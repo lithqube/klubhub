@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": {
+      "/Users/admin/dev/klubhub-dj/.opencode/get-shit-done/*": "allow"
+    },
+    "external_directory": {
+      "/Users/admin/dev/klubhub-dj/.opencode/get-shit-done/*": "allow"
+    }
+  }
+}
