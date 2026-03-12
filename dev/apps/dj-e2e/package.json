@@ -1,0 +1,10 @@
+{
+  "name": "@dev/dj-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "implicitDependencies": [
+      "@dev/dj"
+    ]
+  }
+}
