@@ -14,14 +14,14 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 - [x] **INFRA-01**: System deploys as four Docker Compose services (frontend, api, db, storage) with a single `docker-compose up -d` command
 - [x] **INFRA-02**: All services bind to `127.0.0.1` by default; configurable via `BIND_ADDRESS` env var
 - [ ] **INFRA-03**: Go API runs database migrations automatically on startup using embedded goose migrations
-- [ ] **INFRA-04**: `GET /api/v1/health` returns per-integration status: database, storage, Spotify, Discogs, MusicBrainz, Instagram
-- [ ] **INFRA-05**: API starts and degrades gracefully when optional API keys (Spotify, Discogs, Instagram) are missing; only PostgreSQL and MinIO are hard dependencies
+- [x] **INFRA-04**: `GET /api/v1/health` returns per-integration status: database, storage, Spotify, Discogs, MusicBrainz, Instagram
+- [x] **INFRA-05**: API starts and degrades gracefully when optional API keys (Spotify, Discogs, Instagram) are missing; only PostgreSQL and MinIO are hard dependencies
 - [x] **INFRA-06**: Nuxt 4 frontend proxies all `/api/v1/*` requests to the Go backend (no direct browser-to-Go-port communication)
-- [ ] **INFRA-07**: `user_settings` singleton table stores DJ name, logo path, default colors, default template, visible fields, social links, bio, contact info
+- [x] **INFRA-07**: `user_settings` singleton table stores DJ name, logo path, default colors, default template, visible fields, social links, bio, contact info
 - [ ] **INFRA-08**: Project includes `scripts/backup.sh` (pg_dump + mc mirror) and `scripts/restore.sh` for manual data portability
 - [ ] **INFRA-09**: Social media OAuth tokens stored in DB encrypted with AES-256-GCM using `TOKEN_ENCRYPTION_KEY` env var
-- [ ] **INFRA-10**: All entities use UUID primary keys, `created_at`/`updated_at` timestamps, and soft deletion via `deleted_at`
-- [ ] **INFRA-11**: All entity update (PUT) endpoints implement optimistic concurrency control: client sends `updated_at`, server returns HTTP 409 on conflict
+- [x] **INFRA-10**: All entities use UUID primary keys, `created_at`/`updated_at` timestamps, and soft deletion via `deleted_at`
+- [x] **INFRA-11**: All entity update (PUT) endpoints implement optimistic concurrency control: client sends `updated_at`, server returns HTTP 409 on conflict
 
 ### Tracklist Image Generator (TRKL)
 
