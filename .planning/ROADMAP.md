@@ -51,7 +51,13 @@ Plans:
   3. User can choose from 3-5 design presets with color overrides, toggle metadata field visibility, set background mode (solid / custom upload / cover art mosaic), and upload a corner-positioned logo/watermark
   4. User sees a live preview at 50% resolution before export; exporting produces a full-resolution PNG or JPEG at both 1080×1920 (Story) and 1080×1080 (Square) via a single "Export Both" action
   5. User's last-used template, background mode, and field visibility settings are remembered across sessions; track names with CJK, Cyrillic, and Arabic characters render correctly in all generated images
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 01-01-PLAN.md — Go backend: migration 002, Rekordbox parser, tracklist CRUD API (upload, list, get, update-track, delete)
+- [ ] 01-02-PLAN.md — Nuxt frontend: tracklist page (upload + review table + inline edit + card preview + past list)
+- [ ] 01-03-PLAN.md — Cover art fetcher: Spotify → Discogs → MusicBrainz chain, MinIO caching, goroutine worker pool
+- [ ] 01-04-PLAN.md — Screenshot pipeline: Nitro Playwright plugin + screenshot endpoint + Go generate-image + Dockerfile update
+- [ ] 01-05-PLAN.md — End-to-end smoke + human checkpoint
 
 ### Phase 2: Social Media Scheduler
 **Goal**: Users can schedule generated tracklist images to Instagram Feed and Stories and trust the system to publish them reliably
@@ -138,7 +144,7 @@ Note: Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can b
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Infrastructure | 3/4 | In Progress|  |
-| 1. Tracklist Image Generator | 0/TBD | Not started | - |
+| 1. Tracklist Image Generator | 0/5 | Not started | - |
 | 2. Social Media Scheduler | 0/TBD | Not started | - |
 | 3. EPK / Press Kit Builder | 0/TBD | Not started | - |
 | 4. Gig Tracker | 0/TBD | Not started | - |
