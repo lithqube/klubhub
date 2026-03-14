@@ -22,4 +22,20 @@ export default defineNuxtConfig({
   vite: {
     plugins: [nxViteTsPaths()],
   },
+  // Proxy all /api/v1/* requests to the Go backend.
+  // Production: NUXT_PUBLIC_API_BASE is set to http://api:8080 in docker-compose.yml
+  // Dev: nitro.devProxy below handles the same path via localhost:8080
+  routeRules: {
+    '/api/v1/**': {
+      proxy: (process.env.NUXT_PUBLIC_API_BASE ?? 'http://localhost:8080') + '/api/v1/**',
+    },
+  },
+  nitro: {
+    devProxy: {
+      '/api/v1': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
+  },
 });
