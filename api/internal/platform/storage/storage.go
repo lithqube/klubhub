@@ -61,3 +61,10 @@ func (c *Client) Bucket() string {
 func (c *Client) PublicEndpoint() string {
 	return c.publicEndpoint
 }
+
+// HealthCheck performs a lightweight probe against MinIO by checking if the
+// configured bucket exists. Returns nil if MinIO is reachable.
+func (c *Client) HealthCheck(ctx context.Context) error {
+	_, err := c.mc.BucketExists(ctx, c.bucket)
+	return err
+}
