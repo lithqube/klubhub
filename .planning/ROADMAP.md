@@ -34,7 +34,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. API starts cleanly when optional API keys (Spotify, Discogs, Instagram) are absent; only PostgreSQL and MinIO are required to pass health checks
   4. Database migrations run automatically at API startup with no manual intervention; migration state is visible in health response
   5. `scripts/backup.sh` and `scripts/restore.sh` execute without error and produce/restore a valid data snapshot
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 00-01-PLAN.md — Go module scaffold: platform packages (config, db, storage, log, crypto, embedded migrations)
+- [ ] 00-02-PLAN.md — Docker Compose stack: four services, .env.example, Nuxt API proxy
+- [ ] 00-03-PLAN.md — Health endpoint + user_settings CRUD with optimistic concurrency
+- [ ] 00-04-PLAN.md — Backup/restore scripts + end-to-end smoke checkpoint
 
 ### Phase 1: Tracklist Image Generator
 **Goal**: A DJ can upload their history file and get a professional, social-media-ready tracklist image without any design tool or external service
@@ -132,7 +137,7 @@ Note: Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can b
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Infrastructure | 0/TBD | Not started | - |
+| 0. Infrastructure | 0/4 | Not started | - |
 | 1. Tracklist Image Generator | 0/TBD | Not started | - |
 | 2. Social Media Scheduler | 0/TBD | Not started | - |
 | 3. EPK / Press Kit Builder | 0/TBD | Not started | - |
