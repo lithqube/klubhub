@@ -85,7 +85,7 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 - [ ] **EPK-07**: User can select which sections to include or exclude in the PDF export
 - [ ] **EPK-08**: Each PDF export is stored in MinIO and listed in an export history view with timestamps; user can download or delete any previous export
 - [ ] **EPK-09**: All EPK data stored in PostgreSQL; photo and document assets stored in MinIO
-- [ ] **EPK-10**: When Gig Tracker (Phase 1d) is available, an "Import from Gigs" button populates gig highlights from selected gig entries
+- [ ] **EPK-10**: When Gig Tracker (Phase 4) is available, an "Import from Gigs" button populates gig highlights from selected gig entries
 
 ### Gig Tracker (GIG)
 
@@ -205,21 +205,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement Group | Phase | Status |
 |-------------------|-------|--------|
-| INFRA-01 to INFRA-11 | Phase 0 | Pending |
-| TRKL-01 to TRKL-28 | Phase 1a | Pending |
-| SOCL-01 to SOCL-17 | Phase 1b | Pending |
-| EPK-01 to EPK-10 | Phase 1c | Pending |
-| GIG-01 to GIG-09 | Phase 1d | Pending |
-| FIN-01 to FIN-10 | Phase 1e | Pending |
-| REL-01 to REL-07 | Phase 1f | Pending |
-| TOUR-01 to TOUR-07 | Phase 1g | Pending |
-| DASH-01 to DASH-08 | Phase 1h | Pending |
+| INFRA-01 to INFRA-11 | Phase 0: Infrastructure | Pending |
+| TRKL-01 to TRKL-28 | Phase 1: Tracklist Image Generator | Pending |
+| SOCL-01 to SOCL-17 | Phase 2: Social Media Scheduler | Pending |
+| EPK-01 to EPK-10 | Phase 3: EPK / Press Kit Builder | Pending |
+| GIG-01 to GIG-09 | Phase 4: Gig Tracker | Pending |
+| FIN-01 to FIN-10 | Phase 5: Finance Tracker | Pending |
+| REL-01 to REL-07 | Phase 6: Release Planner | Pending |
+| TOUR-01 to TOUR-07 | Phase 7: Tour Manager | Pending |
+| DASH-01 to DASH-08 | Phase 8: Unified Dashboard | Pending |
 
 **Coverage:**
 - v1 requirements: 93 total
 - Mapped to phases: 93
-- Unmapped: 0 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-14*
-*Last updated: 2026-03-14 after initial definition*
+*Last updated: 2026-03-14 — traceability updated after roadmap creation (phases 0-8)*
