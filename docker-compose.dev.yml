@@ -1,0 +1,20 @@
+# docker-compose.dev.yml — overlay for local development
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+name: klubhub-dj
+
+services:
+  storage:
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:9001:9001"   # MinIO console
+
+  db:
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:5432:5432"   # already in base, re-declared for clarity
+
+  # api and frontend are NOT started in dev; run them locally
+  api:
+    profiles: ["prod-only"]
+
+  frontend:
+    profiles: ["prod-only"]
