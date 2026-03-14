@@ -137,7 +137,7 @@ Note: Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can b
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Infrastructure | 0/4 | Not started | - |
+| 0. Infrastructure | 1/4 | In Progress|  |
 | 1. Tracklist Image Generator | 0/TBD | Not started | - |
 | 2. Social Media Scheduler | 0/TBD | Not started | - |
 | 3. EPK / Press Kit Builder | 0/TBD | Not started | - |
