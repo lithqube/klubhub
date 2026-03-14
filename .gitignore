@@ -38,6 +38,10 @@ testem.log
 .DS_Store
 Thumbs.db
 
+# Backup archives
+backups/*.tar.gz
+backups/work-*/
+
 .nx/cache
 .nx/workspace-data
 
