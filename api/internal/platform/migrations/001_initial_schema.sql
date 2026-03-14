@@ -34,3 +34,7 @@ CREATE TABLE social_accounts (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- +goose Down
+DROP TABLE IF EXISTS social_accounts;
+DROP TABLE IF EXISTS user_settings;
