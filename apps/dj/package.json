@@ -1,5 +1,8 @@
 {
   "name": "@dev/dj",
   "version": "0.0.1",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@vueuse/core": "^14.2.1"
+  }
 }
