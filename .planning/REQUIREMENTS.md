@@ -25,20 +25,20 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 
 ### Tracklist Image Generator (TRKL)
 
-- [ ] **TRKL-01**: User can upload a DJ history file via drag-and-drop or file picker
-- [ ] **TRKL-02**: System auto-detects and parses Rekordbox (.txt, .csv, .xml), Serato (history format), and Traktor (.nml) without user input
-- [ ] **TRKL-03**: System extracts artist, title, BPM, key, label, duration, and time played from all supported formats
-- [ ] **TRKL-04**: System validates uploaded files and returns clear error messages for unsupported or malformed files
-- [ ] **TRKL-05**: System rejects files exceeding configurable max upload size (default 50 MB) with a clear error message
-- [ ] **TRKL-06**: System returns partial parse results with per-track warnings for malformed/missing metadata; tracks are never silently discarded
-- [ ] **TRKL-07**: If a valid file has zero parseable tracks, system returns a specific error message
-- [ ] **TRKL-08**: User can inline-edit any parsed track metadata field (artist, title, BPM, key, label, duration); edits persist to PostgreSQL; source file in MinIO is never modified
-- [ ] **TRKL-09**: System stores parsed tracklists in PostgreSQL and raw source files in MinIO
+- [x] **TRKL-01**: User can upload a DJ history file via drag-and-drop or file picker
+- [x] **TRKL-02**: System auto-detects and parses Rekordbox (.txt, .csv, .xml), Serato (history format), and Traktor (.nml) without user input
+- [x] **TRKL-03**: System extracts artist, title, BPM, key, label, duration, and time played from all supported formats
+- [x] **TRKL-04**: System validates uploaded files and returns clear error messages for unsupported or malformed files
+- [x] **TRKL-05**: System rejects files exceeding configurable max upload size (default 50 MB) with a clear error message
+- [x] **TRKL-06**: System returns partial parse results with per-track warnings for malformed/missing metadata; tracks are never silently discarded
+- [x] **TRKL-07**: If a valid file has zero parseable tracks, system returns a specific error message
+- [x] **TRKL-08**: User can inline-edit any parsed track metadata field (artist, title, BPM, key, label, duration); edits persist to PostgreSQL; source file in MinIO is never modified
+- [x] **TRKL-09**: System stores parsed tracklists in PostgreSQL and raw source files in MinIO
 - [ ] **TRKL-10**: System searches Spotify, then Discogs, then MusicBrainz for cover art using artist + title (fallback chain)
 - [ ] **TRKL-11**: System caches fetched cover art in MinIO; all fetched artwork is cached to avoid redundant API calls
 - [ ] **TRKL-12**: Cover art fetching is asynchronous with progressive UI updates
 - [ ] **TRKL-13**: Placeholder cover art (dark tile with music note icon, 500×500 PNG) is used for unmatched tracks; user can upload a custom global placeholder in settings
-- [ ] **TRKL-14**: User can upload a replacement cover art image per-track; manual override persists and is not replaced by API re-fetch unless explicitly reset
+- [x] **TRKL-14**: User can upload a replacement cover art image per-track; manual override persists and is not replaced by API re-fetch unless explicitly reset
 - [ ] **TRKL-15**: Tracklist configuration UI shows all cover art thumbnails; user can accept, reject, or replace each
 - [ ] **TRKL-16**: If all cover art APIs are unreachable, all tracks receive placeholder art and UI shows a warning with a "Retry Cover Art" button
 - [ ] **TRKL-17**: System generates tracklist images at 1080×1920 (Story) and 1080×1080 (Square)
@@ -51,7 +51,7 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 - [ ] **TRKL-24**: "Export Both" button triggers Story and Square generation in a single action
 - [ ] **TRKL-25**: Each template defines a `max_tracks_displayed` limit (default 30); UI shows track range selector for tracklists that exceed the limit
 - [ ] **TRKL-26**: Image templates support full Unicode rendering including CJK, Cyrillic, and Arabic via bundled Noto Sans fonts; unrenderable glyphs show `?` substitution
-- [ ] **TRKL-27**: User can delete a tracklist; cascade soft-deletes child tracks and generated images; linked gig references are set to NULL; confirmation dialog warns user
+- [x] **TRKL-27**: User can delete a tracklist; cascade soft-deletes child tracks and generated images; linked gig references are set to NULL; confirmation dialog warns user
 - [ ] **TRKL-28**: System persists user's last-used template, background mode, and metadata field settings
 
 ### Social Media Scheduler (SOCL)

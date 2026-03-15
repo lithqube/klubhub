@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 01-tracklist
-current_plan: 0 of 0
-status: planning
-last_updated: "2026-03-14T00:00:00Z"
+current_phase: 01-tracklist-image-generator
+status: executing
+last_updated: '2026-03-15T18:39:10.149Z'
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 4
+  total_plans: 9
+  completed_plans: 5
 ---
 
 # Session State
@@ -28,6 +27,10 @@ See: .planning/PROJECT.md
 
 ## Decisions
 
+- [Phase 01-tracklist-image-generator]: Position column (#) parsed from Rekordbox TSV and stored in database
+- [Phase 01-tracklist-image-generator]: Soft delete implemented with TODO for Phase 4 gigs NULL cascade (TRKL-27)
+- [Phase 01-tracklist-image-generator]: Storage interface uses io.Reader for MinIO uploads
+- [Phase 01-tracklist-image-generator]: UTF-16 LE BOM detection with BOMOverride fallback
 - TOKEN_ENCRYPTION_KEY uses `:?` (error if empty) — no safe default, must be set explicitly
 - NUXT_PUBLIC_API_BASE used in routeRules proxy target to resolve correctly within Docker network
 - Dev overlay uses `profiles: ["prod-only"]` to exclude api/frontend from local dev startup
