@@ -1,0 +1,32 @@
+{
+  "name": "KlubHub DJ",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/node": {
+      "version": "22"
+    },
+    "ghcr.io/devcontainers/features/go": {
+      "version": "1.23"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker": {}
+  },
+  "forwardPorts": [3000, 8080, 9000, 9001],
+  "portsAttributes": {
+    "3000": {
+      "label": "Frontend",
+      "onAutoForward": "openPreview"
+    },
+    "8080": {
+      "label": "API",
+      "onAutoForward": "notify"
+    },
+    "9000": {
+      "label": "MinIO S3",
+      "onAutoForward": "ignore"
+    },
+    "9001": {
+      "label": "MinIO Console",
+      "onAutoForward": "notify"
+    }
+  }
+}
