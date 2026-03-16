@@ -18,6 +18,7 @@ type tracklistServiceIface interface {
 	UpdateTrack(ctx context.Context, tracklistID, trackID uuid.UUID, req UpdateTrackRequest) (*Track, error)
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	SaveManualArtwork(ctx context.Context, tracklistID, trackID uuid.UUID, imageData []byte, contentType string) error
+	GenerateImage(ctx context.Context, id uuid.UUID, format string) (map[string]string, error)
 }
 
 // Handler handles HTTP requests for tracklists
@@ -39,6 +40,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Put("/{id}/tracks/{track_id}", h.handleUpdateTrack)
 	r.Delete("/{id}", h.handleDelete)
 	r.Put("/{id}/tracks/{track_id}/artwork", h.handleTrackArtwork)
+	r.Post("/{id}/generate-image", h.handleGenerateImage)
 	return r
 }
 
@@ -276,6 +278,38 @@ func (h *Handler) handleTrackArtwork(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"track": updatedTrack,
 	})
+}
+
+// handleGenerateImage handles POST /{id}/generate-image
+func (h *Handler) handleGenerateImage(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id := uuid.MustParse(idStr)
+
+	// Get format from query param, default to "story"
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "story"
+	}
+
+	// Validate format
+	validFormats := map[string]bool{"story": true, "square": true, "both": true}
+	if !validFormats[format] {
+		h.writeError(w, http.StatusBadRequest, "invalid format: must be story, square, or both")
+		return
+	}
+
+	// Call service.GenerateImage
+	result, err := h.svc.GenerateImage(r.Context(), id, format)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, err.Error())
+		} else {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, result)
 }
 
 // writeJSON writes JSON response

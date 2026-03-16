@@ -90,7 +90,7 @@ func main() {
 
 	// Build tracklist service with artwork wired
 	tracklistSvc := tracklist.NewService(tracklistRepo, storeClient, artworkSvc, tracklist.ServiceConfig{
-		NuxtInternalURL: "",
+		NuxtInternalURL: cfg.NuxtInternalURL,
 		StorageBucket:   cfg.MinioBucket,
 		MaxUploadBytes:  10 * 1024 * 1024, // 10MB
 	})

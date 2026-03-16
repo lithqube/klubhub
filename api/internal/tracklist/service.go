@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,10 +15,11 @@ import (
 
 // Service provides business logic for tracklists
 type Service struct {
-	repo    tracklistRepoIface
-	storage storageIface
-	artwork artworkServiceIface
-	config  ServiceConfig
+	repo       tracklistRepoIface
+	storage    storageIface
+	artwork    artworkServiceIface
+	config     ServiceConfig
+	httpClient *http.Client
 }
 
 // serviceConfig holds configuration for the service
@@ -45,15 +48,17 @@ type artworkServiceIface interface {
 // storageIface defines the interface for object storage
 type storageIface interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	PresignedGetObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, reqParams map[string]string) (string, error)
 }
 
 // NewService creates a new Service with the given dependencies
 func NewService(repo tracklistRepoIface, storage storageIface, artwork artworkServiceIface, config ServiceConfig) *Service {
 	return &Service{
-		repo:    repo,
-		storage: storage,
-		artwork: artwork,
-		config:  config,
+		repo:       repo,
+		storage:    storage,
+		artwork:    artwork,
+		config:     config,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -174,4 +179,50 @@ func (s *Service) SaveManualArtwork(ctx context.Context, tracklistID, trackID uu
 
 	// If no storage is configured, just save to database with a placeholder URL
 	return s.repo.SaveManualArtwork(ctx, trackID, "placeholder://manual/"+trackID.String())
+}
+
+// GenerateImage calls the Nuxt screenshot endpoint for the given format ("story", "square", "both"),
+// stores the PNG(s) in MinIO, and returns presigned URL(s).
+// format must be "story", "square", or "both".
+func (s *Service) GenerateImage(ctx context.Context, id uuid.UUID, format string) (map[string]string, error) {
+	validFormats := map[string]bool{"story": true, "square": true, "both": true}
+	if !validFormats[format] {
+		return nil, fmt.Errorf("invalid format: %s", format)
+	}
+
+	formats := []string{format}
+	if format == "both" {
+		formats = []string{"story", "square"}
+	}
+
+	result := make(map[string]string, len(formats))
+	for _, f := range formats {
+		url := fmt.Sprintf("%s/api/screenshot/tracklist/%s?format=%s",
+			s.config.NuxtInternalURL, id, f)
+
+		resp, err := s.httpClient.Get(url)
+		if err != nil {
+			return nil, fmt.Errorf("screenshot request for %s: %w", f, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("screenshot returned %d for format %s", resp.StatusCode, f)
+		}
+
+		objectKey := fmt.Sprintf("tracklist-images/%s/%s.png", id, f)
+		_, err = s.storage.PutObject(ctx, s.config.StorageBucket, objectKey,
+			resp.Body, resp.ContentLength,
+			minio.PutObjectOptions{ContentType: "image/png"})
+		if err != nil {
+			return nil, fmt.Errorf("minio store %s: %w", f, err)
+		}
+
+		presigned, err := s.storage.PresignedGetObject(ctx, s.config.StorageBucket, objectKey,
+			7*24*time.Hour, nil)
+		if err != nil {
+			return nil, fmt.Errorf("presign %s: %w", f, err)
+		}
+		result[f] = presigned
+	}
+	return result, nil
 }

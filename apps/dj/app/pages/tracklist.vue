@@ -10,6 +10,7 @@ import {
   uploadTrackArtwork,
   deleteTracklist,
   pollArtworkStatus,
+  generateImage,
 } from '../composables/useTracklist';
 
 // Step management: 'upload' or 'edit'
@@ -329,19 +330,37 @@ const exportImage = async (format: 'story' | 'square') => {
   exportError.value = null;
 
   try {
-    // Note: In a real implementation, this would trigger a file download
-    // For now, we'll just call the API and handle the response
-    const result = await $fetch(
-      `/api/v1/tracklists/${tracklist.value.id}/generate-image?format=${format}`,
-      {
-        method: 'POST',
-      },
-    );
+    const result = await generateImage(tracklist.value.id, format);
 
-    // In a real app, we'd trigger a download here
-    console.log('Export result:', result);
+    // Open the returned URL in a new tab
+    if (result[format]) {
+      window.open(result[format], '_blank');
+    }
   } catch (err: any) {
     exportError.value = err.message ?? 'Failed to export image';
+  } finally {
+    exportLoading.value = false;
+  }
+};
+
+const exportBoth = async () => {
+  if (!tracklist.value) return;
+
+  exportLoading.value = true;
+  exportError.value = null;
+
+  try {
+    const result = await generateImage(tracklist.value.id, 'both');
+
+    // Open both URLs sequentially
+    if (result.story) {
+      window.open(result.story, '_blank');
+    }
+    if (result.square) {
+      window.open(result.square, '_blank');
+    }
+  } catch (err: any) {
+    exportError.value = err.message ?? 'Failed to export images';
   } finally {
     exportLoading.value = false;
   }
@@ -1146,14 +1165,14 @@ onMounted(() => {
           <div class="mt-4 flex gap-3">
             <button
               :disabled="exportLoading || !tracklist"
-              class="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded"
+              class="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded"
               @click="exportImage('story')"
             >
               Export Story (1080×1920)
             </button>
             <button
               :disabled="exportLoading || !tracklist"
-              class="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded"
+              class="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded"
               @click="exportImage('square')"
             >
               Export Square (1080×1080)
@@ -1161,11 +1180,7 @@ onMounted(() => {
             <button
               :disabled="exportLoading || !tracklist"
               class="flex-1 px-4 py-3 bg-primary hover:bg-primary-dark disabled:opacity-50 rounded"
-              @click="
-                () => {
-                  exportImage('story').then(() => exportImage('square'));
-                }
-              "
+              @click="exportBoth"
             >
               Export Both
             </button>

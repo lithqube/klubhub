@@ -158,3 +158,25 @@ export function pollArtworkStatus(
 
   poll();
 }
+
+// Generate tracklist image (TRKL-17)
+export function generateImage(
+  tracklistId: string,
+  format: 'story' | 'square' | 'both',
+): Promise<{ story?: string; square?: string }> {
+  return $fetch(
+    `/api/v1/tracklists/${tracklistId}/generate-image?format=${format}`,
+    {
+      method: 'POST',
+    },
+  ).then((res) => {
+    const response = res as {
+      story?: string;
+      square?: string;
+      error?: string;
+      message?: string;
+    };
+    if (response.error) throw new Error(response.message ?? response.error);
+    return response;
+  });
+}

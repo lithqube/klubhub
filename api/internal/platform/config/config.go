@@ -41,6 +41,9 @@ type Config struct {
 	// Optional: Instagram/Facebook OAuth credentials
 	InstagramClientID     string `envconfig:"INSTAGRAM_CLIENT_ID"`
 	InstagramClientSecret string `envconfig:"INSTAGRAM_CLIENT_SECRET"`
+
+	// Optional: Nuxt internal URL for screenshot generation
+	NuxtInternalURL string `envconfig:"NUXT_INTERNAL_URL" default:"http://localhost:3000"`
 }
 
 // Load reads configuration from environment variables.
