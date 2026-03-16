@@ -36,23 +36,23 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 - [x] **TRKL-09**: System stores parsed tracklists in PostgreSQL and raw source files in MinIO
 - [ ] **TRKL-10**: System searches Spotify, then Discogs, then MusicBrainz for cover art using artist + title (fallback chain)
 - [ ] **TRKL-11**: System caches fetched cover art in MinIO; all fetched artwork is cached to avoid redundant API calls
-- [ ] **TRKL-12**: Cover art fetching is asynchronous with progressive UI updates
-- [ ] **TRKL-13**: Placeholder cover art (dark tile with music note icon, 500×500 PNG) is used for unmatched tracks; user can upload a custom global placeholder in settings
+- [x] **TRKL-12**: Cover art fetching is asynchronous with progressive UI updates
+- [x] **TRKL-13**: Placeholder cover art (dark tile with music note icon, 500×500 PNG) is used for unmatched tracks; user can upload a custom global placeholder in settings
 - [x] **TRKL-14**: User can upload a replacement cover art image per-track; manual override persists and is not replaced by API re-fetch unless explicitly reset
-- [ ] **TRKL-15**: Tracklist configuration UI shows all cover art thumbnails; user can accept, reject, or replace each
-- [ ] **TRKL-16**: If all cover art APIs are unreachable, all tracks receive placeholder art and UI shows a warning with a "Retry Cover Art" button
+- [x] **TRKL-15**: Tracklist configuration UI shows all cover art thumbnails; user can accept, reject, or replace each
+- [x] **TRKL-16**: If all cover art APIs are unreachable, all tracks receive placeholder art and UI shows a warning with a "Retry Cover Art" button
 - [ ] **TRKL-17**: System generates tracklist images at 1080×1920 (Story) and 1080×1080 (Square)
-- [ ] **TRKL-18**: User can choose background mode: custom upload, solid color (with color picker), or cover art mosaic
-- [ ] **TRKL-19**: User can select from 3–5 built-in design presets with primary/accent color and font color overrides
-- [ ] **TRKL-20**: User can toggle display of each metadata field: artist, title, BPM, key, label, time played, set duration, DJ name, event name, date
-- [ ] **TRKL-21**: User can upload a logo/watermark (PNG with transparency) and choose corner position
-- [ ] **TRKL-22**: Live preview renders at 50% resolution in the browser; exported image is full resolution; UI indicates the difference
-- [ ] **TRKL-23**: User can export generated image as PNG or JPEG
-- [ ] **TRKL-24**: "Export Both" button triggers Story and Square generation in a single action
-- [ ] **TRKL-25**: Each template defines a `max_tracks_displayed` limit (default 30); UI shows track range selector for tracklists that exceed the limit
+- [x] **TRKL-18**: User can choose background mode: custom upload, solid color (with color picker), or cover art mosaic
+- [x] **TRKL-19**: User can select from 3–5 built-in design presets with primary/accent color and font color overrides
+- [x] **TRKL-20**: User can toggle display of each metadata field: artist, title, BPM, key, label, time played, set duration, DJ name, event name, date
+- [x] **TRKL-21**: User can upload a logo/watermark (PNG with transparency) and choose corner position
+- [x] **TRKL-22**: Live preview renders at 50% resolution in the browser; exported image is full resolution; UI indicates the difference
+- [x] **TRKL-23**: User can export generated image as PNG or JPEG
+- [x] **TRKL-24**: "Export Both" button triggers Story and Square generation in a single action
+- [x] **TRKL-25**: Each template defines a `max_tracks_displayed` limit (default 30); UI shows track range selector for tracklists that exceed the limit
 - [ ] **TRKL-26**: Image templates support full Unicode rendering including CJK, Cyrillic, and Arabic via bundled Noto Sans fonts; unrenderable glyphs show `?` substitution
 - [x] **TRKL-27**: User can delete a tracklist; cascade soft-deletes child tracks and generated images; linked gig references are set to NULL; confirmation dialog warns user
-- [ ] **TRKL-28**: System persists user's last-used template, background mode, and metadata field settings
+- [x] **TRKL-28**: System persists user's last-used template, background mode, and metadata field settings
 
 ### Social Media Scheduler (SOCL)
 
