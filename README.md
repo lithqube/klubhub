@@ -4,7 +4,65 @@
 
 ✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/nuxt?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/nuxt?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+
+## Running Locally (Docker)
+
+To run the full application stack locally with Docker:
+
+1. Copy the example environment file and fill in your values:
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
+
+2. Start the stack:
+
+   ```bash
+   docker compose up -d
+   ```
+
+3. Wait for services to be healthy (approximately 30 seconds), then visit:
+   - Frontend: http://localhost:3000
+   - API Health: http://localhost:8080/api/v1/health
+   - MinIO Console: http://localhost:9001
+
+4. To stop the stack:
+   ```bash
+   docker compose down
+   ```
+
+## Running in Development Mode
+
+For faster development iterations:
+
+```bash
+# Start API in dev mode
+npx nx serve api
+
+# In another terminal, start frontend in dev mode
+npx nx serve dj
+
+# Note: You'll still need PostgreSQL and MinIO running via Docker:
+docker compose up -d db storage
+```
+
+## End-to-End Testing
+
+The project includes E2E tests for the screenshot pipeline that verify:
+
+- PNG dimensions are correct (1080×1920 for stories, 1080×1080 for square)
+- Unicode/CJK characters render correctly without substitution
+- Screenshot endpoints return proper content-types
+
+To run E2E tests:
+
+1. Ensure Docker stack is running: `docker compose up -d`
+2. Install Playwright browsers: `npx playwright install chromium` (run from apps/dj directory)
+3. Run the E2E tests: `npx nx e2e dj-e2e`
+
+Note: These tests require a running Docker stack with data and are skipped in unit test runs.
 
 ## Run tasks
 
@@ -89,12 +147,13 @@ Nx Console is an editor extension that enriches your developer experience. It le
 
 Learn more:
 
-- [Learn more about this workspace setup](https://nx.dev/nx-api/nuxt?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
+- [Learn more about this workspace setup](https://nx.dev/nx-api/nuxt?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
 - [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
 - [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
 - [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
 
 And join the Nx community:
+
 - [Discord](https://go.nx.dev/community)
 - [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
 - [Our Youtube channel](https://www.youtube.com/@nxdevtools)
