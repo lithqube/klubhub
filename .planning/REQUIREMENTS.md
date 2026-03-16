@@ -34,8 +34,8 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 - [x] **TRKL-07**: If a valid file has zero parseable tracks, system returns a specific error message
 - [x] **TRKL-08**: User can inline-edit any parsed track metadata field (artist, title, BPM, key, label, duration); edits persist to PostgreSQL; source file in MinIO is never modified
 - [x] **TRKL-09**: System stores parsed tracklists in PostgreSQL and raw source files in MinIO
-- [ ] **TRKL-10**: System searches Spotify, then Discogs, then MusicBrainz for cover art using artist + title (fallback chain)
-- [ ] **TRKL-11**: System caches fetched cover art in MinIO; all fetched artwork is cached to avoid redundant API calls
+- [x] **TRKL-10**: System searches Spotify, then Discogs, then MusicBrainz for cover art using artist + title (fallback chain)
+- [x] **TRKL-11**: System caches fetched cover art in MinIO; all fetched artwork is cached to avoid redundant API calls
 - [x] **TRKL-12**: Cover art fetching is asynchronous with progressive UI updates
 - [x] **TRKL-13**: Placeholder cover art (dark tile with music note icon, 500×500 PNG) is used for unmatched tracks; user can upload a custom global placeholder in settings
 - [x] **TRKL-14**: User can upload a replacement cover art image per-track; manual override persists and is not replaced by API re-fetch unless explicitly reset
