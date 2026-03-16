@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useAsyncData } from '#imports';
-import TrackcardPreview from '@/app/components/TrackcardPreview.vue';
+import { useAsyncData, useRoute } from '#app';
+import TrackcardPreview from '../../../components/TrackcardPreview.vue';
+import { useHead } from '#app';
 
-// Disable layout for pure white-canvas page for Playwright screenshots
-definePageMeta({ layout: false });
+const route = useRoute();
 
 // Fetch tracklist and settings data
 const { data: tracklistData } = await useAsyncData(() =>
@@ -14,15 +14,13 @@ const { data: settingsData } = await useAsyncData(() =>
   $fetch(`/api/v1/settings`),
 );
 
-// Handle not found case
-if (!tracklistData.value) {
-  // Render plain text for Playwright to get a 200
-  definePageMeta({
-    head: {
-      title: 'Not Found',
-    },
-  });
-}
+// Disable layout for pure white-canvas page for Playwright screenshots
+definePageMeta({ layout: false });
+
+// Set title for not found case
+useHead({
+  title: !tracklistData.value ? 'Not Found' : undefined,
+});
 </script>
 
 <template>
