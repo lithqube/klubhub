@@ -13,12 +13,14 @@ import (
 
 // NewRouter constructs a chi router with all routes wired.
 // settingsHandler handles both GET and PUT /api/v1/settings.
+// tracklistHandler handles tracklist CRUD operations.
 func NewRouter(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	store *storage.Client,
 	log zerolog.Logger,
 	settingsHandler http.Handler,
+	tracklistHandler http.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -32,6 +34,9 @@ func NewRouter(
 
 	r.Get("/api/v1/settings", settingsHandler.ServeHTTP)
 	r.Put("/api/v1/settings", settingsHandler.ServeHTTP)
+
+	// Tracklist routes
+	r.Mount("/api/v1/tracklists", tracklistHandler)
 
 	return r
 }

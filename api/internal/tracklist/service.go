@@ -16,11 +16,11 @@ type Service struct {
 	repo    tracklistRepoIface
 	storage storageIface
 	artwork artworkServiceIface
-	config  serviceConfig
+	config  ServiceConfig
 }
 
 // serviceConfig holds configuration for the service
-type serviceConfig struct {
+type ServiceConfig struct {
 	NuxtInternalURL string
 	StorageBucket   string
 	MaxUploadBytes  int64
@@ -48,7 +48,7 @@ type storageIface interface {
 }
 
 // NewService creates a new Service with the given dependencies
-func NewService(repo tracklistRepoIface, storage storageIface, artwork artworkServiceIface, config serviceConfig) *Service {
+func NewService(repo tracklistRepoIface, storage storageIface, artwork artworkServiceIface, config ServiceConfig) *Service {
 	return &Service{
 		repo:    repo,
 		storage: storage,
@@ -130,8 +130,22 @@ func (s *Service) List(ctx context.Context) ([]Tracklist, error) {
 }
 
 // UpdateTrack updates a track
-func (s *Service) UpdateTrack(ctx context.Context, tracklistID, trackID uuid.UUID, req UpdateTrackRequest) error {
-	return s.repo.UpdateTrack(ctx, tracklistID, trackID, req)
+func (s *Service) UpdateTrack(ctx context.Context, tracklistID, trackID uuid.UUID, req UpdateTrackRequest) (*Track, error) {
+	err := s.repo.UpdateTrack(ctx, tracklistID, trackID, req)
+	if err != nil {
+		return nil, err
+	}
+	// Get the updated track
+	_, tracks, err := s.repo.Get(ctx, tracklistID)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tracks {
+		if t.ID == trackID {
+			return &t, nil
+		}
+	}
+	return nil, ErrNotFound
 }
 
 // SoftDelete soft-deletes a tracklist

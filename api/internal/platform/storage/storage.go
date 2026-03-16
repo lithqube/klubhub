@@ -2,6 +2,9 @@ package storage
 
 import (
 	"context"
+	"io"
+	"net/url"
+	"time"
 
 	"github.com/klubhub/dj/api/internal/platform/config"
 	"github.com/minio/minio-go/v7"
@@ -67,4 +70,32 @@ func (c *Client) PublicEndpoint() string {
 func (c *Client) HealthCheck(ctx context.Context) error {
 	_, err := c.mc.BucketExists(ctx, c.bucket)
 	return err
+}
+
+// PutObject wraps minio.Client.PutObject
+func (c *Client) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
+	return c.mc.PutObject(ctx, bucketName, objectName, reader, size, opts)
+}
+
+// GetObject wraps minio.Client.GetObject
+func (c *Client) GetObject(ctx context.Context, bucketName, objectName string, opts minio.GetObjectOptions) (*minio.Object, error) {
+	return c.mc.GetObject(ctx, bucketName, objectName, opts)
+}
+
+// StatObject wraps minio.Client.StatObject
+func (c *Client) StatObject(ctx context.Context, bucketName, objectName string, opts minio.GetObjectOptions) (minio.ObjectInfo, error) {
+	return c.mc.StatObject(ctx, bucketName, objectName, opts)
+}
+
+// PresignedGetObject wraps minio.Client.PresignedGetObject
+func (c *Client) PresignedGetObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, reqParams map[string]string) (string, error) {
+	reqValues := url.Values{}
+	for k, v := range reqParams {
+		reqValues.Set(k, v)
+	}
+	presignedURL, err := c.mc.PresignedGetObject(ctx, bucketName, objectName, expiry, reqValues)
+	if err != nil {
+		return "", err
+	}
+	return presignedURL.String(), nil
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/klubhub/dj/api/internal/artwork"
 	"github.com/klubhub/dj/api/internal/platform/config"
 	"github.com/klubhub/dj/api/internal/platform/db"
 	apphttp "github.com/klubhub/dj/api/internal/platform/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/migrations"
 	"github.com/klubhub/dj/api/internal/platform/storage"
 	"github.com/klubhub/dj/api/internal/settings"
+	"github.com/klubhub/dj/api/internal/tracklist"
 )
 
 func main() {
@@ -61,8 +63,41 @@ func main() {
 	settingsSvc := settings.NewService(settingsRepo)
 	settingsHandler := settings.NewHandler(settingsSvc)
 
-	// 6. Build router (internal http package aliased as apphttp).
-	router := apphttp.NewRouter(cfg, pool, storeClient, logger, settingsHandler)
+	// 6. Wire tracklist module with artwork service.
+	tracklistRepo := tracklist.NewRepository(pool)
+
+	// Build artwork clients (nil-safe when API keys absent)
+	var spotifyClient artwork.SpotifySearcher
+	if cfg.SpotifyClientID != "" && cfg.SpotifyClientSecret != "" {
+		spotifyClient = artwork.NewSpotifyClient(cfg.SpotifyClientID, cfg.SpotifyClientSecret)
+	}
+
+	var discogsClient artwork.DiscogsSearcher
+	if cfg.DiscogsAPIKey != "" {
+		discogsClient = artwork.NewDiscogsClient(cfg.DiscogsAPIKey)
+	}
+
+	musicbrainzClient := artwork.NewMusicBrainzClient("KlubHub-DJ/1.0 (admin@klubhub.io)")
+
+	// Build artwork cache with MinIO
+	artworkCache := artwork.NewArtworkCache(storeClient, cfg.MinioBucket, cfg.MinioPublicEndpoint)
+
+	// Build fetch chain
+	fetchChain := artwork.NewFetchChain(spotifyClient, discogsClient, musicbrainzClient, artworkCache, "placeholder://default")
+
+	// Build artwork service
+	artworkSvc := artwork.NewService(fetchChain, tracklistRepo, "placeholder://default")
+
+	// Build tracklist service with artwork wired
+	tracklistSvc := tracklist.NewService(tracklistRepo, storeClient, artworkSvc, tracklist.ServiceConfig{
+		NuxtInternalURL: "",
+		StorageBucket:   cfg.MinioBucket,
+		MaxUploadBytes:  10 * 1024 * 1024, // 10MB
+	})
+	tracklistHandler := tracklist.NewHandler(tracklistSvc)
+
+	// 7. Build router (internal http package aliased as apphttp).
+	router := apphttp.NewRouter(cfg, pool, storeClient, logger, settingsHandler, tracklistHandler.Routes())
 
 	// 7. Start HTTP server.
 	addr := cfg.BindAddress + ":" + cfg.Port
