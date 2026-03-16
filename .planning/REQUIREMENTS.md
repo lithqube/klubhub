@@ -41,7 +41,7 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 - [x] **TRKL-14**: User can upload a replacement cover art image per-track; manual override persists and is not replaced by API re-fetch unless explicitly reset
 - [x] **TRKL-15**: Tracklist configuration UI shows all cover art thumbnails; user can accept, reject, or replace each
 - [x] **TRKL-16**: If all cover art APIs are unreachable, all tracks receive placeholder art and UI shows a warning with a "Retry Cover Art" button
-- [ ] **TRKL-17**: System generates tracklist images at 1080×1920 (Story) and 1080×1080 (Square)
+- [x] **TRKL-17**: System generates tracklist images at 1080×1920 (Story) and 1080×1080 (Square)
 - [x] **TRKL-18**: User can choose background mode: custom upload, solid color (with color picker), or cover art mosaic
 - [x] **TRKL-19**: User can select from 3–5 built-in design presets with primary/accent color and font color overrides
 - [x] **TRKL-20**: User can toggle display of each metadata field: artist, title, BPM, key, label, time played, set duration, DJ name, event name, date
@@ -50,7 +50,7 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 - [x] **TRKL-23**: User can export generated image as PNG or JPEG
 - [x] **TRKL-24**: "Export Both" button triggers Story and Square generation in a single action
 - [x] **TRKL-25**: Each template defines a `max_tracks_displayed` limit (default 30); UI shows track range selector for tracklists that exceed the limit
-- [ ] **TRKL-26**: Image templates support full Unicode rendering including CJK, Cyrillic, and Arabic via bundled Noto Sans fonts; unrenderable glyphs show `?` substitution
+- [x] **TRKL-26**: Image templates support full Unicode rendering including CJK, Cyrillic, and Arabic via bundled Noto Sans fonts; unrenderable glyphs show `?` substitution
 - [x] **TRKL-27**: User can delete a tracklist; cascade soft-deletes child tracks and generated images; linked gig references are set to NULL; confirmation dialog warns user
 - [x] **TRKL-28**: System persists user's last-used template, background mode, and metadata field settings
 
