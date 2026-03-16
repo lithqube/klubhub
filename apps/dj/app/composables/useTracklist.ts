@@ -1,4 +1,40 @@
-import type { Tracklist, Track, ParseWarning } from '~/types/tracklist';
+import type { Tracklist, Track, ParseWarning } from '../types/tracklist';
+
+// Define response interfaces for API calls
+interface UploadTracklistResponse {
+  tracklist: Tracklist;
+  tracks: Track[];
+  warnings: ParseWarning[];
+  error?: string;
+  message?: string;
+}
+
+interface TracklistResponse {
+  tracklists: Tracklist[];
+  error?: string;
+  message?: string;
+}
+
+interface TracklistDetailResponse {
+  tracklist: Tracklist;
+  tracks: Track[];
+  error?: string;
+  message?: string;
+}
+
+interface TrackResponse {
+  track: Track;
+  error?: string;
+  message?: string;
+}
+
+interface ArtworkResponse {
+  artwork_url: string;
+  artwork_source: 'manual';
+  artwork_status: 'manual';
+  error?: string;
+  message?: string;
+}
 
 // Upload a tracklist file (TXT format)
 export function uploadTracklist(file: File): Promise<{
@@ -13,20 +49,18 @@ export function uploadTracklist(file: File): Promise<{
     method: 'POST',
     body: formData,
   }).then((res) => {
-    if (res.error) throw new Error(res.message ?? res.error);
-    return res as {
-      tracklist: Tracklist;
-      tracks: Track[];
-      warnings: ParseWarning[];
-    };
+    const response = res as UploadTracklistResponse;
+    if (response.error) throw new Error(response.message ?? response.error);
+    return response;
   });
 }
 
 // List all tracklists
 export function listTracklists(): Promise<Tracklist[]> {
   return $fetch(`/api/v1/tracklists`).then((res) => {
-    if (res.error) throw new Error(res.message ?? res.error);
-    return res as Tracklist[];
+    const response = res as TracklistResponse;
+    if (response.error) throw new Error(response.message ?? response.error);
+    return response.tracklists;
   });
 }
 
@@ -36,11 +70,9 @@ export function getTracklist(id: string): Promise<{
   tracks: Track[];
 }> {
   return $fetch(`/api/v1/tracklists/${id}`).then((res) => {
-    if (res.error) throw new Error(res.message ?? res.error);
-    return res as {
-      tracklist: Tracklist;
-      tracks: Track[];
-    };
+    const response = res as TracklistDetailResponse;
+    if (response.error) throw new Error(response.message ?? response.error);
+    return response;
   });
 }
 
@@ -56,8 +88,9 @@ export function updateTrack(
     method: 'PUT',
     body: fields,
   }).then((res) => {
-    if (res.error) throw new Error(res.message ?? res.error);
-    return res as Track;
+    const response = res as TrackResponse;
+    if (response.error) throw new Error(response.message ?? response.error);
+    return response.track;
   });
 }
 
@@ -78,11 +111,12 @@ export function uploadTrackArtwork(
     method: 'PUT',
     body: formData,
   }).then((res) => {
-    if (res.error) throw new Error(res.message ?? res.error);
-    return res as {
-      artworkUrl: string;
-      artworkStatus: 'manual';
-      artworkSource: 'manual';
+    const response = res as ArtworkResponse;
+    if (response.error) throw new Error(response.message ?? response.error);
+    return {
+      artworkUrl: response.artwork_url,
+      artworkStatus: response.artwork_status,
+      artworkSource: response.artwork_source,
     };
   });
 }
@@ -92,7 +126,8 @@ export function deleteTracklist(id: string): Promise<void> {
   return $fetch(`/api/v1/tracklists/${id}`, {
     method: 'DELETE',
   }).then((res) => {
-    if (res.error) throw new Error(res.message ?? res.error);
+    const response = res as { error?: string; message?: string };
+    if (response.error) throw new Error(response.message ?? response.error);
   });
 }
 
@@ -105,11 +140,10 @@ export function pollArtworkStatus(
 ): void {
   const fetchTracks = async () => {
     try {
-      const res = await $fetch<{ tracklist: Tracklist; tracks: Track[] }>(
-        `/api/v1/tracklists/${tracklistId}`,
-      );
-      if (res.error) throw new Error(res.message ?? res.error);
-      onUpdate(res.tracks);
+      const res = await $fetch(`/api/v1/tracklists/${tracklistId}`);
+      const response = res as TracklistDetailResponse;
+      if (response.error) throw new Error(response.message ?? response.error);
+      onUpdate(response.tracks);
     } catch (err) {
       console.error('Failed to poll artwork status:', err);
     }
