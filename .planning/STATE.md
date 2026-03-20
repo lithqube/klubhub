@@ -53,6 +53,9 @@ See: .planning/PROJECT.md
 - [Phase 1.5-design-system-foundation]: Pinia stores use setup function (composition API) style — not options API
 - [Phase 1.5-design-system-foundation]: abortController in useTracklistStore is private (not returned) — internal implementation detail for cancellable uploads
 - [Phase 1.5-design-system-foundation]: storeToRefs() enforced for reactive store destructuring — raw destructuring (const { step } = store) destroys reactivity
+- [Phase 1.5-design-system-foundation]: TrackcardPreview.vue uses withDefaults(defineProps<Props>()) TypeScript-generic style — more compact than runtime props for orchestrators
+- [Phase 1.5-design-system-foundation]: colors computed once in TrackcardPreview.vue orchestrator, passed as prop — avoids re-importing PRESETS in sub-components
+- [Phase 1.5-design-system-foundation]: TrackcardPreviewPanel.vue uses bg-surface-container (opaque) per mockup spec override — not glass-panel
 
 ## Performance Metrics
 
@@ -64,6 +67,7 @@ See: .planning/PROJECT.md
 | 01-tracklist-image-generator   | 05   | 2 min    | 2     | 0     |
 | 1.5-design-system-foundation   | 01   | 20 min   | 3     | 6     |
 | 1.5-design-system-foundation   | 03   | 45 min   | 2     | 12    |
+| 1.5-design-system-foundation   | 04   | 25 min   | 3     | 9     |
 
 ## Session Log
 
@@ -78,8 +82,9 @@ See: .planning/PROJECT.md
 - 2026-03-20: Inserted Phase 1.5 (Design System Foundation) — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition
 - 2026-03-20: Completed 1.5-01 (Tailwind v4 + Cyberpunk HUD design tokens + variable fonts + all mockup-derived utilities)
 - 2026-03-20: Completed 1.5-03 (Pinia stores: settings, tracklist, ui + design-tokens.ts with 5 presets — 30 tests GREEN)
+- 2026-03-20: Completed 1.5-04 (TrackcardPreview.vue decomposed into 6 sub-components + TrackcardPreviewPanel.vue — 464→60 lines)
 
 ---
 
 _Phase: 1.5-design-system-foundation_
-_Status: In progress (1.5-01, 1.5-03 complete)_
+_Status: In progress (1.5-01, 1.5-03, 1.5-04 complete)_
