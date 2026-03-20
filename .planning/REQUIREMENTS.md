@@ -54,6 +54,22 @@ Requirements for full platform delivery across all 8 areas (infra + 7 modules). 
 - [x] **TRKL-27**: User can delete a tracklist; cascade soft-deletes child tracks and generated images; linked gig references are set to NULL; confirmation dialog warns user
 - [x] **TRKL-28**: System persists user's last-used template, background mode, and metadata field settings
 
+### Design System Foundation (DSYS) — INSERTED
+
+- [ ] **DSYS-01**: Tailwind CSS v4 is installed via `@nuxtjs/tailwindcss` with full Cyberpunk HUD design token system mapped in `tailwind.config.ts` (surface hierarchy, primary/secondary/tertiary/error colors, glow shadows, glassmorphism utilities, 0px border-radius enforced globally)
+- [ ] **DSYS-02**: shadcn-vue component library is installed with components restyled to Cyberpunk Editorial spec: gradient CTAs on primary buttons, glass panels on dialogs/cards, accent bar focus on inputs, no rounded corners, luminous hover states, alternating surface colors instead of row dividers in tables
+- [ ] **DSYS-03**: Pinia state management is installed with stores for user settings (`stores/settings.ts`), tracklist CRUD state (`stores/tracklist.ts`), and UI state (`stores/ui.ts`); all 30+ local refs in tracklist.vue are migrated to centralized stores
+- [ ] **DSYS-04**: Image generation preset colors are extracted to `app/utils/design-tokens.ts` as shared constants; TrackcardPreview.vue imports from this file instead of inline hardcoded objects; image presets remain separate from UI theme tokens
+- [ ] **DSYS-05**: TrackcardPreview.vue (465 lines) is decomposed into 6 focused sub-components inside `app/components/trackcard/`: TrackCard (container), TrackCardHeader, TrackCardTrackList, TrackCardTrackRow, TrackCardLogo, TrackCardFooter; TrackcardPreview.vue becomes a thin orchestrator
+- [ ] **DSYS-06**: tracklist.vue page (~50KB) is decomposed into 5 feature components inside `app/components/tracklist/`: TracklistUploadZone, TracklistEditor, TracklistCustomizer, TracklistExporter, TracklistHistory; page becomes a layout wiring components via Pinia stores
+- [ ] **DSYS-07**: Typography system uses three font families bundled locally in `public/fonts/` as variable woff2 files: Space Grotesk (display/headlines), Inter (body), Manrope (labels/metadata); Google Fonts CDN import is removed from TrackcardPreview; Noto Sans retained for image generation CJK support
+- [ ] **DSYS-08**: Responsive layout uses Tailwind breakpoints: mobile (<640px) single column with 48dp touch targets, tablet (640-1024px) two-column where possible, desktop (>1024px) full side-by-side editor + preview; TrackcardPreview scales dynamically per viewport
+- [ ] **DSYS-09**: Error boundary (`<NuxtErrorBoundary>`) wraps all pages in app.vue with a cyberpunk-styled fallback UI; Toast notification system uses shadcn-vue Toast with cyberpunk overrides (glass-panel, glow-error for destructive variant)
+- [ ] **DSYS-10**: NxWelcome.vue (881-line placeholder) is deleted; `pages/index.vue` redirects to `/tracklist` or displays a cyberpunk-styled landing page
+- [ ] **DSYS-11**: Component naming convention is established: `ui/` for shadcn-vue base components, `trackcard/` for image generation components, `tracklist/` for tracklist feature components, `The{Name}.vue` for app-level singletons
+- [ ] **DSYS-12**: All UI surfaces follow the "No-Line" rule: no traditional 1px solid borders for sectioning; boundaries defined by tonal transitions between surface levels or luminous thresholds (outline at 20% opacity paired with primary glow)
+- [ ] **DSYS-13**: All floating panels use Glassmorphism: surface_variant at 60% opacity with backdrop-blur (20-40px); primary CTAs use 135-degree gradient from primary (#96F8FF) to primary_container (#00F1FD)
+
 ### Social Media Scheduler (SOCL)
 
 - [ ] **SOCL-01**: User can connect an Instagram account via OAuth (Facebook Business account flow)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-KlubHub DJ ships in nine sequential phases, driven by a hard module-dependency graph. Phase 0 builds the four-service Docker Compose stack that everything else runs on. Phase 1 (tracklist image generator) is the flagship and the product's identity. Phases 2-8 add the social scheduler, press kit builder, gig tracker hub, finance tracker, release planner, tour manager, and unified dashboard — in an order dictated by which modules depend on which. The gig tracker (Phase 4) is the dependency hub: finance, tour, and EPK's live-data import cannot ship without it. The unified dashboard (Phase 8) is always last, aggregating all prior modules.
+KlubHub DJ ships in ten phases (including one inserted phase), driven by a hard module-dependency graph. Phase 0 builds the four-service Docker Compose stack that everything else runs on. Phase 1 (tracklist image generator) is the flagship and the product's identity. Phases 2-8 add the social scheduler, press kit builder, gig tracker hub, finance tracker, release planner, tour manager, and unified dashboard — in an order dictated by which modules depend on which. The gig tracker (Phase 4) is the dependency hub: finance, tour, and EPK's live-data import cannot ship without it. The unified dashboard (Phase 8) is always last, aggregating all prior modules.
 
 ## Phases
 
@@ -15,6 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 0: Infrastructure** - Four-service Docker Compose stack, Go API scaffold, health endpoint, embedded migrations, backup/restore scripts
 - [ ] **Phase 1: Tracklist Image Generator** - DJ file upload and parsing, cover art fetch chain, image generation with presets, live preview, PNG/JPEG export
+- [ ] **Phase 1.5: Design System Foundation** - INSERTED — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition, responsive design
 - [ ] **Phase 2: Social Media Scheduler** - Instagram OAuth, timezone-aware post scheduling, retry with backoff, queue/calendar view
 - [ ] **Phase 3: EPK / Press Kit Builder** - Artist bio, press photos, tech rider, PDF export with section control, export history
 - [ ] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, calendar/list views, GigReader interface for downstream modules
@@ -65,6 +66,22 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] 01-03-PLAN.md — Cover art fetcher: Spotify → Discogs → MusicBrainz chain, MinIO caching, goroutine worker pool
 - [ ] 01-04-PLAN.md — Screenshot pipeline: Nitro Playwright plugin + screenshot endpoint + Go generate-image + Dockerfile update
 - [ ] 01-05-PLAN.md — End-to-end smoke + human checkpoint
+
+### Phase 1.5: Design System Foundation (INSERTED)
+
+**Goal**: Establish a cohesive design system, component library, and state management layer so all future phases build on a consistent, accessible, responsive UI foundation
+**Depends on**: Phase 1
+**Requirements**: DSYS-01, DSYS-02, DSYS-03, DSYS-04, DSYS-05, DSYS-06, DSYS-07, DSYS-08, DSYS-09, DSYS-10, DSYS-11, DSYS-12, DSYS-13
+**Success Criteria** (what must be TRUE):
+
+1. Tailwind CSS is installed and configured with the full Cyberpunk HUD design token system (surface hierarchy, primary/secondary/tertiary colors, glow shadows, 0px border-radius, glassmorphism utilities); all existing pages render correctly
+2. shadcn-vue components (Button, Input, Select, Dialog, Table, Tabs, Toast, Dropdown, Card, Badge, Popover, Sheet) are installed and restyled to match the Cyberpunk Editorial spec (gradient CTAs, glass panels, accent bar focus, no rounded corners, luminous hover states)
+3. Pinia stores exist for settings, tracklist, and UI state; tracklist.vue page state is migrated from 30+ local refs to centralized stores
+4. TrackcardPreview.vue is decomposed into 6 focused sub-components with shared design tokens extracted to a utility file; image generation presets remain separate from UI theme tokens
+5. tracklist.vue is decomposed into 5 feature components (upload zone, editor, customizer, exporter, history) wired via Pinia stores
+6. Responsive layout works across mobile (<640px), tablet (640-1024px), and desktop (>1024px) with 48dp touch targets on mobile and progressive disclosure for technical metadata
+7. Error boundary and toast notification system are in place; API errors display cyberpunk-styled toast notifications instead of raw error text
+   **Plans**: TBD
 
 ### Phase 2: Social Media Scheduler
 
@@ -158,18 +175,19 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 0 → 1 → 1.5 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
-Note: Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can be parallelized. Phase 6 (Release) is independent of Phase 5 (Finance) and can be parallelized with it. Phase 2 (Social) depends on Phase 1. Phases 5 and 7 depend on Phase 4. Phase 8 depends on all others.
+Note: Phase 1.5 (Design System) is an inserted phase that must complete before Phase 2, as the scheduler UI depends on the component library and design tokens. Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can be parallelized. Phase 6 (Release) is independent of Phase 5 (Finance) and can be parallelized with it. Phase 2 (Social) depends on Phase 1.5. Phases 5 and 7 depend on Phase 4. Phase 8 depends on all others.
 
-| Phase                        | Plans Complete | Status      | Completed  |
-| ---------------------------- | -------------- | ----------- | ---------- |
-| 0. Infrastructure            | 4/4            | Complete    | 2026-03-14 |
-| 1. Tracklist Image Generator | 5/5            | Complete    | 2026-03-16 |
-| 2. Social Media Scheduler    | 0/TBD          | Not started | -          |
-| 3. EPK / Press Kit Builder   | 0/TBD          | Not started | -          |
-| 4. Gig Tracker               | 0/TBD          | Not started | -          |
-| 5. Finance Tracker           | 0/TBD          | Not started | -          |
-| 6. Release Planner           | 0/TBD          | Not started | -          |
-| 7. Tour Manager              | 0/TBD          | Not started | -          |
-| 8. Unified Dashboard         | 0/TBD          | Not started | -          |
+| Phase                            | Plans Complete | Status      | Completed  |
+| -------------------------------- | -------------- | ----------- | ---------- |
+| 0. Infrastructure                | 4/4            | Complete    | 2026-03-14 |
+| 1. Tracklist Image Generator     | 5/5            | Complete    | 2026-03-16 |
+| 1.5 Design System Foundation     | 0/TBD          | Not started | -          |
+| 2. Social Media Scheduler        | 0/TBD          | Not started | -          |
+| 3. EPK / Press Kit Builder       | 0/TBD          | Not started | -          |
+| 4. Gig Tracker                   | 0/TBD          | Not started | -          |
+| 5. Finance Tracker               | 0/TBD          | Not started | -          |
+| 6. Release Planner               | 0/TBD          | Not started | -          |
+| 7. Tour Manager                  | 0/TBD          | Not started | -          |
+| 8. Unified Dashboard             | 0/TBD          | Not started | -          |

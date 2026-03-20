@@ -53,3 +53,7 @@ backups/work-*/
 .cache
 vitest.config.*.timestamp*
 test-output
+
+.nx/polygraph
+.claude/worktrees
+.claude/settings.local.json

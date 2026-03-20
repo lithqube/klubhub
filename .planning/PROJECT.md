@@ -128,6 +128,11 @@ A DJ can upload their DJ history file and get a professional, social-media-ready
 | No job queue (DB-backed polling) | No Redis/external queue; simpler ops for self-hosters | — Pending |
 | Phased delivery (1a first) | Tracklist generator is the flagship draw; validates product before full build | — Pending |
 | MIT license | Maximum adoption for open-source tool | — Pending |
+| Tailwind CSS + shadcn-vue (not Nuxt UI) | shadcn-vue gives full component ownership (copy-paste, not dependency); user prefers shadcn ecosystem; Tailwind maps design tokens directly | — Decided 2026-03-20 |
+| Cyberpunk HUD design language | "The Kinetic HUD" — dark-first, glassmorphism, 0px radii, luminous halos, no traditional borders; see `.planning/phases/1.5-design-system-foundation/1.5-DESIGN-SYSTEM-SPEC.md` | — Decided 2026-03-20 |
+| Pinia for state management | 30+ local refs unsustainable; cross-module data sharing needed for scheduler/dashboard | — Decided 2026-03-20 |
+| Dual color token architecture | UI theme (Tailwind config) separate from image preset colors (design-tokens.ts) — image presets are product data, not UI chrome | — Decided 2026-03-20 |
+| Space Grotesk + Inter + Manrope typography | Three-font system: Command (headlines), Data (body), Terminal (labels); bundled locally as variable woff2 | — Decided 2026-03-20 |
 
 ---
 *Last updated: 2026-03-14 after initialization*
