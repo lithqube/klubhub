@@ -9,7 +9,7 @@ progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 16
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Session State
@@ -49,6 +49,10 @@ See: .planning/PROJECT.md
 - [Phase 1.5-design-system-foundation]: Fonts downloaded to public/fonts/ from GitHub source repos (not npm packages) — no CDN dependency
 - [Phase 1.5-design-system-foundation]: All --radius tokens set to 0px — enforces zero rounded corners for Cyberpunk HUD aesthetic
 - [Phase 1.5-design-system-foundation]: nav-item-active uses dashed border all 4 sides (not solid fill, not left-only) — per mockup sidebar active state
+- [Phase 1.5-design-system-foundation]: PRESETS in design-tokens.ts are image-generation colors only — separate from CSS UI theme tokens in styles.css (no overlap)
+- [Phase 1.5-design-system-foundation]: Pinia stores use setup function (composition API) style — not options API
+- [Phase 1.5-design-system-foundation]: abortController in useTracklistStore is private (not returned) — internal implementation detail for cancellable uploads
+- [Phase 1.5-design-system-foundation]: storeToRefs() enforced for reactive store destructuring — raw destructuring (const { step } = store) destroys reactivity
 
 ## Performance Metrics
 
@@ -59,6 +63,7 @@ See: .planning/PROJECT.md
 | 01-tracklist-image-generator   | 04   | 10 min   | 3     | 11    |
 | 01-tracklist-image-generator   | 05   | 2 min    | 2     | 0     |
 | 1.5-design-system-foundation   | 01   | 20 min   | 3     | 6     |
+| 1.5-design-system-foundation   | 03   | 45 min   | 2     | 12    |
 
 ## Session Log
 
@@ -72,8 +77,9 @@ See: .planning/PROJECT.md
 - 2026-03-16: Completed 01-05 (E2E smoke test + human verification - all 28 TRKL requirements verified)
 - 2026-03-20: Inserted Phase 1.5 (Design System Foundation) — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition
 - 2026-03-20: Completed 1.5-01 (Tailwind v4 + Cyberpunk HUD design tokens + variable fonts + all mockup-derived utilities)
+- 2026-03-20: Completed 1.5-03 (Pinia stores: settings, tracklist, ui + design-tokens.ts with 5 presets — 30 tests GREEN)
 
 ---
 
 _Phase: 1.5-design-system-foundation_
-_Status: In progress (1.5-01 complete)_
+_Status: In progress (1.5-01, 1.5-03 complete)_

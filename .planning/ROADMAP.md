@@ -85,9 +85,9 @@ Decimal phases appear between their surrounding integers in numeric order.
    **Plans**: 7 plans
    Plans:
 
-- [ ] 1.5-01-PLAN.md — Tailwind v4 install + cyberpunk @theme token system + variable fonts
+- [x] 1.5-01-PLAN.md — Tailwind v4 install + cyberpunk @theme token system + variable fonts
 - [ ] 1.5-02-PLAN.md — shadcn-vue install + cyberpunk component overrides (14 components)
-- [ ] 1.5-03-PLAN.md — Pinia stores (settings, tracklist, ui) + design-tokens.ts (TDD)
+- [x] 1.5-03-PLAN.md — Pinia stores (settings, tracklist, ui) + design-tokens.ts (TDD)
 - [ ] 1.5-04-PLAN.md — TrackcardPreview.vue decomposition → 6 trackcard/ sub-components
 - [ ] 1.5-05-PLAN.md — tracklist.vue decomposition → 5 tracklist/ feature components
 - [ ] 1.5-06-PLAN.md — app.vue cyberpunk shell + error boundary + index.vue redirect
