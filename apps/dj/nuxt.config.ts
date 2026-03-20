@@ -1,4 +1,4 @@
-//
+import tailwindcss from '@tailwindcss/vite';
 import { defineNuxtConfig } from 'nuxt/config';
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
@@ -19,9 +19,9 @@ export default defineNuxtConfig({
     autoImport: true,
   },
   css: ['~/assets/css/styles.css'],
-  // vite: {
-  //   plugins: [nxViteTsPaths()],
-  // },
+  vite: {
+    plugins: [tailwindcss()],
+  },
   // Proxy all /api/v1/* requests to the Go backend.
   // Production: NUXT_PUBLIC_API_BASE is set to http://api:8080 in docker-compose.yml
   // Dev: nitro.devProxy below handles the same path via localhost:8080
