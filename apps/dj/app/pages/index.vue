@@ -1,3 +1,8 @@
+<script setup lang="ts">
+// Redirect to /tracklist as the primary entry point of the app
+await navigateTo('/tracklist', { replace: true })
+</script>
+
 <template>
-  <NxWelcome title="@dev/dj" />
+  <!-- Redirecting to /tracklist -->
 </template>
