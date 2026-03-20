@@ -7,7 +7,7 @@
 
 ## v1 Requirements
 
-Requirements for full platform delivery across all 8 areas (infra + 7 modules). Each maps to a roadmap phase.
+Requirements for full platform delivery across all 9 areas (infra + 7 modules + production hardening). Each maps to a roadmap phase.
 
 ### Infrastructure / Platform (INFRA)
 
@@ -197,6 +197,23 @@ Deferred to v1.x and v2.0. Tracked but not in current roadmap.
 - Hosted EPK web pages with shareable links
 - Contract management and e-signatures
 
+### Production Hardening (PROD)
+
+- [ ] **PROD-01**: README.md includes hero screenshot, 3-step quick start (`docker compose up -d`), feature overview grid, tech stack badges, and links to docs
+- [ ] **PROD-02**: `docs/SELF-HOSTING.md` covers system requirements (2GB RAM, 10GB disk), all env vars, HTTPS reverse proxy setup (Caddy and nginx examples), and backup schedule recommendation
+- [ ] **PROD-03**: `docs/CONFIGURATION.md` documents every environment variable with type, default value, example, and which module uses it
+- [ ] **PROD-04**: `docs/CONTRIBUTING.md` covers dev environment setup, code style (Go + Vue), PR process, module architecture overview, and testing guide
+- [ ] **PROD-05**: `CHANGELOG.md` contains v1.0.0 release notes covering all modules shipped
+- [ ] **PROD-06**: MIT `LICENSE` file is present at repository root
+- [ ] **PROD-07**: All API endpoints pass input validation audit; no SQL injection, path traversal, or unbounded query vulnerabilities
+- [ ] **PROD-08**: Rate limiting is configurable via `RATE_LIMIT_RPM` env var (default: 100 req/min per IP) and active on all endpoints
+- [ ] **PROD-09**: CORS defaults to same-origin only; configurable via `CORS_ORIGINS` env var
+- [ ] **PROD-10**: `govulncheck ./...` reports no known Go vulnerabilities; `pnpm audit` reports no high/critical npm CVEs
+- [ ] **PROD-11**: GitHub Actions CI pipeline runs lint, unit tests, build, and E2E tests on every push to main and every PR
+- [ ] **PROD-12**: Go unit test coverage is ≥70% on service and repository layers; Playwright E2E tests cover all critical user flows
+- [ ] **PROD-13**: Go API implements graceful shutdown (SIGTERM drains in-flight requests within 30s); all Docker services have HEALTHCHECK directives
+- [ ] **PROD-14**: Docker images are published to ghcr.io on git tag; multi-arch build supports amd64 and arm64; GitHub Release includes release notes and upgrade instructions
+
 ---
 
 ## Out of Scope
@@ -230,10 +247,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REL-01 to REL-07 | Phase 6: Release Planner | Pending |
 | TOUR-01 to TOUR-07 | Phase 7: Tour Manager | Pending |
 | DASH-01 to DASH-08 | Phase 8: Unified Dashboard | Pending |
+| PROD-01 to PROD-14 | Phase 9: Production Hardening | Pending |
 
 **Coverage:**
-- v1 requirements: 93 total
-- Mapped to phases: 93
+- v1 requirements: 107 total (93 feature + 14 production hardening)
+- Mapped to phases: 107
 - Unmapped: 0
 
 ---

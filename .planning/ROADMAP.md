@@ -2,7 +2,7 @@
 
 ## Overview
 
-KlubHub DJ ships in ten phases (including one inserted phase), driven by a hard module-dependency graph. Phase 0 builds the four-service Docker Compose stack that everything else runs on. Phase 1 (tracklist image generator) is the flagship and the product's identity. Phases 2-8 add the social scheduler, press kit builder, gig tracker hub, finance tracker, release planner, tour manager, and unified dashboard — in an order dictated by which modules depend on which. The gig tracker (Phase 4) is the dependency hub: finance, tour, and EPK's live-data import cannot ship without it. The unified dashboard (Phase 8) is always last, aggregating all prior modules.
+KlubHub DJ ships in eleven phases (including one inserted phase), driven by a hard module-dependency graph. Phase 0 builds the four-service Docker Compose stack that everything else runs on. Phase 1 (tracklist image generator) is the flagship and the product's identity. Phases 2-8 add the social scheduler, press kit builder, gig tracker hub, finance tracker, release planner, tour manager, and unified dashboard — in an order dictated by which modules depend on which. The gig tracker (Phase 4) is the dependency hub: finance, tour, and EPK's live-data import cannot ship without it. The unified dashboard (Phase 8) is always last, aggregating all prior modules.
 
 ## Phases
 
@@ -23,6 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 6: Release Planner** - Release CRUD with status workflow, deadline tracking, promo checklist with customizable default template
 - [ ] **Phase 7: Tour Manager** - Named tour groups of linked gigs, per-stop logistics, tour budget aggregate
 - [ ] **Phase 8: Unified Dashboard** - Aggregated view of all modules: upcoming gigs, scheduled posts, recent tracklists, finance summary, release deadlines
+- [ ] **Phase 9: Production Hardening** - Documentation, security audit, CI/CD, testing, release engineering for v1.0.0 open-source release
 
 ## Phase Details
 
@@ -172,12 +173,32 @@ Decimal phases appear between their surrounding integers in numeric order.
 3. Widgets for modules with no data or not yet deployed are hidden rather than showing empty states; each module query has a 500ms timeout and the dashboard renders with partial data if any module is slow
    **Plans**: TBD
 
+### Phase 9: Production Hardening
+
+**Goal**: Ship v1.0.0 as a polished, documented, production-ready open-source release suitable for public adoption
+**Depends on**: All prior phases (0-8)
+**Requirements**: PROD-01, PROD-02, PROD-03, PROD-04, PROD-05, PROD-06, PROD-07, PROD-08, PROD-09, PROD-10, PROD-11, PROD-12, PROD-13, PROD-14
+**Success Criteria** (what must be TRUE):
+
+1. README.md contains a hero screenshot, 3-step quick start, feature overview, and tech stack badges; SELF-HOSTING.md covers system requirements, env vars, reverse proxy setup, and backup schedule; CONTRIBUTING.md covers dev setup, code style, and PR process
+2. All API endpoints pass input validation audit (no SQL injection, path traversal, or unbounded queries); CORS defaults to same-origin; rate limiting is configured; `govulncheck` and `pnpm audit` report no high/critical CVEs
+3. GitHub Actions CI pipeline runs lint, test, build, and E2E on every push; Go test coverage is ≥70% on service/repository layers; Docker multi-arch build (amd64 + arm64) succeeds
+4. Go API drains in-flight requests on SIGTERM; all 4 Docker services have HEALTHCHECK directives; structured JSON logging with configurable level is enabled
+5. Git tag v1.0.0 is created; Docker images are published to ghcr.io; GitHub Release includes release notes, SELF-HOSTING link, and upgrade instructions
+   **Plans**: TBD
+
+---
+
+**v2 SaaS Milestone Boundary**
+
+After v1.0.0 release, SaaS migration work begins in a separate repository (`klubhub-dj-cloud`). The v2 milestones (M1-M9) are documented in `docs/v2-saas-migration-plan.md` and `.planning/research/V2-SAAS-ARCHITECTURE.md`. The open-source repo continues to receive updates independently.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 0 → 1 → 1.5 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 0 → 1 → 1.5 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 
-Note: Phase 1.5 (Design System) is an inserted phase that must complete before Phase 2, as the scheduler UI depends on the component library and design tokens. Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can be parallelized. Phase 6 (Release) is independent of Phase 5 (Finance) and can be parallelized with it. Phase 2 (Social) depends on Phase 1.5. Phases 5 and 7 depend on Phase 4. Phase 8 depends on all others.
+Note: Phase 1.5 (Design System) is an inserted phase that must complete before Phase 2, as the scheduler UI depends on the component library and design tokens. Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can be parallelized. Phase 6 (Release) is independent of Phase 5 (Finance) and can be parallelized with it. Phase 2 (Social) depends on Phase 1.5. Phases 5 and 7 depend on Phase 4. Phase 8 depends on all others. Phase 9 (Production Hardening) is the final phase before v1.0.0 release — it covers documentation, security, CI/CD, testing, and release engineering.
 
 | Phase                            | Plans Complete | Status      | Completed  |
 | -------------------------------- | -------------- | ----------- | ---------- |
@@ -191,3 +212,4 @@ Note: Phase 1.5 (Design System) is an inserted phase that must complete before P
 | 6. Release Planner               | 0/TBD          | Not started | -          |
 | 7. Tour Manager                  | 0/TBD          | Not started | -          |
 | 8. Unified Dashboard             | 0/TBD          | Not started | -          |
+| 9. Production Hardening          | 0/TBD          | Not started | -          |

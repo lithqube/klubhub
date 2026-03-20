@@ -133,6 +133,9 @@ A DJ can upload their DJ history file and get a professional, social-media-ready
 | Pinia for state management | 30+ local refs unsustainable; cross-module data sharing needed for scheduler/dashboard | — Decided 2026-03-20 |
 | Dual color token architecture | UI theme (Tailwind config) separate from image preset colors (design-tokens.ts) — image presets are product data, not UI chrome | — Decided 2026-03-20 |
 | Space Grotesk + Inter + Manrope typography | Three-font system: Command (headlines), Data (body), Terminal (labels); bundled locally as variable woff2 | — Decided 2026-03-20 |
+| v1 open-source + v2 SaaS release strategy | v1.0.0 ships all 8 modules as MIT open-source with Phase 9 production hardening; v2 SaaS in separate private repo (`klubhub-dj-cloud`) imports v1 as Go module and adds auth, billing, service extraction, K8s | — Decided 2026-03-20 |
+| Open-core monetization model | Data-ownership modules (tracklist, gig, finance, release) stay free forever; infrastructure/automation modules (social scheduler, hosted EPK, collaboration) become SaaS premium; $9/mo PRO, $25/mo TEAM | — Decided 2026-03-20 |
+| Separate repository for SaaS (not fork) | OSS repo stays clean; SaaS repo imports OSS as Go module; feature flags in frontend; contributors never see billing/auth code | — Decided 2026-03-20 |
 
 ---
-*Last updated: 2026-03-14 after initialization*
+*Last updated: 2026-03-20 after v1/v2 release planning*
