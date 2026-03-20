@@ -82,7 +82,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 5. tracklist.vue is decomposed into 5 feature components (upload zone, editor, customizer, exporter, history) wired via Pinia stores
 6. Responsive layout works across mobile (<640px), tablet (640-1024px), and desktop (>1024px) with 48dp touch targets on mobile and progressive disclosure for technical metadata
 7. Error boundary and toast notification system are in place; API errors display cyberpunk-styled toast notifications instead of raw error text
-   **Plans**: TBD
+   **Plans**: 7 plans
+   Plans:
+
+- [ ] 1.5-01-PLAN.md — Tailwind v4 install + cyberpunk @theme token system + variable fonts
+- [ ] 1.5-02-PLAN.md — shadcn-vue install + cyberpunk component overrides (14 components)
+- [ ] 1.5-03-PLAN.md — Pinia stores (settings, tracklist, ui) + design-tokens.ts (TDD)
+- [ ] 1.5-04-PLAN.md — TrackcardPreview.vue decomposition → 6 trackcard/ sub-components
+- [ ] 1.5-05-PLAN.md — tracklist.vue decomposition → 5 tracklist/ feature components
+- [ ] 1.5-06-PLAN.md — app.vue cyberpunk shell + error boundary + index.vue redirect
+- [ ] 1.5-07-PLAN.md — Human verification checkpoint
 
 ### Phase 2: Social Media Scheduler
 
