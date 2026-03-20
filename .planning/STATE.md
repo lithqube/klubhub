@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 1.5-design-system-foundation
 status: planning
-last_updated: "2026-03-20T00:00:00.000Z"
+last_updated: "2026-03-20T15:09:05.409Z"
 progress:
-  total_phases: 10
+  total_phases: 11
   completed_phases: 2
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 16
+  completed_plans: 10
 ---
 
 # Session State
@@ -44,15 +44,21 @@ See: .planning/PROJECT.md
 - [Phase 00-infrastructure]: Dev overlay uses profiles: [prod-only] to exclude api/frontend from local dev startup
 - [Phase 00-infrastructure]: goose migration files use single-file convention (001_name.sql with Up/Down sections) not separate .up.sql/.down.sql files
 - [Phase 00-infrastructure]: DBPinger and StorageHealthChecker interfaces allow health handler to be unit-tested without Docker
+- [Phase 1.5-design-system-foundation]: Use @tailwindcss/vite Vite plugin (not @nuxtjs/tailwindcss module) — Tailwind v4 recommended approach
+- [Phase 1.5-design-system-foundation]: All design tokens in @theme CSS block — Tailwind v4 CSS-only configuration, no tailwind.config.ts
+- [Phase 1.5-design-system-foundation]: Fonts downloaded to public/fonts/ from GitHub source repos (not npm packages) — no CDN dependency
+- [Phase 1.5-design-system-foundation]: All --radius tokens set to 0px — enforces zero rounded corners for Cyberpunk HUD aesthetic
+- [Phase 1.5-design-system-foundation]: nav-item-active uses dashed border all 4 sides (not solid fill, not left-only) — per mockup sidebar active state
 
 ## Performance Metrics
 
-| Phase                        | Plan | Duration | Tasks | Files |
-| ---------------------------- | ---- | -------- | ----- | ----- |
-| 01-tracklist-image-generator | 02   | 45 min   | 4     | 5     |
-| 01-tracklist-image-generator | 03   | 45 min   | 3     | 8     |
-| 01-tracklist-image-generator | 04   | 10 min   | 3     | 11    |
-| 01-tracklist-image-generator | 05   | 2 min    | 2     | 0     |
+| Phase                          | Plan | Duration | Tasks | Files |
+| ------------------------------ | ---- | -------- | ----- | ----- |
+| 01-tracklist-image-generator   | 02   | 45 min   | 4     | 5     |
+| 01-tracklist-image-generator   | 03   | 45 min   | 3     | 8     |
+| 01-tracklist-image-generator   | 04   | 10 min   | 3     | 11    |
+| 01-tracklist-image-generator   | 05   | 2 min    | 2     | 0     |
+| 1.5-design-system-foundation   | 01   | 20 min   | 3     | 6     |
 
 ## Session Log
 
@@ -65,8 +71,9 @@ See: .planning/PROJECT.md
 - 2026-03-16: Completed 01-04 (Playwright screenshot pipeline)
 - 2026-03-16: Completed 01-05 (E2E smoke test + human verification - all 28 TRKL requirements verified)
 - 2026-03-20: Inserted Phase 1.5 (Design System Foundation) — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition
+- 2026-03-20: Completed 1.5-01 (Tailwind v4 + Cyberpunk HUD design tokens + variable fonts + all mockup-derived utilities)
 
 ---
 
 _Phase: 1.5-design-system-foundation_
-_Status: Ready to plan_
+_Status: In progress (1.5-01 complete)_
