@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Nuxt Frontend (dj)",
+      "runtimeExecutable": "/Users/admin/.nvm/versions/node/v25.2.1/bin/node",
+      "runtimeArgs": ["node_modules/nx/bin/nx.js", "serve", "dj"],
+      "port": 4200
+    },
+    {
+      "name": "Go API",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd /Users/admin/dev/klubhub-dj/api && DATABASE_URL='postgres://klubhub:changeme@127.0.0.1:5432/klubhub?sslmode=disable' MINIO_ENDPOINT='127.0.0.1:9000' MINIO_ACCESS_KEY='minioadmin' MINIO_SECRET_KEY='changeme' MINIO_PUBLIC_ENDPOINT='http://127.0.0.1:9000' MINIO_BUCKET='klubhub-dj' TOKEN_ENCRYPTION_KEY='47af03a678c55fcb8f08b973b48a185a85a5f0cf5ca3b265f15181954efc88e7' LOG_LEVEL='info' CORS_ORIGIN='http://127.0.0.1:4200' /usr/local/Cellar/go/1.26.1/libexec/bin/go run ./cmd/api/main.go"],
+      "port": 8080
+    }
+  ]
+}
