@@ -4,6 +4,11 @@ import { defineNuxtConfig } from 'nuxt/config';
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   workspaceDir: '../../',
+  modules: ['@pinia/nuxt', 'shadcn-nuxt'],
+  shadcn: {
+    prefix: '',
+    componentDir: './app/components/ui',
+  },
   devtools: { enabled: true },
   devServer: {
     host: 'localhost',
