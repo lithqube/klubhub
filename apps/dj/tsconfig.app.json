@@ -6,7 +6,11 @@
     "jsx": "preserve",
     "jsxImportSource": "vue",
     "resolveJsonModule": true,
-    "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo"
+    "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo",
+    "paths": {
+      "@": ["./app"],
+      "@/*": ["./app/*"]
+    }
   },
   "include": [".nuxt/nuxt.d.ts", "app/**/*", "server/**/*"],
   "exclude": [
