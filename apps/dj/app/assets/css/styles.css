@@ -1,54 +1,164 @@
-html {
-  -webkit-text-size-adjust: 100%;
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    Arial,
-    'Noto Sans',
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol',
-    'Noto Color Emoji';
-  line-height: 1.5;
-  tab-size: 4;
-  scroll-behavior: smooth;
+/* ── Variable font declarations ── */
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/SpaceGrotesk[wght].woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-display: swap;
 }
-body {
-  font-family: inherit;
-  line-height: inherit;
-  margin: 0;
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter[slnt,wght].woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: oblique 0deg 10deg;
+  font-display: swap;
 }
-h1,
-h2,
-p,
-pre {
-  margin: 0;
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope[wght].woff2') format('woff2-variations');
+  font-weight: 200 800;
+  font-display: swap;
 }
-*,
-::before,
-::after {
-  box-sizing: border-box;
-  border-width: 0;
-  border-style: solid;
-  border-color: currentColor;
+
+@import "tailwindcss";
+
+@theme {
+  /* Surface hierarchy */
+  --color-surface:                   #0E0E0F;
+  --color-surface-bright:            #1E1E20;
+  --color-surface-variant:           #1A1A1C;
+  --color-surface-container:         #1C1C1E;
+  --color-surface-container-lowest:  #121214;
+  --color-surface-container-low:     #161618;
+  --color-surface-container-high:    #232326;
+  --color-surface-container-highest: #2A2A2D;
+
+  /* Primary (radioactive cyan) */
+  --color-primary:           #96F8FF;
+  --color-primary-container: #00F1FD;
+  --color-primary-dim:       #4CCAD4;
+
+  /* Secondary (violet) */
+  --color-secondary:           #C8B8FF;
+  --color-secondary-container: #7B68EE;
+
+  /* Tertiary / Error / On-colors */
+  --color-tertiary:           #7A8899;
+  --color-error:              #FF716C;
+  --color-error-container:    #5C2B29;
+  --color-on-primary:         #0E0E0F;
+  --color-on-surface:         #E0E0E2;
+  --color-on-surface-variant: #C4C4C7;
+  --color-outline:            #3A3A3D;
+  --color-outline-variant:    #2E2E31;
+
+  /* Status accent colors (for accent bars and badges) */
+  --color-status-ready:    #96F8FF;   /* cyan — same as primary */
+  --color-status-draft:    #C8B8FF;   /* violet — same as secondary */
+  --color-status-pending:  #C8B8FF;   /* violet */
+  --color-status-archived: #F5C518;   /* amber/yellow */
+  --color-status-failed:   #FF716C;   /* red — same as error */
+
+  /* Glow shadows */
+  --shadow-glow-primary:        0 0 32px rgba(150, 248, 255, 0.10);
+  --shadow-glow-secondary:      0 0 32px rgba(200, 184, 255, 0.10);
+  --shadow-glow-error:          0 0 16px rgba(255, 113, 108, 0.15);
+  --shadow-glow-primary-strong: 0 0 24px rgba(150, 248, 255, 0.25);
+
+  /* Font families */
+  --font-command:  'Space Grotesk', sans-serif;
+  --font-data:     'Inter', sans-serif;
+  --font-terminal: 'Manrope', sans-serif;
+  --font-noto:     'Noto Sans', sans-serif;
+
+  /* Letter spacing */
+  --tracking-command:  -0.02em;
+  --tracking-terminal:  0.05em;
+
+  /* Backdrop blur */
+  --blur-glass:       20px;
+  --blur-glass-heavy: 40px;
+
+  /* Border radius — 0px enforced globally */
+  --radius:    0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
 }
-h1,
-h2 {
-  font-size: inherit;
-  font-weight: inherit;
-}
-a {
-  color: inherit;
-  text-decoration: inherit;
-}
-pre {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    'Courier New', monospace;
+
+@layer components {
+  /* ── Base design system utilities ── */
+  .glass-panel {
+    @apply bg-surface-variant/60 backdrop-blur-glass;
+  }
+  .glass-panel-heavy {
+    @apply bg-surface-variant/60 backdrop-blur-glass-heavy;
+  }
+  .gradient-cta {
+    background: linear-gradient(135deg, #96F8FF, #00F1FD);
+  }
+  .ghost-border {
+    border: 1px dashed rgba(46, 46, 49, 0.6); /* outline-variant at partial opacity, dashed */
+  }
+  .luminous-threshold {
+    outline: 1px solid rgba(46, 46, 49, 0.2);
+    @apply shadow-glow-primary;
+  }
+  .accent-bar-focus {
+    @apply border-l-2 border-primary;
+  }
+
+  /* ── Mockup-derived: Sidebar active state ── */
+  /* Active nav item: dashed cyan border on ALL 4 sides (not solid fill, not left-only) */
+  .nav-item-active {
+    border: 1px dashed #96F8FF;
+    @apply text-primary;
+  }
+  /* Inactive nav items get a faint dashed underline only */
+  .nav-item-inactive {
+    border-bottom: 1px dashed rgba(150, 248, 255, 0.25);
+  }
+
+  /* ── Mockup-derived: List/table status accent bars ── */
+  /* 3-4px left vertical bar per status color, used in tracklist rows, gig table rows, etc. */
+  .accent-bar-ready {
+    border-left: 3px solid #96F8FF; /* cyan — ready/confirmed */
+  }
+  .accent-bar-confirmed {
+    border-left: 3px solid #96F8FF; /* cyan — alias for ready */
+  }
+  .accent-bar-draft {
+    border-left: 3px solid #C8B8FF; /* violet — draft/pending */
+  }
+  .accent-bar-pending {
+    border-left: 3px solid #C8B8FF; /* violet — alias for draft */
+  }
+  .accent-bar-archived {
+    border-left: 3px solid #F5C518; /* amber — archived/warning */
+  }
+  .accent-bar-failed {
+    border-left: 3px solid #FF716C; /* red — failed/error */
+  }
+  .accent-bar-scheduled {
+    border-left: 3px solid #96F8FF; /* cyan — scheduled */
+  }
+  .accent-bar-published {
+    border-left: 3px solid #7A8899; /* tertiary/gray — published/settled */
+  }
+
+  /* ── Mockup-derived: Progress bar track ── */
+  /* 4px thin bar, used with SYSTEM_PROCESS: label pattern */
+  .progress-bar-track {
+    @apply h-1 w-full bg-surface-container-high;
+  }
+  .progress-bar-fill {
+    @apply h-full;
+    background: linear-gradient(90deg, #96F8FF, #00F1FD);
+  }
+
+  /* ── Mockup-derived: Table row selected state ── */
+  /* Violet/purple translucent background for selected rows */
+  .row-selected {
+    background-color: rgba(123, 104, 238, 0.15); /* secondary-container at 15% */
+  }
 }
