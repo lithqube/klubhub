@@ -223,7 +223,7 @@ Note: Phase 1.5 (Design System) is an inserted phase that must complete before P
 | 0. Infrastructure                | 4/4            | Complete    | 2026-03-14 |
 | 1. Tracklist Image Generator     | 5/5            | Complete    | 2026-03-16 |
 | 1.5 Design System Foundation     | 0/TBD          | Not started | -          |
-| 2. Social Media Scheduler        | 0/7            | Not started | -          |
+| 2. Social Media Scheduler        | 1/7 | In Progress|  |
 | 3. EPK / Press Kit Builder       | 0/TBD          | Not started | -          |
 | 4. Gig Tracker                   | 0/TBD          | Not started | -          |
 | 5. Finance Tracker               | 0/TBD          | Not started | -          |

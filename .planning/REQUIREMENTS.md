@@ -74,21 +74,21 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 
 - [ ] **SOCL-01**: User can connect an Instagram account via OAuth (Facebook Business account flow)
 - [ ] **SOCL-02**: System automatically refreshes Instagram OAuth tokens before expiry; marks account as `disconnected` on refresh failure and surfaces a re-authorization warning
-- [ ] **SOCL-03**: User can schedule a post for a specific date and time with timezone selection
+- [x] **SOCL-03**: User can schedule a post for a specific date and time with timezone selection
 - [ ] **SOCL-04**: System publishes scheduled posts automatically at the specified time
 - [ ] **SOCL-05**: User can post to Instagram Feed (single image + caption with hashtags)
 - [ ] **SOCL-06**: User can post to Instagram Stories (single image)
 - [ ] **SOCL-07**: User can attach any generated tracklist image or a custom uploaded image to a post
 - [ ] **SOCL-08**: Custom-uploaded images are validated for format (JPEG/PNG), size (<8 MB), dimensions, and aspect ratio before scheduling
-- [ ] **SOCL-09**: User sees a queue/calendar view of all scheduled, publishing, published, failed, and permanently failed posts
-- [ ] **SOCL-10**: Post status tracks: draft, scheduled, publishing, published, failed, permanently_failed
+- [x] **SOCL-09**: User sees a queue/calendar view of all scheduled, publishing, published, failed, and permanently failed posts
+- [x] **SOCL-10**: Post status tracks: draft, scheduled, publishing, published, failed, permanently_failed
 - [ ] **SOCL-11**: Failed posts retry up to 3 times with exponential backoff; after exhaustion, post is marked `permanently_failed`
 - [ ] **SOCL-12**: Permanently failed posts surface on dashboard and queue with error reason; user can retry once manually or download the image for manual posting
 - [ ] **SOCL-13**: Scheduler respects Instagram rate limits: minimum 30-second interval between posts; backs off on 429 responses per response headers (default 15 minutes)
 - [ ] **SOCL-14**: Scheduled posts can be fully edited (caption, image, time, timezone) while in `scheduled` status; edits are blocked once `publishing` begins
 - [ ] **SOCL-15**: Disconnecting a social account moves all its `scheduled` posts to `draft` status; user is warned before disconnect
 - [ ] **SOCL-16**: Before retrying a failed post, scheduler checks whether the post was already published on Instagram (duplicate prevention)
-- [ ] **SOCL-17**: After image export in Tracklist Generator, UI shows a "Schedule Post" CTA that pre-fills the new post form with the generated image attached
+- [x] **SOCL-17**: After image export in Tracklist Generator, UI shows a "Schedule Post" CTA that pre-fills the new post form with the generated image attached
 
 ### EPK / Press Kit Builder (EPK)
 
