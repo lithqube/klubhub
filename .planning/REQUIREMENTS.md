@@ -78,8 +78,8 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 - [x] **SOCL-02**: System automatically refreshes Instagram OAuth tokens before expiry; marks account as `disconnected` on refresh failure and surfaces a re-authorization warning
 - [x] **SOCL-03**: User can schedule a post for a specific date and time with timezone selection
 - [ ] **SOCL-04**: System publishes scheduled posts automatically at the specified time
-- [ ] **SOCL-05**: User can post to Instagram Feed (single image + caption with hashtags)
-- [ ] **SOCL-06**: User can post to Instagram Stories (single image)
+- [x] **SOCL-05**: User can post to Instagram Feed (single image + caption with hashtags)
+- [x] **SOCL-06**: User can post to Instagram Stories (single image)
 - [x] **SOCL-07**: User can attach any generated tracklist image or a custom uploaded image to a post
 - [x] **SOCL-08**: Custom-uploaded images are validated for format (JPEG/PNG), size (<8 MB), dimensions, and aspect ratio before scheduling
 - [x] **SOCL-09**: User sees a queue/calendar view of all scheduled, publishing, published, failed, and permanently failed posts

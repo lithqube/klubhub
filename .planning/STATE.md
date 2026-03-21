@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 1.5-design-system-foundation
 status: planning
-last_updated: "2026-03-21T23:17:34.305Z"
+last_updated: "2026-03-21T23:25:44.385Z"
 progress:
   total_phases: 13
   completed_phases: 2
   total_plans: 23
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Session State
@@ -66,6 +66,8 @@ See: .planning/PROJECT.md
 - [Phase 02-social-media-scheduler]: parseDateTimeLocal uses time.LoadLocation + ParseInLocation for IANA timezone-aware UTC conversion
 - [Phase 02-social-media-scheduler]: dotColorForStatus extracted to socialCalendarUtils.ts (not inline export from SFC) — Vue script setup does not allow named exports
 - [Phase 02-social-media-scheduler]: SocialCalendarView accepts optional month prop for deterministic test rendering without mocking Date.now()
+- [Phase 02-social-media-scheduler]: data-testid attributes on submit-btn, retry-btn, download-btn, post-card, failed-card, next-slot-card for deterministic test queries
+- [Phase 02-social-media-scheduler]: ~ alias added to vitest.config.ts resolve.alias — needed for component imports using Nuxt ~ convention to resolve in test environment
 
 ## Performance Metrics
 
@@ -82,6 +84,7 @@ See: .planning/PROJECT.md
 | Phase 02-social-media-scheduler P03 | 15 | 2 tasks | 5 files |
 | Phase 02-social-media-scheduler P01 | 10 min | 2 tasks | 11 files |
 | Phase 02-social-media-scheduler P05 | 25min | 2 tasks | 6 files |
+| Phase 02-social-media-scheduler P04 | 25 min | 3 tasks | 8 files |
 
 ## Session Log
 
