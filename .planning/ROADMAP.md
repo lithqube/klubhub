@@ -108,11 +108,11 @@ Decimal phases appear between their surrounding integers in numeric order.
    **Plans**: 7 plans
    Plans:
 
-- [ ] 02-01-PLAN.md — Go social package: migration 003, model, repository, service, handler (OAuth + post CRUD + edit blocking + disconnect cascade)
+- [ ] 02-01-PLAN.md — Go social package: migration 003, model, repository, service, handler (OAuth + post CRUD + edit blocking + disconnect cascade + manual retry + image dimension validation)
 - [ ] 02-02-PLAN.md — Go publishing worker + Instagram API client (two-step publish, retry backoff, rate limit, token refresh)
 - [ ] 02-03-PLAN.md — Pinia useSocialStore + useSocialPostForm composable + TypeScript types
-- [ ] 02-04-PLAN.md — social.vue page + SocialPostCompose + SocialQueueGrid + SocialPostCard + SocialPostCardFailed
-- [ ] 02-05-PLAN.md — SocialCalendarView + SocialConnectionBanner + SocialTokenWarningBanner + TheNav social entry
+- [ ] 02-04-PLAN.md — social.vue page + SocialPostCompose (with tests) + SocialQueueGrid + SocialPostCard + SocialPostCardFailed (with tests)
+- [ ] 02-05-PLAN.md — SocialCalendarView + SocialConnectionBanner + SocialTokenWarningBanner (with tests) + TheNav social entry
 - [ ] 02-06-PLAN.md — TracklistExporter "Schedule to Instagram" CTA integration (SOCL-17)
 - [ ] 02-07-PLAN.md — Human verification checkpoint
 
