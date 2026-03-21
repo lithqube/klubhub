@@ -22,6 +22,9 @@ onMounted(async () => {
   const imageId = route.query.imageId
   if (imageId && typeof imageId === 'string') {
     store.openComposePanel(imageId)
+    nextTick(() => {
+      document.querySelector('[data-compose-panel]')?.scrollIntoView({ behavior: 'smooth' })
+    })
   }
 })
 

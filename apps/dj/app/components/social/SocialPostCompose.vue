@@ -83,7 +83,7 @@ function removeImage() {
 </script>
 
 <template>
-  <div class="glass-panel border border-outline-variant/20 p-6 space-y-5">
+  <div data-compose-panel class="glass-panel border border-outline-variant/20 p-6 space-y-5">
 
     <!-- Header -->
     <div class="flex items-center justify-between">

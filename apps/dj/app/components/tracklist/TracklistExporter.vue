@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { generateImage } from '@/composables/useTracklist';
 
 const tracklistStore = useTracklistStore();
@@ -8,16 +9,27 @@ const settingsStore = useSettingsStore();
 const { tracklist } = storeToRefs(tracklistStore);
 const { exportLoading, exportError } = storeToRefs(uiStore);
 
+// Track last export result for the "Schedule to Instagram" CTA
+const lastExportStoryPath = ref<string | null>(null);
+const lastExportSquarePath = ref<string | null>(null);
+
 const exportImage = async (format: 'story' | 'square') => {
   if (!tracklist.value) return;
 
   uiStore.exportLoading = true;
   uiStore.exportError = null;
+  lastExportStoryPath.value = null;
+  lastExportSquarePath.value = null;
 
   try {
     const result = await generateImage(tracklist.value.id, format);
-    if (result[format]) {
-      window.open(result[format], '_blank');
+    if (result.story) {
+      lastExportStoryPath.value = result.story;
+      window.open(result.story, '_blank');
+    }
+    if (result.square) {
+      lastExportSquarePath.value = result.square;
+      window.open(result.square, '_blank');
     }
   } catch (err: unknown) {
     const error = err as { message?: string };
@@ -32,11 +44,19 @@ const exportBoth = async () => {
 
   uiStore.exportLoading = true;
   uiStore.exportError = null;
+  lastExportStoryPath.value = null;
+  lastExportSquarePath.value = null;
 
   try {
     const result = await generateImage(tracklist.value.id, 'both');
-    if (result.story) window.open(result.story, '_blank');
-    if (result.square) window.open(result.square, '_blank');
+    if (result.story) {
+      lastExportStoryPath.value = result.story;
+      window.open(result.story, '_blank');
+    }
+    if (result.square) {
+      lastExportSquarePath.value = result.square;
+      window.open(result.square, '_blank');
+    }
   } catch (err: unknown) {
     const error = err as { message?: string };
     uiStore.exportError = error.message ?? 'Failed to export images';
@@ -44,6 +64,14 @@ const exportBoth = async () => {
     uiStore.exportLoading = false;
   }
 };
+
+// Navigate to social page with the best available image path
+function scheduleToInstagram() {
+  // Prefer story format (1080×1920) as primary DJ post format; fall back to square
+  const imageId = lastExportStoryPath.value ?? lastExportSquarePath.value;
+  if (!imageId) return;
+  navigateTo('/social?imageId=' + encodeURIComponent(imageId));
+}
 </script>
 
 <template>
@@ -113,6 +141,17 @@ const exportBoth = async () => {
       <p class="font-terminal tracking-terminal text-error text-xs uppercase">
         ERROR: {{ exportError }}
       </p>
+    </div>
+
+    <!-- Post-export CTA: Schedule to Instagram -->
+    <div v-if="lastExportStoryPath || lastExportSquarePath" class="pt-1">
+      <Button
+        variant="ghost"
+        class="w-full ghost-border font-command tracking-command text-primary text-xs uppercase"
+        @click="scheduleToInstagram"
+      >
+        ⚡ SCHEDULE TO INSTAGRAM
+      </Button>
     </div>
 
     <!-- No tracklist message -->
