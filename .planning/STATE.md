@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 1.5-design-system-foundation
 status: planning
-last_updated: "2026-03-21T23:26:59.420Z"
+last_updated: "2026-03-21T23:35:17.495Z"
 progress:
   total_phases: 13
   completed_phases: 2
   total_plans: 23
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Session State
@@ -71,6 +71,8 @@ See: .planning/PROJECT.md
 - [Phase 02-social-media-scheduler]: Worker uses workerRepoIface/instagramIface/storageIface thin interfaces for full-mock unit testing without testcontainers
 - [Phase 02-social-media-scheduler]: signal.NotifyContext added in main.go for SIGTERM/SIGINT — ensures worker goroutine exits cleanly on container shutdown
 - [Phase 02-social-media-scheduler]: Worker.tick swallows RateLimitError (returns nil) — stops tick loop early without propagating error
+- [Phase 02-social-media-scheduler]: lastExportStoryPath/lastExportSquarePath refs track export result in TracklistExporter; CTA only visible after successful export, cleared on each new export attempt
+- [Phase 02-social-media-scheduler]: navigateTo('/social?imageId=...') with nextTick scroll to [data-compose-panel] used for cross-page prefill flow from TracklistExporter to SocialPostCompose
 
 ## Performance Metrics
 
@@ -89,6 +91,7 @@ See: .planning/PROJECT.md
 | Phase 02-social-media-scheduler P05 | 25min | 2 tasks | 6 files |
 | Phase 02-social-media-scheduler P04 | 25 min | 3 tasks | 8 files |
 | Phase 02-social-media-scheduler P02 | 15 min | 2 tasks | 5 files |
+| Phase 02-social-media-scheduler P06 | 10 min | 1 tasks | 3 files |
 
 ## Session Log
 
