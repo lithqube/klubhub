@@ -264,3 +264,90 @@ func (r *Repository) ResetPostForRetry(ctx context.Context, id uuid.UUID) error 
 	}
 	return nil
 }
+
+// ListDuePosts returns scheduled posts that are due for publishing:
+// status='scheduled' AND scheduled_at_utc <= now AND (next_retry_at IS NULL OR next_retry_at <= now).
+func (r *Repository) ListDuePosts(ctx context.Context) ([]ScheduledPost, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, account_id, status, post_type, caption, image_minio_path,
+		       scheduled_at_utc, timezone_name, retry_count, next_retry_at,
+		       last_error, container_id, created_at, updated_at, deleted_at
+		FROM scheduled_posts
+		WHERE deleted_at IS NULL
+		  AND status = 'scheduled'
+		  AND scheduled_at_utc <= NOW()
+		  AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+		ORDER BY scheduled_at_utc ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var posts []ScheduledPost
+	for rows.Next() {
+		var p ScheduledPost
+		if err := rows.Scan(
+			&p.ID, &p.AccountID, &p.Status, &p.PostType, &p.Caption,
+			&p.ImageMinioPath, &p.ScheduledAtUTC, &p.TimezoneName, &p.RetryCount,
+			&p.NextRetryAt, &p.LastError, &p.ContainerID,
+			&p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		posts = append(posts, p)
+	}
+	return posts, rows.Err()
+}
+
+// ListExpiringAccounts returns connected accounts whose token expires within 7 days.
+func (r *Repository) ListExpiringAccounts(ctx context.Context) ([]SocialAccount, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, platform, account_name, ig_user_id, access_token,
+		       token_expiry, status, user_id, created_at, updated_at
+		FROM social_accounts
+		WHERE deleted_at IS NULL
+		  AND status = 'connected'
+		  AND token_expiry IS NOT NULL
+		  AND token_expiry <= NOW() + INTERVAL '7 days'`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accounts []SocialAccount
+	for rows.Next() {
+		var a SocialAccount
+		if err := rows.Scan(
+			&a.ID, &a.Platform, &a.AccountName, &a.IgUserID, &a.AccessToken,
+			&a.TokenExpiry, &a.Status, &a.UserID, &a.CreatedAt, &a.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, a)
+	}
+	return accounts, rows.Err()
+}
+
+// UpdateContainerID stores the Instagram container ID for a post after creation.
+func (r *Repository) UpdateContainerID(ctx context.Context, id uuid.UUID, containerID string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE scheduled_posts
+		SET container_id=$1, updated_at=NOW()
+		WHERE id=$2`,
+		containerID, id,
+	)
+	return err
+}
+
+// UpdateAccountToken updates the access_token and token_expiry for an account after a token refresh.
+func (r *Repository) UpdateAccountToken(ctx context.Context, id uuid.UUID, encryptedToken string, expiry time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE social_accounts
+		SET access_token=$1, token_expiry=$2, updated_at=NOW()
+		WHERE id=$3`,
+		encryptedToken, expiry, id,
+	)
+	return err
+}

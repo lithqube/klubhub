@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	nethttp "net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/klubhub/dj/api/internal/artwork"
@@ -28,7 +30,9 @@ func main() {
 
 	logger := applog.New(cfg.LogLevel)
 
-	ctx := context.Background()
+	// Root context cancelled on SIGTERM/SIGINT for graceful shutdown.
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
 
 	// 1. Open sql.DB for goose migrations (goose requires *sql.DB).
 	sqlDB, err := sql.Open("pgx", cfg.DatabaseURL)
@@ -107,10 +111,16 @@ func main() {
 	})
 	socialHandler := social.NewHandler(socialSvc)
 
+	// 7a. Wire and start the background publish worker.
+	igClient := social.NewInstagramClient([]byte(cfg.TokenEncryptionKey))
+	publishWorker := social.NewWorker(socialRepo, igClient, storeClient, []byte(cfg.TokenEncryptionKey), logger)
+	go social.StartPublishWorker(ctx, publishWorker)
+	logger.Info().Msg("social publish worker started")
+
 	// 8. Build router (internal http package aliased as apphttp).
 	router := apphttp.NewRouter(cfg, pool, storeClient, logger, settingsHandler, tracklistHandler.Routes(), socialHandler.Routes())
 
-	// 7. Start HTTP server.
+	// 9. Start HTTP server (blocks until ctx cancelled or error).
 	addr := cfg.BindAddress + ":" + cfg.Port
 	logger.Info().
 		Str("addr", addr).
