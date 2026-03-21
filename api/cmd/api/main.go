@@ -15,6 +15,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/migrations"
 	"github.com/klubhub/dj/api/internal/platform/storage"
 	"github.com/klubhub/dj/api/internal/settings"
+	"github.com/klubhub/dj/api/internal/social"
 	"github.com/klubhub/dj/api/internal/tracklist"
 )
 
@@ -96,8 +97,18 @@ func main() {
 	})
 	tracklistHandler := tracklist.NewHandler(tracklistSvc)
 
-	// 7. Build router (internal http package aliased as apphttp).
-	router := apphttp.NewRouter(cfg, pool, storeClient, logger, settingsHandler, tracklistHandler.Routes())
+	// 7. Wire social module.
+	socialRepo := social.NewRepository(pool)
+	socialSvc := social.NewService(socialRepo, social.ServiceConfig{
+		InstagramAppID:       cfg.InstagramClientID,
+		InstagramAppSecret:   cfg.InstagramClientSecret,
+		InstagramRedirectURI: cfg.InstagramRedirectURI,
+		TokenEncryptionKey:   []byte(cfg.TokenEncryptionKey),
+	})
+	socialHandler := social.NewHandler(socialSvc)
+
+	// 8. Build router (internal http package aliased as apphttp).
+	router := apphttp.NewRouter(cfg, pool, storeClient, logger, settingsHandler, tracklistHandler.Routes(), socialHandler.Routes())
 
 	// 7. Start HTTP server.
 	addr := cfg.BindAddress + ":" + cfg.Port

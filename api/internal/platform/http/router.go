@@ -14,6 +14,7 @@ import (
 // NewRouter constructs a chi router with all routes wired.
 // settingsHandler handles both GET and PUT /api/v1/settings.
 // tracklistHandler handles tracklist CRUD operations.
+// socialHandler handles social scheduling routes under /api/v1/social.
 func NewRouter(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -21,6 +22,7 @@ func NewRouter(
 	log zerolog.Logger,
 	settingsHandler http.Handler,
 	tracklistHandler http.Handler,
+	socialHandler http.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -37,6 +39,9 @@ func NewRouter(
 
 	// Tracklist routes
 	r.Mount("/api/v1/tracklists", tracklistHandler)
+
+	// Social scheduling routes
+	r.Mount("/api/v1/social", socialHandler)
 
 	return r
 }
