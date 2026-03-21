@@ -105,7 +105,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 3. Failed posts retry up to 3 times with exponential backoff; permanently failed posts appear in the queue with the error reason and offer a "Download Image" fallback so the user can post manually
 4. User can view all posts (scheduled, publishing, published, failed, permanently_failed) in a queue/calendar view; scheduled posts can be fully edited before publishing begins
 5. After exporting a tracklist image, a "Schedule Post" call-to-action pre-fills the new post form with that image attached
-   **Plans**: TBD
+   **Plans**: 7 plans
+   Plans:
+
+- [ ] 02-01-PLAN.md — Go social package: migration 003, model, repository, service, handler (OAuth + post CRUD + edit blocking + disconnect cascade)
+- [ ] 02-02-PLAN.md — Go publishing worker + Instagram API client (two-step publish, retry backoff, rate limit, token refresh)
+- [ ] 02-03-PLAN.md — Pinia useSocialStore + useSocialPostForm composable + TypeScript types
+- [ ] 02-04-PLAN.md — social.vue page + SocialPostCompose + SocialQueueGrid + SocialPostCard + SocialPostCardFailed
+- [ ] 02-05-PLAN.md — SocialCalendarView + SocialConnectionBanner + SocialTokenWarningBanner + TheNav social entry
+- [ ] 02-06-PLAN.md — TracklistExporter "Schedule to Instagram" CTA integration (SOCL-17)
+- [ ] 02-07-PLAN.md — Human verification checkpoint
 
 ### Phase 3: EPK / Press Kit Builder
 
@@ -214,7 +223,7 @@ Note: Phase 1.5 (Design System) is an inserted phase that must complete before P
 | 0. Infrastructure                | 4/4            | Complete    | 2026-03-14 |
 | 1. Tracklist Image Generator     | 5/5            | Complete    | 2026-03-16 |
 | 1.5 Design System Foundation     | 0/TBD          | Not started | -          |
-| 2. Social Media Scheduler        | 0/TBD          | Not started | -          |
+| 2. Social Media Scheduler        | 0/7            | Not started | -          |
 | 3. EPK / Press Kit Builder       | 0/TBD          | Not started | -          |
 | 4. Gig Tracker                   | 0/TBD          | Not started | -          |
 | 5. Finance Tracker               | 0/TBD          | Not started | -          |
