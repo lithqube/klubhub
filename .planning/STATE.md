@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 1.5-design-system-foundation
 status: planning
-last_updated: "2026-03-21T17:05:54.398Z"
+last_updated: "2026-03-21T17:09:03.800Z"
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 23
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Session State
@@ -60,6 +60,10 @@ See: .planning/PROJECT.md
 - [Phase 02-social-media-scheduler]: useSocialPostForm uses computed() for djName access — storeToRefs() incompatible with vi.mock plain object in tests
 - [Phase 02-social-media-scheduler]: retryPost() updates individual post in-store by index splice rather than full reload to avoid loading flash
 - [Phase 02-social-media-scheduler]: createPost() calls loadPosts() after POST to keep store in sync with server state
+- [Phase 02-social-media-scheduler]: UNIQUE constraint on social_accounts(platform) added in migration 003 (not 001) to enable ON CONFLICT upsert
+- [Phase 02-social-media-scheduler]: Two-level interface stack: handler→serviceIface, service→repoIface for independent mock testing without testcontainers
+- [Phase 02-social-media-scheduler]: ValidateImage order: MIME → size → dimensions — cheapest checks first for fast rejection
+- [Phase 02-social-media-scheduler]: parseDateTimeLocal uses time.LoadLocation + ParseInLocation for IANA timezone-aware UTC conversion
 
 ## Performance Metrics
 
@@ -74,6 +78,7 @@ See: .planning/PROJECT.md
 | 1.5-design-system-foundation   | 04   | 25 min   | 3     | 9     |
 | Phase 1.5 P05 | 15 | 3 tasks | 6 files |
 | Phase 02-social-media-scheduler P03 | 15 | 2 tasks | 5 files |
+| Phase 02-social-media-scheduler P01 | 10 min | 2 tasks | 11 files |
 
 ## Session Log
 
