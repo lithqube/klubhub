@@ -1,664 +1,570 @@
 # Phase 2: Social Media Scheduler - Research
 
-**Researched:** 2026-03-14
-**Domain:** Social media scheduling, Instagram Graph API, Go background workers
-**Confidence:** MEDIUM
+**Researched:** 2026-03-21
+**Domain:** Instagram Graph API, OAuth 2.0, Go background workers, Vue/Pinia scheduling UI
+**Confidence:** HIGH (core stack verified against official Meta docs and existing codebase)
+
+---
+
+<user_constraints>
+## User Constraints (from CONTEXT.md)
+
+### Locked Decisions
+- **Default view: Queue** — card grid of posts (matches the Social Scheduler mockup)
+- **Calendar tab also built in Phase 2**: monthly grid with dot indicators per day (colored by status: cyan=scheduled, gray=published, magenta=failed)
+- Clicking a calendar day filters the queue to show only posts for that date
+- **Tabs in scope: QUEUE + CALENDAR only** — Analytics and Automations tabs rendered as "Coming Soon" stubs (no backend, just placeholder UI)
+- **Empty queue empty state**: dashed "NEXT SLOT" card + a connection banner above if no Instagram account is connected
+- Post cards in queue: image thumbnail, status badge (READY/SCHEDULED/PUBLISHED/FAILED), datetime, caption excerpt, platform tag (INSTAGRAM / INSTAGRAM REELS)
+- **Flow: Navigate to Social page** — clicking "Schedule to Instagram" on the tracklist page navigates to `/social?imageId={id}`
+- The Social page reads the `imageId` query param, fetches the image from MinIO, auto-expands the new-post form, and pre-fills the image
+- **Form visibility**: collapsed by default ("+ ADD TO QUEUE" button); clicking it expands a panel inline above the queue grid. `⚡ QUICK EXPORT FROM TRACKLIST` button also triggers this flow from within Social
+- **Caption**: auto-generates a suggested caption from tracklist metadata (template: `[DJ Name] @ [set name] — [track count] tracks • avg [BPM] BPM #techno #djset`). User can freely edit.
+- **Character counter**: adaptive by post type (Feed: `482 / 2200`, turns red at 90%+; Story: dimmed + note "Captions are not shown on Stories")
+- **Timezone**: datetime-local picker + searchable timezone dropdown (IANA names). Stored as UTC internally.
+- **Post type selector**: Feed vs Story
+- **Inline card expansion**: clicking a scheduled post card expands it in-place. Edit only available on `scheduled` status.
+- **Magenta banner at top of card**: `⚠ ATTENTION REQUIRED: SYNC ERROR` for failed posts
+- **Two actions on failed card**: `RETRY SYNC` + `DOWNLOAD IMAGE`
+- Failed state appears after 3 automatic retries with exponential backoff exhausted
+- **No Instagram connected**: connection banner visible with `CONNECT INSTAGRAM` CTA
+- **Connected**: small green status dot + account handle in top-right of Social module header
+- **Token expiry warning**: proactive orange banner `⚠ INSTAGRAM TOKEN EXPIRING IN 7 DAYS — RE-AUTHORIZE`
+- **Token expired mid-session**: queue freezes for new scheduling, banner changes to magenta
+
+### Claude's Discretion
+- Exact Pinia store structure for social posts (`useSocialStore`)
+- Database schema for `scheduled_posts` table (UUIDs, status enum, retry_count, scheduled_at_utc, timezone_name)
+- Go polling worker implementation (time.Ticker interval — 1 min recommended)
+- Exponential backoff formula (start: 5 min, max: 4 hr)
+- MinIO path convention for social post images
+- Instagram Graph API endpoint selection (Feed: `/me/media` + `/me/media_publish`, Stories: same with `media_type=STORIES`)
+- Exact timezone dropdown component (searchable select from IANA list, filter on type)
+
+### Deferred Ideas (OUT OF SCOPE)
+- Analytics tab — post performance metrics (reach, impressions, engagement)
+- Automations tab — auto-scheduling rules
+- Multi-platform support (Twitter/X, TikTok, Facebook) — architecture should not block it but Phase 2 is Instagram-only
+- Best time to post suggestions
+</user_constraints>
+
+---
+
+<phase_requirements>
+## Phase Requirements
+
+| ID | Description | Research Support |
+|----|-------------|-----------------|
+| SOCL-01 | User can connect an Instagram account via OAuth (Facebook Business account flow) | Instagram Platform API OAuth flow documented; requires `instagram_business_basic` + `instagram_business_content_publish` scopes |
+| SOCL-02 | System automatically refreshes Instagram OAuth tokens before expiry; marks account as `disconnected` on refresh failure | Token refresh via `GET /refresh_access_token`; 60-day expiry; polling worker checks `token_expiry` column 7 days ahead |
+| SOCL-03 | User can schedule a post for a specific date and time with timezone selection | Stored as UTC; IANA timezone dropdown via `Intl.supportedValuesOf('timeZone')`; datetime-local picker |
+| SOCL-04 | System publishes scheduled posts automatically at the specified time | Go time.Ticker polling worker; `scheduled_at_utc <= NOW()` query with status=scheduled |
+| SOCL-05 | User can post to Instagram Feed (single image + caption with hashtags) | `POST /<IG_ID>/media` with `media_type=IMAGE` then `POST /<IG_ID>/media_publish` |
+| SOCL-06 | User can post to Instagram Stories (single image) | `POST /<IG_ID>/media` with `media_type=STORIES` then `POST /<IG_ID>/media_publish` |
+| SOCL-07 | User can attach any generated tracklist image or a custom uploaded image | MinIO path stored on post; presigned GET URL generated at publish time |
+| SOCL-08 | Custom-uploaded images validated for format (JPEG/PNG), size (<8 MB), dimensions, and aspect ratio | Instagram requires JPEG; PNG must be converted; 8 MB max; aspect ratio 4:5 to 1.91:1 for feed |
+| SOCL-09 | User sees a queue/calendar view of all scheduled, publishing, published, failed, and permanently failed posts | Queue + Calendar tabs; status-colored UI; poll `/api/v1/social/posts` |
+| SOCL-10 | Post status tracks: draft, scheduled, publishing, published, failed, permanently_failed | PostgreSQL enum column with CHECK constraint |
+| SOCL-11 | Failed posts retry up to 3 times with exponential backoff; after exhaustion, mark `permanently_failed` | retry_count column; backoff: 5 min, 20 min, 80 min; worker checks `next_retry_at` |
+| SOCL-12 | Permanently failed posts surface with error reason; user can retry once manually or download image | `RETRY SYNC` + `DOWNLOAD IMAGE` actions on failed card |
+| SOCL-13 | Scheduler respects Instagram rate limits: minimum 30-second interval between posts; backs off on 429 | Worker enforces 30s minimum; reads Retry-After header on 429; defaults to 15-min backoff |
+| SOCL-14 | Scheduled posts can be fully edited while in `scheduled` status; edits blocked once `publishing` begins | Edit blocked on publishing, published, failed, permanently_failed |
+| SOCL-15 | Disconnecting account moves all its `scheduled` posts to `draft` status; user warned | Cascade status update on disconnect |
+| SOCL-16 | Before retrying, scheduler checks whether post was already published (duplicate prevention) | `GET /<container_id>?fields=status_code` before retry |
+| SOCL-17 | After image export, UI shows "Schedule Post" CTA that pre-fills the new post form | Navigate to `/social?imageId={minioId}`; Social page reads param and pre-fills compose panel |
+</phase_requirements>
+
+---
 
 ## Summary
 
-This phase involves implementing a social media scheduler for Instagram Feed and Stories with reliable publishing. Key technical components include: Instagram OAuth connection, automatic token refresh, scheduling posts with timezone support, a queue/calendar view, automatic publishing with retry logic, rate limit adherence, and integration with the tracklist generator via a "Schedule Post" CTA. The implementation decisions have been locked in the CONTEXT.md, specifying a DB-backed polling mechanism (goroutine checking DB every minute), specific UI views (calendar/list), editing behavior for scheduled posts, rate limiting with exponential backoff, and integration points. Research focuses on validating the technical feasibility of these decisions, particularly the Instagram Graph API capabilities for publishing, token management, and rate limits, along with Go concurrency patterns for the polling worker.
+Phase 2 builds a complete Instagram social scheduler on top of the existing Go/Nuxt/PostgreSQL/MinIO stack. The three main technical layers are: (1) Instagram OAuth integration with token lifecycle management, (2) a Go background worker that polls the `scheduled_posts` table every 60 seconds and publishes via the Instagram Graph API, and (3) a Nuxt social page with Queue and Calendar views following the established Cyberpunk HUD design system.
 
-**Primary recommendation:** Implement the scheduler using the locked decisions (DB-backed polling, specific UI/UX patterns) and leverage the Instagram Graph API for publishing with careful attention to token refresh and rate limit handling. Use Go's standard library for concurrency (time.Ticker, context) rather than external worker libraries for the polling mechanism.
+The Instagram Graph API uses a two-step publish flow: create a media container (`POST /<IG_ID>/media`) then publish it (`POST /<IG_ID>/media_publish`). Images must be served from a publicly accessible URL — MinIO presigned GET URLs using `MINIO_PUBLIC_ENDPOINT` with a 30-minute expiry satisfy this requirement. Critically, the API only accepts JPEG; PNG images from the tracklist generator must be converted before submission. Do NOT create the media container at scheduling time — Instagram containers expire after 24 hours, so the container must be created at publish time (in the worker).
+
+The `social_accounts` table stub already exists in migration 001. This phase adds migration 003 for `scheduled_posts`, the `social` Go package following the handler/service/repository/worker structure of the existing `tracklist` package, and `pages/social.vue` with feature components under `components/social/`.
+
+**Primary recommendation:** Use the existing `platform/crypto` AES-256-GCM package for token encryption (already implemented in `api/internal/platform/crypto/aes.go`), the existing time.Ticker + goroutine pattern for the publishing worker, and MinIO presigned GET URLs with a 30-minute expiry window for Instagram's `image_url` parameter.
+
+---
 
 ## Standard Stack
 
 ### Core
-
-| Library             | Version               | Purpose                                  | Why Standard                                                                      |
-| ------------------- | --------------------- | ---------------------------------------- | --------------------------------------------------------------------------------- |
-| Go                  | 1.25.7                | Primary backend language                 | Matches project's existing Go version and concurrency model                       |
-| Instagram Graph API | v24.0                 | Publishing to Instagram Feed and Stories | Official Meta API for professional accounts; required for programmatic publishing |
-| Go time.Ticker      | stdlib                | Polling mechanism for scheduled posts    | Built-in, lightweight ticker for interval-based database checks                   |
-| Go context          | stdlib                | Cancellation and timeout handling        | Standard for managing goroutine lifecycles and request-scoped values              |
-| PostgreSQL          | Project's existing DB | Storing scheduled posts and metadata     | Consistent with project's existing data storage                                   |
-| MinIO               | Project's existing    | Storing tracklist images for scheduling  | Already integrated via internal/pkg/minio/ wrapper                                |
-| Vue 3               | 3.5.13                | Frontend framework                       | Matches project's existing Nuxt/Vue stack                                         |
-| Nuxt                | 4.0.0                 | Frontend framework                       | Existing project framework for SSR and routing                                    |
+| Library / Feature | Version | Purpose | Why Standard |
+|-------------------|---------|---------|--------------|
+| Instagram Graph API | v22.0 (2025) | Publishing feed posts and stories | Only supported path for Business/Creator accounts after Dec 2024 deprecation of Basic Display API |
+| `github.com/go-chi/chi/v5` | v5.2.5 (existing) | HTTP routing for social endpoints | Already in go.mod; established project router |
+| `github.com/jackc/pgx/v5` | v5.8.0 (existing) | PostgreSQL queries for social_accounts + scheduled_posts | Already in go.mod; all other packages use it |
+| `github.com/minio/minio-go/v7` | v7.0.99 (existing) | Object storage for post images; presigned GET URLs | Already in go.mod; `PresignedGetObject` interface already defined |
+| `api/internal/platform/crypto` | existing (internal) | AES-256-GCM encryption for OAuth access tokens | Already implemented; satisfies INFRA-09 |
+| `time.Ticker` (Go stdlib) | Go 1.26 | Background polling worker at 60s intervals | Standard lib; no new dependency; matches artwork worker pattern |
 
 ### Supporting
-
-| Library                                        | Version | Purpose                                    | When to Use                                                  |
-| ---------------------------------------------- | ------- | ------------------------------------------ | ------------------------------------------------------------ |
-| github.com/assaidy/workers                     | v1.1.0  | Background job processing with retry logic | Alternative to custom polling worker if complexity increases |
-| github.com/qcserestipy/instagram-api-go-client | latest  | Type-safe Instagram Graph API client       | For simplified API interactions (if adopted)                 |
-| golang.org/x/oauth2                            | stdlib  | OAuth 2.0 token management                 | Standard library for Instagram OAuth flow                    |
-| github.com/go-chi/jwt                          | latest  | JWT handling for token storage             | If implementing custom token storage beyond DB               |
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| `github.com/sethvargo/go-retry` | v0.3.0 (existing in go.mod) | Retry with backoff for Instagram API calls | Use for the Instagram HTTP client retry wrapper |
+| `github.com/gabriel-vasile/mimetype` | existing in go.mod | MIME type detection for uploaded images | Use when validating custom-uploaded images (SOCL-08) |
+| radix-vue Tabs (shadcn-vue) | existing | Queue/Calendar tab switching on social page | `ui/tabs/` components already present |
+| Pinia composition store | existing | `useSocialStore` state management | All stores use setup-function style |
+| `$fetch` Nuxt built-in | existing | Social API calls from frontend | Project standard; no Axios |
 
 ### Alternatives Considered
+| Instead of | Could Use | Tradeoff |
+|------------|-----------|----------|
+| time.Ticker + goroutine worker | `riverqueue/river` (Postgres-backed job queue) | River is more robust for high volume; overkill for a single-user app with <100 posts/day; time.Ticker keeps zero new dependencies |
+| MinIO presigned GET URL as image_url | Separate public CDN | Presigned URLs work as long as expiry > Instagram processing time (~5 min); 30-min window is safe and uses existing infrastructure |
+| Custom searchable timezone combobox | `vue-timezone-select` npm package | Building from radix-vue ComboBox primitive avoids a new dep and matches design system exactly |
+| `golang.org/x/oauth2` | Manual HTTP OAuth flow | For this app the OAuth flow is simple (3 HTTP calls); manual implementation using `net/http` is more transparent and avoids the x/oauth2 token storage abstraction complexity |
 
-| Instead of                         | Could Use                                | Tradeoff                                                                                                                               |
-| ---------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Custom DB-backed polling goroutine | Redis-backed queue (e.g., Redis Streams) | Redis adds infrastructure complexity but offers better visibility and durability; DB polling is simpler with existing stack            |
-| Go time.Ticker                     | github.com/robfig/cron/v3                | Cron library offers more scheduling flexibility but adds dependency; ticker is sufficient for fixed-interval polling                   |
-| Manual OAuth implementation        | golang.org/x/oauth2                      | Standard library is battle-tested; custom implementation risks security issues                                                         |
-| Custom retry logic                 | github.com/cenkalti/backoff/v4           | Library provides robust backoff strategies but adds dependency; simple exponential backoff with jitter is straightforward to implement |
+**Installation:** No new Go dependencies required. No new npm packages required for frontend.
 
-**Installation:**
-
-```bash
-go get github.com/assaidy/workers
-go get github.com/qcserestipy/instagram-api-go-client
-# Note: Instagram Graph API is accessed via HTTP, no Go SDK installation strictly required
-# Standard library packages (time, context, oauth2) are included with Go
-```
+---
 
 ## Architecture Patterns
 
 ### Recommended Project Structure
+```
+api/internal/social/
+├── handler.go          # chi routes: /accounts, /posts, /posts/{id}/retry
+├── model.go            # SocialAccount, ScheduledPost, PostStatus enum
+├── repository.go       # DB queries: CRUD on social_accounts + scheduled_posts
+├── repository_test.go  # testcontainers-go integration tests (mirrors tracklist pattern)
+├── service.go          # business logic: schedule, edit, disconnect, retry
+├── worker.go           # time.Ticker goroutine; publish loop; token refresh check
+└── instagram.go        # Instagram Graph API HTTP client: createContainer, publish, checkStatus
 
-```bash
-api/
-├── internal/
-│   ├── scheduler/          # Scheduler-specific logic
-│   │   ├── service.go      # Scheduler service implementation
-│   │   ├── worker.go       # Background polling worker
-│   │   ├── model.go        # Data models for scheduled posts
-│   │   └── handler.go      # API handlers for scheduler endpoints
-│   ├── instagram/          # Instagram API wrapper (to be implemented)
-│   │   └── client.go       # Instagram Graph API client
-│   ├── api/
-│   │   └── v1/
-│   │       ├── scheduler/  # Scheduler API routes
-│   │       └── ...         # Other API versions
-│   └── minio/              # Existing MinIO wrapper
-├── pkg/
-│   └── instagram/          # Placeholder for Instagram package (per existing code context)
-└── cmd/
-    └── api/                # Main application entry point
+api/internal/platform/migrations/
+└── 003_social.sql      # scheduled_posts table + social_accounts additions
 
-frontend/
-├── components/
-│   └── scheduler/          # Scheduler-specific UI components
-│       ├── CalendarView.vue
-│       ├── ListView.vue
-│       ├── SchedulerModal.vue
-│       └── PostForm.vue
-├── composables/
-│   └── useScheduler.js     # Scheduler API composable
-├── pages/
-│   └── scheduler/          # Scheduler page route
-│       └── index.vue
-└── lib/
-    └── date-fns/           # Existing date formatting utilities
+apps/dj/app/
+├── pages/social.vue                  # thin layout page; reads ?imageId query param
+├── stores/social.ts                  # useSocialStore: posts[], account, composePanelOpen
+├── components/social/
+│   ├── SocialPageHeader.vue          # "SOCIAL SCHEDULER" + account status dot + account handle
+│   ├── SocialTabs.vue                # QUEUE / CALENDAR tabs + stub triggers for ANALYTICS / AUTOMATIONS
+│   ├── SocialConnectionBanner.vue    # "CONNECT INSTAGRAM" CTA when disconnected
+│   ├── SocialTokenWarningBanner.vue  # Orange 7-day warning; magenta disconnected banner
+│   ├── SocialPostCompose.vue         # Collapsible compose panel (caption, type, timezone, datetime)
+│   ├── SocialQueueGrid.vue           # 3-column grid of SocialPostCard
+│   ├── SocialPostCard.vue            # Post card with inline expand-to-edit on click
+│   ├── SocialPostCardFailed.vue      # Failed card with RETRY SYNC + DOWNLOAD IMAGE
+│   ├── SocialCalendarView.vue        # Monthly grid, dot indicators, day-click filters queue
+│   └── SocialNextSlotCard.vue        # Dashed empty card for empty queue
+└── composables/
+    └── useSocialPostForm.ts          # Caption auto-generation; character counter logic; timezone helpers
 ```
 
-### Pattern 1: DB-backed Polling Worker
-
-**What:** A background goroutine that periodically checks the database for posts ready to be published, processes them with appropriate status transitions, and handles errors with retry logic.
-
-**When to use:** When you need reliable, durable scheduling that persists across application restarts and doesn't require external infrastructure beyond the existing database.
-
+### Pattern 1: Go Publishing Worker (time.Ticker)
+**What:** A goroutine started from `main.go` that polls `scheduled_posts WHERE status='scheduled' AND scheduled_at_utc <= NOW()` every 60 seconds.
+**When to use:** Single-user app; polling is simpler than a full job queue; matches the existing artwork worker pattern.
 **Example:**
-
 ```go
-// Source: Internal patterns from existing codebase (health checks, GIG phase workflows)
-func (s *SchedulerService) StartPollingWorker(ctx context.Context) {
-    ticker := time.NewTicker(s.pollingInterval)
+// Source: Go stdlib time package
+func StartPublishWorker(ctx context.Context, svc *Service, log zerolog.Logger) {
+    ticker := time.NewTicker(60 * time.Second)
     defer ticker.Stop()
-
     for {
         select {
         case <-ticker.C:
-            // Check for posts ready to publish
-            readyPosts, err := s.repo.GetReadyForPublishingPosts()
-            if err != nil {
-                s.logger.Error("Failed to get ready posts", "error", err)
-                continue
+            if err := svc.PublishDuePosts(ctx); err != nil {
+                log.Error().Err(err).Msg("publish worker error")
             }
-
-            for _, post := range readyPosts {
-                // Process each post in a separate goroutine to avoid blocking
-                go s.processPost(ctx, post)
+            if err := svc.RefreshExpiringTokens(ctx); err != nil {
+                log.Error().Err(err).Msg("token refresh worker error")
             }
         case <-ctx.Done():
-            s.logger.Info("Scheduler worker shutting down")
             return
         }
     }
 }
-
-func (s *SchedulerService) processPost(ctx context.Context, post *model.ScheduledPost) {
-    // Transition to publishing status
-    if err := s.repo.UpdatePostStatus(post.ID, model.StatusPublishing); err != nil {
-        s.logger.Error("Failed to update post status to publishing", "error", err, "post_id", post.ID)
-        return
-    }
-
-    // Attempt to publish via Instagram API
-    if err := s.instagramClient.PublishPost(ctx, post); err != nil {
-        // Handle failure with retry logic
-        s.handlePublishFailure(ctx, post, err)
-        return
-    }
-
-    // Success - transition to published
-    if err := s.repo.UpdatePostStatus(post.ID, model.StatusPublished); err != nil {
-        s.logger.Error("Failed to update post status to published", "error", err, "post_id", post.ID)
-    }
-}
 ```
 
-### Pattern 2: State Transition Model
-
-**What:** Modeling scheduled posts as a state machine with clear transitions: scheduled → publishing → published/failed → (retry) → publishing or permanently_failed.
-
-**When to use:** When you need clear auditability of post lifecycle and deterministic behavior for retries and editing.
-
+### Pattern 2: Instagram Two-Step Publish (CRITICAL)
+**What:** Create a media container then publish it. Two separate HTTP calls.
+**When to use:** Every feed post and story. Container must be created at publish time, NOT at scheduling time (containers expire after 24 hours).
 **Example:**
-
 ```go
-// Source: GIG phase workflow patterns (inquiry→confirmed→etc.)
-type PostStatus string
+// Source: https://developers.facebook.com/docs/instagram-platform/content-publishing/
 
-const (
-    StatusScheduled     PostStatus = "scheduled"
-    StatusPublishing    PostStatus = "publishing"
-    StatusPublished     PostStatus = "published"
-    StatusFailed        PostStatus = "failed"
-    StatusPermanentlyFailed PostStatus = "permanently_failed"
-    StatusCancelled     PostStatus = "cancelled"
-)
+// Step 1: Create container
+// POST https://graph.instagram.com/v22.0/{ig_user_id}/media
+// Params: image_url (public URL), media_type (IMAGE|STORIES), caption, access_token
 
-// State transition rules:
-// scheduled → publishing (when time reaches)
-// publishing → published (on success)
-// publishing → failed (on failure, then retry logic)
-// failed → publishing (on retry, up to max attempts)
-// failed → permanently_failed (after max retries)
-// scheduled → cancelled (when edited, original post)
-// scheduled → scheduled (when edited, new post)
+// Step 2: Publish container
+// POST https://graph.instagram.com/v22.0/{ig_user_id}/media_publish
+// Params: creation_id (container ID from step 1), access_token
 ```
 
-### Pattern 3: Optimistic Concurrency for Post Editing
+### Pattern 3: Token Refresh (Proactive)
+**What:** During each worker tick, check `token_expiry - 7 days <= NOW()` and call the refresh endpoint for connected accounts.
+**When to use:** On every 60-second worker tick alongside post publishing.
+**Refresh endpoint:**
+```
+GET https://graph.instagram.com/refresh_access_token
+  ?grant_type=ig_refresh_token
+  &access_token={current_long_lived_token}
+```
+Token must be valid (not expired) and at least 24 hours old. Returns a new 60-day token. If refresh fails, mark account `status='disconnected'`.
 
-**What:** Using `updated_at` timestamp to detect and prevent lost updates when editing scheduled posts, similar to existing INFRA-11 pattern.
+### Pattern 4: Exponential Backoff on Publish Failure
+**What:** After each failed publish, set `next_retry_at = NOW() + backoff`. Worker skips posts where `next_retry_at > NOW()`.
+**Backoff schedule (Claude's Discretion — recommended values):**
+| retry_count | Delay before next attempt |
+|-------------|--------------------------|
+| 0 (first try) | immediate |
+| 1 (1st retry) | 5 minutes |
+| 2 (2nd retry) | 20 minutes |
+| 3 (3rd retry) | 80 minutes |
+| exhausted | mark `permanently_failed`; set `error_reason` |
 
-**When to use:** When multiple users might edit the same post or when edits could happen concurrently with publishing attempts.
+### Pattern 5: Duplicate Prevention via Container Status Check (SOCL-16)
+**What:** Before retrying a failed post, call `GET /<container_id>?fields=status_code` to see if Instagram already published it.
+**status_code values:** `IN_PROGRESS`, `FINISHED`, `PUBLISHED`, `ERROR`, `EXPIRED`
+If `status_code=PUBLISHED`, mark post `published` locally without re-publishing.
 
+### Pattern 6: useSocialStore (Pinia Composition API)
+**What:** Composition-API Pinia store following project conventions (`apps/dj/app/stores/settings.ts`).
 **Example:**
+```typescript
+// Source: project convention from apps/dj/app/stores/settings.ts
+export const useSocialStore = defineStore('social', () => {
+  const posts = ref<ScheduledPost[]>([])
+  const account = ref<SocialAccount | null>(null)
+  const loading = ref(false)
+  const composePanelOpen = ref(false)
+  const prefilledImageId = ref<string | null>(null)
 
-```go
-// Source: INFRA-11 pattern using updated_at for conflict detection
-func (s *SchedulerService) EditPost(ctx context.Context, postID uint64, edit model.PostEdit) (*model.ScheduledPost, error) {
-    // Get current post with version check
-    currentPost, err := s.repo.GetPostByID(postID)
-    if err != nil {
-        return nil, err
-    }
-    if currentPost.Status != model.StatusScheduled {
-        return nil, errors.New("can only edit scheduled posts")
-    }
+  async function loadPosts(): Promise<void> {
+    // $fetch('/api/v1/social/posts')
+  }
+  async function createPost(req: CreatePostRequest): Promise<void> { ... }
+  async function retryPost(id: string): Promise<void> { ... }
+  async function downloadImage(id: string): Promise<void> { ... }
 
-    // Create new post with edited values
-    newPost := &model.ScheduledPost{
-        UserID:     currentPost.UserID,
-        InstagramAccountID: currentPost.InstagramAccountID,
-        ImageID:    edit.ImageID or currentPost.ImageID,
-        Caption:    edit.Caption or currentPost.Caption,
-        ScheduledAt: edit.ScheduledAt or currentPost.ScheduledAt,
-        Timezone:   edit.Timezone or currentPost.Timezone,
-        Status:     model.StatusScheduled,
-    }
-
-    // Mark original as cancelled (using updated_at for conflict detection)
-    if err := s.repo.CancelPost(postID, currentPost.UpdatedAt); err != nil {
-        return nil, err
-    }
-
-    // Create new post
-    return s.repo.CreatePost(newPost)
-}
+  return { posts, account, loading, composePanelOpen, prefilledImageId, loadPosts, createPost, retryPost, downloadImage }
+})
 ```
 
 ### Anti-Patterns to Avoid
+- **Creating the Instagram media container at scheduling time**: Containers expire after 24 hours. Always create at publish time (inside the worker).
+- **Polling `/api/v1/social/posts` from the browser on an interval**: Use manual/user-triggered refresh. Background publish status is rare; browser auto-polling adds complexity without meaningful UX benefit.
+- **Storing decrypted access tokens in memory across requests**: Decrypt from DB on demand per operation, discard immediately.
+- **Using the same `scheduled_at_utc` column to track retries**: Keep `scheduled_at_utc` immutable (user intent) and use a separate `next_retry_at` column (worker bookkeeping).
+- **Sending PNG directly to Instagram**: Convert PNG to JPEG before storing the social-specific copy; Instagram rejects non-JPEG with a non-obvious error.
 
-- **Building custom OAuth 2.0 implementation:** Don't hand-roll OAuth logic; use golang.org/x/oauth2 which is battle-tested and secure.
-- **Using unbounded goroutines for each post:** Don't spawn a new goroutine for every post to publish; use worker pools or the existing ticker pattern to prevent resource exhaustion.
-- **Storing access tokens without encryption:** Don't store long-lived access tokens in plaintext; encrypt them at rest or use a secure vault solution.
-- **Ignoring rate limit headers:** Don't fail to check and respect Instagram's rate limit headers (X-Ratelimit-Limit, X-Ratelimit-Remaining, X-Ratelimit-Reset) which can lead to temporary blocks.
-- **Not handling token expiration gracefully:** Don't assume tokens never expire; implement proactive refresh before expiry and handle 401 responses with refresh attempts.
+---
 
 ## Don't Hand-Roll
 
-| Problem                              | Don't Build                 | Use Instead                                                    | Why                                                                                                                                                                         |
-| ------------------------------------ | --------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OAuth 2.0 flow for Instagram         | Custom OAuth implementation | golang.org/x/oauth2                                            | Instagram's OAuth has specific requirements (state validation, PKCE, proper redirect handling) that are easy to get wrong; standard library handles token exchange securely |
-| Retry logic with exponential backoff | Custom retry implementation | github.com/cenkalti/backoff/v4 or simple stdlib implementation | Proper jitter implementation and max retry limits are nuanced; library prevents thundering herd problems                                                                    |
-| Rate limit handling                  | Custom rate limiter         | Respect Instagram's headers + simple token bucket              | Instagram's rate limits are complex (200/hr, per-app, per-user); custom implementations often miscalculate reset times                                                      |
-| Media upload handling                | Custom multipart/form-data  | net/http with proper multipart writer                          | Instagram requires specific headers and formatting; manual implementation risks malformed requests                                                                          |
-| Timezone storage/display             | Manual timezone conversion  | time.Location with UTC storage + TZ database                   | Proper timezone handling requires IANA database; manual offsets fail with DST changes                                                                                       |
+| Problem | Don't Build | Use Instead | Why |
+|---------|-------------|-------------|-----|
+| AES-256-GCM token encryption | Custom crypto | `api/internal/platform/crypto` (existing) | Already tested, handles nonce generation and base64 encoding |
+| HTTP retry with backoff | Custom retry loop | `github.com/sethvargo/go-retry` v0.3.0 (already in go.mod) | Already in go.mod; handles jitter, max attempts, context cancellation |
+| OAuth state/CSRF protection | Custom state tracking | `github.com/google/uuid` (existing) + DB record | State = `uuid.NewString()`; store in short-lived DB row; verify on callback |
+| IANA timezone list | Hardcoded slice | `Intl.supportedValuesOf('timeZone')` (Web API) | Browser-native; zero npm dependency; 400+ IANA zones; filter on input for combobox |
+| Image MIME type detection | `strings.HasSuffix` | `github.com/gabriel-vasile/mimetype` (existing in go.mod) | Already in go.mod; used by tracklist upload; detects real content-type regardless of filename |
 
-**Key insight:** The Instagram Graph API has specific requirements for media publishing (container creation, publishing endpoint, media types) and authentication that are complex to implement correctly. Leveraging established patterns and libraries reduces the risk of integration failures that could prevent posts from publishing.
+**Key insight:** Every Go package needed for social scheduling is already in `go.mod`. No new `go get` commands required.
 
-## User Constraints (from CONTEXT.md)
-
-<user_constraints>
-
-## User Constraints (from CONTEXT.md)
-
-### Locked Decisions
-
-- Use DB-backed polling: a background goroutine checks the database every minute for posts whose scheduled time has passed and are in `scheduled` status.
-- When time matches, the post status transitions to `publishing`, the image is published via Instagram API, and on success moves to `published` or on failure to `failed` with retry logic.
-- Default view is a monthly calendar with color-coded dots on dates indicating post status (scheduled, publishing, published, failed, permanently_failed).
-- Clicking a date shows a list view of posts for that day with details: scheduled time, caption preview, image thumbnail, and status icons.
-- Users can toggle between calendar and list views via a toolbar button.
-- While a post is in `scheduled` status, users can edit caption, image, and scheduled time.
-- Editing creates a new scheduled post entry; the original is marked as `cancelled` (not shown in default views).
-- If the new scheduled time is in the past, an error is shown and the edit is rejected.
-- Editing does not reset retry counters; the new post starts fresh.
-- Implement exponential backoff with jitter for retries (base 1 minute, max 15 minutes) after failures.
-- Enforce minimum 30-second interval between successful posts to the same Instagram account; if a post is ready but the interval hasn't elapsed, delay until it has.
-- Track the last successful post timestamp per account to enforce the interval.
-- After a tracklist image is successfully exported, a non-intrusive toast notification appears with a "Schedule Post" button.
-- Clicking the button opens the scheduler modal in overlay mode, with the exported image pre-selected in the image upload field and a preview shown.
-- The modal defaults to the current date/time for scheduling, but users can adjust all fields.
-
-### Claude's Discretion
-
-- Exact polling interval duration (currently 1 minute) can be tuned for responsiveness vs. resource usage.
-- Design of toast notification and scheduler modal (styling, animations).
-- Specific implementation of exponential backoff jitter algorithm.
-- Handling of timezone storage and display (using ICU or moment.js equivalents).
-
-### Deferred Ideas (OUT OF SCOPE)
-
-- Support for Facebook Pages, Twitter/X, and TikTok posting — future phases.
-- Social media content calendar view with drag-and-drop rescheduling.
-- AI-generated captions or hashtag suggestions.
-- Advanced analytics on post performance (likes, comments, reach).
-- Bulk scheduling via CSV upload.
-  </user_constraints>
+---
 
 ## Common Pitfalls
 
-### Pitfall 1: Media Type Confusion for Reels vs Video
+### Pitfall 1: Instagram Requires Publicly Accessible image_url
+**What goes wrong:** Posting with a private MinIO URL (e.g. `http://minio:9000/...`) or a localhost URL fails with `(#100) image_url is not a valid URL` or `(#2207026) image could not be retrieved`.
+**Why it happens:** Instagram's servers fetch the image during container creation. Internal Docker network addresses are unreachable by Meta's servers.
+**How to avoid:** Generate a presigned GET URL using `MINIO_PUBLIC_ENDPOINT` (the externally accessible MinIO address) with a 30-minute expiry before calling the Instagram API. The `PresignedGetObject` method on the storage interface is already defined in `api/internal/tracklist/service.go`.
+**Warning signs:** Container creation returns HTTP 400 with error code `#2207026`.
 
-**What goes wrong:** When attempting to publish Reels via the Instagram Graph API, developers consistently receive the error "Media created with media_type=VIDEO is a carousel item and cannot be published as a standalone post" even when explicitly setting media_type=REELS in the container creation request.
+### Pitfall 2: Instagram Only Accepts JPEG
+**What goes wrong:** Posting a PNG (default Playwright screenshot output) fails silently or with an unhelpful media format error.
+**Why it happens:** The Instagram Graph API rejects non-JPEG images.
+**How to avoid:** When a social post image is attached (either from tracklist export or custom upload), convert PNG to JPEG using Go's `image/jpeg` standard library and store the JPEG version under `social/posts/{post_id}/image.jpg` in MinIO. Do not modify the original tracklist export file.
+**Warning signs:** Container creation returns error code `#2207026` with no other indication.
 
-**Why it happens:** This is a known issue with the Instagram Graph API where certain video specifications (particularly around duration, frame rate, or encoding) cause the API to misclassify Reels-standard videos as carousel-ineligible content. The error message is misleading as it suggests using media_type=REELS when it's already being used.
+### Pitfall 3: Instagram Container Expires After 24 Hours
+**What goes wrong:** If the media container is created at scheduling time and the post is scheduled more than 24 hours out, publish fails with `EXPIRED` status_code.
+**Why it happens:** Instagram containers have a 24-hour TTL.
+**How to avoid:** Never create the container at scheduling time. Create it in the worker, immediately before calling `media_publish`. Store only the MinIO path and caption in `scheduled_posts`.
 
-**How to avoid:**
+### Pitfall 4: Token Refresh Window
+**What goes wrong:** Token refresh fails because it was attempted on an already-expired token. Expired tokens cannot be refreshed via the API.
+**Why it happens:** If the worker only checks token expiry when publishing, an inactive account's token may expire unnoticed between refreshes.
+**How to avoid:** On each 60-second worker tick, also check `token_expiry - 7 days <= NOW()` for all connected accounts and refresh proactively. If refresh fails, mark account `status='disconnected'` immediately. Surface orange warning banner at 7 days, magenta at expiry.
 
-1. Ensure video meets strict Reels requirements:
-   - Duration between 3-60 seconds
-   - Frame rate 30fps or less
-   - H.264 codec, AAC audio
-   - Maximum 30MB file size
-   - Vertical aspect ratio (9:16)
-2. Upload video first to a publicly accessible URL (required by API)
-3. Consider using the Resumable Upload endpoint for larger files
-4. Check the Media Container status endpoint after creation to see if it's valid before attempting to publish
+### Pitfall 5: Duplicate Post on Retry (SOCL-16)
+**What goes wrong:** A publish call timed out after Instagram had already processed it, causing a retry to create a duplicate post.
+**Why it happens:** Network timeouts don't mean the operation failed; Instagram may have published successfully despite the Go HTTP client receiving no response.
+**How to avoid:** Before retrying any failed post that has a `ig_container_id`, call `GET /<container_id>?fields=status_code`. If `status_code=PUBLISHED`, mark the post `published` locally without re-calling `media_publish`.
 
-**Warning signs:**
+### Pitfall 6: Timezone Arithmetic Errors
+**What goes wrong:** Posts publish at the wrong time (often off by 1 hour during DST transitions).
+**Why it happens:** Performing arithmetic on local timestamps instead of UTC, or not storing the IANA timezone name alongside the UTC time.
+**How to avoid:** Store `scheduled_at_utc TIMESTAMPTZ` and `timezone_name TEXT` (e.g., `Europe/Berlin`) as separate columns. Convert to UTC at form submission on the frontend using `luxon` or Go's `time.LoadLocation`. Display in local time using `Intl.DateTimeFormat`. The DB comparison in the worker uses only UTC: `scheduled_at_utc <= NOW()`.
 
-- Getting error 2207089 with "Carousel Item Cannot Be Published Standalone" message
-- Successful container creation but failed publish despite correct media_type
-- Works for short test videos but fails with actual content
+### Pitfall 7: OAuth State Parameter Not Validated
+**What goes wrong:** CSRF attack allows an attacker to associate their Instagram account with the victim's session.
+**Why it happens:** State parameter skipped or not verified on callback.
+**How to avoid:** Generate `state = uuid.NewString()`, store in a short-lived DB row (e.g. `oauth_states` table with `expires_at = NOW() + 10 minutes`), verify on callback. Reject mismatched or expired state.
 
-### Pitfall 2: Token Expiration Without Refresh
-
-**What goes wrong:** Long-lived Instagram User Access Tokens expire after 60 days, causing scheduled posts to fail silently when the scheduler attempts to publish with an expired token.
-
-**Why it happens:** Many developers assume that once obtained, long-lived tokens remain valid indefinitely or don't implement proactive refresh mechanisms, only discovering the issue when posts start failing.
-
-**How to avoid:**
-
-1. Implement automatic token refresh before expiry (refresh when token is <7 days old)
-2. Store token expiry timestamp alongside the token in the database
-3. Handle 401 Unauthorized responses from Instagram API by attempting token refresh
-4. Notify users when token refresh fails requiring re-authentication
-5. Use the `/refresh_access_token` endpoint with `grant_type=ig_refresh_token`
-
-**Warning signs:**
-
-- Posts failing with OAuthException or invalid token errors
-- Scheduler logs showing 401 responses from Instagram API
-- No new posts being published despite scheduled times passing
-
-### Pitfall 3: Rate Limit Miscalculation
-
-**What goes wrong:** The scheduler exceeds Instagram's rate limits (200 API calls per hour) causing temporary blocks and failed posts, particularly when handling multiple accounts or retrying failed posts.
-
-**Why it happens:** Developers often underestimate the cumulative API calls from token checks, media container creation, publishing attempts, and insights requests, especially when implementing retry logic without proper backoff.
-
-**How to avoid:**
-
-1. Implement request counting and respect the X-Ratelimit-Remaining header
-2. Queue requests when approaching limits rather than bursting
-3. Use exponential backoff with jitter for retries (as specified in locked decisions)
-4. Monitor and log rate limit header values for tuning
-5. Consider batching operations where possible (though Instagram API has limited batch support)
-
-**Warning signs:**
-
-- HTTP 429 Too Many Requests responses
-- X-Ratelimit-Remaining header consistently low or zero
-- Posts failing intermittently with "try again later" messages
-- Need to wait extended periods for limits to reset
-
-### Pitfall 4: Timezone Handling Errors
-
-**What goes wrong:** Posts publish at incorrect times due to improper timezone storage, conversion, or scheduling logic, particularly around DST transitions.
-
-**Why it happens:** Storing times as UTC without proper timezone context, or converting times incorrectly when displaying to users versus storing for scheduling.
-
-**How to avoid:**
-
-1. Always store scheduled times in UTC in the database
-2. Store the original timezone identifier (e.g., "America/New_York") separately
-3. Use a reliable timezone database (IANA/TZ database) for conversions
-4. When displaying times to users, convert from UTC to their selected timezone
-5. When checking for posts to publish, convert current time to UTC for comparison
-6. Test scheduling around DST transition dates (spring/fall)
-
-**Warning signs:**
-
-- Posts publishing 1 hour early or late
-- Incorrect times displayed in calendar view
-- Issues specifically occurring during DST transition periods
-- Users in different timezones seeing inconsistent times
-
-### Pitfall 5: Lost Updates During Post Editing
-
-**What goes wrong:** When users edit a scheduled post concurrently with the scheduler checking for posts to publish, changes are lost or inconsistent states occur.
-
-**Why it happens:** Without proper concurrency control, two operations (edit and publish check) can read the same post state, leading to one overwriting the other or processing outdated data.
-
-**How to avoid:**
-
-1. Implement optimistic concurrency using updated_at timestamps (as in locked decisions)
-2. When editing a scheduled post, verify the record hasn't changed since last read
-3. If conflict detected, reject the edit and ask user to retry
-4. Consider locking mechanisms for critical sections if optimistic approach proves insufficient
-5. Ensure edits create new posts rather than modifying in-place (as specified)
-
-**Warning signs:**
-
-- Edits disappearing or not taking effect
-- Posts publishing with old captions/images despite edits
-- Database showing inconsistent states (e.g., cancelled posts still being processed)
-- User reporting that edits "didn't save"
-
-### Pitfall 6: Media Hosting Requirements Oversight
-
-**What goes wrong:** Attempting to publish posts fails because the media (image/video) is not hosted at a publicly accessible URL at the time of API calls.
-
-**Why it happens:** The Instagram Graph API requires media to be accessible via a public URL when creating the media container. Developers sometimes assume they can upload directly or use private/storage URLs.
-
-**How to avoid:**
-
-1. Ensure all media is uploaded to a publicly accessible CDN or storage service before attempting to schedule
-2. In this project's case, use MinIO with public bucket access or pre-signed URLs with sufficient expiry
-3. Validate media accessibility before creating container (HEAD request to media URL)
-4. Store media URLs (not just IDs) in the scheduled post record for reliability
-5. Implement media expiry tracking and refresh if needed
-
-**Warning signs:**
-
-- HTTP 400 errors with "Invalid parameter" or "URL not accessible" messages
-- Successful container creation but failed publish
-- Works in development with localhost URLs but fails in production
-- Media ID valid but URL returns 403 or 404 when accessed by Instagram's servers
+---
 
 ## Code Examples
 
 Verified patterns from official sources:
 
-### Instagram Media Container Creation for Image
-
+### OAuth Authorization URL Construction
 ```go
-// Source: Facebook Instagram Graph API Documentation - Media endpoint
-// https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media/
-func (c *InstagramClient) CreateImageContainer(ctx context.Context, imageURL, caption string) (string, error) {
-    endpoint := fmt.Sprintf("%s/%s/media", c.baseURL, c.igUserID)
-    data := url.Values{}
-    data.Set("image_url", imageURL)
-    data.Set("caption", caption)
-    data.Set("access_token", c.accessToken)
-
-    req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(data.Encode()))
-    if err != nil {
-        return "", err
-    }
-    req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-    resp, err := c.httpClient.Do(req)
-    if err != nil {
-        return "", err
-    }
-    defer resp.Body.Close()
-
-    var result struct {
-        ID string `json:"id"`
-    }
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return "", err
-    }
-
-    return result.ID, nil
-}
+// Source: https://developers.facebook.com/docs/instagram-platform/reference/oauth-authorize/
+// Required scopes for feed + stories posting:
+authURL := fmt.Sprintf(
+    "https://api.instagram.com/oauth/authorize?client_id=%s&redirect_uri=%s&scope=%s&state=%s&response_type=code",
+    cfg.InstagramClientID,
+    url.QueryEscape(redirectURI),
+    "instagram_business_basic,instagram_business_content_publish",
+    state,
+)
 ```
 
-### Instagram Media Container Creation for Reels
-
+### Token Exchange (code → short-lived → long-lived)
 ```go
-// Source: Facebook Instagram Graph API Documentation - Reels posting
-// https://developers.facebook.com/docs/instagram-platform/content-publishing/#reels
-func (c *InstagramClient) CreateReelsContainer(ctx context.Context, videoURL, caption string) (string, error) {
-    endpoint := fmt.Sprintf("%s/%s/media", c.baseURL, c.igUserID)
-    data := url.Values{}
-    data.Set("video_url", videoURL)
-    data.Set("caption", caption)
-    data.Set("media_type", "REELS")
-    data.Set("access_token", c.accessToken)
+// Source: https://gist.github.com/PrenSJ2/0213e60e834e66b7e09f7f93999163fc
+// Step 1: Exchange auth code for short-lived token
+// POST https://api.instagram.com/oauth/access_token
+// Body: client_id, client_secret, grant_type=authorization_code, redirect_uri, code
 
-    req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(data.Encode()))
-    if err != nil {
-        return "", err
-    }
-    req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+// Step 2: Exchange short-lived for long-lived (60 days)
+// GET https://graph.instagram.com/access_token
+//   ?grant_type=ig_exchange_token
+//   &client_secret={secret}
+//   &access_token={short_lived_token}
 
-    resp, err := c.httpClient.Do(req)
-    if err != nil {
-        return "", err
-    }
-    defer resp.Body.Close()
-
-    var result struct {
-        ID string `json:"id"`
-        Error struct {
-            Message string `json:"message"`
-            Code    int    `json:"code"`
-        } `json:"error"`
-    }
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return "", err
-    }
-    if result.Error.Message != "" {
-        return "", fmt.Errorf("instagram api error (%d): %s", result.Error.Code, result.Error.Message)
-    }
-
-    return result.ID, nil
-}
+// Step 3: Get IG user ID (needed for all publishing calls)
+// GET https://graph.instagram.com/me?fields=id,username&access_token={token}
+// Response: {"id": "123456789", "username": "dj_handle"}
 ```
 
-### Publishing Media Container
-
+### Proactive Token Refresh
 ```go
-// Source: Facebook Instagram Graph API Documentation - Media Publish endpoint
-// https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media_publish/
-func (c *InstagramClient) PublishContainer(ctx context.Context, creationID string) (string, error) {
-    endpoint := fmt.Sprintf("%s/%s/media_publish", c.baseURL, c.igUserID)
-    data := url.Values{}
-    data.Set("creation_id", creationID)
-    data.Set("access_token", c.accessToken)
-
-    req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(data.Encode()))
-    if err != nil {
-        return "", err
-    }
-    req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-    resp, err := c.httpClient.Do(req)
-    if err != nil {
-        return "", err
-    }
-    defer resp.Body.Close()
-
-    var result struct {
-        ID string `json:"id"`
-        Error struct {
-            Message string `json:"message"`
-            Code    int    `json:"code"`
-        } `json:"error"`
-    }
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return "", err
-    }
-    if result.Error.Message != "" {
-        return "", fmt.Errorf("instagram api error (%d): %s", result.Error.Code, result.Error.Message)
-    }
-
-    return result.ID, nil
-}
+// Source: https://developers.facebook.com/docs/instagram-platform/reference/refresh_access_token/
+// GET https://graph.instagram.com/refresh_access_token
+//   ?grant_type=ig_refresh_token
+//   &access_token={current_non_expired_long_lived_token}
+// Response: {"access_token": "...", "token_type": "bearer", "expires_in": 5183944}
+// Note: token must be valid (not expired) and at least 24h old to refresh
 ```
 
-### Token Refresh Implementation
-
+### Publish Feed Post (Go struct pattern)
 ```go
-// Source: Facebook Instagram Graph API Documentation - Refresh Access Token
-// https://developers.facebook.com/docs/instagram-platform/reference/refresh_access_token/
-func (c *InstagramClient) RefreshToken(ctx context.Context) error {
-    endpoint := fmt.Sprintf("%s/refresh_access_token", c.baseURL)
-    data := url.Values{}
-    data.Set("grant_type", "ig_refresh_token")
-    data.Set("access_token", c.accessToken)
+// Source: https://developers.facebook.com/docs/instagram-platform/content-publishing/
 
-    req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
-    if err != nil {
-        return err
-    }
-    req.URL.RawQuery = data.Encode()
+// Step 1: Create container
+// POST https://graph.instagram.com/v22.0/{ig_user_id}/media
+// Required: image_url (must be publicly accessible JPEG), access_token
+// Optional: caption (omit for stories), media_type (default IMAGE; STORIES for stories)
 
-    resp, err := c.httpClient.Do(req)
-    if err != nil {
-        return err
-    }
-    defer resp.Body.Close()
-
-    var result struct {
-        AccessToken string `json:"access_token"`
-        ExpiresIn   int    `json:"expires_in"` // Seconds until expiry (typically 5184000 = 60 days)
-    }
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return err
-    }
-
-    c.accessToken = result.AccessToken
-    c.tokenExpiry = time.Now().Add(time.Duration(result.ExpiresIn) * time.Second)
-    return nil
-}
+// Step 2: Publish
+// POST https://graph.instagram.com/v22.0/{ig_user_id}/media_publish
+// Required: creation_id (from step 1), access_token
+// Returns: {"id": "<IG_MEDIA_ID>"}
 ```
 
-### Database Query for Ready Posts
+### Container Status Check (Duplicate Prevention)
+```go
+// Source: https://developers.facebook.com/docs/instagram-platform/content-publishing/
+// GET https://graph.instagram.com/v22.0/{container_id}
+//   ?fields=status_code
+//   &access_token={token}
+// Response: {"status_code": "PUBLISHED", "id": "..."}
+// Possible status_code values: IN_PROGRESS, FINISHED, PUBLISHED, ERROR, EXPIRED
+```
 
+### Database Schema for scheduled_posts (Migration 003)
 ```sql
--- Get posts scheduled for publishing that are ready to be processed
-SELECT id, user_id, instagram_account_id, image_id, caption, scheduled_at, timezone, status, retry_count
-FROM scheduled_posts
-WHERE status = 'scheduled'
-  AND scheduled_at <= NOW() AT TIME ZONE 'UTC'
-  AND (next_retry_at IS NULL OR next_retry_at <= NOW() AT TIME ZONE 'UTC')
-ORDER BY scheduled_at ASC;
+-- +goose Up
+
+-- Extend social_accounts (stub from migration 001) with columns needed for publishing
+ALTER TABLE social_accounts
+  ADD COLUMN IF NOT EXISTS ig_user_id     TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS token_expiry   TIMESTAMPTZ;
+
+CREATE TABLE scheduled_posts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  social_account_id UUID NOT NULL REFERENCES social_accounts(id),
+  image_minio_path  TEXT NOT NULL,
+  caption           TEXT NOT NULL DEFAULT '',
+  post_type         TEXT NOT NULL CHECK (post_type IN ('feed', 'story')),
+  status            TEXT NOT NULL DEFAULT 'draft'
+                    CHECK (status IN ('draft','scheduled','publishing','published','failed','permanently_failed')),
+  scheduled_at_utc  TIMESTAMPTZ,
+  timezone_name     TEXT NOT NULL DEFAULT 'UTC',
+  published_at_utc  TIMESTAMPTZ,
+  ig_media_id       TEXT,
+  ig_container_id   TEXT,
+  retry_count       INT NOT NULL DEFAULT 0,
+  next_retry_at     TIMESTAMPTZ,
+  error_reason      TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at        TIMESTAMPTZ
+);
+
+CREATE INDEX ON scheduled_posts(status, scheduled_at_utc) WHERE deleted_at IS NULL;
+CREATE INDEX ON scheduled_posts(social_account_id)        WHERE deleted_at IS NULL;
+CREATE INDEX ON scheduled_posts(status, next_retry_at)    WHERE deleted_at IS NULL;
+
+-- +goose Down
+DROP TABLE IF EXISTS scheduled_posts;
+ALTER TABLE social_accounts DROP COLUMN IF EXISTS ig_user_id;
+ALTER TABLE social_accounts DROP COLUMN IF EXISTS token_expiry;
 ```
 
-### Exponential Backoff with Jitter Implementation
-
-```go
-// Calculate delay with exponential backoff and jitter
-// Base: 1 minute, Max: 15 minutes, Jitter: ±25%
-func calculateRetryDelay(attempt int) time.Duration {
-    if attempt <= 0 {
-        return 0
-    }
-
-    // Exponential backoff: 1min * 2^(attempt-1), capped at 15min
-    baseDelay := time.Minute
-    maxDelay := 15 * time.Minute
-
-    delay := baseDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-    if delay > maxDelay {
-        delay = maxDelay
-    }
-
-    // Add jitter: ±25% of delay
-    jitter := time.Duration(float64(delay) * 0.25 * (2*rand.Float64() - 1))
-    delay += jitter
-
-    // Ensure non-negative
-    if delay < 0 {
-        delay = 0
-    }
-
-    return delay
+### Caption Auto-Generation (TypeScript)
+```typescript
+// Source: CONTEXT.md caption template decision
+// Reads djName from useSettingsStore, tracklist metadata from useTracklistStore
+function generateCaption(djName: string, title: string, trackCount: number, avgBpm: number): string {
+  return `${djName} @ ${title} — ${trackCount} tracks • avg ${avgBpm} BPM\n#techno #djset`
 }
 ```
 
+### Timezone Picker (Browser-Native, No npm Package)
+```typescript
+// Source: MDN Web API — Intl.supportedValuesOf
+// Available in Chrome 99+, Firefox 103+, Safari 15.4+
+const allTimezones: string[] = Intl.supportedValuesOf('timeZone')
+// Example output: ["Africa/Abidjan", ..., "Europe/Berlin", ..., "UTC"]
+
+// Filter on user input for searchable combobox
+const filtered = computed(() =>
+  allTimezones.filter(tz => tz.toLowerCase().includes(search.value.toLowerCase()))
+)
+```
+
+---
 
 ## State of the Art
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| Basic Display API for read-only access | Instagram Graph API for publishing and insights | Basic Display API deprecated Dec 2024 | Enabled programmatic content publishing for business/creator accounts |
-| Manual token management | Automatic token refresh with expiry tracking | Ongoing improvement | Reduced authentication failures and improved scheduler reliability |
-| Fixed retry intervals | Exponential backoff with jitter | Industry standard practice | Prevented thundering herd problems and rate limit exhaustion |
-| UTC-only time storage | UTC storage with timezone identifier | Growing awareness of timezone complexity | Correct scheduling across DST transitions and user timezones |
-| Direct media upload to API | Public URL requirement for media | Instagram API design constraint | Necessitated reliable media hosting (MinIO/CDN) and URL validation |
-| Unbounded goroutine per task | Worker pools or ticker-based polling | Modern Go concurrency practices | Prevented resource exhaustion under load |
-| Manual OAuth implementation | Standard library (golang.org/x/oauth2) | Security best practices | Reduced vulnerability to authentication flaws |
+| Instagram Basic Display API (personal accounts) | Instagram Graph API (Business/Creator accounts only) | December 4, 2024 (EOL) | User must have a Business or Creator Instagram account; personal accounts cannot connect |
+| `graph.facebook.com` for Instagram publishing | `graph.instagram.com` for token management and publishing | 2024 Instagram Direct Login launch | Simpler flow; doesn't require Facebook account linkage |
+| Creating media container at scheduling time | Creating container only at publish time (in worker) | API constraint — always been this way | Containers expire after 24 hours; must be created within 24h of intended publish time |
+| Posting image URL from internal network | Publicly accessible presigned URL via `MINIO_PUBLIC_ENDPOINT` | Fundamental API requirement | Instagram servers fetch the image directly; internal URLs will never work |
 
 **Deprecated/outdated:**
-- Basic Display API: Deprecated December 2024, replaced by Instagram Graph API for all programmatic access
-- Manual token refresh without expiry tracking: Leads to unexpected authentication failures
-- Fixed interval retries without jitter: Causes thundering herd problems during service outages
-- Storing times as strings instead of time objects: Leads to parsing errors and timezone mishandling
-- Assuming media can be uploaded directly to Instagram API: Instagram requires publicly accessible media URLs
+- `instagram.com/oauth/authorize` with `instagram_basic` scope alone: Needs `instagram_business_content_publish` for posting
+- Instagram Basic Display API: EOL Dec 4, 2024; all integrations must use Graph API
+- Assuming PNG works for image uploads: Instagram only accepts JPEG
+
+---
+
+## Open Questions
+
+1. **JPEG Conversion Pipeline**
+   - What we know: Instagram only accepts JPEG. The tracklist generator exports PNG (via Playwright screenshot).
+   - What's unclear: Whether conversion should happen at export time or at social-upload time.
+   - Recommendation: Convert PNG to JPEG in the social service layer (`image/jpeg` stdlib) when the image is attached to a post. Store the JPEG under `social/posts/{post_id}/image.jpg` in MinIO. Do not modify the original tracklist export.
+
+2. **Instagram App Review for Stories Publishing**
+   - What we know: Stories publishing requires `instagram_business_content_publish` scope.
+   - What's unclear: Whether a self-hosted personal-use app with no public distribution requires the same App Review process as a publicly distributed app. Meta's documentation is written for publicly distributed apps.
+   - Recommendation: Test stories publishing in Meta's development mode first (sandbox with test accounts). If App Review is required, gate the Stories post type behind a UI flag and show a "pending review" message. Feed posts work without App Review for development mode.
+
+3. **OAuth Redirect URI for Self-Hosted Production**
+   - What we know: The redirect URI must be whitelisted in the Meta App Dashboard. Localhost URIs are supported for development.
+   - What's unclear: For a self-hosted production instance at a custom domain, the user must manually add their domain to the Meta App Dashboard.
+   - Recommendation: Support `INSTAGRAM_REDIRECT_URI` env var (already scaffolded in `config.go` as `InstagramClientID`/`InstagramClientSecret`). Document in `docs/SELF-HOSTING.md` that the production redirect URI must be registered in the Meta App Dashboard.
+
+---
+
+## Validation Architecture
+
+> `workflow.nyquist_validation` is `true` in `.planning/config.json` — section is required.
+
+### Test Framework
+| Property | Value |
+|----------|-------|
+| Framework (frontend) | Vitest (existing, `apps/dj/vitest.config.ts`) |
+| Framework (backend) | `go test` + testcontainers-go (existing) |
+| Config file (frontend) | `apps/dj/vitest.config.ts` |
+| Quick run (frontend) | `pnpm nx test dj -- --testPathPattern social` |
+| Full suite (frontend) | `pnpm nx test dj` |
+| Quick run (backend) | `pnpm nx test api -- -run TestSocial -count=1 ./internal/social/...` |
+| Full suite (backend) | `pnpm nx test api` |
+
+### Phase Requirements → Test Map
+| Req ID | Behavior | Test Type | Automated Command | File Exists? |
+|--------|----------|-----------|-------------------|-------------|
+| SOCL-01 | OAuth URL constructed with correct scopes and CSRF state | unit | `go test ./internal/social/... -run TestOAuthURL` | ❌ Wave 0 |
+| SOCL-01 | OAuth callback exchanges code for long-lived token and stores encrypted | unit (mocked HTTP) | `go test ./internal/social/... -run TestOAuthCallback` | ❌ Wave 0 |
+| SOCL-02 | Token refresh called when expiry within 7 days | unit | `go test ./internal/social/... -run TestTokenRefreshProactive` | ❌ Wave 0 |
+| SOCL-02 | Account marked disconnected on refresh failure | unit | `go test ./internal/social/... -run TestTokenRefreshFailure` | ❌ Wave 0 |
+| SOCL-03 | Post scheduled with UTC conversion from IANA timezone | unit | `go test ./internal/social/... -run TestScheduleUTCConversion` | ❌ Wave 0 |
+| SOCL-04 | Worker picks up due posts (status=scheduled, scheduled_at_utc<=NOW) | integration (testcontainers) | `go test ./internal/social/... -run TestWorkerPublishDue` | ❌ Wave 0 |
+| SOCL-05 | Instagram client creates IMAGE container then publishes | unit (mocked HTTP) | `go test ./internal/social/... -run TestPublishFeedPost` | ❌ Wave 0 |
+| SOCL-06 | Instagram client creates STORIES container then publishes | unit (mocked HTTP) | `go test ./internal/social/... -run TestPublishStory` | ❌ Wave 0 |
+| SOCL-07 | Presigned GET URL generated from MINIO_PUBLIC_ENDPOINT before publish | unit | `go test ./internal/social/... -run TestPresignedURL` | ❌ Wave 0 |
+| SOCL-08 | Image >8MB rejected at upload; non-JPEG MIME rejected | unit | `go test ./internal/social/... -run TestImageValidation` | ❌ Wave 0 |
+| SOCL-09 | useSocialStore loads posts and groups by status | unit (Vitest) | `pnpm nx test dj -- --testPathPattern social.test` | ❌ Wave 0 |
+| SOCL-10 | All 6 valid status values accepted; invalid value rejected by DB CHECK | unit | `go test ./internal/social/... -run TestPostStatusEnum` | ❌ Wave 0 |
+| SOCL-11 | Backoff delays computed correctly (5m, 20m, 80m) | unit | `go test ./internal/social/... -run TestBackoffSchedule` | ❌ Wave 0 |
+| SOCL-11 | After 3 failures post marked permanently_failed | unit | `go test ./internal/social/... -run TestRetryExhaustion` | ❌ Wave 0 |
+| SOCL-12 | Manual retry resets retry_count and schedules immediately | unit | `go test ./internal/social/... -run TestManualRetry` | ❌ Wave 0 |
+| SOCL-13 | 429 response triggers Retry-After header respecting backoff | unit (mocked HTTP) | `go test ./internal/social/... -run TestRateLimit429` | ❌ Wave 0 |
+| SOCL-14 | Edit blocked on publishing/published/failed/permanently_failed | unit | `go test ./internal/social/... -run TestEditBlocking` | ❌ Wave 0 |
+| SOCL-15 | Disconnect moves all account's scheduled posts to draft | unit | `go test ./internal/social/... -run TestDisconnectCascade` | ❌ Wave 0 |
+| SOCL-16 | Retry aborted if container status_code=PUBLISHED; post marked published | unit (mocked HTTP) | `go test ./internal/social/... -run TestDuplicatePrevention` | ❌ Wave 0 |
+| SOCL-17 | Social page reads ?imageId and opens compose panel pre-filled | unit (Vitest, mount social.vue) | `pnpm nx test dj -- --testPathPattern socialPage.test` | ❌ Wave 0 |
+
+### Sampling Rate
+- **Per task commit:** Run the test package for the task's files (e.g. `go test ./internal/social/...` for backend tasks; `pnpm nx test dj -- --testPathPattern social` for frontend tasks)
+- **Per wave merge:** `pnpm nx run-many -t test -p dj api`
+- **Phase gate:** Full suite green before `/gsd:verify-work`
+
+### Wave 0 Gaps
+- [ ] `api/internal/platform/migrations/003_social.sql` — required before any social service tests can run
+- [ ] `api/internal/social/handler_test.go` — HTTP handler tests for all routes
+- [ ] `api/internal/social/service_test.go` — business logic unit tests (scheduling, retry, disconnect cascade)
+- [ ] `api/internal/social/worker_test.go` — worker tick, backoff calculation, token refresh trigger
+- [ ] `api/internal/social/instagram_test.go` — mocked HTTP Instagram API client (container create, publish, status check)
+- [ ] `apps/dj/app/stores/__tests__/social.test.ts` — useSocialStore unit tests (load, create, retry, prefill from imageId)
+- [ ] `apps/dj/app/components/social/__tests__/SocialPostCompose.test.ts` — caption auto-gen, char counter, timezone combobox
+
+---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Facebook Instagram Graph API Documentation - Official API reference for media publishing, token refresh, and endpoints
-- Go standard library documentation - time, context, http packages for implementation patterns
-- Existing project codebase patterns - Reusable workers, middleware, and MinIO integration
+- [Meta — Instagram Content Publishing](https://developers.facebook.com/docs/instagram-platform/content-publishing/) — two-step publish flow, endpoint parameters, rate limits, image requirements (JPEG only, 8 MB max, publicly accessible URL)
+- [Meta — OAuth Authorize](https://developers.facebook.com/docs/instagram-platform/reference/oauth-authorize/) — authorization URL, required scopes, callback handling
+- [Meta — Refresh Access Token](https://developers.facebook.com/docs/instagram-platform/reference/refresh_access_token/) — 60-day token validity, 24-hour minimum age for refresh, refresh endpoint
+- [Instagram Direct Login implementation guide (July 2024)](https://gist.github.com/PrenSJ2/0213e60e834e66b7e09f7f93999163fc) — full OAuth flow, short-lived to long-lived exchange, IG user ID retrieval
+- `api/internal/platform/crypto/aes.go` — existing AES-256-GCM implementation confirmed
+- `api/internal/platform/migrations/001_initial_schema.sql` — existing `social_accounts` table stub confirmed
+- `api/go.mod` — confirmed all needed packages already present (no new `go get` required)
+- `apps/dj/vitest.config.ts` — confirmed Vitest test infrastructure
 
 ### Secondary (MEDIUM confidence)
-- Instagram Graph API: Complete Developer Guide for 2026 (Elfsight) - Verified API limits and authentication requirements
-- Publishing to Instagram via API: A technical guide (Postproxy Blog) - Verified permissions and app review process
-- How to Publish Instagram Reels via API: Upload, Schedule, and Automate Short-Form Video (Postproxy Blog) - Verified Reels-specific requirements
+- Multiple sources corroborating: Instagram Basic Display API EOL December 4, 2024; Business/Creator accounts only
+- `Intl.supportedValuesOf('timeZone')` — MDN Web API; confirmed browser support (Chrome 99+, Firefox 103+, Safari 15.4+)
+- Go `time.Ticker` + goroutine for polling workers — standard Go pattern confirmed against stdlib docs
 
-### Tertiary (LOW confidence)
-- Go Concurrency Patterns 2026: Modern Parallel Programming Best Practices (Reintech.io) - Worker pool patterns for background processing
-- Instagram API Rate Limits: 200 DMs/Hour Explained (2026) (Creatorflow.so) - Rate limit information
-- Refresh Access Token - Instagram Platform (Meta for Developers) - Token refresh endpoint details
+### Tertiary (LOW confidence — needs validation in development)
+- Instagram App Review requirement for Stories publishing on self-hosted non-public apps — unclear from official docs whether development-mode access bypasses App Review for single-user apps
+
+---
 
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack: HIGH - Based on project's existing technology stack and documented decisions
-- Architecture: HIGH - Based on locked decisions in CONTEXT.md and verified implementation patterns
-- Pitfalls: MEDIUM - Based on verified API behaviors and industry knowledge, with some specific error codes requiring validation
-- Code examples: HIGH - Directly sourced from official Facebook API documentation
+- Standard stack: HIGH — all backend deps in existing go.mod; all UI primitives installed; no new packages needed
+- Architecture: HIGH — exactly mirrors the tracklist package pattern (handler/service/repository + worker goroutine)
+- Instagram API endpoints and parameters: HIGH — verified against official Meta documentation
+- Token lifecycle (60-day, 7-day proactive refresh): HIGH — verified from official refresh endpoint docs
+- Image constraints (JPEG only, 8 MB, publicly accessible URL): HIGH — verified from official IG media endpoint docs
+- Stories App Review requirement for non-public apps: LOW — unclear; needs testing in development mode
 
-**Research date:** 2026-03-14
-**Valid until:** 2026-04-13 (30 days for stable technologies like Instagram API and Go)
+**Research date:** 2026-03-21
+**Valid until:** 2026-06-21 (Instagram API stable; token behavior unlikely to change; 90-day window)
