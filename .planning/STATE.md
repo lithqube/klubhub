@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 1.5-design-system-foundation
 status: planning
-last_updated: "2026-03-21T23:25:44.385Z"
+last_updated: "2026-03-21T23:26:59.420Z"
 progress:
   total_phases: 13
   completed_phases: 2
   total_plans: 23
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Session State
@@ -68,6 +68,9 @@ See: .planning/PROJECT.md
 - [Phase 02-social-media-scheduler]: SocialCalendarView accepts optional month prop for deterministic test rendering without mocking Date.now()
 - [Phase 02-social-media-scheduler]: data-testid attributes on submit-btn, retry-btn, download-btn, post-card, failed-card, next-slot-card for deterministic test queries
 - [Phase 02-social-media-scheduler]: ~ alias added to vitest.config.ts resolve.alias — needed for component imports using Nuxt ~ convention to resolve in test environment
+- [Phase 02-social-media-scheduler]: Worker uses workerRepoIface/instagramIface/storageIface thin interfaces for full-mock unit testing without testcontainers
+- [Phase 02-social-media-scheduler]: signal.NotifyContext added in main.go for SIGTERM/SIGINT — ensures worker goroutine exits cleanly on container shutdown
+- [Phase 02-social-media-scheduler]: Worker.tick swallows RateLimitError (returns nil) — stops tick loop early without propagating error
 
 ## Performance Metrics
 
@@ -85,6 +88,7 @@ See: .planning/PROJECT.md
 | Phase 02-social-media-scheduler P01 | 10 min | 2 tasks | 11 files |
 | Phase 02-social-media-scheduler P05 | 25min | 2 tasks | 6 files |
 | Phase 02-social-media-scheduler P04 | 25 min | 3 tasks | 8 files |
+| Phase 02-social-media-scheduler P02 | 15 min | 2 tasks | 5 files |
 
 ## Session Log
 
