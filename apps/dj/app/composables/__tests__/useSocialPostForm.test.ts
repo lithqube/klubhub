@@ -1,11 +1,22 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
+import { ref } from 'vue';
 import { useSocialPostForm } from '../useSocialPostForm';
 
-// Mock useSettingsStore
+// Mock useSettingsStore — must return a store-compatible object with reactive refs
+// so that storeToRefs() can destructure djName correctly.
 vi.mock('../../stores/settings', () => ({
-  useSettingsStore: () => ({
-    djName: 'DJ Techno',
+  useSettingsStore: vi.fn(() => {
+    const djName = ref('DJ Techno');
+    return {
+      djName,
+      $id: 'settings',
+      $patch: vi.fn(),
+      $subscribe: vi.fn(),
+      $onAction: vi.fn(),
+      $dispose: vi.fn(),
+      $state: {},
+    };
   }),
 }));
 
