@@ -9,7 +9,9 @@
 
 ## Overview
 
-v2 transforms KlubHub DJ from a single-user self-hosted tool into a multi-tenant SaaS platform while keeping the open-source core intact. The strategy is **open-core**: data-ownership modules (tracklist, gig, finance, release) stay MIT-licensed and free forever. Infrastructure/automation modules (social scheduler, hosted EPK, collaboration, dashboard) become premium SaaS features.
+v2 transforms KlubHub DJ from a single-user self-hosted tool into a multi-tenant SaaS platform while keeping the open-source core intact. The strategy is **open-core**: data-ownership modules (tracklist, gig, finance, release, tour manager, unified dashboard, and Instagram social scheduling) stay MIT-licensed and free forever. Infrastructure/automation features that require centralized hosting (multi-platform social posting, hosted EPK pages, real-time collaboration) become premium SaaS features.
+
+**Golden rule:** Own your data free, rent infrastructure paid.
 
 **Business model:** Freemium with PRO ($9/mo) and TEAM ($25/mo) tiers. See `.planning/research/MONETIZATION.md` for full pricing analysis.
 
@@ -76,9 +78,9 @@ klubhub-dj-cloud (new, private)
 |------|---------|
 | Stripe integration | Subscription lifecycle: create, update, cancel, reactivate |
 | Tier middleware | Check `subscription.tier` before premium route handlers |
-| Free tier limits | 4 social posts/month, 1 EPK (no public URL), 500MB storage |
-| PRO tier ($9/mo) | Unlimited social, unlimited EPK + public URLs, 10GB storage |
-| TEAM tier ($25/mo) | Multi-user (up to 10), unlimited collaboration, 50GB storage |
+| Free tier limits | Instagram: unlimited posts (OSS). Multi-platform (TikTok/Twitter/Facebook): 4 posts/month. 1 hosted EPK (no custom domain). 500MB storage. |
+| PRO tier ($9/mo) | Multi-platform: unlimited posts. AI captions: unlimited. Hosted EPK + public URL with branding. 10GB storage. |
+| TEAM tier ($25/mo) | Multi-user (up to 10). Collaborative tour planning. Custom EPK domain. 50GB storage. |
 | Usage metering | Track posts scheduled, storage used, EPKs created per billing period |
 | Billing portal | Stripe Customer Portal: self-service plan changes, invoices, payment methods |
 | Webhook handling | Stripe webhooks for payment success/failure, subscription changes |
@@ -98,11 +100,12 @@ klubhub-dj-cloud (new, private)
 | 24/7 reliability | Service restarts don't lose scheduled posts; jobs survive process crashes |
 | Pooled OAuth | Centralized Instagram token management across tenants |
 | Rate limiting | Per-tenant and global rate limits to respect Instagram API quotas |
-| Multi-platform prep | Architecture supports adding TikTok, Twitter/X as new publisher implementations |
+| Multi-platform posting | TikTok, Twitter/X, and Facebook publisher implementations — SaaS PRO feature |
+| AI caption generation | Claude API integration for caption suggestions from tracklist data — SaaS PRO |
 | Retry improvements | Dead-letter queue for permanently failed posts; admin visibility |
 | Monitoring | Scheduler health endpoint; Prometheus metrics for queue depth, publish latency |
 
-**Why extract?** The social scheduler is the highest-value SaaS feature. Self-hosters must keep Docker running 24/7 or miss posts. The SaaS scheduler runs on managed infrastructure with guaranteed uptime.
+**Why extract?** The scheduler extraction enables two things: (1) **reliable 24/7 uptime** for self-hosters who can't keep Docker running continuously — Instagram scheduling is OSS and self-hosted users benefit from this too; and (2) **multi-platform posting** (TikTok, Twitter/X, Facebook) that requires centralized API key management and rate limit orchestration across tenants that self-hosters cannot replicate easily. Instagram scheduling itself remains OSS — the extracted service adds reliability and platform breadth.
 
 ### M4: Hosted EPK Pages
 
@@ -291,10 +294,18 @@ export default defineNuxtPlugin(() => {
   return {
     provide: {
       features: {
-        socialScheduler: isSaaS && tier !== 'free',
+        // Instagram scheduling is always enabled (OSS — never gated)
+        instagramScheduler: true,
+        // Multi-platform requires SaaS PRO (centralized API key management)
+        multiPlatformSocial: isSaaS && tier !== 'free',
+        // AI captions require hosted Claude API key
+        aiCaptions: isSaaS && tier !== 'free',
+        // Hosted EPK page requires web serving infrastructure
         hostedEPK: isSaaS && tier !== 'free',
+        // Collaboration requires WebSocket + real-time infrastructure
         collaboration: isSaaS && tier === 'team',
-        // ...
+        // Custom EPK domain requires DNS + SSL management
+        customEPKDomain: isSaaS && tier === 'team',
       }
     }
   }

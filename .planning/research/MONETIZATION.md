@@ -26,30 +26,36 @@ These modules form the **core identity** of KlubHub DJ and must remain free to:
 | Module | Phase | Why Open-Source |
 |--------|-------|-----------------|
 | **Infrastructure** | 0 | Foundation — breaking this out would kill self-hosted story |
-| **Tracklist Image Generator** | 1 | **Flagship identity** — "upload file, get image in 60 seconds" IS the product. Must be free to create viral adoption. This is your funnel. |
+| **Tracklist Image Generator** | 1 | **Flagship identity** — "upload file, get image in 60 seconds" IS the product. Must be free to create viral adoption. Includes text export (1001Tracklists/Mixcloud/SoundCloud). |
 | **Design System** | 1.5 | UI foundation — no value as paid |
-| **Gig Tracker** | 4 | Privacy-sensitive data (fees, contacts, venues). Hub module — restricting it blocks 3 downstream modules. DJs won't trust a tool that locks their gig data behind a paywall. |
+| **Social Media Scheduler (Instagram)** | 2 | Instagram scheduling completes the tracklist→post workflow. Paywalling the last step of the flagship workflow frustrates the core user at peak value. Multi-platform (TikTok, Twitter/X) is SaaS PRO. |
+| **Gig Tracker** | 4 | Privacy-sensitive data (fees, contacts, venues). Hub module — restricting it blocks 3 downstream modules. Now includes venue/contact DB, iCal feed, and booking confirmation PDF. |
+| **Contacts & Venue Database** | 4 | User owns their professional network. Table-stakes for any booking tool. |
+| **Rider Templates** | 4.5 | User owns their technical requirements. Completes the gig advancing workflow. |
 | **Finance Tracker** | 5 | **Highly privacy-sensitive** (income, expenses, invoices). DJs will not enter financial data into a system that could paywall their own records. Trust signal. |
 | **Release Planner** | 6 | Simple CRUD — not enough value to justify payment. Better as a "stickiness" feature that keeps users in the ecosystem. |
+| **Tour Manager** | 7 | Basic tour planning (named gig groups, per-stop logistics, budget aggregate) is user data. Collaboration is SaaS TEAM. |
+| **Unified Dashboard + Career Analytics** | 8 | Aggregation of data the user already owns. Analytics derived from their own gig history — no external APIs. |
 
-**Why this split matters:** The open-source modules cover the **data-ownership** story. A DJ's tracklists, gig history, finances, and release plans are *their* data. Keeping this free builds the trust needed to sell the SaaS tier.
+**Why this split matters:** The open-source modules cover the **data-ownership** story. A DJ's tracklists, gig history, contacts, finances, releases, and tours are *their* data. Keeping all of this free builds the trust needed to sell the SaaS tier.
 
 ---
 
 ### Tier 2: SaaS Premium (Hosted Cloud — Subscription)
 
-These modules have characteristics that naturally justify SaaS pricing:
-- They require **infrastructure you manage** (OAuth token refresh, API rate limits, scheduling reliability)
-- They provide **automation value** (set-and-forget publishing, batch operations)
-- They involve **external service orchestration** that's painful to self-host
-- They benefit from **always-on availability** (24/7 scheduler, real-time monitoring)
+These features have characteristics that naturally justify SaaS pricing:
+- They require **infrastructure you manage** (multi-platform OAuth, rate limit orchestration, CDN/SSL/domain routing)
+- They provide **automation value beyond a single platform** (cross-platform publishing, AI generation)
+- They involve **collaboration** that requires always-on hosted infrastructure
+- They require **hosted web serving** that self-hosters cannot trivially replicate
 
-| Module | Phase | Why SaaS | SaaS Value Proposition |
-|--------|-------|----------|----------------------|
-| **Social Media Scheduler** | 2 | Requires Instagram App Review (3+ weeks), OAuth token management, 24/7 scheduler uptime, retry logic, rate limit management. Self-hosters must keep Docker running 24/7 or miss posts. | "Never miss a post. We handle Instagram OAuth, token refresh, and 24/7 scheduling so you don't need a server running." |
-| **EPK / Press Kit Builder** | 3 | PDF generation is compute-intensive. **Hosted EPK pages** (shareable public URLs) require a web server, custom domains, SSL — this is explicitly a v3 feature that only makes sense as SaaS. | "One-click professional press kit with a shareable URL. No hosting setup required." |
-| **Tour Manager** | 7 | **Collaboration potential** — touring DJs need to share logistics with managers, agents, promoters. Multi-user access to tour data is the natural SaaS upsell. Document storage (contracts, boarding passes) needs reliable hosted storage. | "Share tour logistics with your team. Collaborate on per-stop checklists without managing a server." |
-| **Unified Dashboard** | 8 | Aggregation across modules with **real-time monitoring** (upcoming gigs, scheduled posts, release deadlines). Cloud dashboard with mobile access is a natural premium. | "Your DJ career at a glance — from any device, anywhere. Real-time alerts for upcoming deadlines." |
+| Feature | Why SaaS | SaaS Value Proposition |
+|---------|----------|----------------------|
+| **Multi-platform Social Posting** (TikTok, Twitter/X, Facebook) | Requires centralized API key management + rate limit orchestration across platforms that is impractical to self-host. Instagram stays OSS; multi-platform is the upgrade. | "Post to TikTok, Twitter, and Facebook automatically alongside Instagram — from the same tracklist export." |
+| **AI Caption Generation** | Requires hosted Claude API key management; cost-per-use model is incompatible with self-hosted. | "Let AI write your post caption from your tracklist data. One click, three variants." |
+| **Hosted EPK Page** (`klubhub.dj/epk/name`) | Requires web hosting, SSL, CDN, domain routing — fundamentally not self-hostable without DevOps expertise. PDF is always free; the public URL is the SaaS value. | "Share your press kit as a link, not an attachment. `klubhub.dj/epk/your-name` — always up to date." |
+| **Collaborative Tour Planning** | Real-time shared editing (invite manager/agent/promoter) requires WebSocket service + hosted always-on infrastructure. | "Share tour logistics with your team. Managers update per-stop details without accessing your full account." |
+| **Custom EPK Domain** (TEAM tier) | DNS verification + automatic SSL requires hosted infrastructure and domain management. | "Your press kit on your own domain: `epk.yourname.com`." |
 
 ---
 
@@ -59,37 +65,42 @@ These modules have characteristics that naturally justify SaaS pricing:
 
 ```
 FREE (Self-Hosted, Open-Source MIT)
-├── Tracklist Image Generator (unlimited)
-├── Gig Tracker (unlimited)
-├── Finance Tracker (unlimited)
+├── Tracklist Image Generator (unlimited) + text export (1001Tracklists, Mixcloud, SoundCloud)
+├── Social Scheduler: Instagram (unlimited posts)
+├── EPK Builder: unlimited press kits as PDF
+├── Gig Tracker (unlimited) + Contacts & Venue DB + iCal feed + booking confirmation PDF
+├── Rider Templates (unlimited)
+├── Finance Tracker (unlimited, PDF invoices)
 ├── Release Planner (unlimited)
+├── Tour Manager (basic: groups, logistics, budget)
+├── Unified Dashboard + Career Analytics
 ├── Design System & Full UI
 └── Docker Compose deployment
 
 CLOUD FREE TIER (Hosted)
 ├── Everything in Self-Hosted FREE
-├── Social Scheduler: 4 posts/month
-├── EPK Builder: 1 press kit (no public URL)
-├── 500 MB storage
+├── Multi-platform social: 4 cross-platform posts/month (TikTok, Twitter/X, Facebook)
+├── EPK Builder: 1 hosted press kit page (no custom domain)
+├── 500 MB cloud storage
 └── Community support
 
 PRO — $9/month or $89/year
 ├── Everything in Cloud Free
-├── Social Scheduler: unlimited posts, multi-platform (Instagram + TikTok)
-├── EPK Builder: unlimited press kits + shareable public URLs with custom branding
-├── Tour Manager: full tour planning + team collaboration (invite 3 collaborators)
-├── Unified Dashboard: real-time alerts + mobile-optimized view
-├── 10 GB storage
+├── Multi-platform social: unlimited posts (Instagram + TikTok + Twitter/X + Facebook)
+├── AI caption generation from tracklist data (unlimited)
+├── Hosted EPK page: unlimited press kits at klubhub.dj/epk/name with custom branding
 ├── Priority cover art fetching (pooled API keys, faster lookups)
+├── 10 GB cloud storage
 ├── Email support
 └── Early access to new features
 
 TEAM — $25/month or $249/year
 ├── Everything in PRO
 ├── Multi-user: up to 10 DJs (collective, label, agency)
-├── Tour Manager: unlimited collaborators
+├── Collaborative tour planning (invite managers/agents, real-time shared checklists)
+├── Custom domain for hosted EPK page (epk.yourname.com)
 ├── Shared template library across team
-├── 50 GB storage
+├── 50 GB cloud storage
 ├── Team analytics (aggregate stats across members)
 ├── Priority support
 └── Custom branding removal
@@ -108,6 +119,14 @@ TEAM — $25/month or $249/year
 
 ## Revenue Streams Beyond Subscriptions
 
+### 0. AI Caption Generation (PRO — included, not add-on)
+
+**What:** When scheduling a social post after tracklist export, Claude API generates 3 caption variants based on tracklist data (venue, event name, track labels, genre signals). One-click "Use This" fills the caption field.
+
+**Model:** Included in PRO tier. Estimated cost: ~$0.001/generation at Claude Haiku pricing — negligible at SaaS scale.
+
+**Why SaaS-only:** Requires a hosted API key. Self-hosters can optionally add their own `CLAUDE_API_KEY` to `.env` for local generation (OSS-friendly escape hatch), but the managed experience is PRO.
+
 ### 1. Template Marketplace (v2.0+)
 
 **What:** Community-created tracklist image templates, EPK themes, and invoice designs.
@@ -125,6 +144,12 @@ TEAM — $25/month or $249/year
 **Model:** Included in PRO tier. Self-hosted users can optionally buy an API key add-on ($3/mo) for faster cover art resolution.
 
 **Technical fit:** The `CoverArtProvider` interface already abstracts the API layer. Add a `HostedCoverArtProvider` that routes through a centralized proxy with pooled credentials.
+
+### 2.5. Bandsintown Sync (OSS — growth driver, not revenue)
+
+**What:** When a gig is confirmed and `BANDSINTOWN_API_KEY` is configured, event is pushed to the DJ's Bandsintown artist page automatically (Phase 4.8).
+
+**Model:** Free Bandsintown API, ships as OSS. Not a revenue stream — a **growth driver** that makes KlubHub DJ indispensable to DJs who promote on Bandsintown, and a discovery vector when DJs mention KlubHub in their Bandsintown event descriptions.
 
 ### 3. Hosted EPK Pages (SaaS-Only Feature)
 
@@ -198,13 +223,16 @@ The architecture doc already defines this migration path in §9 "Deployment Arch
 | Competitor | What They Offer | Price | KlubHub Advantage |
 |-----------|-----------------|-------|-------------------|
 | **Canva** | Generic image templates | $13/mo | DJ-specific templates, automatic track parsing, cover art fetching |
-| **Buffer / Later / Hootsuite** | Social scheduling | $6-$25/mo | DJ-specific (tracklist → post workflow), not generic scheduling |
-| **Linktree / Carrd** | Simple landing pages | $9-$19/mo | Full EPK with PDF export, not just a link page |
-| **Google Sheets** | Manual gig/finance tracking | Free | Purpose-built workflows (status tracking, auto-income, invoicing) |
+| **Buffer / Later / Hootsuite** | Social scheduling | $6-$25/mo | DJ-specific (tracklist → post workflow), not generic scheduling. Instagram OSS = free. |
+| **Linktree / Carrd** | Simple landing pages | $9-$19/mo | Full EPK with PDF export (OSS) + hosted page (PRO); not just a link page |
+| **Google Sheets** | Manual gig/finance tracking | Free | Purpose-built workflows: venue DB, iCal, booking PDF, status tracking, auto-income, invoicing |
+| **Optune** | DJ agency booking CRM | €19-79/mo | OSS + self-hosted; venue/contact DB, iCal, rider templates included free |
+| **Stagent** | Artist agency booking | €39-99/mo | Full OSS equivalent at no cost; agency collaboration at $25/mo vs €99+/mo |
+| **Gigwell** | Agency/venue booking + analytics | $39-319/mo | OSS core tools free forever; SaaS PRO at fraction of cost |
 | **Gigsalad / Encore** | Gig marketplace | Commission-based | Self-managed gig tracking without commission; DJ owns their data |
-| **KUVO / Mixcloud** | Tracklist sharing | Free/paid | Image generation + full career toolkit, not just tracklist hosting |
+| **KUVO / Mixcloud** | Tracklist sharing | Free/paid | Image generation + text export + full career toolkit, not just tracklist hosting |
 
-**KlubHub's moat:** No single tool combines tracklist generation + social scheduling + press kits + gig tracking + finance + touring for DJs. Each competitor covers one slice. KlubHub's integration across all modules is the unique value.
+**KlubHub's moat:** No single tool combines tracklist generation + text export + Instagram scheduling + EPK + gig tracking with venue DB + finance + rider templates + tour management for DJs as a self-hosted OSS tool. Each competitor covers one slice at $19-$99+/mo. KlubHub covers all of it free (self-hosted) or at $9/mo (cloud PRO).
 
 ---
 

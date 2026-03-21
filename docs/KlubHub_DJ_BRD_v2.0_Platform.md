@@ -181,12 +181,13 @@ Tightly integrated with the tracklist generator. After creating a tracklist imag
 
 ### 7.1 Supported Platforms (v1)
 
-| Platform | Capabilities |
-|---|---|
-| **Instagram Feed** | Photo posts with caption, hashtags, and location tag |
-| **Instagram Stories** | Image stories with optional link sticker (business accounts) |
+| Platform | Capabilities | Tier |
+|---|---|---|
+| **Instagram Feed** | Photo posts with caption and hashtags | Open-Source (free) |
+| **Instagram Stories** | Image stories with optional link sticker (business accounts) | Open-Source (free) |
+| **TikTok, Twitter/X, Facebook** | Cross-platform posting from the same scheduled post | KlubHub Cloud PRO |
 
-TikTok support is planned for v1.x as a follow-up integration.
+Instagram scheduling is free and open-source — it completes the core tracklist→post workflow. Multi-platform posting (TikTok, Twitter/X, Facebook) is available in KlubHub Cloud PRO, where centralized API key management and rate limit orchestration across platforms are handled by the hosted infrastructure.
 
 ### 7.2 Core Features
 
@@ -197,6 +198,7 @@ TikTok support is planned for v1.x as a follow-up integration.
 - Queue view: calendar/list of all upcoming scheduled posts.
 - Post status tracking: scheduled, published, failed (with retry).
 - Auto-attach: option to automatically create a draft post when a new tracklist image is generated.
+- **KlubHub Cloud PRO only:** AI-generated caption suggestions (3 variants) from tracklist data using Claude API.
 
 ### 7.3 Functional Requirements — Phase 1b
 
@@ -239,7 +241,9 @@ A tool for building professional electronic press kits that DJs can send to prom
 
 ### 8.2 Output Format
 
-v1 generates a downloadable PDF press kit with a professional layout. The PDF includes the user's branding (logo, colors from their KlubHub DJ settings). Future versions may add a hosted web page with a shareable link.
+v1 generates a downloadable PDF press kit with a professional layout. The PDF includes the user's branding (logo, colors from their KlubHub DJ settings).
+
+A hosted public EPK page with a shareable URL (`klubhub.dj/epk/your-name`) is available in **KlubHub Cloud PRO**. Custom domains (`epk.yourname.com`) are available in **KlubHub Cloud TEAM**. This is intentionally not in the self-hosted v1 — hosted pages require web routing, SSL certificate management, and CDN infrastructure that self-hosters should not need to manage. PDF export satisfies the core use case (emailing your press kit) without any server dependency.
 
 ### 8.3 Functional Requirements — Phase 1c
 
@@ -264,24 +268,31 @@ A centralized place to log, track, and manage all gigs — past and upcoming.
 ### 9.1 Core Features
 
 - Log gigs with: date, venue name, city/country, event name, promoter/booker contact, agreed fee, currency, payment status.
-- Status workflow: inquiry → confirmed → advanced → played → paid (customizable).
+- Status workflow: inquiry → confirmed → advanced → played → played → cancelled.
 - Link a tracklist (from the Tracklist Generator) to a gig.
-- Link generated images to a gig for quick access.
 - Notes field per gig (travel details, hotel, special requirements).
 - Calendar view and list view of all gigs.
 - Filter/search by date range, venue, city, status, fee range.
+- **Venue database:** Create and manage reusable venue records (name, city, country, capacity, website, technical contact). Search and link a saved venue when creating or editing a gig — auto-populates venue fields.
+- **Contact database:** Create and manage reusable promoter/agent/label contacts. Search and link a contact to a gig — auto-populates promoter fields.
+- **Booking confirmation PDF:** Generate a formatted booking confirmation from any confirmed gig, pre-populated with DJ name, venue, date, fee, currency, set length, and technical contact. No e-signature required.
+- **iCal feed:** `GET /api/v1/gigs/calendar.ics` exports all non-cancelled gigs as a standards-compliant iCal feed importable by Google Calendar, Apple Calendar, and any iCal-compatible client.
 
 ### 9.2 Functional Requirements — Phase 1d
 
 | ID | Requirement |
 |---|---|
 | **FR-040** | System shall allow creating, editing, and deleting gig entries. |
-| **FR-041** | System shall track gig status through a configurable workflow. |
+| **FR-041** | System shall track gig status through a configurable workflow (inquiry → confirmed → advanced → played → cancelled). |
 | **FR-042** | System shall store venue, promoter contact, fee, currency, and payment status per gig. |
 | **FR-043** | System shall allow linking tracklists and generated images to gig entries. |
 | **FR-044** | System shall provide calendar and list views for gigs. |
 | **FR-045** | System shall support filtering by date, venue, city, status, and fee range. |
-| **FR-046** | System shall store all gig data in PostgreSQL. |
+| **FR-046** | System shall store all gig data in PostgreSQL with soft deletion. |
+| **FR-047** | System shall provide a reusable venue database: create, edit, delete venue records; search and link to gig with auto-populate. |
+| **FR-048** | System shall provide a reusable contact database: create, edit, delete contact records; search and link to gig with auto-populate. |
+| **FR-049** | System shall generate a booking confirmation PDF from any confirmed gig pre-populated with DJ and venue details. |
+| **FR-050** | System shall expose `GET /api/v1/gigs/calendar.ics` returning a valid RFC 5545 iCal feed of all non-cancelled gigs. |
 
 ---
 
@@ -303,13 +314,13 @@ Basic financial tracking for independent DJs to understand their income, expense
 
 | ID | Requirement |
 |---|---|
-| **FR-050** | System shall allow logging income entries with amount, currency, category, date, and optional gig link. |
-| **FR-051** | System shall allow logging expense entries with amount, currency, category, date, and notes. |
-| **FR-052** | System shall auto-create income entries from gig fees when a gig is marked as paid. |
-| **FR-053** | System shall provide monthly and yearly summary views with category breakdowns. |
-| **FR-054** | System shall calculate profit/loss per gig, per month, and per year. |
-| **FR-055** | System shall generate a basic PDF invoice from gig and user settings data. |
-| **FR-056** | System shall support multiple currencies with manual exchange rates. |
+| **FR-060** | System shall allow logging income entries with amount, currency, category, date, and optional gig link. |
+| **FR-061** | System shall allow logging expense entries with amount, currency, category, date, and notes. |
+| **FR-062** | System shall auto-create income entries from gig fees when a gig is marked as paid. |
+| **FR-063** | System shall provide monthly and yearly summary views with category breakdowns. |
+| **FR-064** | System shall calculate profit/loss per gig, per month, and per year. |
+| **FR-065** | System shall generate a basic PDF invoice from gig and user settings data. |
+| **FR-066** | System shall support multiple currencies with manual exchange rates. |
 
 ---
 
@@ -341,7 +352,7 @@ A planning tool to coordinate music releases across labels, distributors, and pl
 
 ## 12. Phase 1g — Tour Manager
 
-Coordinate multi-date tours and extended booking runs with logistics tracking.
+Coordinate multi-date tours and extended booking runs with logistics tracking. The Tour Manager ships as a core open-source feature — DJs own their tour logistics data. Real-time collaborative tour management (inviting managers, agents, or promoters to view and edit tour details with live updates) is a KlubHub Cloud TEAM feature available in v2.
 
 ### 12.1 Core Features
 
@@ -417,7 +428,11 @@ Core entities organized by module. All entities use UUID primary keys, created_a
 
 | Table | Fields |
 |---|---|
-| **gigs** | id, date, venue_name, city, country, event_name, promoter_name, promoter_email, promoter_phone, fee, currency, payment_status (enum), gig_status (enum), notes, tracklist_id (FK, nullable) |
+| **venues** | id, name, city, country, capacity (nullable), website (nullable), technical_contact_name, technical_contact_email, technical_contact_phone, notes |
+| **contacts** | id, name, company (nullable), email, phone, type (enum: promoter, agent, label, other), notes |
+| **gigs** | id, date, venue_id (FK→venues, nullable), venue_name, city, country, event_name, contact_id (FK→contacts, nullable), promoter_name, promoter_email, promoter_phone, fee, currency, payment_status (enum), gig_status (enum), notes, tracklist_id (FK, nullable) |
+| **gig_riders** | id, gig_id (FK), technical (text), hospitality (text), backline (text), other (text), rider_template_id (FK→rider_templates, nullable, source reference only) |
+| **rider_templates** | id, name, technical (text), hospitality (text), backline (text), other (text) |
 
 ### 14.6 Finance Module
 
@@ -486,6 +501,27 @@ The Go backend exposes a RESTful API organized by module. All endpoints are pref
 
 Each follows standard REST patterns: GET (list/detail), POST (create), PUT (update), DELETE (remove). Finance module adds `GET /finance/summary` for aggregated views. Tour module adds `GET /tours/:id/budget` for aggregated financials.
 
+Additional Gig module endpoints:
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/v1/gigs/calendar.ics` | iCal feed of all non-cancelled gigs (RFC 5545) |
+| `POST /api/v1/gigs/:id/confirmation-pdf` | Generate booking confirmation PDF for a confirmed gig |
+| `GET /api/v1/venues` | List all venue records |
+| `POST /api/v1/venues` | Create a venue record |
+| `PUT /api/v1/venues/:id` | Update a venue record |
+| `DELETE /api/v1/venues/:id` | Soft-delete a venue record |
+| `GET /api/v1/contacts` | List all contact records |
+| `POST /api/v1/contacts` | Create a contact record |
+| `PUT /api/v1/contacts/:id` | Update a contact record |
+| `DELETE /api/v1/contacts/:id` | Soft-delete a contact record |
+| `GET /api/v1/rider-templates` | List all rider templates |
+| `POST /api/v1/rider-templates` | Create a rider template |
+| `PUT /api/v1/rider-templates/:id` | Update a rider template |
+| `POST /api/v1/gigs/:id/rider` | Attach a rider template to a gig (creates per-gig copy) |
+| `PUT /api/v1/gigs/:id/rider` | Update the per-gig rider |
+| `POST /api/v1/gigs/:id/rider/pdf` | Export the per-gig rider as PDF |
+
 ### 15.5 System
 
 | Endpoint | Description |
@@ -539,39 +575,36 @@ The `.env` file configures: Spotify/Discogs/MusicBrainz API keys, Instagram/Face
 
 | Phase | Module | Key Deliverables |
 |---|---|---|
-| **1a** | Tracklist Image Generator | File parsing (3 formats), image gen (2 sizes, 3 bg modes), cover art, templates, live preview |
-| **1b** | Social Media Scheduler | Instagram feed + stories, scheduling, queue view, auto-attach from tracklist gen |
-| **1c** | EPK / Press Kit Builder | Bio editor, photo management, tech rider, stage plot, PDF export |
-| **1d** | Gig Tracker | Gig CRUD, status workflow, calendar/list views, tracklist linking |
+| **1a** | Tracklist Image Generator | File parsing (3 formats), image gen (2 sizes, 3 bg modes), cover art, templates, live preview, text export (1001Tracklists / Mixcloud / SoundCloud) |
+| **1b** | Social Media Scheduler | Instagram feed + stories, scheduling, queue view, auto-attach from tracklist gen (Instagram is OSS; multi-platform is KlubHub Cloud PRO) |
+| **1c** | EPK / Press Kit Builder | Bio editor, photo management, tech rider, stage plot, PDF export (PDF is OSS; hosted EPK URL is KlubHub Cloud PRO) |
+| **1d** | Gig Tracker | Gig CRUD, status workflow, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, tracklist linking |
+| **1d+** | Rider Templates | Named rider templates, per-gig attachment with overrides, rider PDF export |
+| **1d+** | Bandsintown Sync (optional) | Outbound event push to Bandsintown on gig confirmed |
 | **1e** | Finance Tracker | Income/expense logging, gig fee auto-linking, summaries, basic PDF invoicing |
 | **1f** | Release Planner | Release CRUD, deadline tracking, promo checklists, timeline view |
-| **1g** | Tour Manager | Tour creation, per-stop logistics, checklists, budget aggregation, document storage |
+| **1g** | Tour Manager | Tour creation, per-stop logistics, checklists, budget aggregation, document storage (OSS; collaboration is KlubHub Cloud TEAM) |
 
 ### 18.2 v1.x — Incremental Enhancements
 
-- TikTok posting support.
-- Text-only tracklist export (1001tracklists, Mixcloud, SoundCloud format).
 - Additional image output formats (Twitter/X banner, A4 poster, custom dimensions).
 - Data export (CSV/JSON) for all modules.
-- Calendar sync (Google Calendar, iCal).
+- VirtualDJ, djay Pro, Engine DJ history file parsing.
 
-### 18.3 v2.0 — Integrations & Intelligence
+### 18.3 v2.0 — KlubHub Cloud SaaS + Integrations
 
+- **KlubHub Cloud PRO:** Multi-platform social posting (TikTok, Twitter/X, Facebook), AI caption generation, hosted EPK pages.
+- **KlubHub Cloud TEAM:** Multi-user roster, collaborative tour planning, custom EPK domains.
 - External integrations: Resident Advisor, Beatport, Bandcamp, Spotify for Artists.
 - AI-generated and procedural/gradient backgrounds for tracklist images.
-- Social media content calendar and cross-platform posting (Twitter/X, Facebook).
-- Contact / network CRM (promoters, labels, agents).
 - Promo / marketing asset generator (flyers, banners).
-- Analytics dashboard (gig stats, income trends, career growth metrics).
 
 ### 18.4 v3.0+ — Future Vision
 
-- Multi-user support with authentication (shared instances, collectives, agencies).
+- Multi-user support with authentication (shared instances, collectives, agencies) in self-hosted OSS.
 - Full design editor (custom fonts, drag-and-drop layout).
-- Additional DJ software support (VirtualDJ, djay Pro, Engine DJ).
 - Mobile-responsive or native mobile app.
 - Community template marketplace.
-- Hosted EPK web pages with shareable links.
 - Contract management and e-signatures.
 
 ---

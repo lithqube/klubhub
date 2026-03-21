@@ -89,10 +89,10 @@ A DJ can upload their DJ history file and get a professional, social-media-ready
 | TikTok posting | v1.x follow-up; Instagram first |
 | Tax calculation / VAT | Tracking tool only, not accounting software |
 | AI-generated backgrounds | v2.0 roadmap item |
-| External integrations (RA, Beatport, Bandcamp) | v2.0 roadmap item |
+| External integrations (RA, Beatport, Bandcamp) | v2.0 roadmap item (Bandsintown outbound sync ships as optional Phase 4.8 in v1) |
 | Mobile app | Web-first; mobile later |
 | Real-time chat | Not core to DJ career management |
-| Contract management / e-signatures | v3.0+ roadmap item |
+| Contract management / e-signatures | v3.0+ roadmap item (booking confirmation PDF without e-signature ships in Phase 4 as GIG-12) |
 | Text-only tracklist export (1001tracklists format) | v1.x enhancement |
 
 ## Context
@@ -133,9 +133,13 @@ A DJ can upload their DJ history file and get a professional, social-media-ready
 | Pinia for state management | 30+ local refs unsustainable; cross-module data sharing needed for scheduler/dashboard | — Decided 2026-03-20 |
 | Dual color token architecture | UI theme (Tailwind config) separate from image preset colors (design-tokens.ts) — image presets are product data, not UI chrome | — Decided 2026-03-20 |
 | Space Grotesk + Inter + Manrope typography | Three-font system: Command (headlines), Data (body), Terminal (labels); bundled locally as variable woff2 | — Decided 2026-03-20 |
-| v1 open-source + v2 SaaS release strategy | v1.0.0 ships all 8 modules as MIT open-source with Phase 9 production hardening; v2 SaaS in separate private repo (`klubhub-dj-cloud`) imports v1 as Go module and adds auth, billing, service extraction, K8s | — Decided 2026-03-20 |
-| Open-core monetization model | Data-ownership modules (tracklist, gig, finance, release) stay free forever; infrastructure/automation modules (social scheduler, hosted EPK, collaboration) become SaaS premium; $9/mo PRO, $25/mo TEAM | — Decided 2026-03-20 |
-| Separate repository for SaaS (not fork) | OSS repo stays clean; SaaS repo imports OSS as Go module; feature flags in frontend; contributors never see billing/auth code | — Decided 2026-03-20 |
+| v1 open-source + v2 SaaS release strategy | v1.0.0 ships all modules as MIT open-source with Phase 9 production hardening; v2 SaaS in separate private repo (`klubhub-dj-cloud`) imports v1 as Go module and adds auth, billing, service extraction, K8s | — Decided 2026-03-20 |
+| Open-core monetization model (revised 2026-03-21) | **OSS forever:** tracklist, gig, finance, release, tour manager, unified dashboard, Instagram scheduling, contacts/venue DB, rider templates, iCal feed, text tracklist export, career analytics. **SaaS PRO ($9/mo):** multi-platform social posting (TikTok/Twitter/Facebook), AI caption generation, hosted EPK page with shareable URL. **SaaS TEAM ($25/mo):** multi-user roster, collaborative tour planning, custom EPK domain. Golden rule: "Own your data free, rent infrastructure paid." | — Revised 2026-03-21 |
+| Separate repository for SaaS (not fork) | OSS repo stays clean; SaaS repo imports OSS as Go module; feature flags in frontend (`multiPlatformSocial`, `hostedEPK`, `aiCaptions`, `collaboration`); contributors never see billing/auth code | — Decided 2026-03-20 |
+| Instagram scheduling = OSS (revised 2026-03-21) | Instagram scheduling completes the core tracklist→post workflow and must be free. SaaS PRO adds multi-platform (TikTok, Twitter/X, Facebook) + AI captions — these require centralized API key management and rate limit orchestration across tenants that self-hosters cannot replicate easily | — Revised 2026-03-21 |
+| Tour Manager = OSS (revised 2026-03-21) | Basic tour planning (named gig groups, per-stop logistics, budget aggregate) belongs to the user's data and ships as OSS. Collaborative tour sharing (invite manager/agent, real-time shared checklists) is SaaS TEAM in v2 | — Revised 2026-03-21 |
+| EPK hosted pages = SaaS v2 M4, not v3 (revised 2026-03-21) | PDF-only confirmed for OSS v1 — PDF generation requires no server infrastructure. Hosted public EPK page (`klubhub.dj/epk/name`, custom domain, CDN, SSL) is SaaS PRO in v2 M4. Reclassified from v3 to v2 SaaS launch feature | — Revised 2026-03-21 |
+| Gig Tracker scope extended (2026-03-21) | Phase 4 now includes: reusable venue and contact database (CONT), iCal feed export (INT-02, INT-03), and booking confirmation PDF (GIG-12). These are table-stakes features competitors ship in their core offering; without them the gig tracker cannot replace a working DJ's existing tools | — Decided 2026-03-21 |
 
 ---
 *Last updated: 2026-03-20 after v1/v2 release planning*

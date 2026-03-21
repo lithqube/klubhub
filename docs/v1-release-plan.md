@@ -22,15 +22,17 @@ KlubHub DJ v1.0 is the complete, self-hosted, open-source DJ career toolkit. It 
 | # | Module | Phase | Description |
 |---|--------|-------|-------------|
 | 1 | Infrastructure | 0 | Four-service Docker Compose stack, health endpoint, migrations, backup/restore |
-| 2 | Tracklist Image Generator | 1 | Upload DJ history → professional tracklist image in <60s |
+| 2 | Tracklist Image Generator | 1 | Upload DJ history → professional tracklist image in <60s + text export (1001Tracklists / Mixcloud / SoundCloud) |
 | 3 | Design System | 1.5 | Tailwind CSS + shadcn-vue + Cyberpunk HUD design language |
-| 4 | Social Media Scheduler | 2 | Instagram OAuth, timezone-aware scheduling, retry with backoff |
-| 5 | EPK / Press Kit Builder | 3 | Artist bio, press photos, tech rider, PDF export |
-| 6 | Gig Tracker | 4 | Gig CRUD, status/payment workflows, calendar/list views |
+| 4 | Social Media Scheduler | 2 | Instagram OAuth, timezone-aware scheduling, retry with backoff (Instagram is OSS; multi-platform is KlubHub Cloud PRO) |
+| 5 | EPK / Press Kit Builder | 3 | Artist bio, press photos, tech rider, PDF export (PDF is OSS; hosted EPK URL is KlubHub Cloud PRO) |
+| 6 | Gig Tracker | 4 | Gig CRUD, status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views |
+| 6a | Rider Templates | 4.5 | Named rider templates, per-gig attachment with overrides, rider PDF export |
+| 6b | Bandsintown Sync | 4.8 | Optional outbound event push to Bandsintown on gig confirmed |
 | 7 | Finance Tracker | 5 | Income/expense logging, multi-currency summaries, PDF invoices |
 | 8 | Release Planner | 6 | Release CRUD, deadline tracking, promo checklists |
-| 9 | Tour Manager | 7 | Named tour groups, per-stop logistics, tour budget |
-| 10 | Unified Dashboard | 8 | Aggregated career overview across all modules |
+| 9 | Tour Manager | 7 | Named tour groups, per-stop logistics, tour budget (OSS; collaboration is KlubHub Cloud TEAM) |
+| 10 | Unified Dashboard | 8 | Aggregated career overview + career analytics (gig frequency, top venues, income trend) |
 
 ### Tech Stack
 
@@ -219,10 +221,11 @@ PostgreSQL   MinIO
 | Authentication / multi-user | Single-user self-hosted; v2 SaaS adds this |
 | Billing / subscriptions | No SaaS tier in v1 |
 | Kubernetes / cloud deployment | Docker Compose only |
-| TikTok / Twitter posting | Instagram only in v1 |
+| Multi-platform social posting (TikTok, Twitter/X, Facebook) | Instagram is OSS and ships in v1. Multi-platform requires centralized API key management — KlubHub Cloud PRO in v2. |
 | AI-generated backgrounds | v2 enhancement |
-| Real-time collaboration | v2 SaaS feature |
-| Hosted EPK pages | Requires web hosting — v2 SaaS |
+| AI caption generation | Requires hosted Claude API key — KlubHub Cloud PRO in v2. Self-hosters can optionally supply their own `CLAUDE_API_KEY`. |
+| Real-time collaboration | v2 SaaS feature (TEAM tier) |
+| Hosted EPK pages | PDF export is OSS. Hosted public URL (`klubhub.dj/epk/name`) requires web hosting — KlubHub Cloud PRO in v2. |
 | Template marketplace | v2 SaaS feature |
 | Mobile app | Web-first; mobile deferred |
 

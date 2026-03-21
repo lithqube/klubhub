@@ -53,6 +53,8 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 - [x] **TRKL-26**: Image templates support full Unicode rendering including CJK, Cyrillic, and Arabic via bundled Noto Sans fonts; unrenderable glyphs show `?` substitution
 - [x] **TRKL-27**: User can delete a tracklist; cascade soft-deletes child tracks and generated images; linked gig references are set to NULL; confirmation dialog warns user
 - [x] **TRKL-28**: System persists user's last-used template, background mode, and metadata field settings
+- [ ] **TRKL-29**: User can export a parsed tracklist as plain text in three formats: (a) 1001Tracklists format `HH:MM - Artist - Title`, (b) Mixcloud/SoundCloud description format `Artist - Title` (one per line), (c) numbered list `1. Artist - Title (Label)` with label omitted if missing
+- [ ] **TRKL-30**: Text export respects the active track range selector (same range as image export); empty metadata fields are omitted gracefully from output
 
 ### Design System Foundation (DSYS) — INSERTED
 
@@ -114,6 +116,9 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 - [ ] **GIG-07**: User can filter gigs by date range, venue, city, status, and fee range
 - [ ] **GIG-08**: "Copy from Previous Gig" dropdown auto-fills promoter fields from a selected prior gig
 - [ ] **GIG-09**: All gig data stored in PostgreSQL with soft deletion
+- [ ] **GIG-10**: User can link a gig to a venue record (CONT) and a promoter contact record (CONT); linked records auto-populate venue name, city, country, and promoter fields; fields remain editable after link
+- [ ] **GIG-11**: "Copy from Previous Gig" populates from the gig's linked venue and contact records (not just free-text fields) when those records exist
+- [ ] **GIG-12**: When a gig is in `confirmed` status, user can generate a booking confirmation PDF pre-populated with: DJ name, venue name + city, event date, fee + currency, set length, technical contact name + email; no e-signature required; PDF stored in MinIO and downloadable
 
 ### Finance Tracker (FIN)
 
@@ -158,6 +163,31 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 - [ ] **DASH-06**: Dashboard shows monthly income/expense summary
 - [ ] **DASH-07**: Dashboard provides quick actions: upload tracklist, schedule post, log gig, create invoice
 - [ ] **DASH-08**: Dashboard widgets are hidden when their module has no data or has not been deployed
+- [ ] **DASH-09**: Dashboard shows a career analytics section: gigs per month (last 12 months), top 5 venues by gig count, average fee trend (last 3 years), and peak booking month; all computed from existing PostgreSQL gig data with no external API calls
+- [ ] **DASH-10**: Analytics section is hidden if fewer than 3 gig entries exist; each analytic widget degrades independently if data is insufficient
+
+### Contacts & Venue Database (CONT)
+
+- [ ] **CONT-01**: User can create, edit, and delete venue records with: name, city, country, capacity (optional), website (optional), technical contact name, technical contact email, technical contact phone, notes
+- [ ] **CONT-02**: User can create, edit, and delete contact records with: name, company (optional), email, phone, type (enum: promoter, agent, label, other), notes
+- [ ] **CONT-03**: When creating or editing a gig, user can search and link a venue record and a contact record by name (autocomplete search, minimum 2 characters)
+- [ ] **CONT-04**: Linking a venue to a gig auto-populates venue name, city, and country fields; linking a contact auto-populates promoter name, email, and phone; all auto-populated fields remain editable after link
+- [ ] **CONT-05**: Venue list view shows each venue with total gig count and date of last booking; contact list view shows each contact with total gig count
+- [ ] **CONT-06**: All venue and contact data stored in PostgreSQL with soft deletion; a venue or contact with linked non-deleted gigs cannot be hard-deleted — soft delete only
+
+### Rider Templates (RIDER)
+
+- [ ] **RIDER-01**: User can create, edit, and delete named rider templates with four sections: technical requirements, hospitality, backline, other notes (each section is free-text)
+- [ ] **RIDER-02**: When a gig transitions to `advanced` status, user can select a rider template to attach to the gig; attachment creates a per-gig copy, not a live link to the template
+- [ ] **RIDER-03**: User can override any section of the per-gig rider copy without modifying the source template
+- [ ] **RIDER-04**: User can export the per-gig rider as a PDF using the existing PDFGenerator interface; PDF includes DJ name, venue, date, and all four rider sections
+- [ ] **RIDER-05**: All rider template and per-gig rider data stored in PostgreSQL with soft deletion
+
+### Integrations (INT)
+
+- [ ] **INT-01**: When a gig transitions to `confirmed` status and `BANDSINTOWN_API_KEY` is set in `.env`, system pushes the event to the user's Bandsintown artist page via the Bandsintown API; success and failure are logged; if the API key is absent or the push fails after 3 retries, the gig is still saved without error surfaced to the user
+- [ ] **INT-02**: `GET /api/v1/gigs/calendar.ics` returns an iCal feed (RFC 5545) of all non-cancelled gigs; importable by Google Calendar, Apple Calendar, and any iCal-compatible client without authentication (protected by shared secret in URL query param configurable via `ICAL_SECRET` env var)
+- [ ] **INT-03**: Each iCal event includes: UID (gig UUID), DTSTART (gig date + time if known), SUMMARY (event name or venue name), LOCATION (venue name, city, country), DESCRIPTION (fee + currency + promoter contact email — omitted if empty)
 
 ---
 
@@ -226,7 +256,7 @@ Deferred to v1.x and v2.0. Tracked but not in current roadmap.
 | AI-generated backgrounds | v2.0 roadmap item |
 | Live currency exchange rates | Manual rates only; fully deferred to user |
 | Real-time chat | Not core to DJ career management |
-| Contract management / e-signatures | v3.0+ roadmap item |
+| Contract management / e-signatures | v3.0+ roadmap item (booking confirmation PDF without e-signature ships in Phase 4 as GIG-12) |
 | TikTok posting | v1.x follow-up |
 | OAuth for non-Instagram platforms | Only Instagram in v1 |
 
@@ -239,19 +269,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement Group | Phase | Status |
 |-------------------|-------|--------|
 | INFRA-01 to INFRA-11 | Phase 0: Infrastructure | Pending |
-| TRKL-01 to TRKL-28 | Phase 1: Tracklist Image Generator | Pending |
+| TRKL-01 to TRKL-30 | Phase 1: Tracklist Image Generator | Pending |
 | SOCL-01 to SOCL-17 | Phase 2: Social Media Scheduler | Pending |
 | EPK-01 to EPK-10 | Phase 3: EPK / Press Kit Builder | Pending |
-| GIG-01 to GIG-09 | Phase 4: Gig Tracker | Pending |
+| GIG-01 to GIG-12, CONT-01 to CONT-06, INT-02 to INT-03 | Phase 4: Gig Tracker | Pending |
+| RIDER-01 to RIDER-05 | Phase 4.5: Rider Templates | Pending |
+| INT-01 | Phase 4.8: Bandsintown Sync (optional) | Pending |
 | FIN-01 to FIN-10 | Phase 5: Finance Tracker | Pending |
 | REL-01 to REL-07 | Phase 6: Release Planner | Pending |
 | TOUR-01 to TOUR-07 | Phase 7: Tour Manager | Pending |
-| DASH-01 to DASH-08 | Phase 8: Unified Dashboard | Pending |
+| DASH-01 to DASH-10 | Phase 8: Unified Dashboard | Pending |
 | PROD-01 to PROD-14 | Phase 9: Production Hardening | Pending |
 
 **Coverage:**
-- v1 requirements: 107 total (93 feature + 14 production hardening)
-- Mapped to phases: 107
+- v1 requirements: 130 total (116 feature + 14 production hardening)
+- Mapped to phases: 130
 - Unmapped: 0
 
 ---

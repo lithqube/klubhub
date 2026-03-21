@@ -14,15 +14,17 @@ KlubHub DJ ships in eleven phases (including one inserted phase), driven by a ha
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 0: Infrastructure** - Four-service Docker Compose stack, Go API scaffold, health endpoint, embedded migrations, backup/restore scripts
-- [ ] **Phase 1: Tracklist Image Generator** - DJ file upload and parsing, cover art fetch chain, image generation with presets, live preview, PNG/JPEG export
+- [ ] **Phase 1: Tracklist Image Generator** - DJ file upload and parsing, cover art fetch chain, image generation with presets, live preview, PNG/JPEG export, text tracklist export (1001Tracklists / Mixcloud / SoundCloud formats)
 - [ ] **Phase 1.5: Design System Foundation** - INSERTED — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition, responsive design
 - [ ] **Phase 2: Social Media Scheduler** - Instagram OAuth, timezone-aware post scheduling, retry with backoff, queue/calendar view
-- [ ] **Phase 3: EPK / Press Kit Builder** - Artist bio, press photos, tech rider, PDF export with section control, export history
-- [ ] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, calendar/list views, GigReader interface for downstream modules
+- [ ] **Phase 3: EPK / Press Kit Builder** - Artist bio, press photos, tech rider, PDF export with section control, export history (PDF-only; hosted EPK URL is SaaS v2)
+- [ ] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, GigReader interface for downstream modules
+- [ ] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export
+- [ ] **Phase 4.8: Bandsintown Sync** - INSERTED (optional) — Outbound event push to Bandsintown on gig confirmed
 - [ ] **Phase 5: Finance Tracker** - Income/expense logging, multi-currency summaries, auto-income on gig payment, PDF invoice generation
 - [ ] **Phase 6: Release Planner** - Release CRUD with status workflow, deadline tracking, promo checklist with customizable default template
-- [ ] **Phase 7: Tour Manager** - Named tour groups of linked gigs, per-stop logistics, tour budget aggregate
-- [ ] **Phase 8: Unified Dashboard** - Aggregated view of all modules: upcoming gigs, scheduled posts, recent tracklists, finance summary, release deadlines
+- [ ] **Phase 7: Tour Manager** - Named tour groups of linked gigs, per-stop logistics, tour budget aggregate (OSS; collaboration is SaaS v2)
+- [ ] **Phase 8: Unified Dashboard** - Aggregated view of all modules: upcoming gigs, scheduled posts, recent tracklists, finance summary, release deadlines, career analytics
 - [ ] **Phase 9: Production Hardening** - Documentation, security audit, CI/CD, testing, release engineering for v1.0.0 open-source release
 
 ## Phase Details
@@ -51,7 +53,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Goal**: A DJ can upload their history file and get a professional, social-media-ready tracklist image without any design tool or external service
 **Depends on**: Phase 0
-**Requirements**: TRKL-01, TRKL-02, TRKL-03, TRKL-04, TRKL-05, TRKL-06, TRKL-07, TRKL-08, TRKL-09, TRKL-10, TRKL-11, TRKL-12, TRKL-13, TRKL-14, TRKL-15, TRKL-16, TRKL-17, TRKL-18, TRKL-19, TRKL-20, TRKL-21, TRKL-22, TRKL-23, TRKL-24, TRKL-25, TRKL-26, TRKL-27, TRKL-28
+**Requirements**: TRKL-01, TRKL-02, TRKL-03, TRKL-04, TRKL-05, TRKL-06, TRKL-07, TRKL-08, TRKL-09, TRKL-10, TRKL-11, TRKL-12, TRKL-13, TRKL-14, TRKL-15, TRKL-16, TRKL-17, TRKL-18, TRKL-19, TRKL-20, TRKL-21, TRKL-22, TRKL-23, TRKL-24, TRKL-25, TRKL-26, TRKL-27, TRKL-28, TRKL-29, TRKL-30
 **Success Criteria** (what must be TRUE):
 
 1. User can drag-and-drop or file-pick a Rekordbox, Serato, or Traktor history file and see a parsed tracklist with all available metadata within seconds; files over 50 MB or unrecognized formats show a clear error
@@ -59,7 +61,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 3. User can choose from 3-5 design presets with color overrides, toggle metadata field visibility, set background mode (solid / custom upload / cover art mosaic), and upload a corner-positioned logo/watermark
 4. User sees a live preview at 50% resolution before export; exporting produces a full-resolution PNG or JPEG at both 1080×1920 (Story) and 1080×1080 (Square) via a single "Export Both" action
 5. User's last-used template, background mode, and field visibility settings are remembered across sessions; track names with CJK, Cyrillic, and Arabic characters render correctly in all generated images
-   **Plans**: 5 plans
+6. User can export a parsed tracklist as plain text in 1001Tracklists, Mixcloud/SoundCloud, and numbered-list formats, respecting the active track range selector
+   **Plans**: 6 plans
    Plans:
 
 - [ ] 01-01-PLAN.md — Go backend: migration 002, Rekordbox parser, tracklist CRUD API (upload, list, get, update-track, delete)
@@ -67,6 +70,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] 01-03-PLAN.md — Cover art fetcher: Spotify → Discogs → MusicBrainz chain, MinIO caching, goroutine worker pool
 - [ ] 01-04-PLAN.md — Screenshot pipeline: Nitro Playwright plugin + screenshot endpoint + Go generate-image + Dockerfile update
 - [ ] 01-05-PLAN.md — End-to-end smoke + human checkpoint
+- [ ] 01-06-PLAN.md — Text tracklist export: three format modes (1001Tracklists, Mixcloud/SoundCloud, numbered), track-range aware, download as .txt (TRKL-29, TRKL-30)
 
 ### Phase 1.5: Design System Foundation (INSERTED)
 
@@ -118,6 +122,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 3: EPK / Press Kit Builder
 
+> **Scope note:** EPK is PDF-only in v1 OSS. Hosted public EPK pages (shareable URL, custom domain) are a SaaS v2 feature (KlubHub Cloud PRO) and are intentionally out of scope here. PDF generation requires no server infrastructure; hosted pages require web routing, SSL, and CDN management that self-hosters should not need to manage.
+
 **Goal**: Users can assemble a professional electronic press kit and export it as a shareable PDF in a single session
 **Depends on**: Phase 0
 **Requirements**: EPK-01, EPK-02, EPK-03, EPK-04, EPK-05, EPK-06, EPK-07, EPK-08, EPK-09, EPK-10
@@ -131,15 +137,49 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 4: Gig Tracker
 
-**Goal**: Users can manage their complete gig history and pipeline, and downstream modules can read gig data via a stable interface
+**Goal**: Users can manage their complete gig history and pipeline, with a reusable venue/contact database, iCal export, and booking confirmation PDF; downstream modules can read gig data via a stable interface
 **Depends on**: Phase 0
-**Requirements**: GIG-01, GIG-02, GIG-03, GIG-04, GIG-05, GIG-06, GIG-07, GIG-08, GIG-09
+**Requirements**: GIG-01, GIG-02, GIG-03, GIG-04, GIG-05, GIG-06, GIG-07, GIG-08, GIG-09, GIG-10, GIG-11, GIG-12, CONT-01, CONT-02, CONT-03, CONT-04, CONT-05, CONT-06, INT-02, INT-03
 **Success Criteria** (what must be TRUE):
 
-1. User can create, edit, and delete gig entries with all fields (date, venue, city, country, event name, promoter contact, fee, currency, notes); "Copy from Previous Gig" auto-fills promoter fields from a prior gig
+1. User can create, edit, and delete gig entries with all fields; "Copy from Previous Gig" auto-fills from linked venue and contact records when they exist
 2. User can move a gig through the status workflow (inquiry → confirmed → advanced → played → cancelled) and track payment status independently (unpaid → deposit_paid → paid → overdue → waived)
 3. User can view gigs in calendar and list views, filter by date range, venue, city, status, and fee range, and link a parsed tracklist to any gig
-4. The GigReader interface is exported and consumable by Finance, Tour, and EPK modules without any direct cross-module database joins
+4. User can create, search, and link reusable venue records and promoter contact records; linking auto-populates gig fields while keeping them editable
+5. User can generate a booking confirmation PDF from any confirmed gig pre-populated with DJ name, venue, date, fee, currency, and technical contact details
+6. `GET /api/v1/gigs/calendar.ics` returns a valid RFC 5545 iCal feed of all non-cancelled gigs importable by Google Calendar and Apple Calendar
+7. The GigReader interface is exported and consumable by Finance, Tour, and EPK modules without any direct cross-module database joins
+   **Plans**: 4 plans
+   Plans:
+
+- [ ] 04-01-PLAN.md — Go backend: gig CRUD + status/payment workflow + GigReader interface (GIG-01 to GIG-09)
+- [ ] 04-02-PLAN.md — Contacts & Venue database: venues + contacts tables, gig FK links, autocomplete search (CONT-01 to CONT-06, GIG-10, GIG-11)
+- [ ] 04-03-PLAN.md — Booking confirmation PDF (GIG-12) + iCal feed endpoint (INT-02, INT-03)
+- [ ] 04-04-PLAN.md — Nuxt frontend: gig calendar/list views + contact/venue autocomplete + iCal export button + confirmation PDF download
+
+### Phase 4.5: Rider Templates (INSERTED)
+
+**Goal**: DJs can create reusable technical and hospitality rider templates and attach them to gigs in the advancing stage
+**Depends on**: Phase 4
+**Requirements**: RIDER-01, RIDER-02, RIDER-03, RIDER-04, RIDER-05
+**Success Criteria** (what must be TRUE):
+
+1. User can create, edit, and delete named rider templates with four sections (technical, hospitality, backline, other); templates are listed and reusable across gigs
+2. When a gig moves to `advanced` status, user can select a rider template; attachment creates a per-gig copy that can be overridden without modifying the source template
+3. User can export the per-gig rider as a PDF including DJ name, venue, date, and all four rider sections
+   **Plans**: TBD
+
+### Phase 4.8: Bandsintown Outbound Sync (INSERTED — optional)
+
+**Goal**: When a gig is confirmed and a Bandsintown API key is configured, the event is automatically pushed to the DJ's Bandsintown artist page
+**Depends on**: Phase 4
+**Requirements**: INT-01
+**Success Criteria** (what must be TRUE):
+
+1. When `BANDSINTOWN_API_KEY` is set in `.env` and a gig transitions to `confirmed`, system pushes the event to Bandsintown; success and failure are logged; no user action is required
+2. Health endpoint (`GET /api/v1/health`) reports Bandsintown integration status (configured/unconfigured/error)
+3. If the API key is absent or push fails after 3 retries, the gig is saved normally with no error surfaced to the user
+   **Note**: This phase is optional — defer to v1.x if Bandsintown API access is unavailable or terms change
    **Plans**: TBD
 
 ### Phase 5: Finance Tracker
@@ -169,6 +209,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 7: Tour Manager
 
+> **Scope note:** Tour Manager ships as a core OSS feature — DJs own their tour logistics data. Real-time collaboration (inviting managers, agents, or promoters to shared tour views with live updates) is a SaaS TEAM feature built in v2.
+
 **Goal**: Users can plan tours as named groups of linked gigs, track per-stop logistics, and see aggregate tour budgets
 **Depends on**: Phase 4
 **Requirements**: TOUR-01, TOUR-02, TOUR-03, TOUR-04, TOUR-05, TOUR-06, TOUR-07
@@ -183,12 +225,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Goal**: Users see a single-screen overview of their entire career status across all modules
 **Depends on**: Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, Phase 7
-**Requirements**: DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, DASH-06, DASH-07, DASH-08
+**Requirements**: DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, DASH-06, DASH-07, DASH-08, DASH-09, DASH-10
 **Success Criteria** (what must be TRUE):
 
 1. Dashboard shows upcoming gigs (next 30 days) with status indicators, scheduled social posts (next 7 days), recently generated tracklist images, pending release deadlines, active tour status, and monthly income/expense summary — all on one screen
 2. Quick action buttons (upload tracklist, schedule post, log gig, create invoice) are visible and functional from the dashboard without navigating away first
 3. Widgets for modules with no data or not yet deployed are hidden rather than showing empty states; each module query has a 500ms timeout and the dashboard renders with partial data if any module is slow
+4. Career analytics section shows: gigs per month (last 12 months), top 5 venues by gig count, average fee trend (last 3 years), and peak booking month — all computed from existing PostgreSQL data with no external API calls; section is hidden if fewer than 3 gigs exist
    **Plans**: TBD
 
 ### Phase 9: Production Hardening
@@ -214,20 +257,24 @@ After v1.0.0 release, SaaS migration work begins in a separate repository (`klub
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 0 → 1 → 1.5 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 0 → 1 → 1.5 → 2 → 3 → 4 → 4.5 → 4.8 → 5 → 6 → 7 → 8 → 9
 
-Note: Phase 1.5 (Design System) is an inserted phase that must complete before Phase 2, as the scheduler UI depends on the component library and design tokens. Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can be parallelized. Phase 6 (Release) is independent of Phase 5 (Finance) and can be parallelized with it. Phase 2 (Social) depends on Phase 1.5. Phases 5 and 7 depend on Phase 4. Phase 8 depends on all others. Phase 9 (Production Hardening) is the final phase before v1.0.0 release — it covers documentation, security, CI/CD, testing, and release engineering.
+Note: Phase 1.5 (Design System) is an inserted phase that must complete before Phase 2, as the scheduler UI depends on the component library and design tokens. Phase 3 (EPK) and Phase 4 (Gig) have no dependency on each other and can be parallelized. Phase 4.5 (Rider Templates) and Phase 4.8 (Bandsintown Sync) depend on Phase 4 and can be parallelized with each other. Phase 6 (Release) is independent of Phase 5 (Finance) and can be parallelized with it. Phase 2 (Social) depends on Phase 1.5. Phases 5 and 7 depend on Phase 4. Phase 8 depends on all others. Phase 9 (Production Hardening) is the final phase before v1.0.0 release — it covers documentation, security, CI/CD, testing, and release engineering.
 
 | Phase                            | Plans Complete | Status      | Completed  |
 | -------------------------------- | -------------- | ----------- | ---------- |
 | 0. Infrastructure                | 4/4            | Complete    | 2026-03-14 |
-| 1. Tracklist Image Generator     | 5/5            | Complete    | 2026-03-16 |
+| 1. Tracklist Image Generator     | 5/6            | Complete*   | 2026-03-16 |
 | 1.5 Design System Foundation     | 0/TBD          | Not started | -          |
-| 2. Social Media Scheduler        | 1/7 | In Progress|  |
+| 2. Social Media Scheduler        | 1/7            | In Progress | -          |
 | 3. EPK / Press Kit Builder       | 0/TBD          | Not started | -          |
-| 4. Gig Tracker                   | 0/TBD          | Not started | -          |
+| 4. Gig Tracker                   | 0/4            | Not started | -          |
+| 4.5 Rider Templates              | 0/TBD          | Not started | -          |
+| 4.8 Bandsintown Sync (optional)  | 0/TBD          | Not started | -          |
 | 5. Finance Tracker               | 0/TBD          | Not started | -          |
 | 6. Release Planner               | 0/TBD          | Not started | -          |
 | 7. Tour Manager                  | 0/TBD          | Not started | -          |
 | 8. Unified Dashboard             | 0/TBD          | Not started | -          |
 | 9. Production Hardening          | 0/TBD          | Not started | -          |
+
+*Phase 1 plan 01-06 (text tracklist export) is new and not yet written.
