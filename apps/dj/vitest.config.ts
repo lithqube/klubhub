@@ -1,11 +1,17 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import path from 'path';
 
 export default defineConfig(() => ({
   root: import.meta.dirname,
   cacheDir: '../../node_modules/.vite/apps/dj',
   plugins: [vue()],
+  resolve: {
+    alias: {
+      '~': path.resolve(import.meta.dirname, 'app'),
+    },
+  },
   // Uncomment this if you are using workers.
   // worker: {
   //  plugins: [],
