@@ -4,7 +4,7 @@ import { useSocialStore } from '../social';
 import type { ScheduledPost, SocialAccount } from '../../types/social';
 
 // Mock useUiStore
-vi.mock('../../stores/ui', () => ({
+vi.mock('../ui', () => ({
   useUiStore: () => ({
     showError: vi.fn(),
     showSuccess: vi.fn(),
@@ -212,18 +212,22 @@ describe('useSocialStore', () => {
       expect(formData.get('imageFile')).toBe(file);
     });
 
-    it('calls loadPosts after creating post', async () => {
+    it('refreshes posts after creating post (calls GET /api/v1/social/posts)', async () => {
       const store = useSocialStore();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ data: mockPost })  // POST create
+        .mockResolvedValueOnce({ data: [mockPost] }); // GET loadPosts
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue({ data: mockPost });
-      const loadPostsSpy = vi.spyOn(store, 'loadPosts').mockResolvedValue();
+      global.$fetch = mockFetch;
       await store.createPost({
         postType: 'feed',
         caption: 'Test',
         scheduledAt: '2026-10-24T23:45',
         timezoneName: 'Europe/Berlin',
       });
-      expect(loadPostsSpy).toHaveBeenCalled();
+      // Should have been called twice: POST then GET
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenLastCalledWith('/api/v1/social/posts');
     });
   });
 });
