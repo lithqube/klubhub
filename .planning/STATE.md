@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 1.5-design-system-foundation
 status: planning
-last_updated: "2026-03-21T17:09:03.800Z"
+last_updated: "2026-03-21T23:17:34.305Z"
 progress:
-  total_phases: 11
+  total_phases: 13
   completed_phases: 2
   total_plans: 23
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Session State
@@ -64,6 +64,8 @@ See: .planning/PROJECT.md
 - [Phase 02-social-media-scheduler]: Two-level interface stack: handler→serviceIface, service→repoIface for independent mock testing without testcontainers
 - [Phase 02-social-media-scheduler]: ValidateImage order: MIME → size → dimensions — cheapest checks first for fast rejection
 - [Phase 02-social-media-scheduler]: parseDateTimeLocal uses time.LoadLocation + ParseInLocation for IANA timezone-aware UTC conversion
+- [Phase 02-social-media-scheduler]: dotColorForStatus extracted to socialCalendarUtils.ts (not inline export from SFC) — Vue script setup does not allow named exports
+- [Phase 02-social-media-scheduler]: SocialCalendarView accepts optional month prop for deterministic test rendering without mocking Date.now()
 
 ## Performance Metrics
 
@@ -79,6 +81,7 @@ See: .planning/PROJECT.md
 | Phase 1.5 P05 | 15 | 3 tasks | 6 files |
 | Phase 02-social-media-scheduler P03 | 15 | 2 tasks | 5 files |
 | Phase 02-social-media-scheduler P01 | 10 min | 2 tasks | 11 files |
+| Phase 02-social-media-scheduler P05 | 25min | 2 tasks | 6 files |
 
 ## Session Log
 
