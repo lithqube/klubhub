@@ -133,7 +133,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 2. User can generate a professionally formatted PDF with their logo and colors applied; user controls which sections appear in the export via include/exclude toggles
 3. Each PDF export is saved to MinIO and listed with timestamps; user can download or delete any previous export from the history view
 4. When the Gig Tracker (Phase 4) is available, an "Import from Gigs" button populates the gig highlights section from selected gig entries
-   **Plans**: TBD
+   **Plans**: 7 plans
+   Plans:
+
+- [ ] 03-01-PLAN.md — Go backend data layer: migration 004 (epk_content + epk_exports), model, repository
+- [ ] 03-02-PLAN.md — Go EPK service (photo upload, PDF generation, Markdown renderer), handler, router wiring
+- [ ] 03-03-PLAN.md — Pinia useEpkStore + useEpkAutosave composable + TypeScript types
+- [ ] 03-04-PLAN.md — EpkBioSection + EpkPhotosSection + EpkTechRiderSection + EpkStagePlotSection components
+- [ ] 03-05-PLAN.md — EpkGigHighlightsSection + EpkPressQuotesSection + EpkSocialLinksSection + EpkContactInfoSection + EpkExportPanel
+- [ ] 03-06-PLAN.md — epk.vue page orchestrator + EpkPageHeader + TheNav + TheBottomNav EPK entry
+- [ ] 03-07-PLAN.md — Human verification checkpoint
 
 ### Phase 4: Gig Tracker
 
@@ -267,7 +276,7 @@ Note: Phase 1.5 (Design System) is an inserted phase that must complete before P
 | 1. Tracklist Image Generator     | 5/6            | Complete*   | 2026-03-16 |
 | 1.5 Design System Foundation     | 7/7            | Complete    | 2026-03-22 |
 | 2. Social Media Scheduler        | 7/7            | Complete    | 2026-03-22 |
-| 3. EPK / Press Kit Builder       | 0/TBD          | Not started | -          |
+| 3. EPK / Press Kit Builder       | 0/7            | Planned     | -          |
 | 4. Gig Tracker                   | 0/4            | Not started | -          |
 | 4.5 Rider Templates              | 0/TBD          | Not started | -          |
 | 4.8 Bandsintown Sync (optional)  | 0/TBD          | Not started | -          |
