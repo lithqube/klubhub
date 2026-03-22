@@ -99,3 +99,8 @@ func (c *Client) PresignedGetObject(ctx context.Context, bucketName, objectName 
 	}
 	return presignedURL.String(), nil
 }
+
+// RemoveObject wraps minio.Client.RemoveObject with default remove options.
+func (c *Client) RemoveObject(ctx context.Context, bucketName, objectName string) error {
+	return c.mc.RemoveObject(ctx, bucketName, objectName, minio.RemoveObjectOptions{})
+}
