@@ -10,6 +10,7 @@ export default defineConfig(() => ({
   resolve: {
     alias: {
       '~': path.resolve(import.meta.dirname, 'app'),
+      '@': path.resolve(import.meta.dirname, 'app'),
     },
   },
   // Uncomment this if you are using workers.

@@ -1,29 +1,32 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
-import { ref, computed } from 'vue'
+import { reactive, computed } from 'vue'
 import EpkPhotosSection from '../EpkPhotosSection.vue'
 
-// Mock store state
-const mockPhotoPaths = ref<string[]>(['photos/a.jpg', 'photos/b.jpg', 'photos/c.jpg'])
+// Mock store state — use reactive() so computed() in the component reads plain arrays
 const mockDeletePhoto = vi.fn().mockResolvedValue(undefined)
 const mockUploadPhoto = vi.fn().mockResolvedValue(undefined)
 
+const mockStore = reactive({
+  photoPaths: ['photos/a.jpg', 'photos/b.jpg', 'photos/c.jpg'] as string[],
+  deletePhoto: mockDeletePhoto,
+  uploadPhoto: mockUploadPhoto,
+  get canAddPhoto() { return this.photoPaths.length < 20 },
+  get photoCount() { return this.photoPaths.length },
+})
+
 vi.mock('~/stores/epk', () => ({
-  useEpkStore: vi.fn(() => ({
-    photoPaths: mockPhotoPaths,
-    canAddPhoto: computed(() => mockPhotoPaths.value.length < 20),
-    photoCount: computed(() => mockPhotoPaths.value.length),
-    deletePhoto: mockDeletePhoto,
-    uploadPhoto: mockUploadPhoto,
-  })),
+  useEpkStore: vi.fn(() => mockStore),
 }))
 
 describe('EpkPhotosSection', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    mockPhotoPaths.value = ['photos/a.jpg', 'photos/b.jpg', 'photos/c.jpg']
+    mockStore.photoPaths = ['photos/a.jpg', 'photos/b.jpg', 'photos/c.jpg']
+    mockStore.deletePhoto = mockDeletePhoto
+    mockStore.uploadPhoto = mockUploadPhoto
   })
 
   it('renders correct number of photo items', () => {
@@ -46,21 +49,21 @@ describe('EpkPhotosSection', () => {
   })
 
   it('upload zone is visible when photoCount < 20', () => {
-    mockPhotoPaths.value = ['photos/a.jpg']
+    mockStore.photoPaths = ['photos/a.jpg']
     const wrapper = mount(EpkPhotosSection)
     expect(wrapper.find('[data-testid="photo-upload-zone"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="photo-limit-label"]').exists()).toBe(false)
   })
 
   it('upload zone is hidden when photoCount >= 20', () => {
-    mockPhotoPaths.value = Array.from({ length: 20 }, (_, i) => `photos/${i}.jpg`)
+    mockStore.photoPaths = Array.from({ length: 20 }, (_, i) => `photos/${i}.jpg`)
     const wrapper = mount(EpkPhotosSection)
     expect(wrapper.find('[data-testid="photo-upload-zone"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="photo-limit-label"]').exists()).toBe(true)
   })
 
   it('limit label shows correct text at 20/20', () => {
-    mockPhotoPaths.value = Array.from({ length: 20 }, (_, i) => `photos/${i}.jpg`)
+    mockStore.photoPaths = Array.from({ length: 20 }, (_, i) => `photos/${i}.jpg`)
     const wrapper = mount(EpkPhotosSection)
     const label = wrapper.find('[data-testid="photo-limit-label"]')
     expect(label.text()).toContain('20 / 20 PHOTOS')
@@ -72,7 +75,7 @@ describe('EpkPhotosSection', () => {
   })
 
   it('renders no photo items when photoPaths is empty', () => {
-    mockPhotoPaths.value = []
+    mockStore.photoPaths = []
     const wrapper = mount(EpkPhotosSection)
     const items = wrapper.findAll('[data-testid="photo-item"]')
     expect(items.length).toBe(0)

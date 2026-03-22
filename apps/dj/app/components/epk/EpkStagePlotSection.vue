@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { storeToRefs } from 'pinia'
 import { useEpkStore } from '~/stores/epk'
 
 const store = useEpkStore()
-const { stagePlotPath } = storeToRefs(store)
+const stagePlotPath = computed(() => store.stagePlotPath)
 
 const fileInput = ref<HTMLInputElement>()
 const uploadedFilename = ref<string>('')

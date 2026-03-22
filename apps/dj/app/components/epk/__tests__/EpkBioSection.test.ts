@@ -1,18 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
-import { ref } from 'vue'
+import { reactive, nextTick } from 'vue'
 import EpkBioSection from '../EpkBioSection.vue'
 
-// Mock the EPK store
-const mockBioShort = ref('Hello world')
-const mockBioLong = ref('Long bio text')
+// Mock the EPK store — use reactive() so computed() accessors in the component
+// read plain string values (Pinia stores are reactive objects, not ref wrappers)
+const mockStore = reactive({
+  bioShort: 'Hello world',
+  bioLong: 'Long bio text',
+})
 
 vi.mock('~/stores/epk', () => ({
-  useEpkStore: vi.fn(() => ({
-    bioShort: mockBioShort,
-    bioLong: mockBioLong,
-  })),
+  useEpkStore: vi.fn(() => mockStore),
 }))
 
 // Mock useEpkAutosave
@@ -27,26 +27,28 @@ describe('EpkBioSection', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    mockBioShort.value = 'Hello world'
-    mockBioLong.value = 'Long bio text'
+    mockStore.bioShort = 'Hello world'
+    mockStore.bioLong = 'Long bio text'
   })
 
-  it('renders short bio input with correct initial value from store', () => {
+  it('renders short bio input with correct initial value from store', async () => {
     const wrapper = mount(EpkBioSection)
+    await nextTick()
     const input = wrapper.find('[data-testid="bio-short-input"]')
     expect(input.exists()).toBe(true)
     expect((input.element as HTMLInputElement).value).toBe('Hello world')
   })
 
-  it('renders long bio textarea with correct initial value from store', () => {
+  it('renders long bio textarea with correct initial value from store', async () => {
     const wrapper = mount(EpkBioSection)
+    await nextTick()
     const textarea = wrapper.find('[data-testid="bio-long-textarea"]')
     expect(textarea.exists()).toBe(true)
     expect((textarea.element as HTMLTextAreaElement).value).toBe('Long bio text')
   })
 
   it('character counter shows correct format N / 280', () => {
-    mockBioShort.value = 'Hello world'
+    mockStore.bioShort = 'Hello world'
     const wrapper = mount(EpkBioSection)
     const counter = wrapper.find('[data-testid="bio-short-counter"]')
     expect(counter.exists()).toBe(true)
@@ -54,7 +56,7 @@ describe('EpkBioSection', () => {
   })
 
   it('character counter shows 0 / 280 when bio is empty', () => {
-    mockBioShort.value = ''
+    mockStore.bioShort = ''
     const wrapper = mount(EpkBioSection)
     const counter = wrapper.find('[data-testid="bio-short-counter"]')
     expect(counter.text()).toContain('0 / 280')

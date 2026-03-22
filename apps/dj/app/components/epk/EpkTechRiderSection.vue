@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia'
+import { computed } from 'vue'
 import { useEpkStore } from '~/stores/epk'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
+import Textarea from '~/components/ui/textarea/Textarea.vue'
 
 const store = useEpkStore()
-const { techRider } = storeToRefs(store)
+const techRider = computed({
+  get: () => store.techRider,
+  set: (v) => { store.techRider = v },
+})
 const { scheduleSave } = useEpkAutosave()
 
 function onTechRiderChange(value: string) {

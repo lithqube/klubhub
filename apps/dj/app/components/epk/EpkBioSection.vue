@@ -1,18 +1,33 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia'
+import { ref, watch } from 'vue'
 import { useEpkStore } from '~/stores/epk'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
+import Input from '~/components/ui/input/Input.vue'
+import Textarea from '~/components/ui/textarea/Textarea.vue'
 
 const store = useEpkStore()
-const { bioShort, bioLong } = storeToRefs(store)
 const { scheduleSave } = useEpkAutosave()
 
-function onBioShortChange(value: string) {
-  scheduleSave({ bioShort: value })
+// Local state initialized from store — plain refs that avoid storeToRefs incompatibility
+const bioShort = ref(store.bioShort as string)
+const bioLong = ref(store.bioLong as string)
+
+// Sync store → local on external changes (e.g. loadFromApi)
+watch(() => store.bioShort as string, (v) => { if (v !== bioShort.value) bioShort.value = v })
+watch(() => store.bioLong as string, (v) => { if (v !== bioLong.value) bioLong.value = v })
+
+function onBioShortChange(value: string | number) {
+  const str = String(value)
+  bioShort.value = str
+  store.bioShort = str
+  scheduleSave({ bioShort: str })
 }
 
-function onBioLongChange(value: string) {
-  scheduleSave({ bioLong: value })
+function onBioLongChange(value: string | number) {
+  const str = String(value)
+  bioLong.value = str
+  store.bioLong = str
+  scheduleSave({ bioLong: str })
 }
 </script>
 
@@ -27,7 +42,7 @@ function onBioLongChange(value: string) {
         SHORT BIO
       </label>
       <Input
-        v-model="bioShort"
+        :model-value="bioShort"
         data-testid="bio-short-input"
         :maxlength="500"
         placeholder="Short bio..."
@@ -47,7 +62,7 @@ function onBioLongChange(value: string) {
         LONG BIO (Markdown)
       </label>
       <Textarea
-        v-model="bioLong"
+        :model-value="bioLong"
         data-testid="bio-long-textarea"
         class="font-mono text-xs"
         :rows="8"
