@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 02-social-media-scheduler (COMPLETE)
 status: planning
-last_updated: "2026-03-22T08:05:40.203Z"
+last_updated: "2026-03-22T12:29:44.499Z"
 progress:
   total_phases: 13
   completed_phases: 3
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Session State
@@ -74,6 +74,9 @@ See: .planning/PROJECT.md
 - [Phase 02-social-media-scheduler]: lastExportStoryPath/lastExportSquarePath refs track export result in TracklistExporter; CTA only visible after successful export, cleared on each new export attempt
 - [Phase 02-social-media-scheduler]: navigateTo('/social?imageId=...') with nextTick scroll to [data-compose-panel] used for cross-page prefill flow from TracklistExporter to SocialPostCompose
 - [Phase 02-social-media-scheduler]: Option 1 chosen for gap #19 closure: remove dead code and update verification truth (not implement active PNG→JPEG conversion) — URL-based uploads accept PNG natively
+- [Phase 1.5-design-system-foundation]: index.vue is a full Dashboard page (not a /tracklist redirect) — positive deviation; Dashboard is the correct entry point
+- [Phase 1.5-design-system-foundation]: Responsive shell: TheNav sidebar hidden lg:flex + TheMobileHeader + TheBottomNav for mobile — dual-layout pattern at lg breakpoint
+- [Phase 1.5-design-system-foundation]: min-h-dvh used in app.vue root element instead of min-h-screen — avoids mobile-browser-chrome viewport bug
 
 ## Performance Metrics
 
@@ -96,6 +99,7 @@ See: .planning/PROJECT.md
 | Phase 02-social-media-scheduler P07 | 15 min | 2 tasks | 0 files |
 | Phase 02-social-media-scheduler P07 | 15 min | 2 tasks | 0 files |
 | Phase 02-social-media-scheduler P08 | 3 min | 2 tasks | 2 files |
+| Phase 1.5-design-system-foundation P06 | 15 min | 2 tasks | 0 files |
 
 ## Session Log
 
