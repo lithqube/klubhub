@@ -1,5 +1,5 @@
-import { useEpkStore } from '~/stores/epk';
-import type { UpdateEPKContentRequest } from '~/types/epk';
+import { useEpkStore } from '../stores/epk';
+import type { UpdateEPKContentRequest } from '../types/epk';
 
 export function useEpkAutosave(delayMs = 1500) {
   const store = useEpkStore();
