@@ -9,7 +9,7 @@ progress:
   total_phases: 13
   completed_phases: 4
   total_plans: 31
-  completed_plans: 30
+  completed_plans: 31
 ---
 
 # Session State
@@ -22,8 +22,9 @@ See: .planning/PROJECT.md
 
 **Milestone:** v1.0 milestone
 **Current phase:** 03-epk-press-kit-builder
-**Completed phase:** 1.5-design-system-foundation
-**Status:** Ready to plan Phase 3
+**Current plan:** 03-01 complete (1 of N plans in phase 03)
+**Completed phase:** 02-social-media-scheduler
+**Status:** Phase 03 in progress — 03-01 complete
 **Note:** Phase 1.5 inserted between Phase 1 and Phase 2 — now complete. Phase 02 also complete. Both verified.
 
 ## Decisions
@@ -77,6 +78,10 @@ See: .planning/PROJECT.md
 - [Phase 1.5-design-system-foundation]: index.vue is a full Dashboard page (not a /tracklist redirect) — positive deviation; Dashboard is the correct entry point
 - [Phase 1.5-design-system-foundation]: Responsive shell: TheNav sidebar hidden lg:flex + TheMobileHeader + TheBottomNav for mobile — dual-layout pattern at lg breakpoint
 - [Phase 1.5-design-system-foundation]: min-h-dvh used in app.vue root element instead of min-h-screen — avoids mobile-browser-chrome viewport bug
+- [Phase 03-epk-press-kit-builder]: Singleton epk_content row enforced at DB level via CREATE UNIQUE INDEX ON epk_content ((true)) — constant expression prevents >1 row
+- [Phase 03-epk-press-kit-builder]: UpsertContent CASE WHEN value != '' preserves existing text fields when caller passes empty string (nil pointer = no update intent)
+- [Phase 03-epk-press-kit-builder]: JSONB fields (gig_highlights, press_quotes, photo_paths, section_visibility) replace fully on each upsert — no partial JSONB merge
+- [Phase 03-epk-press-kit-builder]: EPK unit tests use hand-written mockRepo (interface-substitution) — no testcontainers, no pgxmock — consistent with social service_test.go pattern
 
 ## Performance Metrics
 
@@ -100,6 +105,7 @@ See: .planning/PROJECT.md
 | Phase 02-social-media-scheduler P07 | 15 min | 2 tasks | 0 files |
 | Phase 02-social-media-scheduler P08 | 3 min | 2 tasks | 2 files |
 | Phase 1.5-design-system-foundation P06 | 15 min | 2 tasks | 0 files |
+| 03-epk-press-kit-builder | 01 | 4 min | 2 | 4 |
 
 ## Session Log
 
@@ -118,8 +124,9 @@ See: .planning/PROJECT.md
 - 2026-03-22: Completed 02-07 (Human verification checkpoint — backend 21s green, frontend 109 tests green, all 17 SOCL requirements verified)
 - 2026-03-22: Phase 02-social-media-scheduler COMPLETE — all plans 01-07 executed and human-verified
 - 2026-03-22: Phase 1.5-design-system-foundation COMPLETE — design system, mockup patterns, Pinia stores, component decomposition, singleton components, responsive mobile shell, light/dark theme
+- 2026-03-22: Completed 03-01 (EPK data layer — migration 004, EPKContent/EPKExport models, repository with 5 methods, 10 unit tests GREEN)
 
 ---
 
-_Phase: 02-social-media-scheduler_
-_Status: COMPLETE — all 7 plans executed, all 17 SOCL requirements verified and approved_
+_Phase: 03-epk-press-kit-builder_
+_Status: IN PROGRESS — plan 03-01 complete_

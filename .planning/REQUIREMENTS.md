@@ -102,7 +102,7 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 - [ ] **EPK-06**: User can generate a professionally formatted PDF press kit applying their logo and color settings
 - [ ] **EPK-07**: User can select which sections to include or exclude in the PDF export
 - [ ] **EPK-08**: Each PDF export is stored in MinIO and listed in an export history view with timestamps; user can download or delete any previous export
-- [ ] **EPK-09**: All EPK data stored in PostgreSQL; photo and document assets stored in MinIO
+- [x] **EPK-09**: All EPK data stored in PostgreSQL; photo and document assets stored in MinIO
 - [ ] **EPK-10**: When Gig Tracker (Phase 4) is available, an "Import from Gigs" button populates gig highlights from selected gig entries
 
 ### Gig Tracker (GIG)
