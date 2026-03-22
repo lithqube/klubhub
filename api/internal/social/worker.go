@@ -35,7 +35,6 @@ type instagramIface interface {
 	PublishContainer(ctx context.Context, igUserID, accessToken, containerID string) (string, error)
 	CheckContainerStatus(ctx context.Context, containerID, accessToken string) (ContainerStatus, error)
 	RefreshToken(ctx context.Context, currentToken string) (string, time.Time, error)
-	convertPNGToJPEG(pngData []byte) ([]byte, error)
 }
 
 // Worker orchestrates the background publishing loop.
@@ -182,13 +181,10 @@ func (w *Worker) processPost(ctx context.Context, post ScheduledPost) error {
 		return w.failPost(ctx, post, err)
 	}
 
-	// 8. Detect if image is PNG and convert to JPEG.
-	imageURL := presignedURL
-	_ = imageURL // we pass presignedURL directly; PNG conversion happens at the byte level if needed
-	// Note: Since we pass a URL (not raw bytes) to Instagram, PNG→JPEG conversion is only
-	// relevant when we have the actual image bytes. The presigned URL scenario passes the URL
-	// directly to Instagram's servers. PNG conversion is available via convertPNGToJPEG for
-	// direct byte upload scenarios. For URL-based uploads, Instagram accepts PNG transparently.
+	// 8. Pass the presigned URL to Instagram.
+	// Instagram Graph API accepts both JPEG and PNG via URL-based container creation.
+	// convertPNGToJPEG in instagram.go is available for byte-upload scenarios but is not
+	// needed here: the API server downloads the image directly from the presigned URL.
 
 	// 9. Create the Instagram media container.
 	containerID, err := w.instagram.CreateContainer(ctx, account.IgUserID, token, presignedURL, post.Caption, post.PostType)
