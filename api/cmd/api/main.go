@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/klubhub/dj/api/internal/artwork"
+	"github.com/klubhub/dj/api/internal/epk"
 	"github.com/klubhub/dj/api/internal/platform/config"
 	"github.com/klubhub/dj/api/internal/platform/db"
 	apphttp "github.com/klubhub/dj/api/internal/platform/http"
@@ -117,8 +118,15 @@ func main() {
 	go social.StartPublishWorker(ctx, publishWorker)
 	logger.Info().Msg("social publish worker started")
 
-	// 8. Build router (internal http package aliased as apphttp).
-	router := apphttp.NewRouter(cfg, pool, storeClient, logger, settingsHandler, tracklistHandler.Routes(), socialHandler.Routes())
+	// 8. Wire EPK module.
+	epkRepo := epk.NewRepository(pool)
+	epkStorage := epk.NewStorageAdapter(storeClient)
+	epkSettingsSvc := epk.NewSettingsServiceAdapter(settingsSvc)
+	epkSvc := epk.NewService(epkRepo, epkStorage, epkSettingsSvc)
+	epkHandler := epk.NewHandler(epkSvc)
+
+	// 9. Build router (internal http package aliased as apphttp).
+	router := apphttp.NewRouter(cfg, pool, storeClient, logger, settingsHandler, tracklistHandler.Routes(), socialHandler.Routes(), epkHandler.Routes())
 
 	// 9. Start HTTP server (blocks until ctx cancelled or error).
 	addr := cfg.BindAddress + ":" + cfg.Port

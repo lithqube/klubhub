@@ -15,6 +15,7 @@ import (
 // settingsHandler handles both GET and PUT /api/v1/settings.
 // tracklistHandler handles tracklist CRUD operations.
 // socialHandler handles social scheduling routes under /api/v1/social.
+// epkHandler handles EPK/press-kit routes under /api/v1/epk.
 func NewRouter(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -23,6 +24,7 @@ func NewRouter(
 	settingsHandler http.Handler,
 	tracklistHandler http.Handler,
 	socialHandler http.Handler,
+	epkHandler http.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -42,6 +44,9 @@ func NewRouter(
 
 	// Social scheduling routes
 	r.Mount("/api/v1/social", socialHandler)
+
+	// EPK / press-kit routes
+	r.Mount("/api/v1/epk", epkHandler)
 
 	return r
 }
