@@ -5,12 +5,12 @@ milestone_name: milestone
 current_phase: 03-epk-press-kit-builder
 current_plan: 03-02 complete (2 of N plans in phase 03)
 status: executing
-last_updated: "2026-03-22T19:59:16.135Z"
+last_updated: "2026-03-22T20:09:19.303Z"
 progress:
   total_phases: 13
   completed_phases: 4
   total_plans: 31
-  completed_plans: 28
+  completed_plans: 29
 ---
 
 # Session State
@@ -92,6 +92,8 @@ See: .planning/PROJECT.md
 - [Phase 03-epk-press-kit-builder]: Direct store property access via ref/watch (not storeToRefs) in EPK components — storeToRefs incompatible with vi.mock plain objects in tests
 - [Phase 03-epk-press-kit-builder]: Explicit Vue imports in EPK components (not Nuxt auto-imports) — required for vitest component resolution
 - [Phase 03-epk-press-kit-builder]: @ alias added to vitest.config.ts pointing to app/ — resolves @/lib/utils in UI components during tests
+- [Phase 03-epk-press-kit-builder]: EpkSocialLinksSection and EpkContactInfoSection call settings API directly — social_links/contact_info live in user_settings, not EPK content endpoint
+- [Phase 03-epk-press-kit-builder]: Import from Gigs stub visible but disabled with title tooltip — deferred until Gig Tracker phase
 
 ## Performance Metrics
 
@@ -119,6 +121,7 @@ See: .planning/PROJECT.md
 | 03-epk-press-kit-builder | 02 | 9 min | 2 | 8 |
 | Phase 03-epk-press-kit-builder P03 | 15 | 2 tasks | 4 files |
 | Phase 03-epk-press-kit-builder P04 | 14 min | 2 tasks | 8 files |
+| Phase 03-epk-press-kit-builder P05 | 8 min | 2 tasks | 7 files |
 
 ## Session Log
 
