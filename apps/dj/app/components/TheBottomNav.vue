@@ -16,18 +16,18 @@ import {
   LayoutDashboard,
   Layers,
   Send,
+  FileText,
   CalendarDays,
-  Banknote,
 } from 'lucide-vue-next'
 
 const route = useRoute()
 
 const primaryNav = [
-  { label: 'DASH',    icon: LayoutDashboard, to: '/'          },
-  { label: 'TRACKS',  icon: Layers,           to: '/tracklist' },
-  { label: 'SOCIAL',  icon: Send,             to: '/social'    },
-  { label: 'GIGS',    icon: CalendarDays,     to: '/gigs'      },
-  { label: 'FINANCE', icon: Banknote,         to: '/finance'   },
+  { label: 'DASH',   icon: LayoutDashboard, to: '/'          },
+  { label: 'TRACKS', icon: Layers,           to: '/tracklist' },
+  { label: 'SOCIAL', icon: Send,             to: '/social'    },
+  { label: 'EPK',    icon: FileText,         to: '/epk'       },
+  { label: 'GIGS',   icon: CalendarDays,     to: '/gigs'      },
 ]
 
 function isActive(to: string) {

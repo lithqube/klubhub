@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Layers,
   Send,
+  FileText,
   CalendarDays,
   Banknote,
   LifeBuoy,
@@ -18,6 +19,7 @@ const primaryNav = [
   { label: 'DASHBOARD',  icon: LayoutDashboard, to: '/' },
   { label: 'TRACKLIST',  icon: Layers,           to: '/tracklist' },
   { label: 'SOCIAL',     icon: Send,             to: '/social' },
+  { label: 'EPK',        icon: FileText,         to: '/epk' },
   { label: 'GIGS',       icon: CalendarDays,     to: '/gigs' },
   { label: 'FINANCE',    icon: Banknote,         to: '/finance' },
 ]
