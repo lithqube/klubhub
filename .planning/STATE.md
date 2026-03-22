@@ -5,12 +5,12 @@ milestone_name: milestone
 current_phase: 03-epk-press-kit-builder
 current_plan: 03-02 complete (2 of N plans in phase 03)
 status: executing
-last_updated: "2026-03-22T19:41:02.652Z"
+last_updated: "2026-03-22T19:59:16.135Z"
 progress:
   total_phases: 13
   completed_phases: 4
   total_plans: 31
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Session State
@@ -89,6 +89,9 @@ See: .planning/PROJECT.md
 - [Phase 03-epk-press-kit-builder]: RemoveObject added to storage.Client as wrapper — required for EPK photo delete and export delete operations
 - [Phase 03-epk-press-kit-builder]: saveStatus is a plain ref (not computed) — allows direct mutation from both store and useEpkAutosave composable
 - [Phase 03-epk-press-kit-builder]: useEpkAutosave sets store.saveStatus directly (not storeToRefs) — composable is internal collaborator, not consumer
+- [Phase 03-epk-press-kit-builder]: Direct store property access via ref/watch (not storeToRefs) in EPK components — storeToRefs incompatible with vi.mock plain objects in tests
+- [Phase 03-epk-press-kit-builder]: Explicit Vue imports in EPK components (not Nuxt auto-imports) — required for vitest component resolution
+- [Phase 03-epk-press-kit-builder]: @ alias added to vitest.config.ts pointing to app/ — resolves @/lib/utils in UI components during tests
 
 ## Performance Metrics
 
@@ -115,6 +118,7 @@ See: .planning/PROJECT.md
 | 03-epk-press-kit-builder | 01 | 4 min | 2 | 4 |
 | 03-epk-press-kit-builder | 02 | 9 min | 2 | 8 |
 | Phase 03-epk-press-kit-builder P03 | 15 | 2 tasks | 4 files |
+| Phase 03-epk-press-kit-builder P04 | 14 min | 2 tasks | 8 files |
 
 ## Session Log
 
