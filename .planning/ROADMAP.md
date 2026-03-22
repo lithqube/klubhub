@@ -136,8 +136,8 @@ Decimal phases appear between their surrounding integers in numeric order.
    **Plans**: 7 plans
    Plans:
 
-- [ ] 03-01-PLAN.md — Go backend data layer: migration 004 (epk_content + epk_exports), model, repository
-- [ ] 03-02-PLAN.md — Go EPK service (photo upload, PDF generation, Markdown renderer), handler, router wiring
+- [x] 03-01-PLAN.md — Go backend data layer: migration 004 (epk_content + epk_exports), model, repository
+- [x] 03-02-PLAN.md — Go EPK service (photo upload, PDF generation, Markdown renderer), handler, router wiring
 - [ ] 03-03-PLAN.md — Pinia useEpkStore + useEpkAutosave composable + TypeScript types
 - [ ] 03-04-PLAN.md — EpkBioSection + EpkPhotosSection + EpkTechRiderSection + EpkStagePlotSection components
 - [ ] 03-05-PLAN.md — EpkGigHighlightsSection + EpkPressQuotesSection + EpkSocialLinksSection + EpkContactInfoSection + EpkExportPanel
@@ -276,7 +276,7 @@ Note: Phase 1.5 (Design System) is an inserted phase that must complete before P
 | 1. Tracklist Image Generator     | 5/6            | Complete*   | 2026-03-16 |
 | 1.5 Design System Foundation     | 7/7            | Complete    | 2026-03-22 |
 | 2. Social Media Scheduler        | 7/7            | Complete    | 2026-03-22 |
-| 3. EPK / Press Kit Builder       | 1/7 | In Progress|  |
+| 3. EPK / Press Kit Builder       | 2/7            | In Progress | -          |
 | 4. Gig Tracker                   | 0/4            | Not started | -          |
 | 4.5 Rider Templates              | 0/TBD          | Not started | -          |
 | 4.8 Bandsintown Sync (optional)  | 0/TBD          | Not started | -          |
