@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 02-social-media-scheduler (COMPLETE)
 status: verifying
-last_updated: "2026-03-22T07:23:59.981Z"
+last_updated: "2026-03-22T08:04:09.285Z"
 progress:
   total_phases: 13
   completed_phases: 3
-  total_plans: 23
-  completed_plans: 21
+  total_plans: 24
+  completed_plans: 22
 ---
 
 # Session State
@@ -73,6 +73,7 @@ See: .planning/PROJECT.md
 - [Phase 02-social-media-scheduler]: Worker.tick swallows RateLimitError (returns nil) — stops tick loop early without propagating error
 - [Phase 02-social-media-scheduler]: lastExportStoryPath/lastExportSquarePath refs track export result in TracklistExporter; CTA only visible after successful export, cleared on each new export attempt
 - [Phase 02-social-media-scheduler]: navigateTo('/social?imageId=...') with nextTick scroll to [data-compose-panel] used for cross-page prefill flow from TracklistExporter to SocialPostCompose
+- [Phase 02-social-media-scheduler]: Option 1 chosen for gap #19 closure: remove dead code and update verification truth (not implement active PNG→JPEG conversion) — URL-based uploads accept PNG natively
 
 ## Performance Metrics
 
@@ -94,6 +95,7 @@ See: .planning/PROJECT.md
 | Phase 02-social-media-scheduler P06 | 10 min | 1 tasks | 3 files |
 | Phase 02-social-media-scheduler P07 | 15 min | 2 tasks | 0 files |
 | Phase 02-social-media-scheduler P07 | 15 min | 2 tasks | 0 files |
+| Phase 02-social-media-scheduler P08 | 3 min | 2 tasks | 2 files |
 
 ## Session Log
 
