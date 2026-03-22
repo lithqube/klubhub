@@ -94,10 +94,10 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 
 ### EPK / Press Kit Builder (EPK)
 
-- [ ] **EPK-01**: User can write artist bio (short + long versions) with rich text editor supporting bold, italic, lists, links, and H2/H3 headings
+- [x] **EPK-01**: User can write artist bio (short + long versions) with rich text editor supporting bold, italic, lists, links, and H2/H3 headings
 - [x] **EPK-02**: User can upload and manage up to 20 press photos (JPEG/PNG, max 10 MB each)
 - [x] **EPK-03**: User can upload tech rider content and stage plot image
-- [ ] **EPK-04**: User can enter social/streaming profile links
+- [x] **EPK-04**: User can enter social/streaming profile links
 - [x] **EPK-05**: User can manually enter gig history highlights, press quotes, and contact information
 - [x] **EPK-06**: User can generate a professionally formatted PDF press kit applying their logo and color settings
 - [x] **EPK-07**: User can select which sections to include or exclude in the PDF export

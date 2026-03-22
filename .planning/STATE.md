@@ -3,13 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 03-epk-press-kit-builder
-status: planning
-last_updated: "2026-03-22"
+current_plan: 03-02 complete (2 of N plans in phase 03)
+status: executing
+last_updated: "2026-03-22T19:41:02.652Z"
 progress:
   total_phases: 13
   completed_phases: 4
   total_plans: 31
-  completed_plans: 31
+  completed_plans: 27
 ---
 
 # Session State
@@ -86,6 +87,8 @@ See: .planning/PROJECT.md
 - [Phase 03-epk-press-kit-builder]: settingsServiceAdapter maps GetOrCreate+Update to GetSettings+UpdateSettings — zero coupling changes to settings package
 - [Phase 03-epk-press-kit-builder]: renderInline strips bold/italic/link markers to plain text — fpdf v0.11.1 MultiCell has no per-run font switching within a single call
 - [Phase 03-epk-press-kit-builder]: RemoveObject added to storage.Client as wrapper — required for EPK photo delete and export delete operations
+- [Phase 03-epk-press-kit-builder]: saveStatus is a plain ref (not computed) — allows direct mutation from both store and useEpkAutosave composable
+- [Phase 03-epk-press-kit-builder]: useEpkAutosave sets store.saveStatus directly (not storeToRefs) — composable is internal collaborator, not consumer
 
 ## Performance Metrics
 
@@ -111,6 +114,7 @@ See: .planning/PROJECT.md
 | Phase 1.5-design-system-foundation P06 | 15 min | 2 tasks | 0 files |
 | 03-epk-press-kit-builder | 01 | 4 min | 2 | 4 |
 | 03-epk-press-kit-builder | 02 | 9 min | 2 | 8 |
+| Phase 03-epk-press-kit-builder P03 | 15 | 2 tasks | 4 files |
 
 ## Session Log
 
