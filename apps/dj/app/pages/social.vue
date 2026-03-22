@@ -43,12 +43,12 @@ function handleQuickExport() {
     <!-- Page header -->
     <SocialPageHeader :account="account" @disconnect="() => account && store.disconnectAccount(account!.id)" />
 
-    <!-- Connection banner: no account or disconnected -->
+    <!-- Connection banner: responsive padding + Fitts's Law on CTA -->
     <div
       v-if="!account || account.status === 'disconnected'"
-      class="mx-8 mt-4 px-5 py-3 border border-secondary/40 bg-secondary/10 flex items-center justify-between"
+      class="mx-4 md:mx-8 mt-4 px-4 md:px-5 py-3 border border-secondary/40 bg-secondary/10 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between"
     >
-      <div class="flex items-center gap-3">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
         <span class="text-secondary font-terminal tracking-terminal text-xs uppercase">
           ● INSTAGRAM NOT CONNECTED
         </span>
@@ -56,7 +56,7 @@ function handleQuickExport() {
           Connect your Instagram account to start scheduling posts.
         </span>
       </div>
-      <button class="ghost-border px-4 py-1.5 font-terminal tracking-terminal text-xs uppercase text-secondary border-secondary/40 hover:border-secondary transition-colors">
+      <button class="ghost-border px-4 min-h-[44px] w-full sm:w-auto font-terminal tracking-terminal text-xs uppercase text-secondary border-secondary/40 hover:border-secondary transition-colors">
         CONNECT INSTAGRAM
       </button>
     </div>
@@ -64,18 +64,18 @@ function handleQuickExport() {
     <!-- Token expiry warning banner -->
     <div
       v-else-if="account && account.tokenExpiry && isTokenExpiringSoon(account.tokenExpiry)"
-      class="mx-8 mt-4 px-5 py-3 border border-amber-500/40 bg-amber-500/10 flex items-center justify-between"
+      class="mx-4 md:mx-8 mt-4 px-4 md:px-5 py-3 border border-amber-500/40 bg-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between"
     >
       <span class="font-terminal tracking-terminal text-xs text-amber-400 uppercase">
         ⚠ INSTAGRAM TOKEN EXPIRING SOON — RE-AUTHORIZE
       </span>
-      <button class="ghost-border px-4 py-1.5 font-terminal tracking-terminal text-xs uppercase text-amber-400 border-amber-500/40 hover:border-amber-400 transition-colors">
+      <button class="ghost-border px-4 min-h-[44px] w-full sm:w-auto font-terminal tracking-terminal text-xs uppercase text-amber-400 border-amber-500/40 hover:border-amber-400 transition-colors">
         RE-AUTHORIZE
       </button>
     </div>
 
     <!-- Main tabs content area -->
-    <div class="flex-1 flex flex-col overflow-hidden px-8 pt-4">
+    <div class="flex-1 flex flex-col overflow-hidden px-4 md:px-8 pt-4">
       <SocialTabs
         :posts="posts"
         :compose-panel-open="composePanelOpen"

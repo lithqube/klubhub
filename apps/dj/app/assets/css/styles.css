@@ -1,3 +1,14 @@
+/*
+ * KlubHub DJ — Design System
+ * Theme: "The Kinetic HUD" (dark default) + "Daytime HUD" (light variant)
+ *
+ * Token override pattern:
+ *   :root / @theme   → dark (obsidian) tokens
+ *   [data-theme="light"] → light (cool white) token overrides
+ *
+ * The key callback: dark theme's surface (#0E0E0F) becomes light theme's ink.
+ */
+
 /* ── Variable font declarations ── */
 @font-face {
   font-family: 'Space Grotesk';
@@ -20,6 +31,13 @@
 }
 
 @import "tailwindcss";
+
+/* ── Color scheme: tells browser which native UI to render ── */
+:root                  { color-scheme: dark; }
+[data-theme="light"]   { color-scheme: light; }
+
+/* ── Ensure html background always tracks the surface token ── */
+html { background-color: var(--color-surface, #0E0E0F); }
 
 @theme {
   /* Surface hierarchy */
@@ -161,4 +179,108 @@
   .row-selected {
     background-color: rgba(123, 104, 238, 0.15); /* secondary-container at 15% */
   }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DAYTIME HUD — Light Theme
+   Activated by: <html data-theme="light">
+   Philosophy: obsidian ink on cool off-white polycarbonate.
+   Same geometry, same rules, same fonts. Opposite luminance.
+   ════════════════════════════════════════════════════════════════ */
+
+[data-theme="light"] {
+  /* ── Surface hierarchy (cool off-white stack, progressively deeper) ── */
+  --color-surface:                   #F0F0F2; /* base — cool near-white */
+  --color-surface-bright:            #FFFFFF; /* pure white (brightest) */
+  --color-surface-variant:           #E4E4E7; /* glass panel tint */
+  --color-surface-container:         #EAEAED;
+  --color-surface-container-lowest:  #F8F8FA;
+  --color-surface-container-low:     #F2F2F4;
+  --color-surface-container-high:    #DCDCDF;
+  --color-surface-container-highest: #D4D4D7;
+
+  /* ── Primary: deep teal — WCAG AA on white (5.8:1) ── */
+  --color-primary:           #006875;
+  --color-primary-container: #A8EFF5; /* light teal fill */
+  --color-primary-dim:       #004D58; /* deepest teal for active/pressed */
+
+  /* ── Secondary: deep violet — WCAG AA on white (5.2:1) ── */
+  --color-secondary:           #5B4BBD;
+  --color-secondary-container: #EDE8FF; /* light violet fill */
+
+  /* ── Tertiary / Error / On-colors ── */
+  --color-tertiary:           #4E5E6A; /* slate-gray — WCAG AA on white */
+  --color-error:              #C0302C; /* dark red — WCAG AA on white (5.9:1) */
+  --color-error-container:    #FDECEC; /* light red bg */
+  --color-on-primary:         #FFFFFF; /* white text on deep teal */
+  --color-on-surface:         #0E0E0F; /* obsidian ink — the callback */
+  --color-on-surface-variant: #3A3A3E;
+  --color-outline:            #C4C4C7;
+  --color-outline-variant:    #D0D0D3;
+
+  /* ── Status accent colors (deep variants for light backgrounds) ── */
+  --color-status-ready:    #006875;
+  --color-status-draft:    #5B4BBD;
+  --color-status-pending:  #5B4BBD;
+  --color-status-archived: #B45309; /* deep amber */
+  --color-status-failed:   #C0302C;
+
+  /* ── Glow shadows: ambient depth (replaces neon halos) ── */
+  --shadow-glow-primary:        0 2px 20px rgba(0, 104, 117, 0.15);
+  --shadow-glow-secondary:      0 2px 20px rgba(91, 75, 189, 0.12);
+  --shadow-glow-error:          0 2px 12px rgba(192, 48, 44, 0.15);
+  --shadow-glow-primary-strong: 0 4px 28px rgba(0, 104, 117, 0.28);
+}
+
+/* ── Utility class overrides for light mode ──────────────────────
+   These override utility classes that use hardcoded dark hex values.
+   CSS variables (--color-*) auto-update via the block above;
+   only gradient fills and border colors need explicit overrides.
+   ─────────────────────────────────────────────────────────────── */
+
+/* CTA gradient: dark-to-medium teal */
+[data-theme="light"] .gradient-cta {
+  background: linear-gradient(135deg, #006875, #009EA8);
+}
+
+/* Ghost border: light gray dashes (was dark gray) */
+[data-theme="light"] .ghost-border {
+  border: 1px dashed rgba(196, 196, 199, 0.8);
+}
+
+/* Luminous threshold: faint teal edge + ambient glow */
+[data-theme="light"] .luminous-threshold {
+  outline: 1px solid rgba(0, 104, 117, 0.25);
+  box-shadow: var(--shadow-glow-primary);
+}
+
+/* Nav active: dashed deep teal border (was dashed cyan) */
+[data-theme="light"] .nav-item-active {
+  border: 1px dashed #006875;
+  color: #006875;
+}
+
+/* Nav inactive: faint teal underline (was faint cyan) */
+[data-theme="light"] .nav-item-inactive {
+  border-bottom: 1px dashed rgba(0, 104, 117, 0.22);
+}
+
+/* Status accent bars (deep variants) */
+[data-theme="light"] .accent-bar-ready,
+[data-theme="light"] .accent-bar-confirmed,
+[data-theme="light"] .accent-bar-scheduled { border-left-color: #006875; }
+[data-theme="light"] .accent-bar-draft,
+[data-theme="light"] .accent-bar-pending    { border-left-color: #5B4BBD; }
+[data-theme="light"] .accent-bar-archived   { border-left-color: #B45309; }
+[data-theme="light"] .accent-bar-failed     { border-left-color: #C0302C; }
+[data-theme="light"] .accent-bar-published  { border-left-color: #4E5E6A; }
+
+/* Progress bar: deep-to-medium teal gradient */
+[data-theme="light"] .progress-bar-fill {
+  background: linear-gradient(90deg, #006875, #009EA8);
+}
+
+/* Row selected: deep violet at low opacity (was secondary-container 15%) */
+[data-theme="light"] .row-selected {
+  background-color: rgba(91, 75, 189, 0.08);
 }

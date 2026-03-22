@@ -62,8 +62,8 @@ function accentBar(status: TracklistStatus): string {
 <template>
   <div class="flex-1 flex flex-col overflow-hidden">
 
-    <!-- Page header -->
-    <header class="px-8 py-5 border-b border-outline-variant/20 flex items-center justify-between flex-shrink-0">
+    <!-- Page header — responsive padding (Law of Proximity: consistent spatial rhythm) -->
+    <header class="px-4 md:px-8 py-4 md:py-5 border-b border-outline-variant/20 flex items-center justify-between flex-shrink-0">
       <div>
         <h1 class="font-command font-bold text-on-surface text-xl uppercase tracking-wide">
           DASHBOARD
@@ -74,20 +74,25 @@ function accentBar(status: TracklistStatus): string {
       </div>
     </header>
 
-    <!-- Scrollable body -->
-    <main class="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+    <!-- Scrollable body — 4/8px spacing scale (Material Design rhythm) -->
+    <main class="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-6">
 
-      <!-- ── Hero: Upcoming gig card ── -->
+      <!-- ── Hero: Upcoming gig card ──
+           Responsive: stacks vertically on mobile, horizontal on md+
+           Fitts's Law: action buttons min-h-[44px] for touch targets
+      -->
       <section aria-label="Upcoming gig">
-        <div class="glass-panel border border-outline-variant/30 flex overflow-hidden">
+        <div class="glass-panel border border-outline-variant/30 flex flex-col md:flex-row overflow-hidden">
 
-          <!-- Left cyan accent bar -->
-          <div class="w-1 flex-shrink-0 gradient-cta" aria-hidden="true" />
+          <!-- Left cyan accent bar (desktop only — hidden when card is stacked) -->
+          <div class="hidden md:block w-1 flex-shrink-0 gradient-cta" aria-hidden="true" />
+          <!-- Top accent bar for mobile -->
+          <div class="md:hidden h-1 w-full gradient-cta" aria-hidden="true" />
 
-          <div class="flex-1 px-6 py-5">
+          <div class="flex-1 px-4 md:px-6 py-4 md:py-5">
 
             <!-- Tag row -->
-            <div class="flex items-center gap-3 mb-3">
+            <div class="flex flex-wrap items-center gap-2 md:gap-3 mb-3">
               <span class="font-terminal tracking-terminal text-xs text-primary uppercase px-2 py-0.5 border border-primary/40">
                 ⚡ {{ upcomingGig.tag }}
               </span>
@@ -96,31 +101,31 @@ function accentBar(status: TracklistStatus): string {
               </span>
             </div>
 
-            <!-- Venue headline — mixed weight -->
-            <div class="mb-4">
-              <p class="font-command text-4xl font-bold text-primary leading-none uppercase tracking-tight">
+            <!-- Venue headline — scales down on mobile (Responsive Typography) -->
+            <div class="mb-3 md:mb-4">
+              <p class="font-command text-2xl md:text-4xl font-bold text-primary leading-none uppercase tracking-tight">
                 {{ upcomingGig.venue }}
               </p>
-              <p class="font-command text-2xl font-light text-on-surface-variant uppercase tracking-widest mt-0.5">
+              <p class="font-command text-lg md:text-2xl font-light text-on-surface-variant uppercase tracking-widest mt-0.5">
                 {{ upcomingGig.subtitle }}
               </p>
             </div>
 
-            <!-- Meta row -->
-            <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <!-- Meta row: flex-wrap handles overflow gracefully on mobile -->
+            <div class="flex flex-wrap items-center gap-x-4 md:gap-x-6 gap-y-2">
               <div class="flex items-center gap-2">
                 <span class="font-terminal tracking-terminal text-xs text-tertiary uppercase">DATE</span>
                 <span class="font-terminal tracking-terminal text-xs text-on-surface uppercase">{{ upcomingGig.date }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <span class="font-terminal tracking-terminal text-xs text-tertiary uppercase">LOCATION</span>
+                <span class="font-terminal tracking-terminal text-xs text-tertiary uppercase">LOC</span>
                 <span class="font-terminal tracking-terminal text-xs text-on-surface uppercase">{{ upcomingGig.location }}</span>
               </div>
               <div class="flex items-center gap-2">
                 <span class="font-terminal tracking-terminal text-xs text-tertiary uppercase">FEE</span>
                 <span class="font-terminal tracking-terminal text-xs text-primary font-bold uppercase">{{ upcomingGig.fee }}</span>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="hidden sm:flex items-center gap-2">
                 <span class="font-terminal tracking-terminal text-xs text-tertiary uppercase">TRACKLIST</span>
                 <span class="font-terminal tracking-terminal text-xs text-on-surface uppercase">
                   {{ upcomingGig.tracklist }} ({{ upcomingGig.tracks }} tracks)
@@ -130,39 +135,45 @@ function accentBar(status: TracklistStatus): string {
 
           </div>
 
-          <!-- Right actions -->
-          <div class="flex flex-col justify-center gap-3 px-6 border-l border-outline-variant/20 flex-shrink-0">
+          <!-- Actions: horizontal on mobile, vertical column on md+
+               Fitts's Law: min-h-[44px] for all touch targets -->
+          <div class="flex flex-row md:flex-col justify-stretch md:justify-center gap-2 md:gap-3 p-4 md:px-6 md:py-0 border-t md:border-t-0 md:border-l border-outline-variant/20 flex-shrink-0">
             <NuxtLink
               to="/tracklist"
-              class="flex items-center gap-2 px-4 py-2 ghost-border text-on-surface-variant hover:text-primary hover:border-primary/60 transition-colors"
+              class="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 min-h-[44px] ghost-border text-on-surface-variant hover:text-primary hover:border-primary/60 transition-colors"
             >
-              <Layers class="w-3.5 h-3.5" />
+              <Layers class="w-3.5 h-3.5 flex-shrink-0" />
               <span class="font-terminal tracking-terminal text-xs uppercase">TRACKLIST</span>
             </NuxtLink>
             <NuxtLink
               to="/social"
-              class="flex items-center gap-2 px-4 py-2 gradient-cta text-on-primary font-terminal tracking-terminal text-xs uppercase"
+              class="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 min-h-[44px] gradient-cta text-on-primary font-terminal tracking-terminal text-xs uppercase"
             >
-              <Send class="w-3.5 h-3.5" />
-              <span>SCHEDULE POST</span>
+              <Send class="w-3.5 h-3.5 flex-shrink-0" />
+              <span>SCHEDULE</span>
             </NuxtLink>
           </div>
 
         </div>
       </section>
 
-      <!-- ── Three-column widgets ── -->
-      <div class="grid grid-cols-3 gap-6">
+      <!-- ── Widget grid ──
+           Mobile: single column (content-first priority, Law of Proximity)
+           Tablet: 2 columns (finance stacks below social/tracklist)
+           Desktop: 3 columns (original layout)
+      -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
 
         <!-- Column 1: Social Queue -->
         <section aria-label="Social queue" class="flex flex-col gap-3">
-          <div class="flex items-center justify-between">
+          <!-- Fitts's Law: VIEW ALL link gets min-h for easier tap -->
+          <div class="flex items-center justify-between min-h-[32px]">
             <h2 class="font-terminal tracking-terminal text-xs text-tertiary uppercase">
               SOCIAL QUEUE
             </h2>
             <NuxtLink
               to="/social"
-              class="font-terminal tracking-terminal text-xs text-primary/70 hover:text-primary uppercase transition-colors"
+              class="font-terminal tracking-terminal text-xs text-primary/70 hover:text-primary uppercase transition-colors py-1 px-1"
             >
               VIEW ALL →
             </NuxtLink>
@@ -214,13 +225,13 @@ function accentBar(status: TracklistStatus): string {
 
         <!-- Column 2: Recent Tracklists -->
         <section aria-label="Recent tracklists" class="flex flex-col gap-3">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between min-h-[32px]">
             <h2 class="font-terminal tracking-terminal text-xs text-tertiary uppercase">
               RECENT TRACKLISTS
             </h2>
             <NuxtLink
               to="/tracklist"
-              class="font-terminal tracking-terminal text-xs text-primary/70 hover:text-primary uppercase transition-colors"
+              class="font-terminal tracking-terminal text-xs text-primary/70 hover:text-primary uppercase transition-colors py-1 px-1"
             >
               VIEW ALL →
             </NuxtLink>
@@ -270,57 +281,62 @@ function accentBar(status: TracklistStatus): string {
           </NuxtLink>
         </section>
 
-        <!-- Column 3: Financial Overview -->
-        <section aria-label="Financial overview" class="flex flex-col gap-3">
-          <div class="flex items-center justify-between">
+        <!-- Column 3: Financial Overview — spans full width on tablet (md:col-span-2) -->
+        <section aria-label="Financial overview" class="flex flex-col gap-3 md:col-span-2 lg:col-span-1">
+          <div class="flex items-center justify-between min-h-[32px]">
             <h2 class="font-terminal tracking-terminal text-xs text-tertiary uppercase">
               FINANCIAL OVERVIEW
             </h2>
             <NuxtLink
               to="/finance"
-              class="font-terminal tracking-terminal text-xs text-primary/70 hover:text-primary uppercase transition-colors"
+              class="font-terminal tracking-terminal text-xs text-primary/70 hover:text-primary uppercase transition-colors py-1 px-1"
             >
               VIEW ALL →
             </NuxtLink>
           </div>
 
-          <!-- MTD earned -->
-          <div class="glass-panel border border-outline-variant/20 p-4 accent-bar-confirmed">
-            <p class="font-terminal tracking-terminal text-[10px] text-tertiary uppercase mb-1">
-              EARNED THIS MONTH
-            </p>
-            <p class="font-command text-2xl font-bold text-primary">
-              {{ finance.mtdEarned }}
-            </p>
-          </div>
+          <!-- Finance stat cards: grid on tablet to use the col-span-2 width wisely -->
+          <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-1 gap-3">
 
-          <!-- Pending -->
-          <div class="glass-panel border border-outline-variant/20 p-4 accent-bar-draft">
-            <p class="font-terminal tracking-terminal text-[10px] text-tertiary uppercase mb-1">
-              PENDING PAYMENT
-            </p>
-            <p class="font-command text-2xl font-bold text-secondary">
-              {{ finance.pending }}
-            </p>
-            <div class="flex items-center gap-1.5 mt-1.5">
-              <Clock class="w-3 h-3 text-tertiary flex-shrink-0" />
-              <span class="font-terminal tracking-terminal text-[10px] text-tertiary uppercase">
-                NEXT PAYOUT {{ finance.nextPayout }}
-              </span>
-            </div>
-          </div>
-
-          <!-- YTD -->
-          <div class="glass-panel border border-outline-variant/20 p-4">
-            <div class="flex items-center justify-between mb-1">
-              <p class="font-terminal tracking-terminal text-[10px] text-tertiary uppercase">
-                YTD TOTAL
+            <!-- MTD earned -->
+            <div class="glass-panel border border-outline-variant/20 p-4 accent-bar-confirmed">
+              <p class="font-terminal tracking-terminal text-[10px] text-tertiary uppercase mb-1">
+                EARNED THIS MONTH
               </p>
-              <TrendingUp class="w-3.5 h-3.5 text-primary/60" />
+              <p class="font-command text-2xl font-bold text-primary">
+                {{ finance.mtdEarned }}
+              </p>
             </div>
-            <p class="font-command text-xl font-bold text-on-surface">
-              {{ finance.ytd }}
-            </p>
+
+            <!-- Pending -->
+            <div class="glass-panel border border-outline-variant/20 p-4 accent-bar-draft">
+              <p class="font-terminal tracking-terminal text-[10px] text-tertiary uppercase mb-1">
+                PENDING PAYMENT
+              </p>
+              <p class="font-command text-2xl font-bold text-secondary">
+                {{ finance.pending }}
+              </p>
+              <div class="flex items-center gap-1.5 mt-1.5">
+                <Clock class="w-3 h-3 text-tertiary flex-shrink-0" />
+                <span class="font-terminal tracking-terminal text-[10px] text-tertiary uppercase">
+                  PAYOUT {{ finance.nextPayout }}
+                </span>
+              </div>
+            </div>
+
+            <!-- YTD -->
+            <div class="glass-panel border border-outline-variant/20 p-4">
+              <div class="flex items-center justify-between mb-1">
+                <p class="font-terminal tracking-terminal text-[10px] text-tertiary uppercase">
+                  YTD TOTAL
+                </p>
+                <TrendingUp class="w-3.5 h-3.5 text-primary/60" />
+              </div>
+              <p class="font-command text-xl font-bold text-on-surface">
+                {{ finance.ytd }}
+              </p>
+            </div>
+
           </div>
         </section>
 

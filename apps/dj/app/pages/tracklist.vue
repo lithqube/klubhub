@@ -28,7 +28,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="bg-surface min-h-screen p-4 lg:p-8">
+  <!-- min-h-dvh: avoids mobile-browser 100vh bug (UX law: viewport-units) -->
+  <div class="min-h-dvh p-4 md:p-6 lg:p-8">
     <!-- Upload step -->
     <template v-if="step === 'upload'">
       <div class="max-w-2xl mx-auto">

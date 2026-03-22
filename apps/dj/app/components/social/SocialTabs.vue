@@ -33,33 +33,39 @@ function onTabChange(val: string) {
     <!-- Tab bar row -->
     <div class="flex items-center justify-between border-b border-outline-variant/20 pb-0 flex-shrink-0">
 
-      <!-- Left: tabs -->
-      <div class="flex items-end gap-0">
+      <!-- Left: tabs — Fitts's Law: min-h-[44px] on all tabs -->
+      <div class="flex items-end gap-0" role="tablist" aria-label="Social scheduler views">
+
         <!-- QUEUE tab -->
         <button
-          class="px-4 py-3 font-terminal tracking-terminal text-xs uppercase transition-colors border-b-2 -mb-px"
+          class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase transition-colors border-b-2 -mb-px"
           :class="activeTab === 'queue'
             ? 'text-primary border-primary'
             : 'text-tertiary border-transparent hover:text-on-surface'"
           @click="onTabChange('queue')"
+          role="tab"
+          :aria-selected="activeTab === 'queue'"
         >
           QUEUE
         </button>
 
         <!-- CALENDAR tab -->
         <button
-          class="px-4 py-3 font-terminal tracking-terminal text-xs uppercase transition-colors border-b-2 -mb-px"
+          class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase transition-colors border-b-2 -mb-px"
           :class="activeTab === 'calendar'
             ? 'text-primary border-primary'
             : 'text-tertiary border-transparent hover:text-on-surface'"
           @click="onTabChange('calendar')"
+          role="tab"
+          :aria-selected="activeTab === 'calendar'"
         >
           CALENDAR
         </button>
 
-        <!-- ANALYTICS stub (not a real tab) -->
-        <div class="relative group">
-          <span class="px-4 py-3 font-terminal tracking-terminal text-xs uppercase text-tertiary/40 cursor-not-allowed inline-block border-b-2 border-transparent -mb-px">
+        <!-- Stub tabs: hidden on mobile (Hick's Law — progressive disclosure of future features) -->
+        <!-- ANALYTICS stub -->
+        <div class="relative group hidden sm:block">
+          <span class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-tertiary/40 cursor-not-allowed inline-flex items-center border-b-2 border-transparent -mb-px">
             ANALYTICS
           </span>
           <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-surface-container border border-outline-variant/30 font-terminal tracking-terminal text-[10px] text-tertiary uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
@@ -67,31 +73,39 @@ function onTabChange(val: string) {
           </div>
         </div>
 
-        <!-- AUTOMATIONS stub (not a real tab) -->
-        <div class="relative group">
-          <span class="px-4 py-3 font-terminal tracking-terminal text-xs uppercase text-tertiary/40 cursor-not-allowed inline-block border-b-2 border-transparent -mb-px">
+        <!-- AUTOMATIONS stub -->
+        <div class="relative group hidden sm:block">
+          <span class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-tertiary/40 cursor-not-allowed inline-flex items-center border-b-2 border-transparent -mb-px">
             AUTOMATIONS
           </span>
           <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-surface-container border border-outline-variant/30 font-terminal tracking-terminal text-[10px] text-tertiary uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
             Coming Soon
           </div>
         </div>
+
       </div>
 
-      <!-- Right: action buttons -->
-      <div class="flex items-center gap-3 pb-3">
+      <!-- Right: action buttons
+           Progressive Disclosure: long label hidden on mobile (Hick's Law — reduce choices shown)
+           Fitts's Law: min-h-[44px] on all tap targets
+      -->
+      <div class="flex items-center gap-2 md:gap-3 pb-3">
         <button
-          class="ghost-border px-4 py-2 font-terminal tracking-terminal text-xs uppercase text-on-surface-variant hover:text-primary hover:border-primary/40 transition-colors flex items-center gap-2"
+          class="ghost-border px-3 md:px-4 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-on-surface-variant hover:text-primary hover:border-primary/40 transition-colors flex items-center gap-1.5 md:gap-2"
           @click="emit('quick-export')"
+          aria-label="Quick export from tracklist"
         >
-          <span>⚡</span>
-          <span>QUICK EXPORT FROM TRACKLIST</span>
+          <span aria-hidden="true">⚡</span>
+          <!-- Label: icon-only on mobile (Progressive Disclosure), full label on md+ -->
+          <span class="hidden md:inline">QUICK EXPORT</span>
         </button>
         <button
-          class="gradient-cta px-4 py-2 font-terminal tracking-terminal text-xs uppercase text-on-primary flex items-center gap-2"
+          class="gradient-cta px-3 md:px-4 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-on-primary flex items-center gap-1.5 md:gap-2"
           @click="emit('add-to-queue')"
         >
-          <span>+ ADD TO QUEUE</span>
+          <span>+</span>
+          <span class="hidden sm:inline">ADD TO QUEUE</span>
+          <span class="sm:hidden">QUEUE</span>
         </button>
       </div>
 

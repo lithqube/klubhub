@@ -8,8 +8,9 @@ const statusItems = [
 </script>
 
 <template>
-  <!-- Fixed bottom bar: full width, always visible -->
-  <footer class="fixed bottom-0 left-0 right-0 bg-surface-container-high border-t border-outline-variant/20 z-10">
+  <!-- Fixed bottom bar: desktop only — Hick's Law: hide technical metrics on mobile -->
+  <!-- TheBottomNav replaces this area on mobile -->
+  <footer class="fixed bottom-0 left-0 right-0 bg-surface-container-high border-t border-outline-variant/20 z-10 hidden lg:block">
     <div class="flex items-center gap-8 px-6 py-2">
       <div
         v-for="item in statusItems"
