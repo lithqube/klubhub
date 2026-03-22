@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 0: Infrastructure** - Four-service Docker Compose stack, Go API scaffold, health endpoint, embedded migrations, backup/restore scripts
 - [ ] **Phase 1: Tracklist Image Generator** - DJ file upload and parsing, cover art fetch chain, image generation with presets, live preview, PNG/JPEG export, text tracklist export (1001Tracklists / Mixcloud / SoundCloud formats)
-- [ ] **Phase 1.5: Design System Foundation** - INSERTED — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition, responsive design
+- [x] **Phase 1.5: Design System Foundation** - INSERTED — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition, responsive design
 - [ ] **Phase 2: Social Media Scheduler** - Instagram OAuth, timezone-aware post scheduling, retry with backoff, queue/calendar view
 - [ ] **Phase 3: EPK / Press Kit Builder** - Artist bio, press photos, tech rider, PDF export with section control, export history (PDF-only; hosted EPK URL is SaaS v2)
 - [ ] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, GigReader interface for downstream modules
@@ -90,12 +90,12 @@ Decimal phases appear between their surrounding integers in numeric order.
    Plans:
 
 - [x] 1.5-01-PLAN.md — Tailwind v4 install + cyberpunk @theme token system + variable fonts
-- [ ] 1.5-02-PLAN.md — shadcn-vue install + cyberpunk component overrides (14 components)
+- [x] 1.5-02-PLAN.md — shadcn-vue install + cyberpunk component overrides (14 components)
 - [x] 1.5-03-PLAN.md — Pinia stores (settings, tracklist, ui) + design-tokens.ts (TDD)
-- [ ] 1.5-04-PLAN.md — TrackcardPreview.vue decomposition → 6 trackcard/ sub-components
-- [ ] 1.5-05-PLAN.md — tracklist.vue decomposition → 5 tracklist/ feature components
-- [ ] 1.5-06-PLAN.md — app.vue cyberpunk shell + error boundary + index.vue redirect
-- [ ] 1.5-07-PLAN.md — Human verification checkpoint
+- [x] 1.5-04-PLAN.md — TrackcardPreview.vue decomposition → 6 trackcard/ sub-components
+- [x] 1.5-05-PLAN.md — tracklist.vue decomposition → 5 tracklist/ feature components
+- [x] 1.5-06-PLAN.md — app.vue cyberpunk shell + error boundary + index.vue redirect
+- [x] 1.5-07-PLAN.md — Human verification checkpoint
 
 ### Phase 2: Social Media Scheduler
 
@@ -265,7 +265,7 @@ Note: Phase 1.5 (Design System) is an inserted phase that must complete before P
 | -------------------------------- | -------------- | ----------- | ---------- |
 | 0. Infrastructure                | 4/4            | Complete    | 2026-03-14 |
 | 1. Tracklist Image Generator     | 5/6            | Complete*   | 2026-03-16 |
-| 1.5 Design System Foundation     | 0/TBD          | Not started | -          |
+| 1.5 Design System Foundation     | 7/7            | Complete    | 2026-03-22 |
 | 2. Social Media Scheduler        | 7/7            | Complete    | 2026-03-22 |
 | 3. EPK / Press Kit Builder       | 0/TBD          | Not started | -          |
 | 4. Gig Tracker                   | 0/4            | Not started | -          |
