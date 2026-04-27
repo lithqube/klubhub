@@ -14,7 +14,7 @@ KlubHub DJ ships in eleven phases (including inserted phases), driven by a hard 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 0: Infrastructure** - Four-service Docker Compose stack, Go API scaffold, health endpoint, embedded migrations, backup/restore scripts
-- [ ] **Phase 0.5: GarageHQ S3 Storage** - INSERTED — Replace MinIO with GarageHQ for S3-compatible object storage; configure GarageHQ in docker-compose.yml with same env var interface (MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY); add region support (MINIO_REGION); verify all storage operations (cover art, tracklist images, EPK photos, PDFs) work against GarageHQ S3 API
+- [x] **Phase 0.5: GarageHQ S3 Storage** - INSERTED — Replace MinIO with GarageHQ for S3-compatible object storage; configure GarageHQ in docker-compose.yml with same env var interface (MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY); add region support (MINIO_REGION); verify all storage operations (cover art, tracklist images, EPK photos, PDFs) work against GarageHQ S3 API (completed 2026-04-27)
 - [x] **Phase 1: Tracklist Image Generator** - DJ file upload and parsing, cover art fetch chain, image generation with presets, live preview, PNG/JPEG export
 - [x] **Phase 1.5: Design System Foundation** - INSERTED — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition, responsive design
 - [x] **Phase 1.5.5: Kinetic HUD UI Migration** - INSERTED — Full pixel-perfect redesign to Kinetic HUD aesthetic; new Dashboard page; EPK split panel; Gigs/Finance pages (UI); 3-way theme switcher; mock data layer
@@ -236,7 +236,7 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 | Phase                            | Plans Complete | Status       | Completed  |
 | -------------------------------- | -------------- | ------------ | ---------- |
 | 0. Infrastructure                | 4/4            | ✅ Complete  | 2026-03-14 |
-| 0.5. GarageHQ S3 Storage         | 0/2            | ◆ Planning  | —          |
+| 0.5. GarageHQ S3 Storage         | 2/2 | Complete   | 2026-04-27 |
 | 1. Tracklist Image Generator     | 5/6            | ✅ Complete* | 2026-03-16 |
 | 1.5. Design System Foundation    | 7/7            | ✅ Complete  | 2026-03-22 |
 | 1.5.5. Kinetic HUD Migration     | —              | ✅ Complete  | 2026-04-27 |
