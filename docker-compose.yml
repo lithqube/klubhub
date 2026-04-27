@@ -20,18 +20,20 @@ services:
     restart: unless-stopped
 
   storage:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    image: ghcr.io/deuxfleurs/garage:v1.1.0
+    container_name: klubhub-storage
+    ports:
+      - "127.0.0.1:39000:39000"  # S3 API
+      - "39001:39001"              # Admin API (internal only)
     volumes:
       - storage_data:/data
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:9000:9000"
-    networks: [internal]
+    environment:
+      - GARAGE_MODE=singlenode
+      - GARAGE_REGION=${S3_REGION:-eu-west-1}
+      - GARAGE_ROOT_KEY=${S3_ACCESS_KEY}
+      - GARAGE_ROOT_SECRET=${S3_SECRET_KEY}
     healthcheck:
-      test: ["CMD-SHELL", "mc ready local || wget -q -O- http://localhost:9000/minio/health/live"]
+      test: ["CMD", "wget", "-q", "http://localhost:39000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,11 +46,20 @@ services:
     image: klubhub-dj-api:latest
     environment:
       DATABASE_URL: postgres://klubhub:${POSTGRES_PASSWORD}@db:5432/klubhub?sslmode=disable
-      MINIO_ENDPOINT: storage:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://127.0.0.1:9000}
-      MINIO_BUCKET: ${MINIO_BUCKET:-klubhub-dj}
+      # S3 Storage (GarageHQ)
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_REGION: ${S3_REGION:-europe-west-1}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://127.0.0.1:39000}
+      S3_BUCKET: ${S3_BUCKET:-klubhub}
+      # Backward aliases (deprecated, use S3_* vars above)
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_REGION: ${MINIO_REGION}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_BUCKET: ${MINIO_BUCKET}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
       BIND_ADDRESS: ${BIND_ADDRESS:-127.0.0.1}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:3000}
