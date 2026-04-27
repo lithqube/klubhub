@@ -1,16 +1,16 @@
 ---
-gsd_state_version: 1.2
+gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 0.5-garagehq-s3-storage
 current_plan: not started
-status: planning
-last_updated: "2026-04-27T14:45:00.000Z"
+status: completed
+last_updated: "2026-04-27T13:30:02.710Z"
 progress:
-  total_phases: 14
-  completed_phases: 7
+  total_phases: 15
+  completed_phases: 5
   total_plans: 31
-  completed_plans: 44
+  completed_plans: 31
 ---
 
 # Session State
@@ -134,6 +134,7 @@ A full pixel-perfect UI migration was performed against the `ui_kits/dj-app/inde
 - [Phase 1.5.5-kinetic-hud]: TracklistHistory replaced Table/Button/Dialog shadcn components with native HUD HTML — no shadcn dependency in history list
 - [Phase 1.5.5-kinetic-hud]: gigs.vue and finance.vue are new pages with static mock UI data — wired to real API in Phase 4 (Gig Tracker) and Phase 5 (Finance Tracker)
 - [Phase 0.5-garagehq]: GarageHQ (https://garagehq.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. GarageHQ is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
+- [Phase 00.5]: GarageHQ (https://garagehq.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. GarageHQ is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
 
 ## Session Log
 
