@@ -58,3 +58,5 @@ test-output
 .claude/worktrees
 .claude/settings.local.json
 .env
+.env.override
+garage.toml

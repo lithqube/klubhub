@@ -35,7 +35,7 @@ Self-hosted, open-source, built for DJs who want to own their workflow.
 | State | Pinia (setup function stores) |
 | Backend API | Go 1.26 (chi router, pgx v5, goose migrations) |
 | Database | PostgreSQL 16 |
-| Object Storage | MinIO |
+| Object Storage | Garage (S3-compatible, self-hosted) |
 | Image Generation | Playwright (headless Chromium) |
 | PDF Generation | go-pdf/fpdf |
 | Monorepo | Nx 22 + pnpm workspaces |
@@ -57,12 +57,16 @@ Opens at **http://localhost:4200** with mock data for all API routes. No Go back
 
 ```bash
 cp .env.example .env
+cp garage.toml.example garage.toml
+# Edit garage.toml: replace REPLACE_WITH_REAL_RPC_SECRET and REPLACE_WITH_REAL_ADMIN_TOKEN
+# Generate secrets: openssl rand -hex 32 (rpc) and openssl rand -base64 32 (admin)
 docker compose up -d
 ```
 
 - Frontend: **http://localhost:3000**
 - API Health: **http://localhost:8080/api/v1/health**
-- MinIO UI: **http://localhost:9001**
+- Garage S3 API: **http://localhost:39000** (internal: `storage:39000`)
+- Garage Web UI: **http://localhost:39002**
 
 ### Backend + Frontend (hybrid)
 
@@ -149,42 +153,69 @@ All tokens in `apps/dj/app/assets/css/styles.css` inside Tailwind `@theme {}` bl
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `MINIO_ENDPOINT` | Yes | MinIO host |
-| `MINIO_ACCESS_KEY` | Yes | MinIO access key |
-| `MINIO_SECRET_KEY` | Yes | MinIO secret key |
+| `S3_ENDPOINT` | Yes | S3-compatible storage endpoint |
+| `S3_ACCESS_KEY` | Yes | S3 access key |
+| `S3_SECRET_KEY` | Yes | S3 secret key |
+| `S3_REGION` | No | S3 region (default: `europe-west-1`) |
+| `S3_BUCKET` | No | S3 bucket name (default: `klubhub`) |
+| `S3_PUBLIC_ENDPOINT` | No | Public S3 URL for presigned URLs (default: `http://127.0.0.1:39000`) |
+| `GARAGE_RPC_SECRET` | Yes (Garage) | RPC secret for Garage node communication |
+| `GARAGE_ADMIN_TOKEN` | Yes (Garage) | Admin API token for Garage |
 | `TOKEN_ENCRYPTION_KEY` | Yes | 32-byte key for encrypting OAuth tokens |
 | `NUXT_PUBLIC_API_BASE` | No | Go API URL (enables proxy); omit for mock-data dev mode |
 | `SPOTIFY_CLIENT_ID` | No | Spotify API — cover art fetching |
-| `DISCOGS_TOKEN` | No | Discogs API — cover art fallback |
-| `INSTAGRAM_APP_ID` | No | Instagram OAuth |
-| `INSTAGRAM_APP_SECRET` | No | Instagram OAuth |
+| `DISCOGS_API_KEY` | No | Discogs API — cover art fallback |
+| `INSTAGRAM_CLIENT_ID` | No | Instagram OAuth |
+| `INSTAGRAM_CLIENT_SECRET` | No | Instagram OAuth |
 
 ---
 
-## Object Storage — MinIO vs GarageHQ
+## Object Storage — Garage
 
-By default the project uses **MinIO** as the S3-compatible object storage layer (included in `docker-compose.yml` as the `storage` service).
+The project uses **Garage** (https://Garage.deuxfleurs.fr/) as the S3-compatible object storage layer. It is open-source, lightweight, designed for self-hosting, and fully compatible with the S3 API used by the Go backend.
 
-An alternative is **GarageHQ** (https://garagehq.deuxfleurs.fr/), an open-source S3-compatible storage server designed for self-hosting. It is lightweight, actively maintained, and supports both local and distributed deployment. To use GarageHQ instead of MinIO:
+### Setup (first time only)
 
-1. Replace the `storage` service in `docker-compose.yml` with GarageHQ
-2. Update `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and add `MINIO_REGION` env vars
-3. GarageHQ's S3 API is compatible with the existing `minio-go` client — no code changes needed
+```bash
+cp garage.toml.example garage.toml
+# Generate secrets:
+#   openssl rand -hex 32   → GARAGE_RPC_SECRET
+#   openssl rand -base64 32 → GARAGE_ADMIN_TOKEN
+# Replace REPLACE_WITH_REAL_RPC_SECRET and REPLACE_WITH_REAL_ADMIN_TOKEN in garage.toml
 
-See `.planning/phases/00-infrastructure/` for the GarageHQ-compatible `docker-compose.yml` variant.
+docker compose up -d storage
+docker exec klubhub-storage /garage layout assign -z dc1 -c 1G <node_id>
+docker exec klubhub-storage /garage layout apply --version 1
+docker exec klubhub-storage /garage bucket create klubhub
+docker exec klubhub-storage /garage key create klubhub-app-key
+docker exec klubhub-storage /garage bucket allow --read --write --owner klubhub --key klubhub-app-key
+# Note the Key ID and Secret key from the output — put them in .env as S3_ACCESS_KEY and S3_SECRET_KEY
+docker compose up -d
+```
+
+### Bucket and Key Creation
+
+After the container is running for the first time, you must configure the bucket layout via the Garage CLI:
+
+1. **Assign layout**: `docker exec klubhub-storage /garage layout assign -z dc1 -c 1G <node_id>` — get `<node_id>` from `docker exec klubhub-storage /garage status`
+2. **Apply layout**: `docker exec klubhub-storage /garage layout apply --version 1`
+3. **Create bucket**: `docker exec klubhub-storage /garage bucket create klubhub`
+4. **Create API key**: `docker exec klubhub-storage /garage key create klubhub-app-key`
+5. **Grant permissions**: `docker exec klubhub-storage /garage bucket allow --read --write --owner klubhub --key klubhub-app-key`
+6. **Update .env** with the Key ID (`S3_ACCESS_KEY`) and Secret key (`S3_SECRET_KEY`) from step 4
 
 ---
 
 ## Object Storage Compatibility
 
-| Feature | MinIO | GarageHQ |
+| Feature | Garage | MinIO (deprecated) |
 |---|---|---|
 | S3 API compatibility | ✅ Native | ✅ Native |
-| Docker image | ✅ `minio/minio` | ✅ `registry.deuxfleurs.fr/garagehq/garage:latest` |
-| Embedded in compose | ✅ (storage service) | 🔜 Phase 0.5 |
+| Docker image | ✅ `dxflrs/garage` | ✅ `minio/minio` |
+| Config file | ✅ `garage.toml` | ❌ Env vars only |
+| Health check | ❌ Requires auth | ✅ |
 | Multi-node / clustering | ✅ | ✅ |
-| Health check | ✅ | TBD |
-| S3 signature version | v4 | v4 |
+| Self-hosted | ✅ | ✅ |
 
 ---
 

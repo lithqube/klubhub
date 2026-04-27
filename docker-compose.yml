@@ -11,32 +11,29 @@ services:
       - db_data:/var/lib/postgresql/data
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:5432:5432"
-    networks: [internal]
+    networks: [ internal ]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U klubhub -d klubhub"]
+      test: [ "CMD-SHELL", "pg_isready -U klubhub -d klubhub" ]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
   storage:
-    image: ghcr.io/deuxfleurs/garage:v1.1.0
+    image: dxflrs/garage:v2.2.0
     container_name: klubhub-storage
     ports:
-      - "127.0.0.1:39000:39000"  # S3 API
-      - "39001:39001"              # Admin API (internal only)
+      - "127.0.0.1:39000:3900" # S3 API
+      - "39001:3901" # Admin API (internal only)
     volumes:
       - storage_data:/data
+      - ./garage.toml:/etc/garage.toml:ro
     environment:
-      - GARAGE_MODE=singlenode
-      - GARAGE_REGION=${S3_REGION:-eu-west-1}
-      - GARAGE_ROOT_KEY=${S3_ACCESS_KEY}
-      - GARAGE_ROOT_SECRET=${S3_SECRET_KEY}
-    healthcheck:
-      test: ["CMD", "wget", "-q", "http://localhost:39000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - GARAGE_RPC_SECRET=${GARAGE_RPC_SECRET}
+      - GARAGE_ADMIN_TOKEN=${GARAGE_ADMIN_TOKEN}
+    # Healthcheck omitted: Garage does not support anonymous access,
+    # and the S3 API requires authentication for all requests including /.
+    # Use 'docker exec klubhub-storage /garage status' to verify manually.
     restart: unless-stopped
 
   api:
@@ -46,7 +43,7 @@ services:
     image: klubhub-dj-api:latest
     environment:
       DATABASE_URL: postgres://klubhub:${POSTGRES_PASSWORD}@db:5432/klubhub?sslmode=disable
-      # S3 Storage (GarageHQ)
+      # S3 Storage (Garage)
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
@@ -71,14 +68,12 @@ services:
       INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
-    networks: [internal]
+    networks: [ internal ]
     depends_on:
       db:
         condition: service_healthy
-      storage:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/api/v1/health || exit 1"]
+      test: [ "CMD-SHELL", "wget -q -O- http://localhost:8080/api/v1/health || exit 1" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -94,7 +89,7 @@ services:
       NUXT_PUBLIC_API_BASE: http://api:8080
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:3000:3000"
-    networks: [internal]
+    networks: [ internal ]
     depends_on:
       api:
         condition: service_healthy

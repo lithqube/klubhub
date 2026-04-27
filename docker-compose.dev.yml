@@ -6,7 +6,7 @@ name: klubhub-dj
 services:
   storage:
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:9001:9001"   # MinIO console
+      - "${BIND_ADDRESS:-127.0.0.1}:39002:39002"   # Garage web UI
 
   db:
     ports:

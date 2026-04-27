@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # KlubHub DJ — Restore Script
-# Restores PostgreSQL and GarageHQ S3 storage from a backup archive produced by backup.sh.
+# Restores PostgreSQL and Garage S3 storage from a backup archive produced by backup.sh.
 # Usage: bash scripts/restore.sh <backup-archive.tar.gz>
 # WARNING: This DROPS and recreates the klubhub database. All current data will be lost.
 # Requires: docker compose stack running (db and storage healthy)
-# Note: Uses aws s3 CLI with --endpoint-url for GarageHQ S3 API (port 39000)
+# Note: Uses aws s3 CLI with --endpoint-url for Garage S3 API (port 39000)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,15 +39,15 @@ docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T db \
 docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T db \
   psql -U klubhub -d klubhub < "${WORK_DIR}/db.sql"
 
-# 2. Restore GarageHQ S3 storage (using aws s3 CLI with endpoint-url)
-echo "[restore] Restoring GarageHQ S3 storage..."
+# 2. Restore Garage S3 storage (using aws s3 CLI with endpoint-url)
+echo "[restore] Restoring Garage S3 storage..."
 
 AWS_ENDPOINT="${S3_ENDPOINT:-http://127.0.0.1:39000}"
 AWS_ACCESS_KEY="${S3_ACCESS_KEY}"
 AWS_SECRET_KEY="${S3_SECRET_KEY}"
 S3_BUCKET="${S3_BUCKET:-klubhub}"
 
-# Use aws s3 cli with endpoint-url for GarageHQ; --delete removes objects not in backup
+# Use aws s3 cli with endpoint-url for Garage; --delete removes objects not in backup
 aws s3 sync "${WORK_DIR}/storage/" "s3://${S3_BUCKET}" \
   --endpoint-url "${AWS_ENDPOINT}" \
   --access-key "${AWS_ACCESS_KEY}" \

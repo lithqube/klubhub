@@ -14,7 +14,7 @@ KlubHub DJ ships in eleven phases (including inserted phases), driven by a hard 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 0: Infrastructure** - Four-service Docker Compose stack, Go API scaffold, health endpoint, embedded migrations, backup/restore scripts
-- [x] **Phase 0.5: GarageHQ S3 Storage** - INSERTED — Replace MinIO with GarageHQ for S3-compatible object storage; configure GarageHQ in docker-compose.yml with same env var interface (MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY); add region support (MINIO_REGION); verify all storage operations (cover art, tracklist images, EPK photos, PDFs) work against GarageHQ S3 API (completed 2026-04-27)
+- [x] **Phase 0.5: Garage S3 Storage** - INSERTED — Replace MinIO with Garage for S3-compatible object storage; configure Garage in docker-compose.yml with same env var interface (MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY); add region support (MINIO_REGION); verify all storage operations (cover art, tracklist images, EPK photos, PDFs) work against Garage S3 API (completed 2026-04-27)
 - [x] **Phase 1: Tracklist Image Generator** - DJ file upload and parsing, cover art fetch chain, image generation with presets, live preview, PNG/JPEG export
 - [x] **Phase 1.5: Design System Foundation** - INSERTED — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition, responsive design
 - [x] **Phase 1.5.5: Kinetic HUD UI Migration** - INSERTED — Full pixel-perfect redesign to Kinetic HUD aesthetic; new Dashboard page; EPK split panel; Gigs/Finance pages (UI); 3-way theme switcher; mock data layer
@@ -44,23 +44,23 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 00-03-PLAN.md — Health endpoint + user_settings CRUD with optimistic concurrency
 - [x] 00-04-PLAN.md — Backup/restore scripts + end-to-end smoke checkpoint
 
-### Phase 0.5: GarageHQ S3 Storage 🔜 (INSERTED)
+### Phase 0.5: Garage S3 Storage 🔜 (INSERTED)
 
-**Goal**: Replace MinIO with GarageHQ as the S3-compatible object storage layer. GarageHQ is an open-source, actively-maintained S3 server (https://garagehq.deuxfleurs.fr/) that works in single-node and distributed modes. The S3 API is compatible with the existing minio-go client — no application code changes needed.
+**Goal**: Replace MinIO with Garage as the S3-compatible object storage layer. Garage is an open-source, actively-maintained S3 server (https://Garage.deuxfleurs.fr/) that works in single-node and distributed modes. The S3 API is compatible with the existing minio-go client — no application code changes needed.
 **Depends on**: Phase 0
 **Requirements**: INFRA-01 (storage layer swap)
 **Status**: In progress — planning complete
 **Plans**:
 
-- [ ] 00.5-01-PLAN.md — Docker Compose + env vars + storage config for GarageHQ
+- [ ] 00.5-01-PLAN.md — Docker Compose + env vars + storage config for Garage
 - [ ] 00.5-02-PLAN.md — Backup/restore scripts + storage operations verification
 
 **Key deliverables:**
-- GarageHQ `storage` service in `docker-compose.yml` replacing MinIO
+- Garage `storage` service in `docker-compose.yml` replacing MinIO
 - All `MINIO_*` env vars renamed to `S3_*` (backward alias preserved for existing deployments)
-- `MINIO_REGION` support added (GarageHQ requires explicit region)
+- `MINIO_REGION` support added (Garage requires explicit region)
 - All storage operations tested: cover art upload/cache, tracklist image export, EPK photo upload, PDF export
-- Backup/restore scripts updated for GarageHQ (`mc` CLI replaced with Garage-specific commands or `aws s3`)
+- Backup/restore scripts updated for Garage (`mc` CLI replaced with Garage-specific commands or `aws s3`)
 
 ### Phase 1: Tracklist Image Generator ✅
 
@@ -236,7 +236,7 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 | Phase                            | Plans Complete | Status       | Completed  |
 | -------------------------------- | -------------- | ------------ | ---------- |
 | 0. Infrastructure                | 4/4            | ✅ Complete  | 2026-03-14 |
-| 0.5. GarageHQ S3 Storage         | 2/2 | Complete   | 2026-04-27 |
+| 0.5. Garage S3 Storage         | 2/2 | Complete   | 2026-04-27 |
 | 1. Tracklist Image Generator     | 5/6            | ✅ Complete* | 2026-03-16 |
 | 1.5. Design System Foundation    | 7/7            | ✅ Complete  | 2026-03-22 |
 | 1.5.5. Kinetic HUD Migration     | —              | ✅ Complete  | 2026-04-27 |

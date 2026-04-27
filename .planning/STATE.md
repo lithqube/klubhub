@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 0.5-garagehq-s3-storage
+current_phase: 0.5-Garage-s3-storage
 current_plan: 02
 status: completed
 last_updated: "2026-04-27T13:37:34.212Z"
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v1.0 milestone
-**Current phase:** 0.5-garagehq-s3-storage
+**Current phase:** 0.5-Garage-s3-storage
 **Current plan:** not started
 **Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03
-**Status:** Phase 1.5.5 (Kinetic HUD UI migration) complete. Phase 0.5 (GarageHQ S3 storage) is next — inserted phase to replace MinIO with GarageHQ before Phase 4 (Gig Tracker) begins.
+**Status:** Phase 1.5.5 (Kinetic HUD UI migration) complete. Phase 0.5 (Garage S3 storage) is next — inserted phase to replace MinIO with Garage before Phase 4 (Gig Tracker) begins.
 
 ## Completed Phases Summary
 
@@ -133,8 +133,8 @@ A full pixel-perfect UI migration was performed against the `ui_kits/dj-app/inde
 - [Phase 1.5.5-kinetic-hud]: ThemeMode expanded to 'dark' | 'system' | 'light' — 3-way switcher; useTheme exports both mode (user choice) and theme (resolved DOM value)
 - [Phase 1.5.5-kinetic-hud]: TracklistHistory replaced Table/Button/Dialog shadcn components with native HUD HTML — no shadcn dependency in history list
 - [Phase 1.5.5-kinetic-hud]: gigs.vue and finance.vue are new pages with static mock UI data — wired to real API in Phase 4 (Gig Tracker) and Phase 5 (Finance Tracker)
-- [Phase 0.5-garagehq]: GarageHQ (https://garagehq.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. GarageHQ is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
-- [Phase 00.5]: GarageHQ (https://garagehq.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. GarageHQ is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
+- [Phase 0.5-Garage]: Garage (https://Garage.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. Garage is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
+- [Phase 00.5]: Garage (https://Garage.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. Garage is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
 
 ## Session Log
 
@@ -158,11 +158,11 @@ A full pixel-perfect UI migration was performed against the `ui_kits/dj-app/inde
 - 2026-03-23: Phase 03-epk-press-kit-builder COMPLETE — all 7 plans executed and human-verified
 - 2026-04-27: Phase 1.5.5 Kinetic HUD UI migration COMPLETE — full pixel-perfect redesign; new gigs/finance pages; mock data layer; proxy conditional on env var
 - 2026-04-27: Documentation review and update — CLAUDE.md rewritten (was duplicate of AGENTS.md); README.md refreshed; STATE.md progress counters updated (7 completed phases)
-- 2026-04-27: Added Phase 0.5 (GarageHQ S3 Storage) — inserted between Phase 0 and Phase 1 to replace MinIO with GarageHQ (open-source, actively maintained S3 server); updated ROADMAP.md with phase entry and progress table; README.md gains mock vs backend status table and GarageHQ compatibility table
+- 2026-04-27: Added Phase 0.5 (Garage S3 Storage) — inserted between Phase 0 and Phase 1 to replace MinIO with Garage (open-source, actively maintained S3 server); updated ROADMAP.md with phase entry and progress table; README.md gains mock vs backend status table and Garage compatibility table
 
 ---
 
-_Phase: 0.5-garagehq-s3-storage_
+_Phase: 0.5-Garage-s3-storage_
 _Status: NOT STARTED — planning next_
 
 ## Mock vs Backend Implementation Audit

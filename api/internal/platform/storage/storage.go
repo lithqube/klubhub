@@ -20,13 +20,13 @@ type Client struct {
 	bucket         string
 }
 
-// New creates a new MinIO Client from the given configuration.
-// The internal MinIO client uses cfg.MinioEndpoint for API calls.
-// cfg.MinioPublicEndpoint is stored separately for presigned URL base generation.
+// New creates a new S3-compatible client (MinIO or Garage) from the given configuration.
+// The internal client uses cfg.S3Endpoint for API calls.
+// cfg.S3PublicEndpoint is stored separately for presigned URL base generation.
 func New(cfg *config.Config) (*Client, error) {
-	mc, err := minio.New(cfg.MinioEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
-		Secure: cfg.MinioUseSSL,
+	mc, err := minio.New(cfg.S3Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.S3AccessKey, cfg.S3SecretKey, ""),
+		Secure: cfg.S3UseSSL,
 	})
 	if err != nil {
 		return nil, err
@@ -34,8 +34,8 @@ func New(cfg *config.Config) (*Client, error) {
 
 	return &Client{
 		mc:             mc,
-		publicEndpoint: cfg.MinioPublicEndpoint,
-		bucket:         cfg.MinioBucket,
+		publicEndpoint: cfg.S3PublicEndpoint,
+		bucket:         cfg.S3Bucket,
 	}, nil
 }
 

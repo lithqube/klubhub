@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # KlubHub DJ — Backup Script
-# Dumps PostgreSQL and mirrors GarageHQ S3 storage into a timestamped archive.
+# Dumps PostgreSQL and mirrors Garage S3 storage into a timestamped archive.
 # Usage: bash scripts/backup.sh [output-dir]
 # Requires: docker compose stack running (all four services healthy)
-# Note: Uses aws s3 CLI with --endpoint-url for GarageHQ S3 API (port 39000)
+# Note: Uses aws s3 CLI with --endpoint-url for Garage S3 API (port 39000)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,8 +23,8 @@ docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T db \
   pg_dump -U klubhub -d klubhub --no-password \
   > "${WORK_DIR}/db.sql"
 
-# 2. GarageHQ S3 storage backup (using aws s3 CLI with endpoint-url)
-echo "[backup] Mirroring GarageHQ S3 storage..."
+# 2. Garage S3 storage backup (using aws s3 CLI with endpoint-url)
+echo "[backup] Mirroring Garage S3 storage..."
 mkdir -p "${WORK_DIR}/storage"
 
 AWS_ENDPOINT="${S3_ENDPOINT:-http://127.0.0.1:39000}"
@@ -32,7 +32,7 @@ AWS_ACCESS_KEY="${S3_ACCESS_KEY}"
 AWS_SECRET_KEY="${S3_SECRET_KEY}"
 S3_BUCKET="${S3_BUCKET:-klubhub}"
 
-# Use aws s3 cli with endpoint-url for GarageHQ
+# Use aws s3 cli with endpoint-url for Garage
 aws s3 sync "s3://${S3_BUCKET}" "${WORK_DIR}/storage/" \
   --endpoint-url "${AWS_ENDPOINT}" \
   --access-key "${AWS_ACCESS_KEY}" \
