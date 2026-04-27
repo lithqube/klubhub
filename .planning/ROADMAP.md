@@ -49,8 +49,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: Replace MinIO with GarageHQ as the S3-compatible object storage layer. GarageHQ is an open-source, actively-maintained S3 server (https://garagehq.deuxfleurs.fr/) that works in single-node and distributed modes. The S3 API is compatible with the existing minio-go client — no application code changes needed.
 **Depends on**: Phase 0
 **Requirements**: INFRA-01 (storage layer swap)
-**Status**: Not started — inserted after Phase 0
-**Plans**: TBD
+**Status**: In progress — planning complete
+**Plans**:
+
+- [ ] 00.5-01-PLAN.md — Docker Compose + env vars + storage config for GarageHQ
+- [ ] 00.5-02-PLAN.md — Backup/restore scripts + storage operations verification
 
 **Key deliverables:**
 - GarageHQ `storage` service in `docker-compose.yml` replacing MinIO
@@ -233,7 +236,7 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 | Phase                            | Plans Complete | Status       | Completed  |
 | -------------------------------- | -------------- | ------------ | ---------- |
 | 0. Infrastructure                | 4/4            | ✅ Complete  | 2026-03-14 |
-| 0.5. GarageHQ S3 Storage         | 0/TBD          | 🔜 Next      | —          |
+| 0.5. GarageHQ S3 Storage         | 0/2            | ◆ Planning  | —          |
 | 1. Tracklist Image Generator     | 5/6            | ✅ Complete* | 2026-03-16 |
 | 1.5. Design System Foundation    | 7/7            | ✅ Complete  | 2026-03-22 |
 | 1.5.5. Kinetic HUD Migration     | —              | ✅ Complete  | 2026-04-27 |
