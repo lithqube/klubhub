@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # KlubHub DJ — Backup Script
-# Dumps PostgreSQL and mirrors MinIO data into a timestamped archive.
+# Dumps PostgreSQL and mirrors GarageHQ S3 storage into a timestamped archive.
 # Usage: bash scripts/backup.sh [output-dir]
 # Requires: docker compose stack running (all four services healthy)
+# Note: Uses aws s3 CLI with --endpoint-url for GarageHQ S3 API (port 39000)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,16 +23,21 @@ docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T db \
   pg_dump -U klubhub -d klubhub --no-password \
   > "${WORK_DIR}/db.sql"
 
-# 2. MinIO mirror
-echo "[backup] Mirroring MinIO storage..."
+# 2. GarageHQ S3 storage backup (using aws s3 CLI with endpoint-url)
+echo "[backup] Mirroring GarageHQ S3 storage..."
 mkdir -p "${WORK_DIR}/storage"
-docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T storage \
-  mc mirror /data "${WORK_DIR}/storage/" 2>/dev/null || true
-# Fallback: copy via docker cp if mc mirror fails
-if [ ! -d "${WORK_DIR}/storage" ] || [ -z "$(ls -A "${WORK_DIR}/storage" 2>/dev/null)" ]; then
-  CONTAINER_ID=$(docker compose -f "${PROJECT_ROOT}/docker-compose.yml" ps -q storage)
-  docker cp "${CONTAINER_ID}:/data/." "${WORK_DIR}/storage/"
-fi
+
+AWS_ENDPOINT="${S3_ENDPOINT:-http://127.0.0.1:39000}"
+AWS_ACCESS_KEY="${S3_ACCESS_KEY}"
+AWS_SECRET_KEY="${S3_SECRET_KEY}"
+S3_BUCKET="${S3_BUCKET:-klubhub}"
+
+# Use aws s3 cli with endpoint-url for GarageHQ
+aws s3 sync "s3://${S3_BUCKET}" "${WORK_DIR}/storage/" \
+  --endpoint-url "${AWS_ENDPOINT}" \
+  --access-key "${AWS_ACCESS_KEY}" \
+  --secret-key "${AWS_SECRET_KEY}" \
+  --no-verify-ssl 2>/dev/null || true
 
 # 3. Archive
 echo "[backup] Creating archive: ${ARCHIVE}"
