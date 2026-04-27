@@ -14,9 +14,12 @@ type Config struct {
 
 	// Optional: MinIO public endpoint used for presigned URL generation.
 	// Defaults to the internal endpoint if not set.
-	MinioPublicEndpoint string `envconfig:"MINIO_PUBLIC_ENDPOINT" default:"http://127.0.0.1:9000"`
-	MinioBucket         string `envconfig:"MINIO_BUCKET" default:"klubhub-dj"`
+	MinioPublicEndpoint string `envconfig:"MINIO_PUBLIC_ENDPOINT" default:"http://127.0.0.1:39000"`
+	MinioBucket         string `envconfig:"MINIO_BUCKET" default:"klubhub"`
 	MinioUseSSL         bool   `envconfig:"MINIO_USE_SSL" default:"false"`
+
+	// Optional: S3 region (required for GarageHQ, optional for MinIO)
+	S3Region string `envconfig:"S3_REGION" default:""`
 
 	// Optional: HTTP server settings
 	BindAddress string `envconfig:"BIND_ADDRESS" default:"127.0.0.1"`
