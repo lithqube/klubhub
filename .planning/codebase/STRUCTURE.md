@@ -1,189 +1,214 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-03-14
+**Analysis Date:** 2026-04-27
 
 ## Directory Layout
 
 ```
 klubhub-dj/
-├── apps/                          # Nx workspace applications
-│   ├── dj/                        # Main Nuxt application
-│   │   ├── app/                   # Frontend application code
-│   │   │   ├── pages/             # File-based routing pages
-│   │   │   ├── components/        # Reusable Vue components
-│   │   │   ├── assets/            # Global stylesheets
-│   │   │   └── app.vue            # Root layout component
-│   │   ├── server/                # Backend server routes
-│   │   │   └── api/               # API endpoint handlers
-│   │   ├── public/                # Static assets (favicon, etc)
-│   │   ├── nuxt.config.ts         # Nuxt framework configuration
-│   │   ├── vitest.config.ts       # Unit test configuration
-│   │   ├── eslint.config.mjs      # ESLint rules for app
-│   │   ├── tsconfig.json          # TypeScript references config
-│   │   ├── tsconfig.app.json      # Application-specific TypeScript config
-│   │   └── tsconfig.spec.json     # Test-specific TypeScript config
+├── apps/
+│   ├── dj/                              # Nuxt 4 frontend application
+│   │   ├── app/                         # Frontend application code
+│   │   │   ├── pages/                   # File-based routing pages
+│   │   │   │   ├── index.vue            # Dashboard (/)
+│   │   │   │   ├── tracklist.vue        # Tracklist generator (/tracklist)
+│   │   │   │   ├── social.vue           # Social scheduler (/social)
+│   │   │   │   ├── epk.vue              # EPK builder (/epk)
+│   │   │   │   ├── gigs.vue             # Gig tracker (/gigs) — mock UI
+│   │   │   │   └── finance.vue          # Finance tracker (/finance) — mock UI
+│   │   │   ├── components/
+│   │   │   │   ├── TheNav.vue           # Desktop sidebar (220px, lg:flex)
+│   │   │   │   ├── TheMobileHeader.vue  # Mobile brand bar + 3-way theme (lg:hidden)
+│   │   │   │   ├── TheBottomNav.vue     # Mobile bottom nav 5 items (lg:hidden)
+│   │   │   │   ├── TheStatusBar.vue     # Desktop status bar (API latency, storage, sync)
+│   │   │   │   ├── TrackcardPreview.vue # Tracklist image preview orchestrator
+│   │   │   │   ├── trackcard/           # TrackcardPreview sub-components (6 files)
+│   │   │   │   ├── tracklist/           # Feature components
+│   │   │   │   │   ├── TracklistUploadZone.vue
+│   │   │   │   │   ├── TracklistEditor.vue
+│   │   │   │   │   ├── TracklistCustomizer.vue
+│   │   │   │   │   ├── TracklistExporter.vue
+│   │   │   │   │   └── TracklistHistory.vue
+│   │   │   │   ├── social/              # Social scheduler components
+│   │   │   │   │   ├── SocialPageHeader.vue
+│   │   │   │   │   ├── SocialTabs.vue
+│   │   │   │   │   ├── SocialPostCompose.vue
+│   │   │   │   │   ├── SocialQueueGrid.vue
+│   │   │   │   │   ├── SocialPostCard.vue
+│   │   │   │   │   ├── SocialPostCardFailed.vue
+│   │   │   │   │   ├── SocialCalendarView.vue
+│   │   │   │   │   └── SocialConnectionBanner.vue
+│   │   │   │   ├── epk/                 # EPK section components
+│   │   │   │   │   ├── EpkBioSection.vue
+│   │   │   │   │   ├── EpkPhotosSection.vue
+│   │   │   │   │   ├── EpkTechRiderSection.vue
+│   │   │   │   │   ├── EpkStagePlotSection.vue
+│   │   │   │   │   ├── EpkGigHighlightsSection.vue
+│   │   │   │   │   ├── EpkPressQuotesSection.vue
+│   │   │   │   │   ├── EpkSocialLinksSection.vue
+│   │   │   │   │   ├── EpkContactInfoSection.vue
+│   │   │   │   │   └── EpkExportPanel.vue
+│   │   │   │   └── ui/                  # shadcn-vue base components
+│   │   │   ├── composables/
+│   │   │   │   ├── useTheme.ts          # 3-way theme (dark|system|light)
+│   │   │   │   ├── useTracklist.ts      # Tracklist API calls
+│   │   │   │   ├── useEpkAutosave.ts    # Debounced EPK autosave
+│   │   │   │   └── useSocialPostForm.ts # Social post form state
+│   │   │   ├── stores/
+│   │   │   │   ├── tracklist.ts         # useTracklistStore
+│   │   │   │   ├── social.ts            # useSocialStore
+│   │   │   │   ├── epk.ts               # useEpkStore
+│   │   │   │   ├── settings.ts          # useSettingsStore
+│   │   │   │   ├── ui.ts                # useUiStore
+│   │   │   │   └── __tests__/           # Store unit tests
+│   │   │   ├── types/
+│   │   │   │   ├── tracklist.ts         # Tracklist, Track, ParseWarning
+│   │   │   │   ├── social.ts            # SocialAccount, ScheduledPost, PostStatus
+│   │   │   │   └── epk.ts               # EPKContent, EPKExport, PressQuote
+│   │   │   ├── utils/
+│   │   │   │   └── design-tokens.ts     # Image generation PRESETS (5 color schemes)
+│   │   │   └── assets/css/
+│   │   │       └── styles.css           # Tailwind @theme tokens + Kinetic HUD @layer components
+│   │   ├── server/
+│   │   │   ├── api/
+│   │   │   │   ├── v1/                  # Mock data handlers (no NUXT_PUBLIC_API_BASE)
+│   │   │   │   │   ├── settings.get.ts
+│   │   │   │   │   ├── tracklists/
+│   │   │   │   │   │   ├── index.get.ts
+│   │   │   │   │   │   └── [id].get.ts
+│   │   │   │   │   ├── social/
+│   │   │   │   │   │   ├── posts.get.ts
+│   │   │   │   │   │   ├── posts.post.ts
+│   │   │   │   │   │   └── accounts.get.ts
+│   │   │   │   │   └── epk/
+│   │   │   │   │       ├── content.get.ts
+│   │   │   │   │       └── content.put.ts
+│   │   │   │   ├── greet.ts
+│   │   │   │   └── screenshot/tracklist/[id].get.ts
+│   │   │   └── plugins/
+│   │   │       └── playwright.ts        # Playwright singleton (graceful fallback)
+│   │   ├── public/                      # Static assets + variable fonts
+│   │   ├── nuxt.config.ts               # Nuxt config
+│   │   ├── vitest.config.ts
+│   │   ├── components.json              # shadcn-vue config
+│   │   └── tsconfig*.json
 │   │
-│   └── dj-e2e/                    # Playwright end-to-end tests
-│       ├── src/                   # E2E test specifications
-│       └── playwright.config.ts   # Playwright configuration
+│   └── dj-e2e/                          # Playwright E2E tests
+│       └── src/                         # Screenshot pipeline tests
 │
-├── docs/                          # Project documentation
-├── .planning/                     # GSD planning documents
-│   └── codebase/                  # Codebase analysis documents
+├── api/                                 # Go backend
+│   ├── cmd/api/
+│   │   └── main.go                      # Entry point (chi router, worker goroutine, SIGTERM)
+│   ├── internal/
+│   │   ├── config/                      # Environment variable loading
+│   │   ├── db/                          # pgxpool connection + embedded migrations
+│   │   ├── storage/                     # MinIO client wrapper
+│   │   ├── crypto/                      # Token encryption/decryption
+│   │   ├── health/                      # GET /api/v1/health
+│   │   ├── settings/                    # user_settings CRUD
+│   │   ├── tracklist/                   # Tracklist feature (parser, repo, service, handler)
+│   │   ├── social/                      # Social scheduler (repo, service, handler, worker, instagram client)
+│   │   └── epk/                         # EPK builder (repo, service, handler, PDF generator)
+│   └── migrations/                      # goose SQL files (001–004)
 │
-├── node_modules/                  # Installed dependencies (pnpm)
-├── .nx/                           # Nx workspace metadata
-├── .vscode/                       # VS Code workspace settings
-│
-├── package.json                   # Workspace root dependencies
-├── pnpm-workspace.yaml            # pnpm workspace configuration
-├── pnpm-lock.yaml                 # pnpm lock file
-├── tsconfig.base.json             # Base TypeScript configuration
-├── tsconfig.json                  # Root TypeScript references
-├── nx.json                        # Nx workspace configuration
-├── eslint.config.mjs              # Root ESLint configuration
-├── vitest.workspace.ts            # Vitest workspace configuration
-├── .editorconfig                  # Editor formatting rules
-├── .prettierrc                    # Prettier formatting config
-└── README.md                      # Workspace documentation
+├── docs/                                # BRD v2, NFR, architecture docs
+├── scripts/
+│   ├── backup.sh
+│   └── restore.sh
+├── .planning/                           # GSD planning documents
+│   ├── STATE.md                         # Current phase + decisions log
+│   ├── ROADMAP.md                       # All phases with status
+│   ├── PROJECT.md
+│   ├── REQUIREMENTS.md
+│   ├── codebase/                        # Architecture, stack, structure, conventions docs
+│   ├── phases/                          # Per-phase PLAN + SUMMARY files
+│   └── research/                        # Pre-project research docs
+├── docker-compose.yml
+├── .env.example
+├── nx.json
+├── package.json
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+└── README.md
 ```
-
-## Directory Purposes
-
-**apps/dj:**
-- Purpose: Full-stack Nuxt application serving as the main DJ platform
-- Contains: Frontend pages, components, server API routes, configuration files
-- Key files: `app/app.vue`, `nuxt.config.ts`, `app/pages/*`
-
-**apps/dj/app:**
-- Purpose: Frontend application code consumed by Nuxt
-- Contains: Vue components, pages, global assets, layouts
-- Key files: `app.vue` (root layout), `pages/index.vue`, `pages/about.vue`
-
-**apps/dj/app/pages:**
-- Purpose: File-based routing directory - each .vue file becomes a route
-- Contains: Page components that match URL paths
-- Key files: `index.vue` (root path `/`), `about.vue` (path `/about`)
-
-**apps/dj/app/components:**
-- Purpose: Reusable Vue components used across pages
-- Contains: Standalone component definitions
-- Key files: `NxWelcome.vue` (welcome/onboarding component)
-
-**apps/dj/app/assets:**
-- Purpose: Global application assets and stylesheets
-- Contains: CSS files imported globally via `nuxt.config.ts`
-- Key files: `css/styles.css`
-
-**apps/dj/server:**
-- Purpose: Backend server logic and API endpoints
-- Contains: H3 event handlers for HTTP endpoints
-- Key files: All files in `server/api/` become `/api/*` routes
-
-**apps/dj/server/api:**
-- Purpose: RESTful API endpoint definitions
-- Contains: Individual route handlers using h3
-- Key files: `greet.ts` (example endpoint accepting query parameters)
-
-**apps/dj/public:**
-- Purpose: Static files served at root URL
-- Contains: Favicon, robots.txt, other public assets
-- Key files: `favicon.ico`
-
-**apps/dj-e2e:**
-- Purpose: End-to-end testing suite using Playwright
-- Contains: Integration tests for full application flows
-- Key files: `src/example.spec.ts`
 
 ## Key File Locations
 
-**Entry Points:**
-- `apps/dj/app/app.vue`: Root layout component with navigation header and `<nuxt-page/>` outlet
-- `apps/dj/nuxt.config.ts`: Nuxt framework initialization and configuration
-- `apps/dj/app/pages/index.vue`: Home page (route: `/`)
+### Entry Points
 
-**Configuration:**
-- `nx.json`: Nx workspace task configuration and plugin setup
-- `tsconfig.base.json`: Base TypeScript compiler options (strict mode, ES2022 target)
-- `package.json`: Workspace root dependencies and metadata
-- `pnpm-workspace.yaml`: pnpm workspace package declaration
-- `vitest.workspace.ts`: Vitest test runner workspace configuration
+| File | Purpose |
+|---|---|
+| `apps/dj/app/app.vue` | Root layout: `hud-bg` shell, sidebar, mobile header, error boundary |
+| `apps/dj/app/pages/index.vue` | Dashboard page (`/`) — hero gig card, social queue, tracklists, finance |
+| `apps/dj/nuxt.config.ts` | Nuxt config; proxy conditional on `NUXT_PUBLIC_API_BASE` |
+| `api/cmd/api/main.go` | Go API entry point |
 
-**Core Logic:**
-- `apps/dj/server/api/greet.ts`: Example API endpoint demonstrating request handling
-- `apps/dj/app/components/NxWelcome.vue`: Reusable welcome component with prop-based customization
-- `apps/dj/app/pages/about.vue`: Simple about page example
+### Design System
 
-**Testing:**
-- `apps/dj-e2e/src/example.spec.ts`: Playwright test verifying page title contains "Welcome"
-- `apps/dj/vitest.config.ts`: Unit test configuration for Vitest
-- `apps/dj-e2e/playwright.config.ts`: E2E test configuration with automatic server startup
+| File | Purpose |
+|---|---|
+| `apps/dj/app/assets/css/styles.css` | All Tailwind `@theme` tokens + Kinetic HUD `@layer components` classes |
+| `apps/dj/app/utils/design-tokens.ts` | Image-generation PRESETS (color schemes for TrackcardPreview) |
+| `apps/dj/app/composables/useTheme.ts` | 3-way theme mode with localStorage persistence |
+
+### State
+
+| File | Purpose |
+|---|---|
+| `apps/dj/app/stores/tracklist.ts` | Upload state, parsed tracks, past tracklists |
+| `apps/dj/app/stores/social.ts` | Posts, account, compose panel — API calls live here |
+| `apps/dj/app/stores/epk.ts` | EPK content, photos, exports, save status |
+| `apps/dj/app/stores/settings.ts` | DJ name, logo, preset, field visibility |
+| `apps/dj/app/stores/ui.ts` | Step (upload/edit), loading flags, error strings |
+
+### Mock Data (dev only)
+
+| File | Endpoint |
+|---|---|
+| `apps/dj/server/api/v1/settings.get.ts` | `GET /api/v1/settings` |
+| `apps/dj/server/api/v1/tracklists/index.get.ts` | `GET /api/v1/tracklists` |
+| `apps/dj/server/api/v1/tracklists/[id].get.ts` | `GET /api/v1/tracklists/:id` |
+| `apps/dj/server/api/v1/social/posts.get.ts` | `GET /api/v1/social/posts` |
+| `apps/dj/server/api/v1/social/accounts.get.ts` | `GET /api/v1/social/accounts` |
+| `apps/dj/server/api/v1/epk/content.get.ts` | `GET /api/v1/epk/content` |
+| `apps/dj/server/api/v1/epk/content.put.ts` | `PUT /api/v1/epk/content` |
 
 ## Naming Conventions
 
 **Files:**
-- Page components: Lowercase with hyphens for multi-word names, `.vue` extension (e.g., `index.vue`, `about.vue`)
-- Reusable components: PascalCase for component definition (e.g., `NxWelcome.vue`)
-- API routes: Lowercase with hyphens, `.ts` extension (e.g., `greet.ts` maps to `/api/greet`)
-- Configuration: camelCase with `.config.` prefix (e.g., `nuxt.config.ts`, `eslint.config.mjs`)
-- Tests: Pattern `*.spec.ts` or `*.test.ts`
+- Page components: lowercase (e.g., `tracklist.vue`, `index.vue`)
+- Feature components: PascalCase (e.g., `TracklistUploadZone.vue`, `SocialPostCard.vue`)
+- Singleton app components: `The*` prefix (e.g., `TheNav.vue`, `TheMobileHeader.vue`)
+- Composables: `use*` camelCase (e.g., `useTheme.ts`, `useEpkAutosave.ts`)
+- Stores: `use*Store` (e.g., `useTracklistStore`, `useSocialStore`)
+- API server routes: `[name].[method].ts` or `[name].ts` (e.g., `posts.get.ts`, `settings.get.ts`)
+- Dynamic routes: `[param].get.ts` (e.g., `[id].get.ts`)
 
 **Directories:**
-- Lowercase, single words preferred (e.g., `app`, `server`, `api`, `pages`, `components`)
-- Multi-word directories: Lowercase with hyphens (e.g., `dj-e2e`)
-
-**TypeScript:**
-- Functions: camelCase (e.g., `defineEventHandler`, `getQuery`)
-- Types/Interfaces: PascalCase (e.g., `Event`)
-- Constants: UPPER_SNAKE_CASE or camelCase based on visibility
-- Props interfaces: Convention not yet established in codebase
+- Feature components grouped under their feature name (e.g., `components/tracklist/`, `components/social/`, `components/epk/`)
+- Sub-components of a complex component grouped in their parent's name folder (e.g., `trackcard/`)
 
 ## Where to Add New Code
 
-**New Frontend Feature/Page:**
-- Primary code: `apps/dj/app/pages/[feature-name].vue`
-- Reusable components: `apps/dj/app/components/[FeatureName].vue`
-- Styles: Scoped within component `<style scoped>` or global in `apps/dj/app/assets/css/`
-- Tests: Co-located as `pages/[feature-name].spec.ts`
+**New page (route):**
+- `apps/dj/app/pages/[feature].vue`
 
-**New API Endpoint:**
-- Implementation: `apps/dj/server/api/[route-name].ts`
-- Pattern: Wrap handler with `defineEventHandler()` and use h3 utilities (`getQuery`, `getBody`, etc)
-- Route path: Derived from file path (e.g., `api/users/get.ts` becomes `POST /api/users/get`)
+**New feature components:**
+- `apps/dj/app/components/[feature]/[ComponentName].vue`
 
-**New Component Library:**
-- Use Nx generator: `pnpm nx g @nx/vue:lib [library-name]`
-- Output: New directory under workspace root with own package.json and tsconfig
-- Import path: Use TypeScript path aliases defined in `tsconfig.base.json`
+**New Pinia store:**
+- `apps/dj/app/stores/[feature].ts` (setup function style, not options API)
 
-**Utilities & Helpers:**
-- Shared utils: Create new lib via Nx generator or add to `apps/dj/` if app-specific
-- Server utilities: Place in `apps/dj/server/` as needed (not yet structured)
+**New mock API handler:**
+- `apps/dj/server/api/v1/[feature]/[action].[method].ts`
 
-## Special Directories
+**New Go feature:**
+- `api/internal/[feature]/` — model.go, repository.go, service.go, handler.go
+- Add migration: `api/migrations/00N_[feature].sql`
 
-**apps/dj/.nuxt:**
-- Purpose: Generated Nuxt build artifacts and type declarations
-- Generated: Yes (auto-generated by Nuxt on build/dev)
-- Committed: No (in .gitignore)
-- Contains: Cached outputs, TypeScript definitions for auto-imports
-
-**apps/dj/dist:**
-- Purpose: Production build output
-- Generated: Yes (created by `pnpm nx build dj`)
-- Committed: No (in .gitignore)
-- Contains: Bundled JavaScript, CSS, and static assets
-
-**apps/dj-e2e/test-output:**
-- Purpose: Test execution results and coverage reports
-- Generated: Yes (created by test runner)
-- Committed: No (in .gitignore)
-
-**node_modules:**
-- Purpose: Installed npm dependencies
-- Generated: Yes (created by pnpm install)
-- Committed: No (in .gitignore)
+**New design tokens / utility classes:**
+- `apps/dj/app/assets/css/styles.css` — inside `@layer components {}`
 
 ---
 
-*Structure analysis: 2026-03-14*
+*Structure analysis: 2026-04-27*

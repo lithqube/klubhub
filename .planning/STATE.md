@@ -1,16 +1,16 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: 1.2
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03-epk-press-kit-builder
-current_plan: 03-07 complete (7 of 7 plans in phase 03)
-status: executing
-last_updated: "2026-03-23T00:00:00.000Z"
+current_phase: 0.5-garagehq-s3-storage
+current_plan: not started
+status: planning
+last_updated: "2026-04-27T14:45:00.000Z"
 progress:
-  total_phases: 13
-  completed_phases: 5
+  total_phases: 14
+  completed_phases: 7
   total_plans: 31
-  completed_plans: 37
+  completed_plans: 44
 ---
 
 # Session State
@@ -22,11 +22,43 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v1.0 milestone
-**Current phase:** 03-epk-press-kit-builder
-**Current plan:** 03-02 complete (2 of N plans in phase 03)
-**Completed phase:** 02-social-media-scheduler
-**Status:** Phase 03 in progress — 03-02 complete
-**Note:** Phase 1.5 inserted between Phase 1 and Phase 2 — now complete. Phase 02 also complete. Both verified.
+**Current phase:** 0.5-garagehq-s3-storage
+**Current plan:** not started
+**Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03
+**Status:** Phase 1.5.5 (Kinetic HUD UI migration) complete. Phase 0.5 (GarageHQ S3 storage) is next — inserted phase to replace MinIO with GarageHQ before Phase 4 (Gig Tracker) begins.
+
+## Completed Phases Summary
+
+- **Phase 00 — Infrastructure**: 4/4 plans complete (2026-03-14)
+- **Phase 01 — Tracklist Image Generator**: 5/6 plans complete (01-06 text export pending) (2026-03-16)
+- **Phase 1.5 — Design System Foundation**: 7/7 plans complete (2026-03-22)
+- **Phase 1.5.5 — Kinetic HUD UI Migration**: full app redesign complete (2026-04-27)
+- **Phase 02 — Social Media Scheduler**: 7/7 plans complete (2026-03-22)
+- **Phase 03 — EPK / Press Kit Builder**: 7/7 plans complete (2026-03-23)
+
+## Phase 1.5.5 — Kinetic HUD UI Migration ✅
+
+A full pixel-perfect UI migration was performed against the `ui_kits/dj-app/index.html` design prototype:
+
+**What changed:**
+- `apps/dj/app/assets/css/styles.css` — ~400 lines of new HUD component classes added inside `@layer components {}`: `.hud-bg`, `.glass`, `.hud-card`, `.bracket-box`, `.pulse-dot`, `.theme-seg`/`.theme-opt`, `.spost*`, `.data-frag`, `.page-header`/`.page-title`/`.page-sub`, `.page-body`, `.tabs-bar`/`.tab-item`, `.prog-track`/`.prog-fill`, `.upload-zone`, `.bar-chart`/`.bar`, `.tx-row`, `.gig-list-row`, `.btn-hud`, `.badge-hud`, `.hud-input`/`.hud-textarea`, `.hud-toggle`, plus all `[data-theme="light"]` overrides
+- `apps/dj/app/composables/useTheme.ts` — 3-way theme mode (`dark | system | light`) replacing binary toggle; OS preference listener; `initTheme()` with localStorage persistence
+- `apps/dj/app/components/TheNav.vue` — 220px sidebar, corner bracket decoration, 9px nav font, dashed active border, 3-way theme switcher (Moon/Monitor/Sun icons)
+- `apps/dj/app/components/TheMobileHeader.vue` — HUD brand bar with 3-way theme toggle, pulse dot, `lg:hidden`
+- `apps/dj/app/components/TheBottomNav.vue` — HUD bottom nav with cyan top accent on active, `lg:hidden`
+- `apps/dj/app/app.vue` — root div uses `.hud-bg`, z-index layering for scanline overlay
+- `apps/dj/app/pages/index.vue` — full Dashboard page: hero gig card, social queue, tracklists, finance widgets
+- `apps/dj/app/pages/tracklist.vue` — HUD page header, split-panel edit step (editor left, 380px preview right)
+- `apps/dj/app/pages/epk.vue` — split panel: 240px controls + flex-1 live preview
+- `apps/dj/app/pages/social.vue` — HUD-styled connect banner, token expiry warning
+- `apps/dj/app/pages/gigs.vue` — NEW: gig list with date blocks, accent bars, stat cards
+- `apps/dj/app/pages/finance.vue` — NEW: bar chart, transactions, invoices with HUD styling
+- `apps/dj/app/components/social/SocialPageHeader.vue` — HUD page-header, pulse dot, `+ NEW POST` CTA
+- `apps/dj/app/components/tracklist/TracklistUploadZone.vue` — `.upload-zone.hud-card`, "DROP YOUR DJ HISTORY FILE" copy
+- `apps/dj/app/components/tracklist/TracklistHistory.vue` — removed shadcn Table/Button/Dialog; replaced with `.glass` list rows, `.data-frag` chips, `<Teleport>` delete confirm modal
+- `apps/dj/server/plugins/playwright.ts` — graceful error catch when Playwright browsers not installed
+- `apps/dj/server/api/v1/` — NEW: mock data handlers for all `/api/v1/*` routes (tracklists, social posts/accounts, epk/content, settings)
+- `apps/dj/nuxt.config.ts` — proxy rules now conditional on `NUXT_PUBLIC_API_BASE` env var; omitting it routes to Nitro mock handlers instead
 
 ## Decisions
 
@@ -95,35 +127,13 @@ See: .planning/PROJECT.md
 - [Phase 03-epk-press-kit-builder]: EpkSocialLinksSection and EpkContactInfoSection call settings API directly — social_links/contact_info live in user_settings, not EPK content endpoint
 - [Phase 03-epk-press-kit-builder]: Import from Gigs stub visible but disabled with title tooltip — deferred until Gig Tracker phase
 - [Phase 03-epk-press-kit-builder]: EPK inserted between SOCIAL and GIGS in both nav components; TheBottomNav replaces FINANCE with EPK keeping 5 items
-
-## Performance Metrics
-
-| Phase                          | Plan | Duration | Tasks | Files |
-| ------------------------------ | ---- | -------- | ----- | ----- |
-| 01-tracklist-image-generator   | 02   | 45 min   | 4     | 5     |
-| 01-tracklist-image-generator   | 03   | 45 min   | 3     | 8     |
-| 01-tracklist-image-generator   | 04   | 10 min   | 3     | 11    |
-| 01-tracklist-image-generator   | 05   | 2 min    | 2     | 0     |
-| 1.5-design-system-foundation   | 01   | 20 min   | 3     | 6     |
-| 1.5-design-system-foundation   | 03   | 45 min   | 2     | 12    |
-| 1.5-design-system-foundation   | 04   | 25 min   | 3     | 9     |
-| Phase 1.5 P05 | 15 | 3 tasks | 6 files |
-| Phase 02-social-media-scheduler P03 | 15 | 2 tasks | 5 files |
-| Phase 02-social-media-scheduler P01 | 10 min | 2 tasks | 11 files |
-| Phase 02-social-media-scheduler P05 | 25min | 2 tasks | 6 files |
-| Phase 02-social-media-scheduler P04 | 25 min | 3 tasks | 8 files |
-| Phase 02-social-media-scheduler P02 | 15 min | 2 tasks | 5 files |
-| Phase 02-social-media-scheduler P06 | 10 min | 1 tasks | 3 files |
-| Phase 02-social-media-scheduler P07 | 15 min | 2 tasks | 0 files |
-| Phase 02-social-media-scheduler P07 | 15 min | 2 tasks | 0 files |
-| Phase 02-social-media-scheduler P08 | 3 min | 2 tasks | 2 files |
-| Phase 1.5-design-system-foundation P06 | 15 min | 2 tasks | 0 files |
-| 03-epk-press-kit-builder | 01 | 4 min | 2 | 4 |
-| 03-epk-press-kit-builder | 02 | 9 min | 2 | 8 |
-| Phase 03-epk-press-kit-builder P03 | 15 | 2 tasks | 4 files |
-| Phase 03-epk-press-kit-builder P04 | 14 min | 2 tasks | 8 files |
-| Phase 03-epk-press-kit-builder P05 | 8 min | 2 tasks | 7 files |
-| Phase 03-epk-press-kit-builder P06 | 6 min | 2 tasks | 4 files |
+- [Phase 1.5.5-kinetic-hud]: Proxy in nuxt.config.ts is now conditional on NUXT_PUBLIC_API_BASE — when unset, Nitro serves mock handlers from server/api/v1/
+- [Phase 1.5.5-kinetic-hud]: Mock data handlers at server/api/v1/{settings,tracklists,social,epk} serve all API routes for frontend-only dev
+- [Phase 1.5.5-kinetic-hud]: Playwright plugin in server/plugins/playwright.ts now wraps launch() in try/catch — graceful warn instead of crash when browsers not installed
+- [Phase 1.5.5-kinetic-hud]: ThemeMode expanded to 'dark' | 'system' | 'light' — 3-way switcher; useTheme exports both mode (user choice) and theme (resolved DOM value)
+- [Phase 1.5.5-kinetic-hud]: TracklistHistory replaced Table/Button/Dialog shadcn components with native HUD HTML — no shadcn dependency in history list
+- [Phase 1.5.5-kinetic-hud]: gigs.vue and finance.vue are new pages with static mock UI data — wired to real API in Phase 4 (Gig Tracker) and Phase 5 (Finance Tracker)
+- [Phase 0.5-garagehq]: GarageHQ (https://garagehq.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. GarageHQ is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
 
 ## Session Log
 
@@ -134,7 +144,7 @@ See: .planning/PROJECT.md
 - 2026-03-14: Phase 00-infrastructure COMPLETE — verified 10/11 requirements
 - 2026-03-16: Completed 01-03 (artwork fetch pipeline)
 - 2026-03-16: Completed 01-04 (Playwright screenshot pipeline)
-- 2026-03-16: Completed 01-05 (E2E smoke test + human verification - all 28 TRKL requirements verified)
+- 2026-03-16: Completed 01-05 (E2E smoke test + human verification — all 28 TRKL requirements verified)
 - 2026-03-20: Inserted Phase 1.5 (Design System Foundation) — Tailwind CSS + shadcn-vue + Cyberpunk HUD design language, Pinia state management, component decomposition
 - 2026-03-20: Completed 1.5-01 (Tailwind v4 + Cyberpunk HUD design tokens + variable fonts + all mockup-derived utilities)
 - 2026-03-20: Completed 1.5-03 (Pinia stores: settings, tracklist, ui + design-tokens.ts with 5 presets — 30 tests GREEN)
@@ -144,8 +154,58 @@ See: .planning/PROJECT.md
 - 2026-03-22: Phase 1.5-design-system-foundation COMPLETE — design system, mockup patterns, Pinia stores, component decomposition, singleton components, responsive mobile shell, light/dark theme
 - 2026-03-22: Completed 03-01 (EPK data layer — migration 004, EPKContent/EPKExport models, repository with 5 methods, 10 unit tests GREEN)
 - 2026-03-22: Completed 03-02 (EPK service layer + PDF generator + HTTP handler — 8 methods, renderEPKPDF+renderMarkdown, 8 routes at /api/v1/epk, 29 tests GREEN)
+- 2026-03-23: Phase 03-epk-press-kit-builder COMPLETE — all 7 plans executed and human-verified
+- 2026-04-27: Phase 1.5.5 Kinetic HUD UI migration COMPLETE — full pixel-perfect redesign; new gigs/finance pages; mock data layer; proxy conditional on env var
+- 2026-04-27: Documentation review and update — CLAUDE.md rewritten (was duplicate of AGENTS.md); README.md refreshed; STATE.md progress counters updated (7 completed phases)
+- 2026-04-27: Added Phase 0.5 (GarageHQ S3 Storage) — inserted between Phase 0 and Phase 1 to replace MinIO with GarageHQ (open-source, actively maintained S3 server); updated ROADMAP.md with phase entry and progress table; README.md gains mock vs backend status table and GarageHQ compatibility table
 
 ---
 
-_Phase: 03-epk-press-kit-builder_
-_Status: IN PROGRESS — plan 03-02 complete_
+_Phase: 0.5-garagehq-s3-storage_
+_Status: NOT STARTED — planning next_
+
+## Mock vs Backend Implementation Audit
+
+During documentation review (2026-04-27), each page and feature was audited against the actual codebase. Findings:
+
+### Pages — Mock vs Backend
+
+| Page | UI Status | Mock Data | Backend |
+|---|---|---|---|
+| `/` Dashboard | ✅ Complete | Static (no API) | — Phase 8 wiring |
+| `/tracklist` | ✅ Complete | GET /api/v1/tracklists | ✅ Full CRUD + generate |
+| `/social` | ✅ Complete | GET social/posts + accounts | ✅ Full CRUD + publish + worker |
+| `/epk` | ✅ Complete | GET/PUT /api/v1/epk/content | ✅ Full CRUD + photos + PDF |
+| `/gigs` | ⚠️ Mock UI | Static (hardcoded) | — Phase 4 |
+| `/finance` | ⚠️ Mock UI | Static (hardcoded) | — Phase 5 |
+
+### Go Backend — Per Package
+
+| Package | Handler | Service | Repository | Migration |
+|---|---|---|---|---|
+| platform/health | ✅ | — | — | — |
+| platform/storage | ✅ | — | ✅ | — |
+| platform/crypto | ✅ | — | — | AES-256-GCM token encryption |
+| settings | ✅ GET/PUT | ✅ | ✅ | 001 |
+| tracklist | ✅ CRUD+generate | ✅ | ✅ | 002 |
+| social | ✅ CRUD+retry | ✅ | ✅ | 003 |
+| social/worker | ✅ publish | ✅ | ✅ | 003 |
+| social/instagram | ✅ OAuth | ✅ | ✅ | 003 |
+| epk | ✅ CRUD | ✅ | ✅ | 004 |
+| epk/pdf | ✅ | ✅ | — | 004 |
+| artwork | — (workers only) | ✅ | ✅ | — (no migration) |
+| gig | — | — | — | — (Phase 4) |
+| finance | — | — | — | — (Phase 5) |
+
+### Mock Handlers at apps/dj/server/api/v1/
+
+| Endpoint | Mock File |
+|---|---|
+| GET /api/v1/settings | settings.get.ts |
+| GET /api/v1/tracklists | tracklists/index.get.ts |
+| GET /api/v1/tracklists/:id | tracklists/[id].get.ts |
+| GET /api/v1/social/posts | social/posts.get.ts |
+| POST /api/v1/social/posts | social/posts.post.ts |
+| GET /api/v1/social/accounts | social/accounts.get.ts |
+| GET /api/v1/epk/content | epk/content.get.ts |
+| PUT /api/v1/epk/content | epk/content.put.ts |
