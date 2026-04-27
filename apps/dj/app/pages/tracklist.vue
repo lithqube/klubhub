@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import TrackcardPreviewPanel from '@/components/trackcard/TrackcardPreviewPanel.vue';
-import TrackcardPreview from '@/components/TrackcardPreview.vue';
+import TrackcardPreviewPanel from '@/components/trackcard/TrackcardPreviewPanel.vue'
+import TrackcardPreview from '@/components/TrackcardPreview.vue'
 
-const settingsStore = useSettingsStore();
-const tracklistStore = useTracklistStore();
-const uiStore = useUiStore();
+useHead({ title: 'Tracklist — KlubHub DJ' })
 
-const { step } = storeToRefs(uiStore);
-const { tracklist, tracks } = storeToRefs(tracklistStore);
+const settingsStore = useSettingsStore()
+const tracklistStore = useTracklistStore()
+const uiStore = useUiStore()
+
+const { step } = storeToRefs(uiStore)
+const { tracklist, tracks } = storeToRefs(tracklistStore)
 const {
   djName,
   logoPath,
@@ -20,36 +22,44 @@ const {
   trackRangeStart,
   trackRangeEnd,
   customPlaceholderPath,
-} = storeToRefs(settingsStore);
+} = storeToRefs(settingsStore)
 
 onMounted(async () => {
-  await settingsStore.loadFromApi();
-});
+  await settingsStore.loadFromApi()
+})
 </script>
 
 <template>
-  <!-- min-h-dvh: avoids mobile-browser 100vh bug (UX law: viewport-units) -->
-  <div class="min-h-dvh p-4 md:p-6 lg:p-8">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <div class="page-title">TRACKLIST</div>
+        <div class="page-sub">UPLOAD · PARSE · EXPORT</div>
+      </div>
+    </div>
+
     <!-- Upload step -->
     <template v-if="step === 'upload'">
-      <div class="max-w-2xl mx-auto">
+      <div class="page-body" style="max-width:660px;">
         <TracklistUploadZone />
-        <TracklistHistory class="mt-8" />
+        <TracklistHistory />
       </div>
     </template>
 
     <!-- Edit step: editor left, preview right (desktop) -->
     <template v-else>
-      <div class="lg:grid lg:grid-cols-2 lg:gap-8">
-        <!-- Left column: editor + customizer + exporter -->
-        <div class="space-y-6">
+      <div class="page-body" style="flex-direction:row;gap:0;overflow:hidden;padding:0;">
+        <!-- Left: editor -->
+        <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px;">
           <TracklistEditor />
           <TracklistCustomizer />
           <TracklistExporter />
         </div>
 
-        <!-- Desktop preview column — TrackcardPreviewPanel wraps TrackcardPreview -->
-        <div class="hidden lg:block">
+        <!-- Right: desktop preview panel -->
+        <div class="hidden lg:flex" style="width:380px;flex-shrink:0;border-left:1px solid rgba(150,248,255,.08);overflow-y:auto;">
           <TrackcardPreviewPanel>
             <TrackcardPreview
               v-if="tracklist"
@@ -71,5 +81,6 @@ onMounted(async () => {
         </div>
       </div>
     </template>
+
   </div>
 </template>

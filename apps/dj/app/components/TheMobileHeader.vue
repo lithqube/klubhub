@@ -1,46 +1,47 @@
 <script setup lang="ts">
-/**
- * TheMobileHeader — Mobile-only top brand bar
- *
- * UI/UX Laws applied:
- *   Law of Common Region — Brand + status grouped; theme toggle clearly separated
- *   Fitts's Law          — Theme toggle: min 44×44px tap area
- *   Hick's Law           — Only 2 elements visible: brand and one action (theme toggle)
- *   Aesthetic Usability  — Mirrors sidebar logo area, consistent brand voice
- *
- * Hidden on desktop (lg:hidden) — sidebar provides the same information.
- */
-import { Sun, Moon } from 'lucide-vue-next'
+import { Sun, Moon, Monitor } from 'lucide-vue-next'
 
-const { isDark, toggleTheme } = useTheme()
+const { mode, setTheme } = useTheme()
+
+const opts = [
+  { id: 'dark',   icon: Moon    },
+  { id: 'system', icon: Monitor },
+  { id: 'light',  icon: Sun     },
+] as const
 </script>
 
 <template>
   <header
-    class="lg:hidden flex items-center justify-between px-4 py-3 bg-surface-container-low border-b border-outline-variant/20 flex-shrink-0"
+    class="lg:hidden flex-shrink-0"
+    style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(16,16,18,.92);border-bottom:1px solid rgba(150,248,255,.08);backdrop-filter:blur(12px);"
     aria-label="KlubHub DJ brand bar"
   >
     <!-- Brand -->
     <div>
-      <p class="font-command font-bold text-on-surface text-sm uppercase tracking-wide leading-none">
+      <div style="font-family:var(--font-command);font-size:13px;font-weight:800;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;line-height:1;">
         KlubHub DJ
-      </p>
-      <div class="flex items-center gap-1.5 mt-0.5">
-        <span class="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" aria-hidden="true" />
-        <span class="font-terminal tracking-terminal text-tertiary text-[9px] uppercase">
+      </div>
+      <div style="display:flex;align-items:center;gap:5px;margin-top:3px;">
+        <div class="pulse-dot" aria-hidden="true" />
+        <span style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);">
           STATUS: SYNCED
         </span>
       </div>
     </div>
 
-    <!-- Theme toggle: Fitts's Law — min 44×44px target -->
-    <button
-      class="flex items-center justify-center w-11 h-11 text-tertiary hover:text-primary transition-colors duration-200"
-      :aria-label="isDark ? 'Switch to Daytime HUD' : 'Switch to Kinetic HUD'"
-      :aria-pressed="!isDark"
-      @click="toggleTheme"
-    >
-      <component :is="isDark ? Sun : Moon" class="w-4 h-4" aria-hidden="true" />
-    </button>
+    <!-- 3-way theme toggle -->
+    <div class="theme-seg" style="gap:2px;">
+      <button
+        v-for="opt in opts"
+        :key="opt.id"
+        class="theme-opt"
+        :class="mode === opt.id ? 'active' : ''"
+        :aria-pressed="mode === opt.id"
+        style="width:32px;height:26px;"
+        @click="setTheme(opt.id)"
+      >
+        <component :is="opt.icon" style="width:11px;height:11px;" aria-hidden="true" />
+      </button>
+    </div>
   </header>
 </template>

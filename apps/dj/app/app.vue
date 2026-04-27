@@ -36,14 +36,13 @@ function handleError(error: Error) {
     Root layout: horizontal flex (sidebar + main column).
     min-h-dvh: avoids 100vh mobile-browser-chrome bug (UX law: viewport-units).
   -->
-  <div class="bg-surface min-h-dvh font-data text-on-surface flex">
+  <div class="hud-bg min-h-dvh font-data text-on-surface flex" style="position:relative;">
 
     <!-- Desktop sidebar (hidden on mobile via TheNav's own hidden lg:flex) -->
     <TheNav />
 
     <!-- Main column: full-width on mobile, fills remainder on desktop -->
-    <div class="flex-1 flex flex-col min-h-dvh overflow-hidden
-                pb-16 lg:pb-10">
+    <div class="flex-1 flex flex-col min-h-dvh overflow-hidden pb-16 lg:pb-10" style="position:relative;z-index:1;">
       <!--
         pb-16 (64px)  → clears TheBottomNav on mobile   (Fitts's Law: content not under tap targets)
         lg:pb-10      → clears TheStatusBar on desktop

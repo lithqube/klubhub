@@ -1,17 +1,4 @@
 <script setup lang="ts">
-/**
- * TheBottomNav — Mobile-only bottom navigation
- *
- * UI/UX Laws applied:
- *   Jakob's Law       — Familiar bottom-nav pattern; users know how this works
- *   Fitts's Law       — min-h-[56px] per item, generous tap area
- *   Miller's Law      — Exactly 5 items (7±2 cognitive limit)
- *   Hick's Law        — Fewer choices than sidebar (no support/logout/settings at this level)
- *   Law of Proximity  — Icon + label grouped; active indicator visually attached to item
- *
- * Hidden on desktop (lg:hidden) — sidebar takes over.
- * Safe-area padding prevents content hiding behind gesture bar (iOS) and nav bar (Android).
- */
 import {
   LayoutDashboard,
   Layers,
@@ -38,34 +25,32 @@ function isActive(to: string) {
 
 <template>
   <nav
-    class="fixed bottom-0 left-0 right-0 z-20 lg:hidden bg-surface-container-low border-t border-outline-variant/20"
-    style="padding-bottom: env(safe-area-inset-bottom, 0px)"
+    class="lg:hidden"
+    style="position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(16,16,18,.95);border-top:1px solid rgba(150,248,255,.08);backdrop-filter:blur(12px);padding-bottom:env(safe-area-inset-bottom, 0px);"
     aria-label="Primary navigation"
   >
-    <div class="flex items-stretch">
+    <div style="display:flex;align-items:stretch;">
       <NuxtLink
         v-for="item in primaryNav"
         :key="item.to"
         :to="item.to"
-        class="relative flex-1 flex flex-col items-center justify-center gap-1 py-3 min-h-[56px] transition-colors duration-200"
-        :class="isActive(item.to)
-          ? 'text-primary'
-          : 'text-tertiary'"
+        style="position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:10px 4px;min-height:56px;text-decoration:none;transition:color .15s;"
+        :style="isActive(item.to) ? 'color:var(--color-primary);' : 'color:var(--color-tertiary);'"
         :aria-label="item.label"
         :aria-current="isActive(item.to) ? 'page' : undefined"
       >
-        <!-- Active indicator: top accent bar (Gestalt continuity) -->
+        <!-- Top accent line on active -->
         <div
-          class="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 transition-all duration-200"
-          :class="isActive(item.to) ? 'gradient-cta' : 'bg-transparent'"
+          style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:32px;height:2px;transition:all .2s;"
+          :style="isActive(item.to) ? 'background:var(--color-primary);box-shadow:0 0 8px rgba(150,248,255,.5);' : 'background:transparent;'"
           aria-hidden="true"
         />
         <component
           :is="item.icon"
-          class="w-5 h-5 flex-shrink-0"
+          style="width:18px;height:18px;flex-shrink:0;"
           aria-hidden="true"
         />
-        <span class="font-terminal tracking-terminal text-[9px] uppercase leading-none">
+        <span style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;line-height:1;">
           {{ item.label }}
         </span>
       </NuxtLink>

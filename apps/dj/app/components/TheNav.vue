@@ -6,22 +6,29 @@ import {
   FileText,
   CalendarDays,
   Banknote,
-  LifeBuoy,
   LogOut,
-  Sun,
   Moon,
+  Monitor,
+  Sun,
 } from 'lucide-vue-next'
+import type { ThemeMode } from '~/composables/useTheme'
 
 const route = useRoute()
-const { isDark, toggleTheme } = useTheme()
+const { mode, setTheme } = useTheme()
 
 const primaryNav = [
-  { label: 'DASHBOARD',  icon: LayoutDashboard, to: '/' },
-  { label: 'TRACKLIST',  icon: Layers,           to: '/tracklist' },
-  { label: 'SOCIAL',     icon: Send,             to: '/social' },
-  { label: 'EPK',        icon: FileText,         to: '/epk' },
-  { label: 'GIGS',       icon: CalendarDays,     to: '/gigs' },
-  { label: 'FINANCE',    icon: Banknote,         to: '/finance' },
+  { label: 'DASHBOARD', icon: LayoutDashboard, to: '/' },
+  { label: 'TRACKLIST', icon: Layers,           to: '/tracklist' },
+  { label: 'SOCIAL',    icon: Send,             to: '/social' },
+  { label: 'EPK',       icon: FileText,         to: '/epk' },
+  { label: 'GIGS',      icon: CalendarDays,     to: '/gigs' },
+  { label: 'FINANCE',   icon: Banknote,         to: '/finance' },
+]
+
+const themeOptions: { id: ThemeMode; label: string; icon: typeof Moon }[] = [
+  { id: 'dark',   label: 'KINETIC', icon: Moon },
+  { id: 'system', label: 'SYSTEM',  icon: Monitor },
+  { id: 'light',  label: 'DAYTIME', icon: Sun },
 ]
 
 function isActive(to: string) {
@@ -31,68 +38,90 @@ function isActive(to: string) {
 </script>
 
 <template>
-  <!-- Fixed sidebar: 280px width, full height — desktop only (lg+) -->
-  <!-- Hidden on mobile: TheBottomNav + TheMobileHeader take over -->
-  <aside class="w-[280px] min-h-dvh bg-surface-container-low hidden lg:flex flex-col flex-shrink-0">
+  <!-- Sidebar: 220px, full height, desktop only -->
+  <aside
+    class="hidden lg:flex flex-col flex-shrink-0"
+    style="width:220px;min-width:220px;height:100vh;background:var(--color-surface-container-low);border-right:1px solid rgba(150,248,255,.08);position:relative;z-index:10;"
+  >
 
-    <!-- Logo area -->
-    <div class="px-6 py-5 border-b border-outline-variant/20">
-      <p class="font-command font-bold text-on-surface text-lg uppercase tracking-wide">
+    <!-- Logo area with bracket-box corner decoration -->
+    <div
+      class="bracket-box"
+      style="padding:16px 18px;border-bottom:1px solid rgba(150,248,255,.08);"
+    >
+      <div style="font-family:var(--font-command);font-size:14px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;text-transform:uppercase;">
         KlubHub DJ
-      </p>
-      <div class="flex items-center gap-2 mt-1">
-        <span class="w-2 h-2 rounded-full bg-green-400" aria-hidden="true" />
-        <span class="font-terminal tracking-terminal text-tertiary text-xs uppercase">
-          STATUS: SYNCED
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:5px;">
+        <div class="pulse-dot" aria-hidden="true" />
+        <span style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-tertiary);">
+          SYSTEM: ONLINE
         </span>
       </div>
     </div>
 
     <!-- Primary nav -->
-    <nav class="flex-1 px-4 py-4 space-y-1" aria-label="Primary navigation">
+    <nav
+      style="flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:1px;overflow-y:auto;"
+      aria-label="Primary navigation"
+    >
       <NuxtLink
         v-for="item in primaryNav"
         :key="item.to"
         :to="item.to"
-        class="flex items-center gap-3 px-4 py-3 transition-all duration-200"
-        :class="isActive(item.to)
-          ? 'nav-item-active'
-          : 'nav-item-inactive text-tertiary hover:text-on-surface'"
+        :aria-current="isActive(item.to) ? 'page' : undefined"
+        style="display:flex;align-items:center;gap:10px;padding:10px 12px;font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .15s;position:relative;text-decoration:none;"
+        :class="isActive(item.to) ? 'nav-item-active' : 'nav-item-inactive'"
+        :style="isActive(item.to)
+          ? 'color:var(--color-primary);box-shadow:inset 0 0 20px rgba(150,248,255,.04),var(--shadow-glow-primary);'
+          : 'color:var(--color-tertiary);'"
       >
-        <component :is="item.icon" class="w-4 h-4 flex-shrink-0" />
-        <span class="font-terminal tracking-terminal text-xs uppercase">{{ item.label }}</span>
+        <component
+          :is="item.icon"
+          style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;"
+          aria-hidden="true"
+        />
+        {{ item.label }}
       </NuxtLink>
     </nav>
 
-    <!-- Bottom: theme toggle + support + logout -->
-    <div class="px-4 py-4 border-t border-outline-variant/20 space-y-1">
+    <!-- Footer: theme switcher + logout -->
+    <div style="border-top:1px solid rgba(150,248,255,.08);">
 
-      <!-- Theme toggle: Daytime HUD ↔ Kinetic HUD -->
-      <button
-        class="w-full flex items-center gap-3 px-4 py-3 nav-item-inactive text-tertiary hover:text-primary transition-colors duration-200"
-        :aria-label="isDark ? 'Switch to Daytime HUD (light mode)' : 'Switch to Kinetic HUD (dark mode)'"
-        :aria-pressed="!isDark"
-        @click="toggleTheme"
-      >
-        <component :is="isDark ? Sun : Moon" class="w-4 h-4 flex-shrink-0" />
-        <span class="font-terminal tracking-terminal text-xs uppercase">
-          {{ isDark ? 'DAYTIME HUD' : 'KINETIC HUD' }}
-        </span>
-      </button>
+      <!-- 3-way theme segmented control -->
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(150,248,255,.08);">
+        <div style="font-family:var(--font-terminal);font-size:7px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-tertiary);margin-bottom:7px;">
+          DISPLAY MODE
+        </div>
+        <div class="theme-seg">
+          <button
+            v-for="opt in themeOptions"
+            :key="opt.id"
+            class="theme-opt"
+            :class="{ active: mode === opt.id }"
+            :aria-pressed="mode === opt.id"
+            :aria-label="`Switch to ${opt.label} mode`"
+            @click="setTheme(opt.id)"
+          >
+            <component
+              :is="opt.icon"
+              style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;"
+              aria-hidden="true"
+            />
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
 
+      <!-- Logout -->
       <button
-        class="w-full flex items-center gap-3 px-4 py-3 nav-item-inactive text-tertiary hover:text-on-surface transition-colors"
-        aria-label="Support"
-      >
-        <LifeBuoy class="w-4 h-4 flex-shrink-0" />
-        <span class="font-terminal tracking-terminal text-xs uppercase">SUPPORT</span>
-      </button>
-      <button
-        class="w-full flex items-center gap-3 px-4 py-3 nav-item-inactive text-tertiary hover:text-error transition-colors"
+        style="display:flex;align-items:center;gap:10px;padding:10px 12px;width:100%;font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);background:transparent;border:none;border-bottom:1px dashed rgba(150,248,255,.12);cursor:pointer;transition:all .15s;"
         aria-label="Log out"
+        @mouseenter="($event.currentTarget as HTMLElement).style.color = 'var(--color-error)'"
+        @mouseleave="($event.currentTarget as HTMLElement).style.color = 'var(--color-tertiary)'"
       >
-        <LogOut class="w-4 h-4 flex-shrink-0" />
-        <span class="font-terminal tracking-terminal text-xs uppercase">LOGOUT</span>
+        <LogOut style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;" aria-hidden="true" />
+        LOGOUT
       </button>
     </div>
 

@@ -38,44 +38,49 @@ function handleQuickExport() {
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col overflow-hidden">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
 
-    <!-- Page header -->
-    <SocialPageHeader :account="account" @disconnect="() => account && store.disconnectAccount(account!.id)" />
+    <!-- Page header — HUD design spec -->
+    <SocialPageHeader
+      :account="account"
+      @disconnect="() => account && store.disconnectAccount(account!.id)"
+      @new-post="handleAddToQueue"
+    />
 
-    <!-- Connection banner: responsive padding + Fitts's Law on CTA -->
+    <!-- Not-connected banner -->
     <div
       v-if="!account || account.status === 'disconnected'"
-      class="mx-4 md:mx-8 mt-4 px-4 md:px-5 py-3 border border-secondary/40 bg-secondary/10 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between"
+      style="margin:0 20px;margin-top:14px;padding:12px 16px;border:1px dashed rgba(150,248,255,.2);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"
+      class="glass"
     >
-      <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-        <span class="text-secondary font-terminal tracking-terminal text-xs uppercase">
-          ● INSTAGRAM NOT CONNECTED
-        </span>
-        <span class="font-data text-xs text-on-surface-variant">
-          Connect your Instagram account to start scheduling posts.
-        </span>
+      <div>
+        <div style="font-family:var(--font-command);font-size:11px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">
+          CONNECT INSTAGRAM
+        </div>
+        <div class="spost-meta" style="margin-top:2px;">
+          Authorize to enable direct publishing. Queue works offline.
+        </div>
       </div>
-      <button class="ghost-border px-4 min-h-[44px] w-full sm:w-auto font-terminal tracking-terminal text-xs uppercase text-secondary border-secondary/40 hover:border-secondary transition-colors">
-        CONNECT INSTAGRAM
+      <button class="btn-hud btn-hud-cta btn-hud-sm" style="padding:0 14px;">
+        AUTHORIZE →
       </button>
     </div>
 
-    <!-- Token expiry warning banner -->
+    <!-- Token expiry warning -->
     <div
       v-else-if="account && account.tokenExpiry && isTokenExpiringSoon(account.tokenExpiry)"
-      class="mx-4 md:mx-8 mt-4 px-4 md:px-5 py-3 border border-amber-500/40 bg-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between"
+      style="margin:0 20px;margin-top:14px;padding:12px 16px;border:1px dashed rgba(245,197,24,.3);background:rgba(245,197,24,.05);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"
     >
-      <span class="font-terminal tracking-terminal text-xs text-amber-400 uppercase">
+      <span style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:#F5C518;">
         ⚠ INSTAGRAM TOKEN EXPIRING SOON — RE-AUTHORIZE
       </span>
-      <button class="ghost-border px-4 min-h-[44px] w-full sm:w-auto font-terminal tracking-terminal text-xs uppercase text-amber-400 border-amber-500/40 hover:border-amber-400 transition-colors">
+      <button class="btn-hud btn-hud-ghost btn-hud-sm" style="padding:0 12px;border-color:rgba(245,197,24,.3);color:#F5C518;">
         RE-AUTHORIZE
       </button>
     </div>
 
     <!-- Main tabs content area -->
-    <div class="flex-1 flex flex-col overflow-hidden px-4 md:px-8 pt-4">
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;padding:0 20px;padding-top:14px;" class="social-tabs-wrapper">
       <SocialTabs
         :posts="posts"
         :compose-panel-open="composePanelOpen"

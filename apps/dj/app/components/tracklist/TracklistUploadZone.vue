@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useDropZone } from '@vueuse/core';
+import { ref, computed } from 'vue'
+import { useDropZone } from '@vueuse/core'
 import { CloudUpload } from 'lucide-vue-next';
 import { uploadTracklist } from '@/composables/useTracklist';
 
@@ -90,51 +90,34 @@ const hasFile = computed(() => !!uploadFile.value);
 
 <template>
   <div class="space-y-4">
-    <!-- Drop zone -->
+    <!-- Drop zone — HUD design spec: dashed ghost border, glow on hover -->
     <div
       ref="dropZoneRef"
-      :class="[
-        'flex flex-col items-center justify-center gap-4 p-12 cursor-pointer transition-all duration-200',
-        isOverDropZone
-          ? 'luminous-threshold bg-surface-container-low'
-          : 'ghost-border bg-transparent',
-      ]"
+      class="upload-zone hud-card"
+      :class="isOverDropZone ? 'luminous-threshold' : ''"
       @click="openFilePicker"
     >
-      <!-- Cloud upload icon -->
-      <CloudUpload class="w-10 h-10 text-primary" />
+      <CloudUpload
+        style="width:36px;height:36px;stroke:var(--color-primary);stroke-width:1.5;opacity:.5;"
+        aria-hidden="true"
+      />
 
-      <!-- Labels -->
-      <div class="text-center space-y-1">
-        <p class="font-command tracking-command text-on-surface text-sm uppercase font-bold">
-          DROP .XML OR .TXT
-        </p>
-        <p class="font-terminal tracking-terminal text-tertiary text-xs uppercase">
-          MAX_PAYLOAD: 50MB
-        </p>
+      <div style="font-family:var(--font-command);font-size:13px;font-weight:700;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">
+        DROP YOUR DJ HISTORY FILE
+      </div>
+      <div style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-tertiary);">
+        REKORDBOX · SERATO · TRAKTOR
       </div>
 
       <!-- File info when selected -->
-      <div v-if="hasFile" class="text-center mt-2">
-        <p class="font-data text-on-surface text-sm">{{ uploadFilename }}</p>
-        <p class="font-terminal tracking-terminal text-tertiary text-xs">{{ uploadFileSize }}</p>
+      <div v-if="hasFile" style="text-align:center;margin-top:4px;">
+        <div style="font-family:var(--font-data);font-size:12px;color:var(--color-on-surface);">{{ uploadFilename }}</div>
+        <div style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);text-transform:uppercase;letter-spacing:.05em;">{{ uploadFileSize }}</div>
       </div>
 
-      <!-- OR divider -->
-      <div class="flex items-center gap-4 w-full max-w-xs">
-        <div class="flex-1 h-px bg-outline-variant"></div>
-        <span class="font-terminal tracking-terminal text-tertiary text-xs uppercase">OR</span>
-        <div class="flex-1 h-px bg-outline-variant"></div>
+      <div style="font-family:var(--font-terminal);font-size:7px;letter-spacing:.06em;text-transform:uppercase;color:rgba(150,248,255,.4);margin-top:2px;">
+        OR CLICK TO BROWSE FILES
       </div>
-
-      <!-- File picker button -->
-      <Button
-        variant="default"
-        class="gradient-cta text-on-primary font-command tracking-command text-xs uppercase"
-        @click.stop="openFilePicker"
-      >
-        SELECT FILE
-      </Button>
 
       <input
         ref="fileInputRef"
@@ -146,26 +129,27 @@ const hasFile = computed(() => !!uploadFile.value);
     </div>
 
     <!-- Progress indicator -->
-    <div v-if="uploadLoading" class="mt-4">
-      <div class="flex justify-between items-baseline mb-1">
-        <span class="font-terminal tracking-terminal text-tertiary text-xs uppercase">
-          SYSTEM_PROCESS: TRACKLIST_IMPORT
-        </span>
-        <span class="font-terminal tracking-terminal text-primary text-xs">
+    <div v-if="uploadLoading" class="glass" style="padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span class="spost-meta">SYSTEM_PROCESS: TRACKLIST_IMPORT</span>
+        <span style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);">
           {{ Math.round(uploadProgressPct) }}%
         </span>
       </div>
-      <Progress :model-value="uploadProgressPct" />
+      <div class="prog-track">
+        <div class="prog-fill prog-fill-anim" :style="{ width: uploadProgressPct + '%' }" />
+      </div>
     </div>
 
     <!-- Error display -->
     <div
       v-if="uploadError"
-      class="p-3 ghost-border shadow-glow-error"
+      style="padding:12px 14px;border:1px dashed rgba(255,113,108,.3);box-shadow:0 0 16px rgba(255,113,108,.15);"
     >
-      <p class="font-terminal tracking-terminal text-error text-xs uppercase">
+      <span class="spost-meta" style="color:var(--color-error);">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
         ERROR: {{ uploadError }}
-      </p>
+      </span>
     </div>
   </div>
 </template>
