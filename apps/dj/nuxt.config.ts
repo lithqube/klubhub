@@ -48,4 +48,9 @@ export default defineNuxtConfig({
         },
       }
     : {},
+  runtimeConfig: {
+    public: {
+      icalSecret: process.env.ICAL_SECRET || '',
+    },
+  },
 }) as any;
