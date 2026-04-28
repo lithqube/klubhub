@@ -26,6 +26,8 @@ type ServiceIface interface {
 	DeleteGig(ctx context.Context, id uuid.UUID) error
 	LinkVenue(ctx context.Context, gigID, venueID uuid.UUID, isPrimary bool) error
 	LinkContact(ctx context.Context, gigID, contactID uuid.UUID, role string) error
+	GenerateCalendar(ctx context.Context, config CalendarConfig) (string, error)
+	GenerateBookingPDF(ctx context.Context, gigID uuid.UUID, djName string) ([]byte, string, error)
 }
 
 // NewHandler creates a Handler backed by the given service.
@@ -40,11 +42,13 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/", h.handleListGigs)
 	r.Post("/", h.handleCreateGig)
 	r.Get("/autocomplete", h.handleAutocomplete)
+	r.Get("/calendar.ics", h.handleCalendarICS)
 	r.Get("/{id}", h.handleGetGig)
 	r.Put("/{id}", h.handleUpdateGig)
 	r.Delete("/{id}", h.handleDeleteGig)
 	r.Post("/{id}/link-venue", h.handleLinkVenue)
 	r.Post("/{id}/link-contact", h.handleLinkContact)
+	r.Get("/{id}/pdf", h.handleGetBookingPDF)
 
 	return r
 }
@@ -258,6 +262,51 @@ func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeJSON(w, http.StatusOK, gigs)
+}
+
+// handleCalendarICS returns an RFC 5545 compliant iCal feed.
+func (h *Handler) handleCalendarICS(w http.ResponseWriter, r *http.Request) {
+	secret := r.URL.Query().Get("secret")
+	if !ValidateSecret(secret, "ICAL_SECRET") {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	calendar, err := h.svc.GenerateCalendar(r.Context(), CalendarConfig{Secret: secret})
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=klubhub-gigs.ics")
+	_, _ = w.Write([]byte(calendar))
+}
+
+// handleGetBookingPDF returns a booking confirmation PDF for a confirmed gig.
+func (h *Handler) handleGetBookingPDF(w http.ResponseWriter, r *http.Request) {
+	secret := r.URL.Query().Get("secret")
+	if !ValidateSecret(secret, "ICAL_SECRET") {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid gig id")
+		return
+	}
+
+	pdfData, storagePath, err := h.svc.GenerateBookingPDF(r.Context(), id, "DJ Name")
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", "attachment; filename=booking-confirmation.pdf")
+	_, _ = w.Write(pdfData)
+	_ = storagePath // TODO: return storage path or presigned URL
 }
 
 // ─── Response helpers ─────────────────────────────────────────────────────────

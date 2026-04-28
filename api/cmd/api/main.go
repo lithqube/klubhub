@@ -132,8 +132,9 @@ func main() {
 	gigRepo := gig.NewRepository(pool)
 	venueRepo := venue.NewRepository(pool)
 	contactRepo := contact.NewRepository(pool)
+	gigStorage := gig.NewStorageAdapter(storeClient)
 
-	gigSvc := gig.NewService(gigRepo, venueRepo, contactRepo, tracklistRepo)
+	gigSvc := gig.NewService(gigRepo, venueRepo, contactRepo, tracklistRepo, gigStorage)
 	gigHandler := gig.NewHandler(gigSvc)
 
 	venueSvc := venue.NewService(venueRepo)

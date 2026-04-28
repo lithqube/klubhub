@@ -11,7 +11,7 @@ import (
 
 // tracklistRepoIface is the subset of the tracklist repository needed by GigService.
 type tracklistRepoIface interface {
-	Get(ctx context.Context, id uuid.UUID) (*tracklist.Tracklist, error)
+	Get(ctx context.Context, id uuid.UUID) (*tracklist.Tracklist, []tracklist.Track, error)
 }
 
 // venueRepoIface is the subset of the venue repository needed by GigService.
@@ -30,15 +30,17 @@ type Service struct {
 	venueRepo      venueRepoIface
 	contactRepo    contactRepoIface
 	tracklistRepo  tracklistRepoIface
+	storage        PDFStorageClientIface
 }
 
 // NewService creates a new Service.
-func NewService(repo *Repository, venueRepo venueRepoIface, contactRepo contactRepoIface, tracklistRepo tracklistRepoIface) *Service {
+func NewService(repo *Repository, venueRepo venueRepoIface, contactRepo contactRepoIface, tracklistRepo tracklistRepoIface, storage PDFStorageClientIface) *Service {
 	return &Service{
 		repo:          repo,
 		venueRepo:     venueRepo,
 		contactRepo:   contactRepo,
 		tracklistRepo: tracklistRepo,
+		storage:       storage,
 	}
 }
 
@@ -151,4 +153,35 @@ func (s *Service) LinkContact(ctx context.Context, gigID, contactID uuid.UUID, r
 // UnlinkContact unlinks a gig from a contact.
 func (s *Service) UnlinkContact(ctx context.Context, gigID, contactID uuid.UUID) error {
 	return s.repo.UnlinkContact(ctx, gigID, contactID)
+}
+
+// GenerateCalendar generates an RFC 5545 compliant iCal feed for all non-cancelled gigs.
+func (s *Service) GenerateCalendar(ctx context.Context, config CalendarConfig) (string, error) {
+	return GenerateCalendar(ctx, s, config)
+}
+
+// GenerateBookingPDF generates a booking confirmation PDF for a confirmed gig.
+// Returns PDF bytes and storage path.
+func (s *Service) GenerateBookingPDF(ctx context.Context, gigID uuid.UUID, djName string) ([]byte, string, error) {
+	gig, err := s.repo.GetByID(ctx, gigID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// PDF only available for confirmed gigs
+	if gig.Status != GigStatusConfirmed {
+		return nil, "", ErrForbidden
+	}
+
+	pdfData, err := GenerateBookingPDF(gig, djName)
+	if err != nil {
+		return nil, "", err
+	}
+
+	storagePath, err := StoreBookingPDF(ctx, gig, pdfData, s.storage)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return pdfData, storagePath, nil
 }
