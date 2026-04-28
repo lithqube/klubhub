@@ -5,12 +5,12 @@ milestone_name: milestone
 current_phase: 0.5-Garage-s3-storage
 current_plan: not started
 status: completed
-last_updated: "2026-04-28T09:06:55.092Z"
+last_updated: "2026-04-28T09:25:56.354Z"
 progress:
   total_phases: 15
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 35
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Session State
@@ -135,7 +135,10 @@ A full pixel-perfect UI migration was performed against the `ui_kits/dj-app/inde
 - [Phase 1.5.5-kinetic-hud]: gigs.vue and finance.vue are new pages with static mock UI data — wired to real API in Phase 4 (Gig Tracker) and Phase 5 (Finance Tracker)
 - [Phase 0.5-Garage]: Garage (https://Garage.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. Garage is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
 - [Phase 00.5]: Garage (https://Garage.deuxfleurs.fr/) replaces MinIO as the S3-compatible object storage layer. Garage is open-source, actively maintained, and S3 API-compatible with the existing minio-go client — no application code changes needed. All MINIO_* env vars get S3_* equivalents with MINIO_* aliases preserved for backward compatibility.
-- [Phase 04-gig-tracker]: GigReader interface defined in model.go with concrete implementation in service.go — Stable contract for downstream modules (Finance Tracker, Tour Manager, EPK-10 Import) to consume gig data without coupling to implementation details
+  - [Phase 04-gig-tracker]: GigReader interface defined in model.go with concrete implementation in service.go — Stable contract for downstream modules (Finance Tracker, Tour Manager, EPK-10 Import) to consume gig data without coupling to implementation details
+  - [Phase 04-04-gig-tracker-frontend]: useGigStore uses Pinia setup function with storeToRefs for reactive store destructuring — consistent with DSYS-07 pattern established in Phase 1.5
+  - [Phase 04-04-gig-tracker-frontend]: GigCalendarView shows up to 3 colored dots per day with +N overflow indicator — clean calendar display for busy months
+  - [Phase 04-04-gig-tracker-frontend]: GigFormDialog confirms before transitioning to cancelled status — terminal state cannot be undone
 
 ## Session Log
 
