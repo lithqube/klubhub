@@ -107,16 +107,16 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 
 ### Gig Tracker (GIG)
 
-- [ ] **GIG-01**: User can create, edit, and delete gig entries with: date, venue, city, country, event name, promoter name/email/phone, fee, currency, notes
-- [ ] **GIG-02**: Gig status workflow: `inquiry` → `confirmed` → `advanced` → `played` → `cancelled`; forward skipping and backward transitions allowed; `cancelled` is terminal
-- [ ] **GIG-03**: Payment status tracked independently: `unpaid`, `deposit_paid`, `paid`, `overdue`, `waived`
-- [ ] **GIG-04**: Currency stored as ISO 4217 code; no automatic conversion; searchable currency dropdown
+- [x] **GIG-01**: User can create, edit, and delete gig entries with: date, venue, city, country, event name, promoter name/email/phone, fee, currency, notes
+- [x] **GIG-02**: Gig status workflow: `inquiry` → `confirmed` → `advanced` → `played` → `cancelled`; forward skipping and backward transitions allowed; `cancelled` is terminal
+- [x] **GIG-03**: Payment status tracked independently: `unpaid`, `deposit_paid`, `paid`, `overdue`, `waived`
+- [x] **GIG-04**: Currency stored as ISO 4217 code; no automatic conversion; searchable currency dropdown
 - [ ] **GIG-05**: User can link a parsed tracklist to a gig
 - [ ] **GIG-06**: User can view gigs in calendar view and list view
 - [ ] **GIG-07**: User can filter gigs by date range, venue, city, status, and fee range
 - [ ] **GIG-08**: "Copy from Previous Gig" dropdown auto-fills promoter fields from a selected prior gig
-- [ ] **GIG-09**: All gig data stored in PostgreSQL with soft deletion
-- [ ] **GIG-10**: User can link a gig to a venue record (CONT) and a promoter contact record (CONT); linked records auto-populate venue name, city, country, and promoter fields; fields remain editable after link
+- [x] **GIG-09**: All gig data stored in PostgreSQL with soft deletion
+- [x] **GIG-10**: User can link a gig to a venue record (CONT) and a promoter contact record (CONT); linked records auto-populate venue name, city, country, and promoter fields; fields remain editable after link
 - [ ] **GIG-11**: "Copy from Previous Gig" populates from the gig's linked venue and contact records (not just free-text fields) when those records exist
 - [ ] **GIG-12**: When a gig is in `confirmed` status, user can generate a booking confirmation PDF pre-populated with: DJ name, venue name + city, event date, fee + currency, set length, technical contact name + email; no e-signature required; PDF stored in MinIO and downloadable
 
@@ -168,12 +168,12 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 
 ### Contacts & Venue Database (CONT)
 
-- [ ] **CONT-01**: User can create, edit, and delete venue records with: name, city, country, capacity (optional), website (optional), technical contact name, technical contact email, technical contact phone, notes
-- [ ] **CONT-02**: User can create, edit, and delete contact records with: name, company (optional), email, phone, type (enum: promoter, agent, label, other), notes
+- [x] **CONT-01**: User can create, edit, and delete venue records with: name, city, country, capacity (optional), website (optional), technical contact name, technical contact email, technical contact phone, notes
+- [x] **CONT-02**: User can create, edit, and delete contact records with: name, company (optional), email, phone, type (enum: promoter, agent, label, other), notes
 - [ ] **CONT-03**: When creating or editing a gig, user can search and link a venue record and a contact record by name (autocomplete search, minimum 2 characters)
 - [ ] **CONT-04**: Linking a venue to a gig auto-populates venue name, city, and country fields; linking a contact auto-populates promoter name, email, and phone; all auto-populated fields remain editable after link
 - [ ] **CONT-05**: Venue list view shows each venue with total gig count and date of last booking; contact list view shows each contact with total gig count
-- [ ] **CONT-06**: All venue and contact data stored in PostgreSQL with soft deletion; a venue or contact with linked non-deleted gigs cannot be hard-deleted — soft delete only
+- [x] **CONT-06**: All venue and contact data stored in PostgreSQL with soft deletion; a venue or contact with linked non-deleted gigs cannot be hard-deleted — soft delete only
 
 ### Rider Templates (RIDER)
 
