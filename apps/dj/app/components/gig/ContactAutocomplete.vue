@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useContactStore } from '../../stores/contact'
+import { onClickOutside } from '@vueuse/core'
 import type { Contact } from '../../types/gig'
 
 const props = defineProps<{
