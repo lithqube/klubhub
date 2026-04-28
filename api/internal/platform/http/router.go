@@ -16,6 +16,9 @@ import (
 // tracklistHandler handles tracklist CRUD operations.
 // socialHandler handles social scheduling routes under /api/v1/social.
 // epkHandler handles EPK/press-kit routes under /api/v1/epk.
+// gigHandler handles gig CRUD routes under /api/v1/gigs.
+// venueHandler handles venue CRUD routes under /api/v1/venues.
+// contactHandler handles contact CRUD routes under /api/v1/contacts.
 func NewRouter(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -25,6 +28,9 @@ func NewRouter(
 	tracklistHandler http.Handler,
 	socialHandler http.Handler,
 	epkHandler http.Handler,
+	gigHandler http.Handler,
+	venueHandler http.Handler,
+	contactHandler http.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -47,6 +53,15 @@ func NewRouter(
 
 	// EPK / press-kit routes
 	r.Mount("/api/v1/epk", epkHandler)
+
+	// Gig tracker routes
+	r.Mount("/api/v1/gigs", gigHandler)
+
+	// Venue database routes
+	r.Mount("/api/v1/venues", venueHandler)
+
+	// Contact database routes
+	r.Mount("/api/v1/contacts", contactHandler)
 
 	return r
 }

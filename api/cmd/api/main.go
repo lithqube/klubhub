@@ -10,7 +10,9 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/klubhub/dj/api/internal/artwork"
+	"github.com/klubhub/dj/api/internal/contact"
 	"github.com/klubhub/dj/api/internal/epk"
+	"github.com/klubhub/dj/api/internal/gig"
 	"github.com/klubhub/dj/api/internal/platform/config"
 	"github.com/klubhub/dj/api/internal/platform/db"
 	apphttp "github.com/klubhub/dj/api/internal/platform/http"
@@ -20,6 +22,7 @@ import (
 	"github.com/klubhub/dj/api/internal/settings"
 	"github.com/klubhub/dj/api/internal/social"
 	"github.com/klubhub/dj/api/internal/tracklist"
+	"github.com/klubhub/dj/api/internal/venue"
 )
 
 func main() {
@@ -125,8 +128,30 @@ func main() {
 	epkSvc := epk.NewService(epkRepo, epkStorage, epkSettingsSvc)
 	epkHandler := epk.NewHandler(epkSvc)
 
-	// 9. Build router (internal http package aliased as apphttp).
-	router := apphttp.NewRouter(cfg, pool, storeClient, logger, settingsHandler, tracklistHandler.Routes(), socialHandler.Routes(), epkHandler.Routes())
+	// 9. Wire gig, venue, and contact modules.
+	gigRepo := gig.NewRepository(pool)
+	venueRepo := venue.NewRepository(pool)
+	contactRepo := contact.NewRepository(pool)
+
+	gigSvc := gig.NewService(gigRepo, venueRepo, contactRepo, tracklistRepo)
+	gigHandler := gig.NewHandler(gigSvc)
+
+	venueSvc := venue.NewService(venueRepo)
+	venueHandler := venue.NewHandler(venueSvc)
+
+	contactSvc := contact.NewService(contactRepo)
+	contactHandler := contact.NewHandler(contactSvc)
+
+	// 10. Build router (internal http package aliased as apphttp).
+	router := apphttp.NewRouter(cfg, pool, storeClient, logger,
+		settingsHandler,
+		tracklistHandler.Routes(),
+		socialHandler.Routes(),
+		epkHandler.Routes(),
+		gigHandler.Routes(),
+		venueHandler.Routes(),
+		contactHandler.Routes(),
+	)
 
 	// 9. Start HTTP server (blocks until ctx cancelled or error).
 	addr := cfg.BindAddress + ":" + cfg.Port
