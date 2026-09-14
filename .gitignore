@@ -42,6 +42,10 @@ Thumbs.db
 backups/*.tar.gz
 backups/work-*/
 
+# Loose archive artifacts at the repo root (e.g. ad-hoc zips of the project)
+# Specific paths take precedence; *.zip at root only.
+/*.zip
+
 .nx/cache
 .nx/workspace-data
 
