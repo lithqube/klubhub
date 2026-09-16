@@ -6,8 +6,8 @@ Production images for the API and frontend are built and published to **GitHub C
 
 | Service | Image | Built from |
 | --- | --- | --- |
-| API (Go) | `ghcr.io/lithqube/klubhub-dj-api` | `api/Dockerfile` |
-| Frontend (Nuxt) | `ghcr.io/lithqube/klubhub-dj-frontend` | `apps/dj/Dockerfile` |
+| API (Go) | `ghcr.io/lithqube/klubhub-api` | `api/Dockerfile` |
+| Frontend (Nuxt) | `ghcr.io/lithqube/klubhub-frontend` | `apps/dj/Dockerfile` |
 
 ## Tags
 
@@ -24,17 +24,17 @@ Pushes to `main` or a `v*` tag that touch `api/**`, `apps/dj/**`, the workspace 
 Adding the workflow does not change package visibility. GHCR packages published via the built-in `GITHUB_TOKEN` are created **private** the first time, regardless of the repository's own visibility, and must be flipped to public by hand:
 
 1. Push/merge this workflow and let it run once so each package exists.
-2. In the repository, open **Packages** (or `https://github.com/orgs/lithqube/packages` / `https://github.com/users/<owner>/packages` depending on account type) and open `klubhub-dj-api`.
-3. **Package settings → Danger Zone → Change visibility → Public.** Repeat for `klubhub-dj-frontend`.
-4. Optionally, under the same package's settings, **Manage Actions access** to link it back to `lithqube/klubhub-dj` so the repository page shows it under "Packages".
+2. In the repository, open **Packages** (or `https://github.com/orgs/lithqube/packages` / `https://github.com/users/<owner>/packages` depending on account type) and open `klubhub-api`.
+3. **Package settings → Danger Zone → Change visibility → Public.** Repeat for `klubhub-frontend`.
+4. Optionally, under the same package's settings, **Manage Actions access** to link it back to `lithqube/klubhub` so the repository page shows it under "Packages".
 
 No PAT or extra secret is needed for the workflow itself — `GITHUB_TOKEN` has enough scope to push. A token with `write:packages` + package-admin rights is only needed if you want to script the visibility change instead of using the UI.
 
 ## Pulling an image
 
 ```sh
-docker pull ghcr.io/lithqube/klubhub-dj-api:latest
-docker pull ghcr.io/lithqube/klubhub-dj-frontend:latest
+docker pull ghcr.io/lithqube/klubhub-api:latest
+docker pull ghcr.io/lithqube/klubhub-frontend:latest
 ```
 
 Public images pull without authentication once step 3 above is done.

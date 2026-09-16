@@ -26,7 +26,7 @@ The CI intentionally avoids installing the Nuxt/Go workspace; its equivalent sta
 These are manual steps; adding files to the repository does not change GitHub settings or DNS.
 
 1. Verify ownership of `klubhub.io` in the GitHub account/organization's **Settings → Pages**, using the TXT record GitHub supplies. Keep that record. Confirm Pages is available for the repository's visibility and GitHub plan.
-2. In `lithqube/klubhub-dj` → **Settings → Pages**, select **GitHub Actions** as the build source, not branch publishing.
+2. In `lithqube/klubhub` → **Settings → Pages**, select **GitHub Actions** as the build source, not branch publishing.
 3. Set the custom domain to **klubhub.io** and save **before changing DNS**, to reduce takeover risk. The included `CNAME` documents the intended host, but GitHub ignores it for custom Actions publishing: the Pages setting is required.
 4. At your DNS provider, point the apex (`@`) to these GitHub Pages IPv4 addresses, replacing conflicting apex website A/AAAA/ALIAS records only. Preserve mail and verification records:
 

@@ -604,7 +604,7 @@ Response includes per-category object count and total bytes. This endpoint power
 **Requirement:** The system shall deploy via a single `docker-compose.yml` file. All four services, volumes, and networking shall be defined in this one file. The deployment procedure shall be:
 
 ```
-git clone <repo> && cd klubhub-dj && cp .env.example .env && docker compose up -d
+git clone <repo> && cd klubhub && cp .env.example .env && docker compose up -d
 ```
 
 No additional tools, scripts, or manual configuration steps shall be required beyond editing `.env` for API keys.

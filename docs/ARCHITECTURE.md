@@ -978,7 +978,7 @@ The open question from BRD §20.6 (job scheduler: Asynq/Redis vs PostgreSQL poll
 ## 8. Repository Layout
 
 ```
-klubhub-dj/                     (git root — this directory)
+klubhub/                        (git root — this directory)
 ├── dev/                        # Nx monorepo workspace
 │   ├── apps/
 │   │   ├── dj/                 # Nuxt 3 frontend (existing scaffold)

@@ -35,4 +35,4 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shapes) may change without a breaking-version bump. See
   [`docs/v1-release-plan.md`](./docs/v1-release-plan.md) for the path to v1.
 
-[Unreleased]: https://github.com/lithqube/klubhub-dj/compare/main...HEAD
+[Unreleased]: https://github.com/lithqube/klubhub/compare/main...HEAD

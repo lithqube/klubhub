@@ -19,7 +19,7 @@ Be respectful, assume good faith, and help us keep the project welcoming.
 ## Project layout
 
 ```
-klubhub-dj/
+klubhub/
 ├── apps/
 │   ├── dj/        # Nuxt 4 frontend (Vue 3 + TypeScript)
 │   └── dj-e2e/    # Playwright end-to-end tests
