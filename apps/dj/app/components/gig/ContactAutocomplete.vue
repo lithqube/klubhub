@@ -39,7 +39,7 @@ async function search() {
     results.value = await contactStore.fetchAutocomplete(query.value, 5)
     isOpen.value = results.value.length > 0
     highlightedIndex.value = -1
-  } catch (e) {
+  } catch {
     results.value = []
   } finally {
     isLoading.value = false
@@ -100,7 +100,7 @@ onClickOutside(inputRef, () => {
         @input="onInput"
         @keydown="onKeydown"
         @focus="query.length >= 2 && search()"
-      />
+      >
       <button
         v-if="query && !isLoading"
         type="button"

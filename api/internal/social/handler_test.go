@@ -41,7 +41,14 @@ func (m *handlerMockService) GetOAuthURL(_ context.Context) (string, error) {
 	return m.oauthURL, nil
 }
 
-func (m *handlerMockService) HandleOAuthCallback(_ context.Context, code, state string) (*social.SocialAccount, error) {
+// IssueOAuthState is the handler-test mock for IssueOAuthState. The bind
+// value is fixed to "test-bind" — that lets callback tests control whether
+// the cookie matches by setting it (or not) on the test request.
+func (m *handlerMockService) IssueOAuthState(_ context.Context) (string, string, string, error) {
+	return m.oauthURL, "test-state", "test-bind", nil
+}
+
+func (m *handlerMockService) HandleOAuthCallback(_ context.Context, code, state, _ string) (*social.SocialAccount, error) {
 	return &social.SocialAccount{Platform: "instagram", Status: "connected"}, nil
 }
 

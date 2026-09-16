@@ -1,0 +1,15 @@
+meta {
+  name: Calendar feed rejects missing bearer
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/gigs/calendar.ics
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 403
+}

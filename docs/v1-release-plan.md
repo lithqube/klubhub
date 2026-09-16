@@ -39,7 +39,7 @@ KlubHub DJ v1.0 is the complete, self-hosted, open-source DJ career toolkit. It 
 - **Backend:** Go modular monolith (chi router, goose migrations, gg/imaging for image gen)
 - **Frontend:** Nuxt 4 (Vue 3, TypeScript strict, Tailwind CSS, shadcn-vue, Pinia)
 - **Database:** PostgreSQL 16
-- **Object Storage:** MinIO (S3-compatible)
+- **Object Storage:** Garage (S3-compatible)
 - **Deployment:** Docker Compose (4 services)
 
 ---
@@ -66,7 +66,7 @@ This phase prepares the codebase for public release after all feature phases (0-
 |------|---------|
 | Input validation audit | All API endpoints validate input types, lengths, and formats; reject unexpected fields |
 | SQL injection prevention | Verify all queries use parameterized statements (no string concatenation) |
-| Path traversal check | MinIO keys and file paths cannot escape tenant boundaries |
+| Path traversal check | Garage keys and file paths cannot escape tenant boundaries |
 | Rate limiting | Configurable rate limiter on all endpoints (default: 100 req/min per IP) |
 | CORS hardening | Default: same-origin only; configurable via `CORS_ORIGINS` env var |
 | Service binding | Verify all Docker services bind `127.0.0.1` (not `0.0.0.0`) |
@@ -201,7 +201,7 @@ Go API (Modular Monolith)
 └── embedded goose migrations
     │           │
     ▼           ▼
-PostgreSQL   MinIO
+PostgreSQL   Garage
    16        (S3)
 ```
 
@@ -209,7 +209,7 @@ PostgreSQL   MinIO
 - Single Go binary — no external job queue, no Redis, no message broker
 - All modules communicate through Go interfaces, never shared DB queries
 - `user_id` columns on all tables (nullable in v1, required in v2 SaaS)
-- MinIO path prefixing per user (no-op in v1, enforced in v2)
+- Garage path prefixing per user (no-op in v1, enforced in v2)
 - `context.Context` threaded through all handlers (tenant injection ready)
 
 ---

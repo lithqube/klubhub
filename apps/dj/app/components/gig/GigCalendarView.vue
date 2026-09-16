@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { useGigStore } from '../../stores/gig'
 import { storeToRefs } from 'pinia'
+import type { Gig } from '../../types/gig'
 
 const gigStore = useGigStore()
 const { gigs } = storeToRefs(gigStore)
 
-const currentDate = ref(new Date())
 const viewDate = ref(new Date())
 
 const daysInMonth = computed(() => {
@@ -70,7 +70,7 @@ function gigStatusColor(status: string) {
 }
 
 const emit = defineEmits<{
-  'gig-click': [gig: any]
+  'gig-click': [gig: Gig]
 }>()
 </script>
 
@@ -138,7 +138,7 @@ const emit = defineEmits<{
             v-if="gigsByDate.has(day.toISOString().split('T')[0])"
           >
             <template
-              v-for="(gig, i) in (gigsByDate.get(day.toISOString().split('T')[0]) || []).slice(0, 3)"
+              v-for="gig in (gigsByDate.get(day.toISOString().split('T')[0]) || []).slice(0, 3)"
               :key="gig.id"
             >
               <div

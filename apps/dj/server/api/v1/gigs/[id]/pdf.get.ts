@@ -1,6 +1,9 @@
+// Plan B.5 / D — server-only secret. See calendar.ics.get.ts for the
+// full rationale. This file lives under apps/dj/server/api/v1/ which is
+// tree-shaken from production builds (renamed to v1.mock/).
+
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
-  const icalSecret = process.env.ICAL_SECRET || process.env.NUXT_PUBLIC_ICAL_SECRET || ''
 
   if (!id) {
     throw createError({
@@ -9,20 +12,35 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const icalSecret = process.env.ICAL_SECRET || ''
+  const apiBase = process.env.NUXT_PUBLIC_API_BASE || ''
+
+  if (!icalSecret) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'ICAL_SECRET not configured on the server',
+    })
+  }
+
+  if (!apiBase) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'Booking PDF requires NUXT_PUBLIC_API_BASE',
+    })
+  }
+
   try {
     const data = await $fetch(`/api/v1/gigs/${id}/pdf?secret=${encodeURIComponent(icalSecret)}`, {
-      baseURL: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8080',
+      baseURL: apiBase,
       method: 'GET',
       responseType: 'blob',
     })
 
-    // Set headers for file download
     setHeader(event, 'Content-Type', 'application/pdf')
     setHeader(event, 'Content-Disposition', 'attachment; filename=booking-confirmation.pdf')
 
     return data
   } catch (err: any) {
-    // Forward error status codes
     if (err.response?.status) {
       throw createError({
         statusCode: err.response.status,

@@ -1,0 +1,19 @@
+meta {
+  name: Get settings
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/settings
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+}

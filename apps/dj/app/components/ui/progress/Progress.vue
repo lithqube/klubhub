@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils'
 
+import { computed } from 'vue'
+
 interface Props {
   modelValue?: number
   class?: string
@@ -11,8 +13,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const percentage = computed(() => Math.min(100, Math.max(0, props.modelValue ?? 0)))
-
-import { computed } from 'vue'
 </script>
 
 <template>

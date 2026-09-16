@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	// Importing "net/http" shadows stdlib when this package also uses
+	// the same name; alias the platform one for clarity.
+	platformhttp "github.com/klubhub/dj/api/internal/platform/http"
 )
 
 // settingsServiceIface allows handler to use a real or test service.
@@ -45,8 +49,17 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handlePut(w http.ResponseWriter, r *http.Request) {
+	// Settings payloads are small JSON documents. Apply a tight
+	// route-specific cap even though the router's outer ceiling is 50 MiB.
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 	var req UpdateSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Plan B.6: translate cap overflows into 413 so the middleware
+		// can be observed end-to-end.
+		if status := platformhttp.DetectMaxBytes413(err); status != http.StatusBadRequest {
+			writeError(w, status, "request_too_large", "request body exceeds limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return
 	}

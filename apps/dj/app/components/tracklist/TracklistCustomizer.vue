@@ -241,7 +241,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
         v-if="logoPath"
         class="w-20 h-20 bg-surface-container-high overflow-hidden"
       >
-        <img :src="logoPath" alt="DJ Logo" class="w-full h-full object-contain" />
+        <img :src="logoPath" alt="DJ Logo" class="w-full h-full object-contain" >
       </div>
 
       <!-- Logo file input -->
@@ -254,7 +254,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
           accept="image/*"
           class="font-terminal tracking-terminal text-tertiary text-xs uppercase ghost-border p-2 w-full cursor-pointer"
           @change="onLogoUpload"
-        />
+        >
       </div>
 
       <!-- Logo position -->

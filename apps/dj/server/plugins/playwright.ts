@@ -17,7 +17,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     nitroApp.hooks.hookOnce('close', async () => {
       await browser.close();
     });
-  } catch (err) {
+  } catch {
     console.warn('[playwright] Browser unavailable — screenshot routes disabled. Run: npx playwright install chromium');
     (nitroApp as any)._playwright = null;
   }

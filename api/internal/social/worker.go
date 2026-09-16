@@ -2,6 +2,7 @@ package social
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -39,11 +40,11 @@ type instagramIface interface {
 
 // Worker orchestrates the background publishing loop.
 type Worker struct {
-	repo        workerRepoIface
-	instagram   instagramIface
-	storage     storageIface
-	cryptoKey   []byte
-	log         zerolog.Logger
+	repo      workerRepoIface
+	instagram instagramIface
+	storage   storageIface
+	cryptoKey []byte
+	log       zerolog.Logger
 
 	mu              sync.Mutex
 	lastPublishedAt time.Time
@@ -60,23 +61,30 @@ func NewWorker(repo workerRepoIface, ig instagramIface, storage storageIface, cr
 	}
 }
 
-// StartPublishWorker starts the background worker goroutine and returns immediately.
-// The goroutine exits cleanly when ctx is cancelled.
-func StartPublishWorker(ctx context.Context, w *Worker) {
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			if err := w.tick(ctx); err != nil {
-				w.log.Error().Err(err).Msg("worker tick error")
+// StartPublishWorker starts the background worker goroutine and returns a
+// channel that is closed once the goroutine has fully exited. Callers can
+// `<-done` (or wrap in select with a timeout) to block on graceful
+// shutdown. The goroutine exits cleanly when ctx is cancelled.
+func StartPublishWorker(ctx context.Context, w *Worker) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := w.tick(ctx); err != nil {
+					w.log.Error().Err(err).Msg("worker tick error")
+				}
+				w.refreshExpiringTokens(ctx)
+			case <-ctx.Done():
+				w.log.Info().Msg("publish worker stopped")
+				return
 			}
-			w.refreshExpiringTokens(ctx)
-		case <-ctx.Done():
-			w.log.Info().Msg("publish worker stopped")
-			return
 		}
-	}
+	}()
+	return done
 }
 
 // backoffTime returns the next retry time for the given retry count.
@@ -189,11 +197,11 @@ func (w *Worker) processPost(ctx context.Context, post ScheduledPost) error {
 	// 9. Create the Instagram media container.
 	containerID, err := w.instagram.CreateContainer(ctx, account.IgUserID, token, presignedURL, post.Caption, post.PostType)
 	if err != nil {
-		if rlErr, ok := err.(*RateLimitError); ok {
+		var rlErr *RateLimitError
+		if errors.As(err, &rlErr) {
 			// Rate limited: schedule retry and stop processing this tick.
-			_ = w.repo.SetNextRetry(ctx, post.ID, post.RetryCount+1, time.Now().Add(rlErr.RetryAfter))
-			_ = w.repo.UpdatePostStatus(ctx, post.ID, PostStatusFailed, err.Error())
-			return rlErr
+			w.recordRateLimit(ctx, post, err)
+			return err
 		}
 		return w.failPost(ctx, post, err)
 	}
@@ -216,9 +224,41 @@ func (w *Worker) processPost(ctx context.Context, post ScheduledPost) error {
 }
 
 // failPost increments the retry counter and marks the post as failed.
+//
+// The reason string is sanitized before it is persisted to the DB and
+// returned to API consumers. The original (which may include the
+// access_token query parameter) is logged via w.log with structured
+// fields, where it goes to the private JSON log stream and never to a
+// client response.
 func (w *Worker) failPost(ctx context.Context, post ScheduledPost, reason error) error {
+	if reason != nil {
+		w.log.Warn().
+			Err(reason).
+			Str("post_id", post.ID.String()).
+			Msg("instagram transport failure (sanitized for storage)")
+	}
 	_ = w.repo.SetNextRetry(ctx, post.ID, post.RetryCount+1, backoffTime(post.RetryCount))
-	return w.repo.UpdatePostStatus(ctx, post.ID, PostStatusFailed, reason.Error())
+	sanitized := ""
+	if reason != nil {
+		sanitized = SanitizeTransportError(reason.Error())
+	}
+	return w.repo.UpdatePostStatus(ctx, post.ID, PostStatusFailed, sanitized)
+}
+
+// recordRateLimit persists the rate-limit failure reason for a post,
+// using SanitizeTransportError to enforce the sanitization boundary
+// uniformly across all error paths. It accepts any error and locates
+// the *RateLimitError via errors.As so the call site can pass wrapped
+// errors (e.g. a *RateLimitError with extra provider-supplied context
+// folded into Error()).
+func (w *Worker) recordRateLimit(ctx context.Context, post ScheduledPost, err error) {
+	var rlErr *RateLimitError
+	if !errors.As(err, &rlErr) {
+		// Should not happen — caller checked the type — but be safe.
+		return
+	}
+	_ = w.repo.SetNextRetry(ctx, post.ID, post.RetryCount+1, time.Now().Add(rlErr.RetryAfter))
+	_ = w.repo.UpdatePostStatus(ctx, post.ID, PostStatusFailed, SanitizeTransportError(err.Error()))
 }
 
 // errNoAccount is returned when no social account is configured.

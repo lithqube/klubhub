@@ -142,7 +142,7 @@ type PDFStorageClientIface interface {
 	PutObject(ctx context.Context, bucket, key string, r io.Reader, size int64, contentType string) error
 }
 
-// StoreBookingPDF stores a booking confirmation PDF in MinIO/S3.
+// StoreBookingPDF stores a booking confirmation PDF in Garage via S3.
 // Returns the storage path.
 func StoreBookingPDF(ctx context.Context, gig *Gig, pdfData []byte, storage PDFStorageClientIface) (string, error) {
 	bucket := "gig-exports"

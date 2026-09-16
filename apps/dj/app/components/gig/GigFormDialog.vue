@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { useGigStore } from '../../stores/gig'
-import { useVenueStore } from '../../stores/venue'
-import { useContactStore } from '../../stores/contact'
 import type { Gig, GigCreate, Venue, Contact, GigStatus, PaymentStatus } from '../../types/gig'
 import VenueAutocomplete from './VenueAutocomplete.vue'
 import ContactAutocomplete from './ContactAutocomplete.vue'
@@ -17,8 +15,6 @@ const emit = defineEmits<{
 }>()
 
 const gigStore = useGigStore()
-const venueStore = useVenueStore()
-const contactStore = useContactStore()
 
 const isEdit = computed(() => !!props.gig?.id)
 const title = computed(() => (isEdit.value ? 'EDIT GIG' : 'ADD GIG'))
@@ -211,7 +207,7 @@ function close() {
                 type="date"
                 class="hud-input"
                 style="width:100%;"
-              />
+              >
             </div>
 
             <!-- Venue autocomplete -->
@@ -234,7 +230,7 @@ function close() {
                   class="hud-input"
                   style="width:100%;"
                   placeholder="Berlin"
-                />
+                >
               </div>
               <div>
                 <label class="section-lbl" style="display:block;margin-bottom:6px;">COUNTRY</label>
@@ -244,7 +240,7 @@ function close() {
                   class="hud-input"
                   style="width:100%;"
                   placeholder="DE"
-                />
+                >
               </div>
             </div>
 
@@ -257,7 +253,7 @@ function close() {
                 class="hud-input"
                 style="width:100%;"
                 placeholder="Saturday Night"
-              />
+              >
             </div>
 
             <!-- Room / Details -->
@@ -269,7 +265,7 @@ function close() {
                 class="hud-input"
                 style="width:100%;"
                 placeholder="Main Stage"
-              />
+              >
             </div>
 
             <!-- Contact autocomplete -->
@@ -291,7 +287,7 @@ function close() {
                   type="text"
                   class="hud-input"
                   style="width:100%;"
-                />
+                >
               </div>
               <div>
                 <label class="section-lbl" style="display:block;margin-bottom:6px;">PROMOTER EMAIL</label>
@@ -300,7 +296,7 @@ function close() {
                   type="email"
                   class="hud-input"
                   style="width:100%;"
-                />
+                >
               </div>
             </div>
 
@@ -311,7 +307,7 @@ function close() {
                 type="tel"
                 class="hud-input"
                 style="width:100%;"
-              />
+              >
             </div>
 
             <!-- Fee + Currency -->
@@ -324,7 +320,7 @@ function close() {
                   class="hud-input"
                   style="width:100%;"
                   placeholder="2000"
-                />
+                >
               </div>
               <div>
                 <label class="section-lbl" style="display:block;margin-bottom:6px;">CURRENCY</label>
@@ -343,7 +339,7 @@ function close() {
                 class="hud-input"
                 style="width:100%;"
                 placeholder="180"
-              />
+              >
             </div>
 
             <!-- Status + Payment -->
@@ -387,7 +383,7 @@ function close() {
                 style="width:100%;"
                 placeholder="Search gigs..."
                 @input="searchCopyFrom(copyQuery)"
-              />
+              >
               <div
                 v-if="copyResults.length > 0"
                 class="glass"

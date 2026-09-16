@@ -67,8 +67,8 @@ const visibleTracks = computed(() => {
       :key="track.id"
       :track="track"
       :index="index"
-      :visibleFields="visibleFields"
-      :customPlaceholderPath="customPlaceholderPath"
+      :visible-fields="visibleFields"
+      :custom-placeholder-path="customPlaceholderPath"
       :colors="colors"
     />
   </div>

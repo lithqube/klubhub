@@ -1,4 +1,4 @@
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async () => {
   // In mock mode, return a new draft post so the store refreshes correctly
   return {
     data: {

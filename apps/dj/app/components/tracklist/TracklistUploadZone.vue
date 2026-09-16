@@ -125,7 +125,7 @@ const hasFile = computed(() => !!uploadFile.value);
         accept=".txt,.xml"
         class="hidden"
         @change="onFileSelect"
-      />
+      >
     </div>
 
     <!-- Progress indicator -->

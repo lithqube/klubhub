@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
-import { reactive, computed } from 'vue'
+import { reactive } from 'vue'
 import EpkPhotosSection from '../EpkPhotosSection.vue'
 
 // Mock store state — use reactive() so computed() in the component reads plain arrays

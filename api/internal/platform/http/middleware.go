@@ -1,56 +1,77 @@
 package http
 
 import (
+	"errors"
 	"net/http"
-	"time"
 
-	"github.com/google/uuid"
-	"github.com/rs/zerolog"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
-type contextKey string
+// MaxBodyBytes is the default request body cap applied to all routes
+// unless overridden via MaxBytesHandlerWithLimit. Plan B.6 picked
+// 50 MiB because the tracklist upload legitimately accepts that size.
+// Individual JSON and media handlers apply tighter route-specific caps;
+// this is the absolute outer ceiling.
+const MaxBodyBytes int64 = 50 << 20 // 50 MiB — largest supported upload
 
-const requestIDKey contextKey = "request_id"
+// MaxBodyBytesMiddleware caps every request body at MaxBodyBytes and
+// ensures the response is 413 if the cap is exceeded.
+//
+// The middleware wraps r.Body in http.MaxBytesReader. If the body is
+// short enough, downstream handlers behave unchanged. If it exceeds
+// the cap, the read fails with *http.MaxBytesError; handlers must
+// detect that error and return 413 (see DetectMaxBytes413).
+//
+// For obvious cases (Content-Length declared), the middleware short-
+// circuits with 413 directly and never invokes the handler.
+func MaxBodyBytesMiddleware(next http.Handler) http.Handler {
+	return MaxBytesHandlerWithLimit(next, MaxBodyBytes)
+}
 
-// RequestLogger returns a middleware that:
-//   - Generates a UUID request ID and stores it in the request context.
-//   - Sets the X-Request-ID response header.
-//   - Logs method, path, status, and duration upon completion using zerolog.
-func RequestLogger(log zerolog.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			requestID := uuid.New().String()
-			w.Header().Set("X-Request-ID", requestID)
+// MaxBytesHandlerWithLimit is the explicit-limit variant exposed for
+// tests and routes that need a different default.
+func MaxBytesHandlerWithLimit(next http.Handler, n int64) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip bodies for GET/HEAD/DELETE which conventionally have no
+		// body — keep the wrapper out of the way for those.
+		if r.Body == nil || (r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodDelete) {
+			next.ServeHTTP(w, r)
+			return
+		}
 
-			// Store in context for downstream handlers
-			ctx := r.Context()
-			r = r.WithContext(ctx)
+		// Cheap pre-check: declared Content-Length over the cap fails
+		// fast with 413 before any allocation.
+		if r.ContentLength > n {
+			http.Error(w, "request body exceeds limit", http.StatusRequestEntityTooLarge)
+			return
+		}
 
-			// Wrap the ResponseWriter to capture the status code
-			wrapped := &statusRecorder{ResponseWriter: w, code: http.StatusOK}
+		// Wrap the body so chunked uploads can never bypass the cap.
+		r.Body = http.MaxBytesReader(w, r.Body, n)
 
-			start := time.Now()
-			next.ServeHTTP(wrapped, r)
-			duration := time.Since(start)
+		next.ServeHTTP(w, r)
+	})
+}
 
-			log.Info().
-				Str("request_id", requestID).
-				Str("method", r.Method).
-				Str("path", r.URL.Path).
-				Int("status", wrapped.code).
-				Dur("duration_ms", duration).
-				Msg("request completed")
-		})
+// DetectMaxBytes413 inspects err from a body read and returns the
+// HTTP status code the caller should serve: 413 if the read failed
+// because of MaxBytesReader cap overflow, 400 otherwise (parser
+// errors on truncated bodies are typically due to client error,
+// not attack).
+//
+// Handlers that decode JSON or multipart bodies should call this
+// when their reader returns an error so the middleware's cap becomes
+// observable as 413 in production.
+func DetectMaxBytes413(err error) int {
+	if err == nil {
+		return http.StatusOK
 	}
+	var mbe *http.MaxBytesError
+	if errors.As(err, &mbe) {
+		return http.StatusRequestEntityTooLarge
+	}
+	return http.StatusBadRequest
 }
 
-// statusRecorder wraps http.ResponseWriter to capture the written HTTP status code.
-type statusRecorder struct {
-	http.ResponseWriter
-	code int
-}
-
-func (sr *statusRecorder) WriteHeader(code int) {
-	sr.code = code
-	sr.ResponseWriter.WriteHeader(code)
-}
+// keep chiMiddleware import live for future router wiring use.
+var _ = middleware.NewWrapResponseWriter
