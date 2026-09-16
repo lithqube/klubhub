@@ -12,8 +12,7 @@ const opts = [
 
 <template>
   <header
-    class="lg:hidden flex-shrink-0"
-    style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(16,16,18,.92);border-bottom:1px solid rgba(150,248,255,.08);backdrop-filter:blur(12px);"
+    class="lg:hidden flex-shrink-0 page-header"
     aria-label="KlubHub DJ brand bar"
   >
     <!-- Brand -->

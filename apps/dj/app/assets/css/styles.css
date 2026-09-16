@@ -350,6 +350,14 @@ html { background-color: var(--color-surface, #0E0E0F); }
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
   }
+
+  /* ── Bottom nav bar (mobile) — same glass treatment as .page-header, flipped edge ── */
+  .bottom-nav-bar {
+    background: rgba(22,22,24,.6);
+    border-top: 1px solid rgba(150,248,255,.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
   .page-title {
     font-family: var(--font-command);
     font-size: 16px;
@@ -837,6 +845,15 @@ html { background-color: var(--color-surface, #0E0E0F); }
     color: var(--color-on-primary);
     box-shadow: 0 0 40px rgba(200,184,255,.15);
   }
+  .btn-hud-error {
+    background: var(--color-error);
+    color: #fff;
+    box-shadow: var(--shadow-glow-error);
+  }
+  .btn-hud-error:hover {
+    box-shadow: 0 0 32px rgba(255,113,108,.35);
+    transform: translateY(-1px);
+  }
   .btn-hud-sm {
     height: 28px;
     min-height: 28px;
@@ -1053,6 +1070,10 @@ html { background-color: var(--color-surface, #0E0E0F); }
 [data-theme="light"] .page-header {
   background: rgba(242,242,244,.8);
   border-bottom-color: rgba(0,104,117,.1);
+}
+[data-theme="light"] .bottom-nav-bar {
+  background: rgba(242,242,244,.8);
+  border-top-color: rgba(0,104,117,.1);
 }
 [data-theme="light"] .tabs-bar {
   background: rgba(242,242,244,.6);

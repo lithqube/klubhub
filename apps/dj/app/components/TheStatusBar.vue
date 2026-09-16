@@ -17,16 +17,16 @@ const statusItems = [
         :key="item.label"
         class="flex flex-col items-center min-w-[80px]"
       >
-        <span class="font-terminal tracking-terminal text-tertiary text-xs uppercase">
+        <span class="font-terminal tracking-terminal text-tertiary text-[8px] uppercase">
           {{ item.label }}
         </span>
-        <span class="font-command text-on-surface font-semibold text-sm tabular-nums">
+        <span class="font-command text-on-surface font-bold text-sm tabular-nums">
           {{ item.value }}
         </span>
       </div>
       <!-- Right-align: version tag -->
       <div class="ml-auto">
-        <span class="font-terminal tracking-terminal text-outline text-xs uppercase">
+        <span class="font-terminal tracking-terminal text-tertiary text-[8px] uppercase">
           KLUBHUB_DJ v1.0
         </span>
       </div>

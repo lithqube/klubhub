@@ -18,7 +18,7 @@ const forwarded = useForwardProps(delegatedProps)
   <SelectItem
     v-bind="forwarded"
     :class="cn(
-      'relative flex w-full cursor-default select-none items-center rounded-none py-1.5 pl-8 pr-2 text-sm outline-none',
+      'relative flex w-full cursor-default select-none items-center rounded-none py-1.5 pl-8 pr-2 font-terminal tracking-terminal text-xs uppercase outline-none',
       'text-on-surface-variant focus:bg-surface-container-high focus:text-on-surface',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       props.class,

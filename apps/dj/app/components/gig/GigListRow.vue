@@ -18,8 +18,9 @@ const accentClass = computed(() => {
     case 'advanced':
       return 'accent-bar-draft'
     case 'played':
-    case 'cancelled':
       return 'accent-bar-archived'
+    case 'cancelled':
+      return 'accent-bar-failed'
     default:
       return 'accent-bar-archived'
   }
@@ -53,7 +54,7 @@ const { mon, day } = formatDate(props.gig.date)
   >
     <!-- Date block -->
     <div class="gig-date-block">
-      <div class="gig-date-mon" :style="{ color: 'var(--color-primary)' }">
+      <div class="gig-date-mon">
         {{ mon }}
       </div>
       <div class="gig-date-day">{{ day }}</div>

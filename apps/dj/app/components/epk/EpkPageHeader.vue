@@ -29,10 +29,10 @@ watch(saveStatus, (val) => {
   <div data-testid="epk-page-header" class="flex items-start justify-between gap-4">
     <!-- Title block -->
     <div>
-      <h1 class="font-command font-bold text-on-surface text-2xl uppercase tracking-wide">
+      <h1 class="font-command font-bold text-on-surface text-2xl uppercase tracking-command">
         EPK
       </h1>
-      <p class="font-terminal tracking-widest text-muted-foreground text-xs uppercase mt-0.5">
+      <p class="font-terminal tracking-terminal text-tertiary text-xs uppercase mt-0.5">
         ELECTRONIC PRESS KIT
       </p>
     </div>
@@ -41,7 +41,7 @@ watch(saveStatus, (val) => {
     <div data-testid="save-status-indicator" class="flex items-center pt-1">
       <span
         v-if="saveStatus === 'saving'"
-        class="font-terminal tracking-terminal text-muted-foreground text-xs uppercase"
+        class="font-terminal tracking-terminal text-tertiary text-xs uppercase"
       >
         SAVING...
       </span>
@@ -53,7 +53,7 @@ watch(saveStatus, (val) => {
       </span>
       <span
         v-else-if="saveStatus === 'error'"
-        class="font-terminal tracking-terminal text-destructive text-xs uppercase"
+        class="font-terminal tracking-terminal text-error text-xs uppercase"
       >
         SAVE FAILED
       </span>

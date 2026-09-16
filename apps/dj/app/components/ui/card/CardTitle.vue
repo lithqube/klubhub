@@ -4,5 +4,5 @@ interface Props { class?: string }
 const props = defineProps<Props>()
 </script>
 <template>
-  <h3 :class="cn('font-command tracking-command text-sm font-semibold text-on-surface uppercase', props.class)"><slot /></h3>
+  <h3 :class="cn('font-command tracking-command text-sm font-bold text-on-surface uppercase', props.class)"><slot /></h3>
 </template>

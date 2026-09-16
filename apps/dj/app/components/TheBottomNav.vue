@@ -25,8 +25,8 @@ function isActive(to: string) {
 
 <template>
   <nav
-    class="lg:hidden"
-    style="position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(16,16,18,.95);border-top:1px solid rgba(150,248,255,.08);backdrop-filter:blur(12px);padding-bottom:env(safe-area-inset-bottom, 0px);"
+    class="lg:hidden bottom-nav-bar"
+    style="position:fixed;bottom:0;left:0;right:0;z-index:20;padding-bottom:env(safe-area-inset-bottom, 0px);"
     aria-label="Primary navigation"
   >
     <div style="display:flex;align-items:stretch;">

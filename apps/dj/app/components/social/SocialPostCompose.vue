@@ -87,7 +87,7 @@ function removeImage() {
 
     <!-- Header -->
     <div class="flex items-center justify-between">
-      <h3 class="font-command font-bold italic text-primary text-sm uppercase tracking-wide">
+      <h3 class="font-command font-bold text-primary text-sm uppercase tracking-command">
         NEW POST
       </h3>
       <button
@@ -105,15 +105,15 @@ function removeImage() {
         :class="postType === 'feed' ? 'text-primary' : 'text-tertiary'"
       >FEED</span>
       <button
-        class="relative w-10 h-5 rounded-none border border-outline-variant/40 transition-colors flex-shrink-0"
-        :class="postType === 'story' ? 'bg-primary/20 border-primary/40' : 'bg-surface-variant'"
+        class="relative w-8 h-[18px] rounded-none border transition-colors flex-shrink-0"
+        :class="postType === 'story' ? 'bg-primary/20 border-primary' : 'bg-surface-container-high border-primary/20'"
         role="switch"
         :aria-checked="postType === 'story'"
         @click="postType = postType === 'feed' ? 'story' : 'feed'"
       >
         <span
-          class="absolute top-0.5 w-4 h-4 bg-primary transition-transform"
-          :class="postType === 'story' ? 'translate-x-5' : 'translate-x-0.5'"
+          class="absolute top-0.5 w-3 h-3 transition-transform"
+          :class="postType === 'story' ? 'translate-x-4 bg-primary' : 'translate-x-0.5 bg-tertiary'"
         />
       </button>
       <span
@@ -130,19 +130,19 @@ function removeImage() {
       <textarea
         v-model="caption"
         rows="4"
-        class="w-full bg-surface-container border border-outline-variant/30 px-3 py-2 font-data text-sm text-on-surface resize-none focus:outline-none focus:border-primary/60 transition-colors"
-        :class="isOverLimit ? 'ring-1 ring-destructive border-destructive/60 text-destructive' : ''"
+        class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-3 py-2 font-data text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
+        :class="isOverLimit ? 'ring-1 ring-error text-error' : ''"
         placeholder="Write your caption..."
       />
       <!-- Character counter for feed; note for story -->
       <div v-if="charLimit !== null" class="text-right">
         <span
           class="font-data text-xs"
-          :class="isOverLimit ? 'text-destructive' : 'text-on-surface-dim'"
+          :class="isOverLimit ? 'text-error' : 'text-tertiary'"
         >{{ charCount }} / {{ charLimit }}</span>
       </div>
       <div v-else class="text-right">
-        <span class="font-data text-xs text-on-surface-dim italic">
+        <span class="font-data text-xs text-tertiary italic">
           Captions are not shown on Stories
         </span>
       </div>
@@ -157,13 +157,13 @@ function removeImage() {
       <!-- Prefilled image from tracklist -->
       <div
         v-if="imageId"
-        class="flex items-center gap-3 px-3 py-2 border border-primary/30 bg-primary/5"
+        class="flex items-center gap-3 px-3 py-2 border border-dashed border-primary/30 bg-primary/5"
       >
         <span class="font-terminal tracking-terminal text-xs text-primary uppercase flex-1">
           ⚡ ATTACHED FROM TRACKLIST
         </span>
         <button
-          class="font-terminal tracking-terminal text-xs text-tertiary hover:text-secondary transition-colors"
+          class="font-terminal tracking-terminal text-xs text-tertiary hover:text-on-surface transition-colors"
           @click="removeImage()"
         >
           ×
@@ -173,11 +173,11 @@ function removeImage() {
       <!-- File uploaded -->
       <div
         v-else-if="imageFile"
-        class="flex items-center gap-3 px-3 py-2 border border-outline-variant/30 bg-surface-container"
+        class="flex items-center gap-3 px-3 py-2 border border-dashed border-outline-variant/40 bg-surface-container-high"
       >
         <span class="font-data text-xs text-on-surface flex-1 truncate">{{ imageFile.name }}</span>
         <button
-          class="font-terminal tracking-terminal text-xs text-tertiary hover:text-secondary transition-colors"
+          class="font-terminal tracking-terminal text-xs text-tertiary hover:text-on-surface transition-colors"
           @click="removeImage()"
         >
           ×
@@ -209,7 +209,7 @@ function removeImage() {
         <input
           v-model="scheduledAt"
           type="datetime-local"
-          class="w-full bg-surface-container border border-outline-variant/30 px-3 py-2 font-data text-sm text-on-surface focus:outline-none focus:border-primary/60 transition-colors"
+          class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-3 py-2 font-data text-sm text-on-surface focus:outline-none focus:border-primary transition-colors"
         >
       </div>
 
@@ -223,23 +223,23 @@ function removeImage() {
             v-model="timezoneSearch"
             type="text"
             :placeholder="timezoneName"
-            class="w-full bg-surface-container border border-outline-variant/30 px-3 py-2 font-data text-xs text-on-surface focus:outline-none focus:border-primary/60 transition-colors"
+            class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-3 py-2 font-data text-xs text-on-surface focus:outline-none focus:border-primary transition-colors"
           >
           <div
             v-if="timezoneSearch"
-            class="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline-variant/30 max-h-40 overflow-y-auto"
+            class="glass absolute top-full left-0 right-0 z-20 max-h-40 overflow-y-auto"
           >
             <button
               v-for="tz in timezoneOptions.slice(0, 20)"
               :key="tz"
-              class="block w-full text-left px-3 py-1.5 font-data text-xs text-on-surface hover:bg-surface-variant transition-colors"
+              class="block w-full text-left px-3 py-1.5 font-data text-xs text-on-surface hover:bg-primary/[0.08] transition-colors"
               @click="() => { timezoneName = tz; timezoneSearch = '' }"
             >
               {{ tz }}
             </button>
           </div>
         </div>
-        <p v-if="scheduledAtUTCPreview" class="font-data text-xs text-on-surface-dim">
+        <p v-if="scheduledAtUTCPreview" class="font-data text-xs text-tertiary">
           {{ scheduledAtUTCPreview }}
         </p>
       </div>

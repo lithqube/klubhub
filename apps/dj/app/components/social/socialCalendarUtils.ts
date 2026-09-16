@@ -5,12 +5,13 @@ export function dotColorForStatus(status: PostStatus): string {
   switch (status) {
     case 'failed':
     case 'permanently_failed':
-      return 'bg-secondary'
+      return 'bg-error'
     case 'published':
     case 'publishing':
-      return 'bg-on-surface-dim'
-    case 'scheduled':
+      return 'bg-tertiary'
     case 'draft':
+      return 'bg-secondary'
+    case 'scheduled':
     default:
       return 'bg-primary'
   }

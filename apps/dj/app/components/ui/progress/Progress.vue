@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -11,8 +12,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const percentage = computed(() => Math.min(100, Math.max(0, props.modelValue ?? 0)))
-
-import { computed } from 'vue'
 </script>
 
 <template>
@@ -24,13 +23,9 @@ import { computed } from 'vue'
     aria-valuemin="0"
     aria-valuemax="100"
   >
-    <!-- Fill — cyan gradient matching mockup -->
     <div
-      class="h-full rounded-none transition-all duration-300"
-      :style="{
-        width: `${percentage}%`,
-        background: 'linear-gradient(90deg, #96F8FF, #00F1FD)',
-      }"
+      class="h-full rounded-none transition-all duration-300 progress-bar-fill"
+      :style="{ width: `${percentage}%` }"
     />
   </div>
 </template>

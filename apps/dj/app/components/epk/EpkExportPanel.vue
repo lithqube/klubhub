@@ -66,27 +66,27 @@ function formatDate(iso: string): string {
 <template>
   <div class="glass-panel p-4 space-y-4">
     <!-- Section label -->
-    <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">EXPORT PDF</p>
+    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">EXPORT PDF</p>
 
     <!-- Save status indicator -->
     <div
       v-if="(store.saveStatus as string) === 'saved'"
       data-testid="save-status-indicator"
-      class="text-xs font-terminal text-primary"
+      class="text-xs font-terminal tracking-terminal text-primary"
     >
       SAVED
     </div>
 
     <!-- Section visibility toggles -->
     <div class="space-y-2">
-      <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">INCLUDE SECTIONS</p>
+      <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">INCLUDE SECTIONS</p>
       <div
         v-for="section in SECTIONS"
         :key="section.key"
         class="flex items-center justify-between py-1"
         :data-testid="`section-toggle-row-${section.key}`"
       >
-        <span class="text-xs font-terminal text-on-surface-variant uppercase tracking-wider">
+        <span class="text-xs font-terminal text-on-surface-variant uppercase tracking-terminal">
           {{ section.label }}
         </span>
         <Switch
@@ -118,10 +118,10 @@ function formatDate(iso: string): string {
 
     <!-- Export history list -->
     <div class="space-y-2">
-      <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">EXPORT HISTORY</p>
+      <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">EXPORT HISTORY</p>
       <div
         v-if="(store.exports as any[]).length === 0"
-        class="text-xs text-muted-foreground font-terminal"
+        class="text-xs text-tertiary font-terminal uppercase"
       >
         No exports yet
       </div>
@@ -136,19 +136,19 @@ function formatDate(iso: string): string {
           data-testid="export-history-item"
           class="flex items-center justify-between gap-2 text-xs font-terminal"
         >
-          <span class="text-muted-foreground">{{ formatDate(item.createdAt) }}</span>
+          <span class="font-terminal text-tertiary">{{ formatDate(item.createdAt) }}</span>
           <div class="flex items-center gap-2">
             <a
               :href="item.downloadUrl"
               target="_blank"
               rel="noopener"
-              class="text-primary hover:underline uppercase tracking-wider"
+              class="text-primary hover:underline uppercase tracking-terminal"
               :data-testid="`export-download-${item.id}`"
             >
               DOWNLOAD
             </a>
             <button
-              class="text-muted-foreground hover:text-error font-terminal"
+              class="text-tertiary hover:text-error font-terminal"
               type="button"
               :data-testid="`export-delete-${item.id}`"
               @click="(store.deleteExport as (id: string) => Promise<void>)(item.id)"

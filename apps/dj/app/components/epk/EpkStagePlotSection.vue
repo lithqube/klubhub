@@ -35,7 +35,7 @@ async function handleFile(file: File) {
 <template>
   <div class="glass-panel p-4 space-y-4">
     <!-- Section label -->
-    <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">STAGE PLOT</p>
+    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">STAGE PLOT</p>
 
     <!-- Image preview when uploaded -->
     <template v-if="stagePlotPath">
@@ -45,7 +45,7 @@ async function handleFile(file: File) {
         class="w-full object-cover aspect-video"
         alt="Stage plot"
       />
-      <p class="text-xs text-muted-foreground font-terminal">{{ uploadedFilename || stagePlotPath }}</p>
+      <p class="text-xs text-tertiary font-data">{{ uploadedFilename || stagePlotPath }}</p>
     </template>
 
     <!-- Drop zone when no image -->
@@ -57,11 +57,11 @@ async function handleFile(file: File) {
         @drop.prevent="onDrop"
         @click="fileInput?.click()"
       >
-        <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">
+        <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">
           DROP STAGE PLOT IMAGE
         </p>
-        <p class="text-xs text-muted-foreground font-terminal">
-          JPEG or PNG
+        <p class="text-xs text-tertiary font-terminal uppercase">
+          JPEG OR PNG
         </p>
         <input
           ref="fileInput"

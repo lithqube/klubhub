@@ -45,7 +45,7 @@ const colors = computed(() => PRESETS[props.preset]);
 <template>
   <TrackCard :colors="colors" :bgMode="bgMode" :bgValue="bgValue" :tracks="tracks">
     <TrackCardLogo :logoPath="logoPath" :logoPosition="logoPosition" />
-    <TrackCardHeader :djName="djName" :tracklist="tracklist" />
+    <TrackCardHeader :djName="djName" :tracklist="tracklist" :colors="colors" />
     <TrackCardTrackList
       :tracks="tracks"
       :trackRangeStart="trackRangeStart"

@@ -40,14 +40,14 @@ function isActive(to: string) {
 <template>
   <!-- Sidebar: 220px, full height, desktop only -->
   <aside
-    class="hidden lg:flex flex-col flex-shrink-0"
-    style="width:220px;min-width:220px;height:100vh;background:var(--color-surface-container-low);border-right:1px solid rgba(150,248,255,.08);position:relative;z-index:10;"
+    class="hidden lg:flex flex-col flex-shrink-0 border-r border-primary/[0.08]"
+    style="width:220px;min-width:220px;height:100vh;background:var(--color-surface-container-low);position:relative;z-index:10;"
   >
 
     <!-- Logo area with bracket-box corner decoration -->
     <div
-      class="bracket-box"
-      style="padding:16px 18px;border-bottom:1px solid rgba(150,248,255,.08);"
+      class="bracket-box border-b border-primary/[0.08]"
+      style="padding:16px 18px;"
     >
       <div style="font-family:var(--font-command);font-size:14px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;text-transform:uppercase;">
         KlubHub DJ
@@ -73,7 +73,7 @@ function isActive(to: string) {
         style="display:flex;align-items:center;gap:10px;padding:10px 12px;font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .15s;position:relative;text-decoration:none;"
         :class="isActive(item.to) ? 'nav-item-active' : 'nav-item-inactive'"
         :style="isActive(item.to)
-          ? 'color:var(--color-primary);box-shadow:inset 0 0 20px rgba(150,248,255,.04),var(--shadow-glow-primary);'
+          ? 'color:var(--color-primary);box-shadow:var(--shadow-glow-primary);'
           : 'color:var(--color-tertiary);'"
       >
         <component
@@ -86,10 +86,10 @@ function isActive(to: string) {
     </nav>
 
     <!-- Footer: theme switcher + logout -->
-    <div style="border-top:1px solid rgba(150,248,255,.08);">
+    <div class="border-t border-primary/[0.08]">
 
       <!-- 3-way theme segmented control -->
-      <div style="padding:10px 12px;border-bottom:1px solid rgba(150,248,255,.08);">
+      <div class="border-b border-primary/[0.08]" style="padding:10px 12px;">
         <div style="font-family:var(--font-terminal);font-size:7px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-tertiary);margin-bottom:7px;">
           DISPLAY MODE
         </div>
@@ -115,7 +115,8 @@ function isActive(to: string) {
 
       <!-- Logout -->
       <button
-        style="display:flex;align-items:center;gap:10px;padding:10px 12px;width:100%;font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);background:transparent;border:none;border-bottom:1px dashed rgba(150,248,255,.12);cursor:pointer;transition:all .15s;"
+        class="border-b border-dashed border-primary/[0.12]"
+        style="display:flex;align-items:center;gap:10px;padding:10px 12px;width:100%;font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);background:transparent;border-left:none;border-right:none;border-top:none;cursor:pointer;transition:all .15s;"
         aria-label="Log out"
         @mouseenter="($event.currentTarget as HTMLElement).style.color = 'var(--color-error)'"
         @mouseleave="($event.currentTarget as HTMLElement).style.color = 'var(--color-tertiary)'"

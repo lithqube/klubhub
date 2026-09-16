@@ -29,7 +29,7 @@ const variantClasses = {
     aria-live="assertive"
   >
     <div class="flex-1 space-y-1">
-      <p v-if="toast.title" class="font-command tracking-command text-sm font-medium">
+      <p v-if="toast.title" class="font-command tracking-command text-sm font-bold uppercase">
         {{ toast.title }}
       </p>
       <p v-if="toast.description" class="text-xs text-on-surface-variant">

@@ -34,11 +34,11 @@ function onBioLongChange(value: string | number) {
 <template>
   <div class="glass-panel p-4 space-y-4">
     <!-- Section label -->
-    <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">BIO</p>
+    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">BIO</p>
 
     <!-- Short bio -->
     <div class="space-y-1">
-      <label class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">
+      <label class="text-xs tracking-terminal text-tertiary uppercase font-terminal">
         SHORT BIO
       </label>
       <Input
@@ -50,7 +50,7 @@ function onBioLongChange(value: string | number) {
       />
       <span
         data-testid="bio-short-counter"
-        class="text-xs text-muted-foreground font-terminal"
+        class="text-xs text-tertiary font-terminal"
       >
         {{ bioShort.length }} / 280
       </span>
@@ -58,7 +58,7 @@ function onBioLongChange(value: string | number) {
 
     <!-- Long bio -->
     <div class="space-y-1">
-      <label class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">
+      <label class="text-xs tracking-terminal text-tertiary uppercase font-terminal">
         LONG BIO (Markdown)
       </label>
       <Textarea

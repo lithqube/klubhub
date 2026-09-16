@@ -87,7 +87,7 @@ function scheduleToInstagram() {
       <Button
         variant="default"
         :disabled="exportLoading || !tracklist"
-        class="gradient-cta text-on-primary font-command tracking-command text-xs uppercase flex-1"
+        class="gradient-cta text-on-primary font-terminal tracking-terminal text-[9px] uppercase flex-1"
         @click="exportImage('story')"
       >
         <span v-if="exportLoading" class="font-terminal tracking-terminal text-xs uppercase">
@@ -100,7 +100,7 @@ function scheduleToInstagram() {
       <Button
         variant="default"
         :disabled="exportLoading || !tracklist"
-        class="gradient-cta text-on-primary font-command tracking-command text-xs uppercase flex-1"
+        class="gradient-cta text-on-primary font-terminal tracking-terminal text-[9px] uppercase flex-1"
         @click="exportImage('square')"
       >
         <span v-if="exportLoading" class="font-terminal tracking-terminal text-xs uppercase">
@@ -114,7 +114,7 @@ function scheduleToInstagram() {
     <Button
       variant="ghost"
       :disabled="exportLoading || !tracklist"
-      class="w-full ghost-border font-command tracking-command text-on-surface text-xs uppercase"
+      class="w-full ghost-border font-terminal tracking-terminal text-on-surface text-[9px] uppercase"
       @click="exportBoth"
     >
       <span v-if="exportLoading" class="font-terminal tracking-terminal text-xs uppercase">
@@ -130,13 +130,15 @@ function scheduleToInstagram() {
           SYSTEM_PROCESS: IMAGE_GENERATION
         </span>
       </div>
-      <Progress :model-value="undefined" class="animate-pulse" />
+      <div class="prog-track">
+        <div class="prog-fill prog-fill-anim" style="width:60%;" />
+      </div>
     </div>
 
     <!-- Error display -->
     <div
       v-if="exportError"
-      class="p-3 ghost-border shadow-glow-error"
+      class="p-3 border border-dashed border-error/30 shadow-glow-error"
     >
       <p class="font-terminal tracking-terminal text-error text-xs uppercase">
         ERROR: {{ exportError }}
@@ -147,20 +149,23 @@ function scheduleToInstagram() {
     <div v-if="lastExportStoryPath || lastExportSquarePath" class="pt-1">
       <Button
         variant="ghost"
-        class="w-full ghost-border font-command tracking-command text-primary text-xs uppercase"
+        class="w-full ghost-border font-terminal tracking-terminal text-primary text-[9px] uppercase"
         @click="scheduleToInstagram"
       >
-        ⚡ SCHEDULE TO INSTAGRAM
+        SCHEDULE TO INSTAGRAM
       </Button>
     </div>
 
     <!-- No tracklist message -->
     <div
       v-if="!tracklist"
-      class="text-center py-4"
+      class="text-center py-4 space-y-1"
     >
       <p class="font-terminal tracking-terminal text-tertiary text-xs uppercase">
-        NO_TRACKLIST_LOADED — upload a file first
+        NO_TRACKLIST_LOADED
+      </p>
+      <p class="font-data text-tertiary text-xs">
+        Upload a file first
       </p>
     </div>
   </div>

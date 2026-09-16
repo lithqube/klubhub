@@ -20,16 +20,16 @@ async function connectInstagram() {
 <template>
   <div
     v-if="!store.account || store.account.status === 'disconnected'"
-    class="glass-panel border border-surface-variant px-6 py-5 flex items-center justify-between gap-6"
+    class="glass-panel ghost-border px-6 py-5 flex items-center justify-between gap-6"
   >
     <!-- Left: icon + text -->
     <div class="flex items-center gap-4">
-      <Camera class="w-6 h-6 text-on-surface-dim flex-shrink-0" aria-hidden="true" />
+      <Camera class="w-6 h-6 text-tertiary flex-shrink-0" aria-hidden="true" />
       <div>
         <p class="font-terminal tracking-terminal text-xs uppercase text-on-surface font-bold">
           CONNECT YOUR INSTAGRAM ACCOUNT
         </p>
-        <p class="font-terminal tracking-terminal text-xs text-on-surface-dim mt-0.5">
+        <p class="font-terminal tracking-terminal text-xs text-tertiary mt-0.5">
           Schedule posts directly from your tracklist exports
         </p>
       </div>
@@ -37,7 +37,7 @@ async function connectInstagram() {
 
     <!-- Right: CTA button -->
     <button
-      class="gradient-cta px-5 py-2.5 font-terminal tracking-terminal text-xs uppercase whitespace-nowrap flex items-center gap-2 disabled:opacity-60"
+      class="btn-hud btn-hud-cta whitespace-nowrap disabled:opacity-60"
       :disabled="loading"
       @click="connectInstagram"
     >

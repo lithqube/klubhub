@@ -23,7 +23,7 @@ const sideClasses = {
 <template>
   <DialogRoot>
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-50 bg-surface/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+      <DialogOverlay class="fixed inset-0 z-50 bg-surface/80 backdrop-blur-glass data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
       <DialogContent
         :class="cn(
           'fixed z-50 gap-4 glass-panel-heavy p-6 shadow-glow-primary transition ease-in-out',

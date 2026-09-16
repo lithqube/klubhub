@@ -43,7 +43,7 @@ const getArtworkStyle = () => {
   }
 
   return {
-    backgroundColor: '#333333',
+    backgroundColor: props.colors.accent,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -53,12 +53,12 @@ const getArtworkStyle = () => {
 
 <template>
   <div
-    style="
-      display: flex;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    "
+    :style="{
+      display: 'flex',
+      alignItems: 'center',
+      padding: '12px 0',
+      borderBottom: `1px solid ${colors.text}1a`,
+    }"
   >
     <!-- Position -->
     <div
@@ -78,9 +78,9 @@ const getArtworkStyle = () => {
         {
           width: '40px',
           height: '40px',
-          borderRadius: '4px',
           marginRight: '16px',
           flexShrink: 0,
+          position: 'relative',
         },
         getArtworkStyle(),
       ]"
@@ -103,7 +103,6 @@ const getArtworkStyle = () => {
               color: white;
               font-size: 10px;
               padding: 2px 4px;
-              border-radius: 2px;
             "
             >LOCK</span
           >
@@ -122,17 +121,18 @@ const getArtworkStyle = () => {
       >
         <div style="flex: 1">
           <div
-            style="
-              font-weight: 600;
-              font-size: 20px;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            "
+            :style="{
+              fontWeight: 600,
+              fontSize: '20px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              color: colors.text,
+            }"
           >
             {{ track.title || 'Unknown Title' }}
           </div>
-          <div style="font-size: 16px; opacity: 0.8">
+          <div :style="{ fontSize: '16px', opacity: 0.8, color: colors.text }">
             {{ track.artist || 'Unknown Artist' }}
           </div>
         </div>
@@ -140,42 +140,26 @@ const getArtworkStyle = () => {
         <!-- Conditional fields based on visibleFields -->
         <div
           v-if="visibleFields.includes('bpm') && track.bpm"
-          style="text-align: right; font-size: 18px; min-width: 60px"
+          :style="{ textAlign: 'right', fontSize: '18px', minWidth: '60px', color: colors.text }"
         >
           {{ track.bpm }} BPM
         </div>
         <div
           v-else-if="visibleFields.includes('bpm')"
-          style="
-            text-align: right;
-            font-size: 18px;
-            min-width: 60px;
-            opacity: 0.5;
-          "
+          :style="{ textAlign: 'right', fontSize: '18px', minWidth: '60px', opacity: 0.5, color: colors.text }"
         >
           — BPM
         </div>
 
         <div
           v-if="visibleFields.includes('musical_key') && track.musicalKey"
-          style="
-            text-align: right;
-            font-size: 18px;
-            min-width: 60px;
-            margin-left: 12px;
-          "
+          :style="{ textAlign: 'right', fontSize: '18px', minWidth: '60px', marginLeft: '12px', color: colors.text }"
         >
           {{ track.musicalKey }}
         </div>
         <div
           v-else-if="visibleFields.includes('musical_key')"
-          style="
-            text-align: right;
-            font-size: 18px;
-            min-width: 60px;
-            margin-left: 12px;
-            opacity: 0.5;
-          "
+          :style="{ textAlign: 'right', fontSize: '18px', minWidth: '60px', marginLeft: '12px', opacity: 0.5, color: colors.text }"
         >
           — Key
         </div>

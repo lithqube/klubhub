@@ -98,16 +98,16 @@ defineExpose({ postsByDate })
     <!-- Header: prev / month label / next -->
     <div class="flex items-center justify-between mb-4">
       <button
-        class="ghost-border px-3 py-1.5 font-terminal tracking-terminal text-xs uppercase text-on-surface-dim hover:text-on-surface transition-colors"
+        class="ghost-border px-3 py-1.5 font-terminal tracking-terminal text-xs uppercase text-tertiary hover:text-on-surface transition-colors"
         @click="prevMonth"
       >
         ← PREV
       </button>
-      <span class="font-display font-bold text-sm uppercase text-on-surface tracking-wide">
+      <span class="font-command font-bold text-sm uppercase text-on-surface tracking-command">
         {{ monthLabel }}
       </span>
       <button
-        class="ghost-border px-3 py-1.5 font-terminal tracking-terminal text-xs uppercase text-on-surface-dim hover:text-on-surface transition-colors"
+        class="ghost-border px-3 py-1.5 font-terminal tracking-terminal text-xs uppercase text-tertiary hover:text-on-surface transition-colors"
         @click="nextMonth"
       >
         NEXT →
@@ -119,7 +119,7 @@ defineExpose({ postsByDate })
       <div
         v-for="day in ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']"
         :key="day"
-        class="font-terminal tracking-terminal text-xs text-on-surface-dim uppercase text-center py-1"
+        class="font-terminal tracking-terminal text-xs text-tertiary uppercase text-center py-1"
       >
         {{ day }}
       </div>
@@ -135,7 +135,7 @@ defineExpose({ postsByDate })
         <div
           v-else
           :data-date="cell.date"
-          class="h-14 p-1.5 flex flex-col justify-between cursor-pointer border border-transparent transition-colors rounded-sm"
+          class="h-14 p-1.5 flex flex-col justify-between cursor-pointer border border-transparent transition-colors"
           :class="[
             selectedDay === cell.date
               ? 'bg-primary/20 border-primary'
@@ -145,7 +145,7 @@ defineExpose({ postsByDate })
           @click="onDayClick(cell.date)"
         >
           <!-- Day number -->
-          <span class="font-terminal tracking-terminal text-xs text-on-surface">
+          <span class="font-command tracking-command text-xs text-on-surface">
             {{ cell.dayNum }}
           </span>
 
@@ -155,7 +155,7 @@ defineExpose({ postsByDate })
               <span
                 v-for="post in postsByDate.get(cell.date)"
                 :key="post.id"
-                class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                class="w-1.5 h-1.5 flex-shrink-0"
                 :class="dotColorForStatus(post.status)"
               />
             </template>
@@ -163,10 +163,10 @@ defineExpose({ postsByDate })
               <span
                 v-for="post in postsByDate.get(cell.date)!.slice(0, 3)"
                 :key="post.id"
-                class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                class="w-1.5 h-1.5 flex-shrink-0"
                 :class="dotColorForStatus(post.status)"
               />
-              <span class="font-terminal text-[10px] text-on-surface-dim leading-none">
+              <span class="font-terminal text-[10px] text-tertiary leading-none">
                 +{{ (postsByDate.get(cell.date)?.length ?? 0) - 3 }}
               </span>
             </template>
