@@ -1,5 +1,9 @@
 # KLUBHUB DJ
 
+> **Historical requirements record:** MinIO variables and service references
+> below are superseded by Garage and `S3_*` configuration for v1.0.0. Current
+> deployment guidance lives in `CONFIGURATION.md` and `SELF-HOSTING.md`.
+
 *Non-Functional Requirements Document*
 
 ---

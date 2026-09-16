@@ -33,7 +33,7 @@ export interface CreatePostRequest {
   caption: string
   scheduledAt: string  // datetime-local format: "2026-10-24T23:45"
   timezoneName: string
-  imageId?: string     // existing MinIO path
+  imageId?: string     // existing Garage object key (legacy API field)
   imageFile?: File     // custom upload
 }
 

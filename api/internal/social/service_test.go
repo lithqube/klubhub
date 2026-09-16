@@ -16,8 +16,8 @@ import (
 
 // mockRepo is a minimal in-memory stub for service tests.
 type mockRepo struct {
-	account *social.SocialAccount
-	posts   map[uuid.UUID]*social.ScheduledPost
+	account   *social.SocialAccount
+	posts     map[uuid.UUID]*social.ScheduledPost
 	upsertErr error
 	resetErr  error
 }

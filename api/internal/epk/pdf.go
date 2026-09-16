@@ -79,8 +79,8 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 	}
 
 	// ── Press Photos section ─────────────────────────────────────────────────
-	// Note: photos are stored as MinIO paths; we include a reference list in
-	// the PDF (full photo embedding requires MinIO byte fetch which is out of
+	// Note: photos are stored as Garage object keys; we include a reference list
+	// in the PDF (full photo embedding requires an S3 byte fetch, which is out of
 	// scope for the PDF renderer — paths are listed as references).
 	if sectionEnabled(content.SectionVisibility, "photos") && len(content.PhotoPaths) > 0 {
 		writeSectionHeading(f, "PRESS PHOTOS", ar, ag, ab)

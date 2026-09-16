@@ -55,5 +55,5 @@ const logoStyle = computed(() => {
     :src="logoPath"
     :style="logoStyle"
     alt="Logo"
-  />
+  >
 </template>

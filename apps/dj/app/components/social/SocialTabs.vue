@@ -1,8 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '~/components/ui/tabs'
-import { storeToRefs } from 'pinia'
-import { useSocialStore } from '~/stores/social'
 import SocialPostCompose from '~/components/social/SocialPostCompose.vue'
 import SocialQueueGrid from '~/components/social/SocialQueueGrid.vue'
 import type { ScheduledPost } from '~/types/social'
@@ -42,9 +39,9 @@ function onTabChange(val: string) {
           :class="activeTab === 'queue'
             ? 'text-primary border-primary'
             : 'text-tertiary border-transparent hover:text-on-surface'"
-          @click="onTabChange('queue')"
           role="tab"
           :aria-selected="activeTab === 'queue'"
+          @click="onTabChange('queue')"
         >
           QUEUE
         </button>
@@ -55,9 +52,9 @@ function onTabChange(val: string) {
           :class="activeTab === 'calendar'
             ? 'text-primary border-primary'
             : 'text-tertiary border-transparent hover:text-on-surface'"
-          @click="onTabChange('calendar')"
           role="tab"
           :aria-selected="activeTab === 'calendar'"
+          @click="onTabChange('calendar')"
         >
           CALENDAR
         </button>
@@ -92,8 +89,8 @@ function onTabChange(val: string) {
       <div class="flex items-center gap-2 md:gap-3 pb-3">
         <button
           class="ghost-border px-3 md:px-4 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-on-surface-variant hover:text-primary hover:border-primary/40 transition-colors flex items-center gap-1.5 md:gap-2"
-          @click="emit('quick-export')"
           aria-label="Quick export from tracklist"
+          @click="emit('quick-export')"
         >
           <span aria-hidden="true">⚡</span>
           <!-- Label: icon-only on mobile (Progressive Disclosure), full label on md+ -->

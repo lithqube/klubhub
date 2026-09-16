@@ -71,6 +71,10 @@ type igRefreshTokenResponse struct {
 // CreateContainer creates an Instagram media container for the given post.
 // For feed posts, media_type=IMAGE; for stories, media_type=STORIES.
 // On HTTP 429, returns a *RateLimitError with RetryAfter duration.
+//
+// All non-rate-limit error returns wrap the detail with the sanitized
+// status + body so that transport errors do not leak the access_token
+// the API client embedded in its request URL.
 func (c *InstagramClient) CreateContainer(ctx context.Context, igUserID, accessToken, imageURL, caption string, postType PostType) (string, error) {
 	mediaType := "IMAGE"
 	if postType == PostTypeStory {
@@ -110,7 +114,8 @@ func (c *InstagramClient) CreateContainer(ctx context.Context, igUserID, accessT
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("create container: unexpected status %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("create container: status %d: %s",
+			resp.StatusCode, SanitizeTransportError(string(body)))
 	}
 
 	var result igMediaResponse
@@ -141,7 +146,8 @@ func (c *InstagramClient) PublishContainer(ctx context.Context, igUserID, access
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("publish container: unexpected status %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("publish container: status %d: %s",
+			resp.StatusCode, SanitizeTransportError(string(body)))
 	}
 
 	var result igMediaResponse
@@ -172,7 +178,8 @@ func (c *InstagramClient) CheckContainerStatus(ctx context.Context, containerID,
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("check container status: unexpected status %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("check container status: status %d: %s",
+			resp.StatusCode, SanitizeTransportError(string(body)))
 	}
 
 	var result igContainerStatusResponse
@@ -184,6 +191,12 @@ func (c *InstagramClient) CheckContainerStatus(ctx context.Context, containerID,
 
 // RefreshToken refreshes an Instagram long-lived access token.
 // Returns the new token and its expiry time.
+//
+// Error strings from this function intentionally do NOT include the
+// full request URL — the URL carries access_token=<value> in the
+// query, and we sanitize the body but the URL string itself is the
+// caller's, not the body's. We log the unredacted URL only via the
+// caller (worker.go) which goes to a private log sink.
 func (c *InstagramClient) RefreshToken(ctx context.Context, currentToken string) (string, time.Time, error) {
 	endpoint := fmt.Sprintf("%s/refresh_access_token", c.baseURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -204,7 +217,8 @@ func (c *InstagramClient) RefreshToken(ctx context.Context, currentToken string)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", time.Time{}, fmt.Errorf("refresh token: unexpected status %d: %s", resp.StatusCode, string(body))
+		return "", time.Time{}, fmt.Errorf("refresh token: status %d: %s",
+			resp.StatusCode, SanitizeTransportError(string(body)))
 	}
 
 	var result igRefreshTokenResponse

@@ -36,7 +36,7 @@ type MusicBrainzSearcher interface {
 	Search(ctx context.Context, title, artist string) (string, error)
 }
 
-// ArtworkCacher interface for MinIO cache
+// ArtworkCacher abstracts the Garage-backed artwork cache.
 type ArtworkCacher interface {
 	Get(ctx context.Context, title, artist string) string
 	Put(ctx context.Context, title, artist string, imageURL string) error

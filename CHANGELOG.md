@@ -1,38 +1,101 @@
 # Changelog
 
-All notable changes to KlubHub DJ are documented here. The format is based on
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to KlubHub DJ are documented in this file. The
+format follows [Keep a Changelog](https://keepachangelog.com/) and the
+project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0] - 2026-09-16
 
-### Added
+### Hardening for the first public release
 
-- **Phase 0 — Infrastructure** — Four-service Docker Compose stack (Postgres 16,
-  Garage S3, Go API, Nuxt frontend); health endpoint; goose migrations; backup /
-  restore scripts.
-- **Phase 1 — Tracklist Image Generator** — Upload, parse, cover art lookup
-  (Spotify / Discogs), PNG/JPEG export.
-- **Phase 1.5 — Design System Foundation** — Tailwind v4, shadcn-vue, Pinia,
-  responsive shell, 3-way theme switcher.
-- **Phase 1.5.5 — Kinetic HUD UI Migration** — Cyberpunk HUD design system
-  (`.hud-card`, `.bracket-box`, `.pulse-dot`, glass panels).
-- **Phase 2 — Social Media Scheduler** — Instagram OAuth, timezone-aware
-  scheduling, retry with backoff, calendar view.
-- **Phase 3 — EPK / Press Kit Builder** — Bio, photos, tech rider, PDF export
-  (go-pdf/fpdf).
-- **Phase 4 — Gig Tracker** (in progress) — CRUD, status workflow, venue and
-  contact database, iCal feed, booking confirmation PDF.
+This is the first publicly consumable cut of KlubHub DJ. The feature
+set mirrors `docs/v1-release-plan.md`; this entry records only the
+shipping hardening work that happened between the last feature
+branch and the v1.0.0 tag.
 
-### Changed
+#### Added
 
-- Object storage migrated from MinIO to **Garage v2** (S3-compatible,
-  self-hosted).
+- Three GitHub Actions workflows under `.github/workflows/`:
+  - `ci.yml` — lint, typecheck, unit tests, govulncheck, pnpm audit.
+  - `scan.yml` — gitleaks secret scan + CodeQL SAST (Go and JS/TS).
+  - `image.yml` — arm64 image publish to GHCR on tag, with a
+    post-build sanity check that fails the job if any non-arm64
+    platform is present in the published manifest.
+- `.dockerignore` at root, `api/`, and `apps/dj/`, scoping the build
+  context so tracked secrets (`.env`, `garage.toml`, `backups/`)
+  cannot accidentally end up in a published image layer.
+- `apps/dj/server/api/v1/gigs/calendar.ics.get.ts` and
+  `apps/dj/server/api/v1/gigs/[id]/pdf.get.ts` now refuse to run
+  in production without `NUXT_PUBLIC_API_BASE` (returns 503).
+- `scripts/backup.sh`, `scripts/restore.sh` rewritten to fail closed,
+  use standard AWS-CLI env vars, and run with the prod compose
+  file/project.
+- `scripts/garage-bootstrap.sh` (new, idempotent).
+- Testcontainers integration coverage for the complete Gig lifecycle against
+  PostgreSQL 16 with all embedded Goose migrations applied.
+- Bruno API smoke collection under `tests/bruno/` with 11 requests covering
+  health, settings, tracklists, gigs/calendar security, EPK, and social APIs.
 
-### Notes
+#### Changed
 
-- The repository is pre-`v1.0.0` and the public API surface (HTTP routes, JSON
-  shapes) may change without a breaking-version bump. See
-  [`docs/v1-release-plan.md`](./docs/v1-release-plan.md) for the path to v1.
+- `api/Dockerfile` runtime base pinned by digest
+  (`gcr.io/distroless/static-debian12:nonroot@sha256:52dcfbab…`).
+- `cmd/api/main.go` splits `main()` and `run()`, adds `-healthcheck`
+  CLI flag, wires `srv.Shutdown` with a bounded `SHUTDOWN_TIMEOUT_SEC`
+  (default 30 s).
+- `gig.Handler` validates calendar/PDF bearer tokens via
+  `crypto/subtle.ConstantTimeCompare` against `config.ICALSecret`
+  (env-injected; required). The legacy placeholder literal
+  `ICAL_SECRET` is rejected.
+- `social` package: server-side state store (single-use, 10-minute
+  TTL, cookie-bound), sanitized transport errors
+  (`SanitizeTransportError`), and zero-write guarantees on every
+  OAuth failure path.
+- `platform/http.Middleware` enforces a 50 MiB absolute request ceiling;
+  JSON/media handlers enforce tighter route-specific caps. All `http.Server` timeouts
+  (`ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`,
+  `IdleTimeout`) are set from config.
+- `docker-compose.yml` now declares `stop_grace_period` for the api
+  and frontend services, matches the API's `SHUTDOWN_TIMEOUT_SEC`.
+- Garage is the sole supported object-storage service. Runtime configuration
+  uses `S3_*`; legacy `MINIO_*` aliases were removed. `minio-go` remains only
+  as the S3 protocol client library.
+- `apps/dj/nuxt.config.ts` removes `icalSecret` from
+  `runtimeConfig.public` (the secret is server-side only) and
+  refuses to build a production image without `NUXT_PUBLIC_API_BASE`.
+- `apps/dj/server/api/v1/epk/content.put.ts` no longer fake-200s
+  in production; the entire directory is renamed to `v1.mock/` and
+  excluded from production bundles via the `build:before` hook
+  (Plan D).
 
-[Unreleased]: https://github.com/lithqube/klubhub-dj/compare/main...HEAD
+#### Fixed
+
+- `internal/platform/migrations/006..010_*.sql` — Go migrations
+  had been suffixed `005b..005f_*.sql`; Goose's integer parse
+  rejects nonnumeric prefixes, so the API crashed on startup.
+  Renumbered to contiguous `006..010`.
+- API healthcheck no longer uses `wget` against a scratch image
+  (the runtime is distroless). Switched to a CLI flag
+  `-healthcheck` invoked from compose as `CMD ["-healthcheck"]`.
+- MusicBrainz client uses bounded body reads; replaced unbounded
+  `http.Get` with `artworkClient` (timeout, no redirects, 5 MiB
+  cap).
+- `scripts/{backup,restore}.sh` no longer rely on `--no-verify-ssl`,
+  hard-coded `--access-key` / `--secret-key` flags, or `|| true`
+  error suppression.
+- Manual artwork URLs now use Garage-compatible presigning rather than a
+  hard-coded legacy `localhost:9000` URL.
+
+#### Security
+
+- Two security bugs caught in code review of B.4 — both fixed in the
+  same PR:
+  - DoS via missing-cookie state consumption.
+  - Sanitization bypass in the 429 worker branch.
+- Calendar/PDF tokens were a fixed literal in source. Now
+  env-injected, constant-time compared, and the legacy placeholder
+  literal is rejected.
+
+## [0.x] Internal milestones
+
+Pre-public development cycles. See git history and `.planning/`.

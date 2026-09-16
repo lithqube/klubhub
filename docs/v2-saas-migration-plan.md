@@ -61,7 +61,7 @@ klubhub-dj-cloud (new, private)
 | User registration | Sign up, email verification, password reset |
 | `user_id` enforcement | Make all nullable `user_id` columns NOT NULL; backfill existing data |
 | Row-Level Security | PostgreSQL RLS policies on all tables — tenant isolation at DB level |
-| MinIO isolation | Bucket-per-tenant or prefix-per-tenant with IAM policies |
+| Garage isolation | Bucket-per-tenant or prefix-per-tenant with IAM policies |
 | Tenant middleware | Extract tenant ID from JWT, inject into `context.Context` for all handlers |
 | Session management | Refresh tokens with rotation; secure cookie + Bearer token support |
 | API key support | Allow API access via long-lived API keys (for integrations) |
@@ -175,7 +175,7 @@ klubhub-dj-cloud (new, private)
 |------|---------|
 | Kubernetes manifests | Helm charts for all services |
 | PostgreSQL | Managed service (RDS/Cloud SQL) with read replicas, automated backups |
-| Object storage | S3 for SaaS (MinIO retained for self-hosted Docker Compose) |
+| Object storage | S3 for SaaS (Garage retained for self-hosted Docker Compose) |
 | Redis cluster | Sessions, caching, job queue — managed Redis (ElastiCache/Memorystore) |
 | CI/CD pipeline | GitHub Actions → build → test → deploy staging → promote to prod |
 | Infrastructure as Code | Terraform (or Pulumi) for all cloud resources |
@@ -210,7 +210,7 @@ docker compose up -d
 ├── frontend     (Nuxt 4 SSR)
 ├── api          (Go monolith — all modules + scheduler)
 ├── db           (PostgreSQL 16)
-└── storage      (MinIO)
+└── storage      (Garage)
 ```
 
 - Single Go binary, no external job queue
@@ -255,7 +255,7 @@ Kubernetes Cluster
 | Auth | None | JWT + OIDC |
 | Tenancy | Single user | Multi-tenant with RLS |
 | Scheduler | In-process goroutine | Standalone service + Redis queue |
-| Storage | MinIO | S3 (MinIO for self-hosted) |
+| Storage | Garage | S3 (Garage for self-hosted) |
 | Database | Single PostgreSQL | Managed + read replicas + RLS |
 | Scaling | Vertical only | Horizontal autoscaling |
 | Deployment | Docker Compose | Kubernetes + Helm + Terraform |

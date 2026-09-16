@@ -7,7 +7,7 @@ import GigStatsCards from '../components/gig/GigStatsCards.vue'
 import GigListRow from '../components/gig/GigListRow.vue'
 import GigCalendarView from '../components/gig/GigCalendarView.vue'
 import GigFormDialog from '../components/gig/GigFormDialog.vue'
-import GigActions from '../components/gig/GigActions.vue'
+
 
 useHead({ title: 'Gigs — KlubHub DJ' })
 
@@ -151,7 +151,7 @@ function clearFilters() {
             placeholder="City..."
             style="font-size:9px;padding:4px 8px;width:80px;"
             @input="setCityFilter(($event.target as HTMLInputElement).value)"
-          />
+          >
           <button
             v-if="filters.status || filters.city"
             class="btn-hud"

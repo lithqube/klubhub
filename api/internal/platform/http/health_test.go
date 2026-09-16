@@ -3,14 +3,15 @@ package http_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	apphttp "github.com/klubhub/dj/api/internal/platform/http"
 	"github.com/klubhub/dj/api/internal/platform/config"
+	apphttp "github.com/klubhub/dj/api/internal/platform/http"
 )
 
 // mockPool implements a minimal interface for testing health by wrapping pgxpool.Pool.
@@ -37,15 +38,15 @@ func (f *fakePool) Ping(ctx context.Context) error {
 
 func testConfig(spotifyID string) *config.Config {
 	return &config.Config{
-		DatabaseURL:           "postgres://test:test@localhost/test",
-		MinioEndpoint:         "localhost:9000",
-		MinioAccessKey:        "test",
-		MinioSecretKey:        "test",
-		MinioPublicEndpoint:   "http://localhost:9000",
-		MinioBucket:           "test",
-		SpotifyClientID:       spotifyID,
-		DiscogsAPIKey:         "",
-		InstagramClientID:     "",
+		DatabaseURL:       "postgres://test:test@localhost/test",
+		S3Endpoint:        "localhost:39000",
+		S3AccessKey:       "test",
+		S3SecretKey:       "test",
+		S3PublicEndpoint:  "http://localhost:39000",
+		S3Bucket:          "test",
+		SpotifyClientID:   spotifyID,
+		DiscogsAPIKey:     "",
+		InstagramClientID: "",
 	}
 }
 
@@ -91,8 +92,11 @@ func TestHealthHandler_DBFails_Degraded(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 even on DB failure, got %d", rr.Code)
+	// B.2: a failed DB subsystem must surface as HTTP 503 so Docker's
+	// healthcheck (and external monitors) see a real failure rather than
+	// an always-200 probe.
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 on DB failure, got %d", rr.Code)
 	}
 
 	var resp apphttp.HealthResponse
@@ -106,6 +110,57 @@ func TestHealthHandler_DBFails_Degraded(t *testing.T) {
 
 	if resp.Integrations["database"].Status != "error" {
 		t.Errorf("expected database=error, got %q", resp.Integrations["database"].Status)
+	}
+}
+
+// TestHealthHandler_StorageFails_Degraded asserts that a degraded storage
+// subsystem surfaces as HTTP 503 (mirrors the DB failure case).
+func TestHealthHandler_StorageFails_Degraded(t *testing.T) {
+	cfg := testConfig("")
+	handler := apphttp.NewHealthHandler(
+		&fakePool{pingErr: nil},
+		&fakeStore{err: errors.New("bucket does not exist")},
+		cfg,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 on storage failure, got %d", rr.Code)
+	}
+
+	var resp apphttp.HealthResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "unhealthy" {
+		t.Errorf("expected status=unhealthy when storage fails, got %q", resp.Status)
+	}
+
+	if resp.Integrations["storage"].Status != "error" {
+		t.Errorf("expected storage=error, got %q", resp.Integrations["storage"].Status)
+	}
+}
+
+// TestHealthHandler_BothFail_Degraded asserts 503 when both DB and storage
+// fail simultaneously.
+func TestHealthHandler_BothFail_Degraded(t *testing.T) {
+	cfg := testConfig("")
+	handler := apphttp.NewHealthHandler(
+		&fakePool{pingErr: context.DeadlineExceeded},
+		&fakeStore{err: errors.New("storage down")},
+		cfg,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when both subsystems fail, got %d", rr.Code)
 	}
 }
 

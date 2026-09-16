@@ -29,7 +29,9 @@ type PressQuote struct {
 
 // EPKExport records a generated PDF export.
 type EPKExport struct {
-	ID        uuid.UUID
+	ID uuid.UUID
+	// MinioPath is a legacy schema/API name. It stores a Garage object key.
+	// Keep it until a versioned API/database migration can rename it safely.
 	MinioPath string
 	CreatedAt time.Time
 }

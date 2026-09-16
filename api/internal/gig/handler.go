@@ -2,6 +2,7 @@ package gig
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,8 +14,19 @@ import (
 )
 
 // Handler handles HTTP requests for the gig package.
+//
+// icalSecret holds the high-entropy shared secret that gates the
+// unauthenticated calendar.ics and per-gig booking PDF endpoints. It is
+// injected via NewHandler from config (Plan B.5) and MUST NOT be compared
+// against a hard-coded literal — the previous version of this handler
+// compared against the string "ICAL_SECRET" itself, which meant every
+// request that supplied the literal "ICAL_SECRET" as `?secret=...` was
+// accepted. The secret is now read from config.ICALSecret and the
+// comparison uses crypto/subtle.ConstantTimeCompare to mitigate timing
+// attacks.
 type Handler struct {
-	svc ServiceIface
+	svc        ServiceIface
+	icalSecret []byte
 }
 
 // ServiceIface defines the interface exposed by the gig service to the HTTP layer.
@@ -30,9 +42,34 @@ type ServiceIface interface {
 	GenerateBookingPDF(ctx context.Context, gigID uuid.UUID, djName string) ([]byte, string, error)
 }
 
-// NewHandler creates a Handler backed by the given service.
-func NewHandler(svc ServiceIface) *Handler {
-	return &Handler{svc: svc}
+// NewHandler creates a Handler backed by the given service. The icalSecret
+// is the high-entropy shared secret gating the calendar.ics and booking
+// PDF endpoints; an empty secret is rejected at construction so a
+// misconfigured deployment fails fast rather than silently disabling
+// authentication.
+func NewHandler(svc ServiceIface, icalSecret string) *Handler {
+	if icalSecret == "" {
+		// Fail loud rather than letting every request through. This is
+		// almost certainly a deployment misconfiguration: the secret is
+		// loaded from config.ICALSecret, which is required by envconfig.
+		panic("gig.NewHandler: icalSecret must not be empty (config.ICALSecret unset?")
+	}
+	return &Handler{svc: svc, icalSecret: []byte(icalSecret)}
+}
+
+// validateICalSecret checks the provided bearer against the configured
+// secret using a constant-time comparison. Empty bearers and the
+// historical placeholder "ICAL_SECRET" both fail.
+func (h *Handler) validateICalSecret(provided string) bool {
+	if provided == "" || len(h.icalSecret) == 0 {
+		return false
+	}
+	// Reject the legacy placeholder literal that the previous broken
+	// implementation accepted as a valid token.
+	if subtle.ConstantTimeCompare([]byte(provided), []byte("ICAL_SECRET")) == 1 {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), h.icalSecret) == 1
 }
 
 // Routes returns an http.Handler with all gig routes registered.
@@ -265,9 +302,13 @@ func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCalendarICS returns an RFC 5545 compliant iCal feed.
+//
+// Auth: a high-entropy shared secret (config.ICALSecret) must be supplied
+// via the `secret` query parameter. Comparison is constant-time; the
+// legacy "ICAL_SECRET" placeholder is explicitly rejected.
 func (h *Handler) handleCalendarICS(w http.ResponseWriter, r *http.Request) {
 	secret := r.URL.Query().Get("secret")
-	if !ValidateSecret(secret, "ICAL_SECRET") {
+	if !h.validateICalSecret(secret) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -284,9 +325,12 @@ func (h *Handler) handleCalendarICS(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetBookingPDF returns a booking confirmation PDF for a confirmed gig.
+//
+// Auth: see handleCalendarICS — constant-time compare against
+// config.ICALSecret; legacy "ICAL_SECRET" placeholder rejected.
 func (h *Handler) handleGetBookingPDF(w http.ResponseWriter, r *http.Request) {
 	secret := r.URL.Query().Get("secret")
-	if !ValidateSecret(secret, "ICAL_SECRET") {
+	if !h.validateICalSecret(secret) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}

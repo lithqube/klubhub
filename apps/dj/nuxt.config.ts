@@ -2,6 +2,32 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineNuxtConfig } from 'nuxt/config';
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
+
+// Plan D — frontend mock exclusion.
+//
+// Behavior:
+//   - Dev / staging:    /api/v1/* is served by the in-tree mock handlers
+//                        under apps/dj/server/api/v1/. This is the fast
+//                        frontend-only loop described in the README.
+//   - Production:       /api/v1/* is served exclusively by the Nitro
+//                        proxy in front of the Go API. The mock
+//                        handlers are physically excluded from the
+//                        built bundle.
+//
+// Production builds are launched by scripts/build-prod.mjs, which stages the
+// mocks before Nuxt starts. Hooks/config evaluation are too late for route
+// discovery. This guard remains as defense in depth for direct Nuxt builds.
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.NUXT_PUBLIC_API_BASE) {
+    throw new Error(
+      'Refusing to build a production Nuxt image without NUXT_PUBLIC_API_BASE. ' +
+        'Set the env var to the Go API base (e.g. http://api:8080) so the ' +
+        'Nitro proxy routes /api/v1/* to the real backend.',
+    )
+  }
+
+}
+
 export default defineNuxtConfig({
   workspaceDir: '../../',
   modules: ['@pinia/nuxt', 'shadcn-nuxt'],
@@ -29,8 +55,10 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
   },
-  // Proxy /api/v1/* to the Go backend only when NUXT_PUBLIC_API_BASE is explicitly set.
-  // Without it, Nitro serves the mock handlers in server/api/v1/ for local development.
+
+  // Proxy /api/v1/* to the Go backend in production (and dev when
+  // NUXT_PUBLIC_API_BASE is set). Without it, dev Nitro serves the
+  // mock handlers from server/api/v1/.
   routeRules: process.env.NUXT_PUBLIC_API_BASE
     ? {
         '/api/v1/**': {
@@ -50,7 +78,11 @@ export default defineNuxtConfig({
     : {},
   runtimeConfig: {
     public: {
-      icalSecret: process.env.ICAL_SECRET || '',
+      // Plan B.5: removed icalSecret from public runtime config — anything
+      // here ships in the client bundle. Calendar/PDF authentication is
+      // now exclusively server-side via process.env.ICAL_SECRET read by
+      // the Nitro handlers under apps/dj/server/api/v1/gigs/.
+      // Plan B.9: no other secret-bearing fields are allowed here.
     },
   },
 }) as any;

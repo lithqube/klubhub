@@ -42,11 +42,13 @@ type SocialAccount struct {
 
 // ScheduledPost mirrors the scheduled_posts table row.
 type ScheduledPost struct {
-	ID             uuid.UUID  `json:"id"`
-	AccountID      uuid.UUID  `json:"account_id"`
-	Status         PostStatus `json:"status"`
-	PostType       PostType   `json:"post_type"`
-	Caption        string     `json:"caption"`
+	ID        uuid.UUID  `json:"id"`
+	AccountID uuid.UUID  `json:"account_id"`
+	Status    PostStatus `json:"status"`
+	PostType  PostType   `json:"post_type"`
+	Caption   string     `json:"caption"`
+	// ImageMinioPath is a legacy persisted/API field name containing a
+	// Garage object key. Keep it for v1 compatibility.
 	ImageMinioPath string     `json:"image_minio_path"`
 	ScheduledAtUTC time.Time  `json:"scheduled_at_utc"`
 	TimezoneName   string     `json:"timezone_name"`

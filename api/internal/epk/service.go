@@ -11,11 +11,11 @@ import (
 
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
-	"github.com/minio/minio-go/v7"
 	"github.com/klubhub/dj/api/internal/settings"
+	"github.com/minio/minio-go/v7"
 )
 
-// StorageClientAdapter wraps a storage client that uses minio.PutObjectOptions and adapts
+// StorageClientAdapter wraps the minio-go S3 client used with Garage and adapts
 // it to the storageIface expected by the EPK service.
 type StorageClientAdapter struct {
 	client storageClientIface
@@ -78,10 +78,10 @@ var (
 	ErrInvalidMIME        = errors.New("photo must be JPEG or PNG")
 )
 
-// const for the MinIO bucket (consistent with existing usage).
-const minioBucket = "klubhub"
+// Bucket used for Garage object storage.
+const storageBucket = "klubhub"
 
-// storageIface is the thin interface the EPK service needs from MinIO.
+// storageIface is the thin interface the EPK service needs from Garage.
 type storageIface interface {
 	// PutObject stores an object. contentType is the MIME type e.g. "image/jpeg".
 	PutObject(ctx context.Context, bucket, key string, r io.Reader, size int64, contentType string) error
@@ -190,7 +190,7 @@ func (s *Service) UpsertContent(ctx context.Context, req UpsertEPKContentRequest
 	return content, nil
 }
 
-// UploadPhoto validates the MIME type and size, stores the file in MinIO, and appends
+// UploadPhoto validates the MIME type and size, stores the file in Garage, and appends
 // the path to the photo_paths JSONB array. Returns ErrPhotoLimitExceeded at 20 photos.
 func (s *Service) UploadPhoto(ctx context.Context, data []byte, mimeType string) (string, error) {
 	// Validate MIME type.
@@ -219,9 +219,9 @@ func (s *Service) UploadPhoto(ctx context.Context, data []byte, mimeType string)
 		ext = "png"
 	}
 
-	// Store in MinIO.
+	// Store in Garage through S3.
 	key := fmt.Sprintf("epk/photos/%s.%s", uuid.New().String(), ext)
-	if err := s.storage.PutObject(ctx, minioBucket, key, bytes.NewReader(data), int64(len(data)), mt.String()); err != nil {
+	if err := s.storage.PutObject(ctx, storageBucket, key, bytes.NewReader(data), int64(len(data)), mt.String()); err != nil {
 		return "", fmt.Errorf("store photo: %w", err)
 	}
 
@@ -234,10 +234,10 @@ func (s *Service) UploadPhoto(ctx context.Context, data []byte, mimeType string)
 	return key, nil
 }
 
-// DeletePhoto removes the photo from MinIO and from the photo_paths JSONB array.
+// DeletePhoto removes the photo from Garage and from the photo_paths JSONB array.
 func (s *Service) DeletePhoto(ctx context.Context, path string) error {
-	// Remove from MinIO.
-	if err := s.storage.DeleteObject(ctx, minioBucket, path); err != nil {
+	// Remove from Garage.
+	if err := s.storage.DeleteObject(ctx, storageBucket, path); err != nil {
 		return fmt.Errorf("delete photo from storage: %w", err)
 	}
 
@@ -260,7 +260,7 @@ func (s *Service) DeletePhoto(ctx context.Context, path string) error {
 	return nil
 }
 
-// UploadStagePlot validates MIME type and stores the stage plot image in MinIO.
+// UploadStagePlot validates MIME type and stores the stage plot image in Garage.
 // Updates stage_plot_path on the EPK content.
 func (s *Service) UploadStagePlot(ctx context.Context, data []byte, mimeType string) (string, error) {
 	mt := mimetype.Detect(data)
@@ -274,7 +274,7 @@ func (s *Service) UploadStagePlot(ctx context.Context, data []byte, mimeType str
 	}
 
 	key := fmt.Sprintf("epk/stage-plot/%s.%s", uuid.New().String(), ext)
-	if err := s.storage.PutObject(ctx, minioBucket, key, bytes.NewReader(data), int64(len(data)), mt.String()); err != nil {
+	if err := s.storage.PutObject(ctx, storageBucket, key, bytes.NewReader(data), int64(len(data)), mt.String()); err != nil {
 		return "", fmt.Errorf("store stage plot: %w", err)
 	}
 
@@ -285,7 +285,7 @@ func (s *Service) UploadStagePlot(ctx context.Context, data []byte, mimeType str
 	return key, nil
 }
 
-// GeneratePDF loads content + settings, calls renderEPKPDF, stores the result in MinIO,
+// GeneratePDF loads content + settings, calls renderEPKPDF, stores the result in Garage,
 // inserts an epk_exports row, and returns the presigned download URL (15 min expiry).
 func (s *Service) GeneratePDF(ctx context.Context) (*ExportResult, error) {
 	content, err := s.GetContent(ctx)
@@ -305,7 +305,7 @@ func (s *Service) GeneratePDF(ctx context.Context) (*ExportResult, error) {
 
 	pdfData := buf.Bytes()
 	key := fmt.Sprintf("epk/exports/%s.pdf", uuid.New().String())
-	if err := s.storage.PutObject(ctx, minioBucket, key, bytes.NewReader(pdfData), int64(len(pdfData)), "application/pdf"); err != nil {
+	if err := s.storage.PutObject(ctx, storageBucket, key, bytes.NewReader(pdfData), int64(len(pdfData)), "application/pdf"); err != nil {
 		return nil, fmt.Errorf("store PDF: %w", err)
 	}
 
@@ -314,7 +314,7 @@ func (s *Service) GeneratePDF(ctx context.Context) (*ExportResult, error) {
 		return nil, fmt.Errorf("insert export record: %w", err)
 	}
 
-	downloadURL, err := s.storage.PresignedGetObject(ctx, minioBucket, key, 15*time.Minute)
+	downloadURL, err := s.storage.PresignedGetObject(ctx, storageBucket, key, 15*time.Minute)
 	if err != nil {
 		return nil, fmt.Errorf("generate presigned URL: %w", err)
 	}
@@ -331,7 +331,7 @@ func (s *Service) ListExports(ctx context.Context) ([]EPKExport, error) {
 	return s.repo.ListExports(ctx)
 }
 
-// DeleteExport removes the MinIO object then deletes the DB row.
+// DeleteExport removes the Garage object then deletes the DB row.
 func (s *Service) DeleteExport(ctx context.Context, id uuid.UUID) error {
 	exports, err := s.repo.ListExports(ctx)
 	if err != nil {
@@ -349,7 +349,7 @@ func (s *Service) DeleteExport(ctx context.Context, id uuid.UUID) error {
 		return ErrNotFound
 	}
 
-	if err := s.storage.DeleteObject(ctx, minioBucket, minioPath); err != nil {
+	if err := s.storage.DeleteObject(ctx, storageBucket, minioPath); err != nil {
 		return fmt.Errorf("delete export from storage: %w", err)
 	}
 

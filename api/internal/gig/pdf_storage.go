@@ -4,12 +4,13 @@ import (
 	"context"
 	"io"
 
-	"github.com/minio/minio-go/v7"
 	"github.com/klubhub/dj/api/internal/platform/storage"
+	"github.com/minio/minio-go/v7"
 )
 
 // StorageAdapter wraps storage.Client to implement the PDFStorageClientIface
-// with gofpdf-compatible signature (contentType string instead of minio.PutObjectOptions).
+// with gofpdf-compatible signature (contentType string instead of the
+// minio-go SDK's S3 PutObjectOptions type). Garage is the deployed service.
 type StorageAdapter struct {
 	client *storage.Client
 }

@@ -21,9 +21,9 @@ type StorageHealthChecker interface {
 
 // HealthResponse is the JSON shape returned by GET /api/v1/health.
 type HealthResponse struct {
-	Status       string                     `json:"status"`
+	Status       string                       `json:"status"`
 	Integrations map[string]IntegrationStatus `json:"integrations"`
-	MigrationsOK bool                        `json:"migrations_ok"`
+	MigrationsOK bool                         `json:"migrations_ok"`
 }
 
 // IntegrationStatus describes the health of a single downstream integration.
@@ -33,7 +33,7 @@ type IntegrationStatus struct {
 }
 
 // NewHealthHandler returns an http.Handler for GET /api/v1/health.
-// It checks the DB, MinIO, and optional integration keys from cfg.
+// It checks the DB, Garage object storage, and optional integrations.
 func NewHealthHandler(pool DBPinger, store StorageHealthChecker, cfg *config.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		integrations := make(map[string]IntegrationStatus, 6)
@@ -81,10 +81,15 @@ func NewHealthHandler(pool DBPinger, store StorageHealthChecker, cfg *config.Con
 			integrations["instagram"] = IntegrationStatus{Status: "ok"}
 		}
 
-		// 4. Compute overall status
+		// 4. Compute overall status and HTTP status code.
+		//    Any required subsystem (database or storage) being unhealthy flips
+		//    the response to HTTP 503 so Docker's healthcheck (and external
+		//    monitors) see a real failure rather than an always-200 probe.
 		overallStatus := "healthy"
+		httpStatus := http.StatusOK
 		if unhealthy {
 			overallStatus = "unhealthy"
+			httpStatus = http.StatusServiceUnavailable
 		}
 
 		resp := HealthResponse{
@@ -94,7 +99,7 @@ func NewHealthHandler(pool DBPinger, store StorageHealthChecker, cfg *config.Con
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck
+		w.WriteHeader(httpStatus)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 }

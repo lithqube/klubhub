@@ -19,7 +19,7 @@ This file provides Claude-specific instructions for working with the KlubHub DJ 
 ## Architecture Summary
 
 ```
-Browser → Nuxt 4 (SSR/SPA) → Go API (chi) → PostgreSQL + MinIO
+Browser → Nuxt 4 (SSR/SPA) → Go API (chi) → PostgreSQL + Garage (S3 API)
          ↑ proxy only when NUXT_PUBLIC_API_BASE is set
          ↑ mock handlers at apps/dj/server/api/v1/ when unset
 ```

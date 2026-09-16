@@ -1,0 +1,57 @@
+# apps/dj/.dockerignore — scoped to the Nuxt app build context.
+#
+# Audit finding (A.1): apps/dj/Dockerfile uses `COPY . .` from the repo
+# root, baking the whole monorepo into the frontend build. We exclude
+# everything outside apps/dj plus common build/runtime noise.
+
+# ---- Secrets and runtime config ----
+.env
+.env.*
+!.env.example
+
+# ---- VCS / IDE / agent trash ----
+.git/
+.gitignore
+.gitattributes
+.claude/
+.opencode/
+.cursor/
+.idea/
+.vscode/
+
+# ---- Monorepo-level noise to exclude from this context ----
+../../.env
+../../.env.*
+!../../.env.example
+../../garage.toml
+../../backups/
+../../.git/
+../../.idea/
+../../.vscode/
+../../.nexus/
+../../.idea/
+../../.nexus/
+
+# ---- pnpm / nx cache ----
+node_modules/
+.nuxt/
+.output/
+.nitro/
+.data/
+.cache/
+dist/
+build/
+coverage/
+.nx/cache
+.nx/workspace-data
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+
+# ---- Test artifacts ----
+test-output/
+vitest.config.*.timestamp*

@@ -41,15 +41,20 @@ You get:
 | 1.5.5 | **Kinetic HUD** | ✅ Complete | Cyberpunk HUD aesthetic — glass panels, bracket boxes, pulse dots, variable-font typography |
 | 2 | **Social Media Scheduler** | ✅ Complete | Instagram OAuth, timezone-aware scheduling, retry with exponential backoff, calendar view |
 | 3 | **EPK / Press Kit Builder** | ✅ Complete | Bio, press photos, tech rider, PDF export (go-pdf/fpdf) |
-| 4 | **Gig Tracker** | 🚧 In progress | CRUD, status / payment workflows, venue & contact database, iCal feed, booking confirmation PDF |
+| 4 | **Gig Tracker** | ✅ Complete | CRUD, status / payment workflows, venue & contact database, iCal feed, booking confirmation PDF |
 | 4.5 | **Rider Templates** | 🔜 Planned | Named tech/hospitality templates attachable to gigs with per-gig overrides |
 | 5 | **Finance Tracker** | 🔜 Planned | Income/expense logging, PDF invoices, gig-payout aggregation |
 | 6 | **Release Planner** | 🔜 Planned | Release status workflow, promo checklist, deadline tracking |
 | 7 | **Tour Manager** | 🔜 Planned | Tour groups, per-stop logistics, budget aggregation |
 | 8 | **Unified Dashboard** | 🔜 Planned | Cross-module overview, career analytics |
-| 9 | **Production Hardening** | 🔜 Planned | Docs, security audit, CI/CD, v1.0 release |
+| 9 | **Production Hardening** | ✅ Complete (this release) | arm64 images on GHCR, hardened compose, OAuth state, body caps, secrets via Docker `secrets:` block, restore drill |
+
+> **Note — architecture:** v1.0.0 images are `linux/arm64` only. amd64 is
+> deferred to a later point release. See
+> [SELF-HOSTING.md](./docs/SELF-HOSTING.md#system-requirements).
 
 See [`docs/v1-release-plan.md`](./docs/v1-release-plan.md) for full module scope and v1 acceptance criteria.
+See [`CHANGELOG.md`](./CHANGELOG.md) for what hardened between the last feature branch and the v1.0.0 tag.
 
 ---
 
@@ -291,8 +296,8 @@ Bind addresses are sanitised to `*********` in `.env.example`; replace with
 | `INSTAGRAM_CLIENT_ID` | No | Instagram OAuth |
 | `INSTAGRAM_CLIENT_SECRET` | No | Instagram OAuth |
 
-`MINIO_*` aliases are kept for backward compatibility — they are forwarded to
-the matching `S3_*` variables.
+`MINIO_*` variables are no longer supported. Existing deployments must rename
+them to the matching `S3_*` variables before upgrading to v1.0.0.
 
 ---
 

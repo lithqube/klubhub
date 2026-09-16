@@ -1,5 +1,9 @@
 # KLUBHUB DJ
 
+> **Historical requirements record:** MinIO references below are superseded
+> for v1.0.0 deployment by Garage (S3-compatible). They remain here to preserve
+> the original requirements traceability, not as current operating guidance.
+
 *The Open-Source Career Toolkit for DJs*
 
 ---

@@ -1,0 +1,20 @@
+meta {
+  name: Calendar feed with bearer
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/gigs/calendar.ics?secret={{calendarSecret}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: text/calendar
+}
+
+assert {
+  res.status: eq 200
+  res.headers["content-type"]: contains text/calendar
+}

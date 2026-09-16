@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { useAsyncData, useRoute } from '#app';
+import { useAsyncData, useRoute, useHead } from '#app';
 import TrackcardPreview from '../../../components/TrackcardPreview.vue';
-import { useHead } from '#app';
 
 const route = useRoute();
 
@@ -24,23 +23,23 @@ useHead({
 </script>
 
 <template>
-  <!-- Only render if we have data -->
   <div
     v-if="tracklistData.value && settingsData.value"
     style="margin: 0; padding: 0; overflow: hidden; background-color: white"
   >
+    <!-- Only render if we have data -->
     <TrackcardPreview
       :tracklist="tracklistData.value.tracklist"
       :tracks="tracklistData.value.tracks"
-      :djName="settingsData.value.djName ?? 'KlubHub DJ'"
-      :logoPath="settingsData.value.logoPath"
-      :logoPosition="
+      :dj-name="settingsData.value.djName ?? 'KlubHub DJ'"
+      :logo-path="settingsData.value.logoPath"
+      :logo-position="
         settingsData.value.tracklist_preferences?.logoPosition ?? 'top-left'
       "
       :preset="settingsData.value.tracklist_preferences?.preset ?? 'default'"
-      :bgMode="settingsData.value.tracklist_preferences?.bgMode ?? 'solid'"
-      :bgValue="settingsData.value.tracklist_preferences?.bgValue"
-      :visibleFields="
+      :bg-mode="settingsData.value.tracklist_preferences?.bgMode ?? 'solid'"
+      :bg-value="settingsData.value.tracklist_preferences?.bgValue"
+      :visible-fields="
         settingsData.value.tracklist_preferences?.visibleFields ?? [
           'title',
           'artist',
@@ -49,20 +48,20 @@ useHead({
           'durationSecs',
         ]
       "
-      :maxTracks="settingsData.value.tracklist_preferences?.maxTracks ?? 50"
-      :trackRangeStart="
+      :max-tracks="settingsData.value.tracklist_preferences?.maxTracks ?? 50"
+      :track-range-start="
         settingsData.value.tracklist_preferences?.trackRangeStart
       "
-      :trackRangeEnd="settingsData.value.tracklist_preferences?.trackRangeEnd"
-      :customPlaceholderPath="settingsData.value.custom_placeholder_path"
+      :track-range-end="settingsData.value.tracklist_preferences?.trackRangeEnd"
+      :custom-placeholder-path="settingsData.value.custom_placeholder_path"
     />
   </div>
 
-  <!-- Fallback for not found -->
   <div
     v-else
     style="margin: 0; padding: 0; overflow: hidden; background-color: white"
   >
+    <!-- Fallback for not found -->
     Not Found
   </div>
 </template>
