@@ -19,6 +19,12 @@ Self-hosted. Open-source. Built for DJs who want to own their workflow.
 
 ---
 
+## KlubHub product family
+
+KlubHub DJ is the first product in the **[KlubHub](https://klubhub.io)** family. **KlubHub Promoter** and **KlubHub Label** are coming soon. Most DJ features will be open source; some future features will be offered as SaaS. SaaS scope, pricing, and availability have not been announced. The current repository remains MIT-licensed.
+
+The static brand site is in `apps/site/`. See **[GitHub Pages setup](./docs/github-pages.md)** for local preview, deployment, and `klubhub.io` DNS configuration.
+
 ## Why KlubHub DJ?
 
 Most DJ tooling is fragmented: a SaaS here for analytics, another for scheduling, a separate site for the press kit, a spreadsheet for finances. KlubHub DJ brings it all under one self-hosted roof with a single design language, one database, one backup story.
