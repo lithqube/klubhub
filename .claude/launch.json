@@ -9,8 +9,11 @@
     },
     {
       "name": "KlubHub Site (static)",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "4300", "--directory", "/Users/admin/dev/klubhub-dj/dist/site"],
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "pnpm exec nx run site:build && python3 -m http.server 4300 --directory dist/site"
+      ],
       "port": 4300
     },
     {

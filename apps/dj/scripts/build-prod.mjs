@@ -1,4 +1,4 @@
-import { existsSync, renameSync, rmSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
@@ -34,7 +34,22 @@ let staged = false
 try {
   // This must happen before the Nuxt process starts. Config hooks run after
   // Nitro's route discovery and cannot reliably prevent mock bundling.
-  renameSync(mockSource, mockStaged)
+  // The source lives inside the workspace tree (which `COPY . .` makes
+  // part of the build's overlay filesystem) and the destination is
+  // alongside it — `rename(2)` is only atomic on the same filesystem. In
+  // a Docker BuildKit overlay the two paths can live on different layers
+  // (EXDEV). Fall back to a recursive copy + delete so the script works
+  // in both `pnpm nx build` and `docker build` invocations.
+  try {
+    renameSync(mockSource, mockStaged)
+  } catch (err) {
+    if (err && (err.code === 'EXDEV' || err.code === 'EPERM' || err.code === 'ENOTSUP')) {
+      cpSync(mockSource, mockStaged, { recursive: true })
+      rmSync(mockSource, { recursive: true, force: true })
+    } else {
+      throw err
+    }
+  }
   staged = true
 
   // Remove generated route manifests so a prior development build cannot
@@ -64,7 +79,17 @@ try {
       )
       process.exitCode = 1
     } else {
-      renameSync(mockStaged, mockSource)
+      try {
+        renameSync(mockStaged, mockSource)
+      } catch (err) {
+        if (err && (err.code === 'EXDEV' || err.code === 'EPERM' || err.code === 'ENOTSUP')) {
+          mkdirSync(mockSource, { recursive: true })
+          cpSync(mockStaged, mockSource, { recursive: true })
+          rmSync(mockStaged, { recursive: true, force: true })
+        } else {
+          throw err
+        }
+      }
       console.warn('[plan-d] Restored development/staging mocks')
     }
   }
