@@ -2,6 +2,8 @@ package migrations_test
 
 import (
 	"io/fs"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/klubhub/dj/api/internal/platform/migrations"
@@ -52,5 +54,72 @@ func TestMigrationVersionOne(t *testing.T) {
 
 	if !found {
 		t.Errorf("expected a migration file starting with '001_', got entries: %v", entries)
+	}
+}
+
+// TestMigrationNumericPrefixes asserts that every embedded SQL migration
+// filename has a purely numeric version prefix (digits only, separated from
+// the rest of the filename by a single underscore). This guards against the
+// fatal-startup bug where Goose's NumericComponent calls
+// strconv.ParseInt(before, 10, 64) and rejects any non-digit characters in
+// the version segment — e.g. "005b_venues.sql" parses the prefix "005b" and
+// returns `invalid syntax`, which surfaces in api/cmd/api/main.go as
+// "failed to run migrations" on boot.
+func TestMigrationNumericPrefixes(t *testing.T) {
+	entries, err := fs.ReadDir(migrations.FS, ".")
+	if err != nil {
+		t.Fatalf("failed to read embedded FS root: %v", err)
+	}
+
+	var offenders []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if len(name) < 5 || name[len(name)-4:] != ".sql" {
+			continue
+		}
+		sep := strings.Index(name, "_")
+		if sep <= 0 {
+			offenders = append(offenders, name+" (missing version separator)")
+			continue
+		}
+		prefix := name[:sep]
+		for i, r := range prefix {
+			if r < '0' || r > '9' {
+				offenders = append(offenders, name+" (non-digit in version: "+string(r)+" at index "+strconv.Itoa(i)+")")
+				break
+			}
+		}
+	}
+
+	if len(offenders) > 0 {
+		t.Errorf("found %d migration file(s) with non-numeric version prefix(es): %v", len(offenders), offenders)
+	}
+}
+
+// TestMigrationVersionsUnique asserts that every embedded SQL migration has
+// a unique numeric version. Goose rejects duplicate versions during
+// collection (provider_collect.go) with `found duplicate migration version
+// %d`, so this is a cheap guard against accidental collisions.
+func TestMigrationVersionsUnique(t *testing.T) {
+	entries, err := fs.ReadDir(migrations.FS, ".")
+	if err != nil {
+		t.Fatalf("failed to read embedded FS root: %v", err)
+	}
+
+	seen := make(map[string]string) // version -> filename
+	for _, entry := range entries {
+		name := entry.Name()
+		if len(name) < 5 || name[len(name)-4:] != ".sql" {
+			continue
+		}
+		sep := strings.Index(name, "_")
+		if sep <= 0 {
+			continue
+		}
+		version := name[:sep]
+		if existing, ok := seen[version]; ok {
+			t.Errorf("duplicate migration version %q: %s and %s", version, existing, name)
+		}
+		seen[version] = name
 	}
 }

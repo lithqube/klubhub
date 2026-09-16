@@ -1,0 +1,67 @@
+# Root .dockerignore for GHCR context (whole-repo builds)
+#
+# Secret-leak mitigation. The root ignore matters because the plan builds
+# the API image with `context: ./api` but the workflow will also build with
+# context root for future app images. Anything tracked OR untracked that
+# could carry credentials must be excluded.
+
+# ---- Secrets and runtime config (untracked, but discovered by build) ----
+.env
+.env.*
+!.env.example
+garage.toml
+garage.toml.*
+!garage.toml.example
+backups/
+backups/*.tar.gz
+backups/work-*/
+
+# ---- VCS / IDE / agent trash ----
+.git/
+.gitignore
+.gitattributes
+
+# ---- CI / agent runtime ----
+.github/
+.claude/
+.opencode/
+.cursor/
+.idea/
+.vscode/
+
+# ---- Node / monorepo noise ----
+node_modules/
+.output/
+.nuxt/
+.nitro/
+.data/
+.cache/
+.nx/cache
+.nx/workspace-data
+.nx/polygraph
+dist/
+build/
+coverage/
+*.log
+
+# ---- Go noise (only relevant where api/.dockerignore doesn't apply) ----
+api/bin/
+api/dist/
+api/coverage.out
+api/*.test
+
+# ---- Backup / archive noise ----
+*.zip
+*.tar.gz
+*.tgz
+
+# ---- OS generated files ----
+.DS_Store
+Thumbs.db
+
+# ---- Misc dev artifacts ----
+tmp/
+test-output/
+*.launch
+*.sublime-workspace
+connect.lock

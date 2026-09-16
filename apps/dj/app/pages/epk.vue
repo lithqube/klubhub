@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useEpkStore } from '~/stores/epk'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
-import { Download, Edit, FileText, Music, Globe, MessageCircle, Image } from 'lucide-vue-next'
+import { Download, Edit, Music, Globe, MessageCircle, Image } from 'lucide-vue-next'
 
 useHead({ title: 'EPK — KlubHub DJ' })
 
@@ -128,9 +128,9 @@ function onBioInput(e: Event) {
         <!-- Bio editor -->
         <div>
           <div class="input-label">DJ NAME</div>
-          <input class="hud-input" :value="djName" style="margin-bottom:8px;" @input="onNameInput" />
+          <input class="hud-input" :value="djName" style="margin-bottom:8px;" @input="onNameInput" >
           <div class="input-label">TAGLINE</div>
-          <input class="hud-input" :value="tagline" style="margin-bottom:8px;" @input="onTaglineInput" />
+          <input class="hud-input" :value="tagline" style="margin-bottom:8px;" @input="onTaglineInput" >
           <div class="input-label">SHORT BIO</div>
           <textarea
             class="hud-textarea"
@@ -145,9 +145,9 @@ function onBioInput(e: Event) {
         <!-- Contact -->
         <div>
           <div class="input-label">BOOKING CONTACT</div>
-          <input class="hud-input" :value="bookingContact" placeholder="EMAIL OR AGENCY" style="margin-bottom:8px;" @input="onContactInput" />
+          <input class="hud-input" :value="bookingContact" placeholder="EMAIL OR AGENCY" style="margin-bottom:8px;" @input="onContactInput" >
           <div class="input-label">LOCATION</div>
-          <input class="hud-input" :value="location" @input="onLocationInput" />
+          <input class="hud-input" :value="location" @input="onLocationInput" >
         </div>
 
         <div class="section-divider" />
@@ -170,7 +170,7 @@ function onBioInput(e: Event) {
         <div class="epk-preview-hero">
           <!-- Background accent shape -->
           <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:24px;opacity:.15;pointer-events:none;">
-            <div style="width:140px;height:180px;background:linear-gradient(160deg,var(--color-secondary-container),transparent);clip-path:polygon(0 0,100% 0,100% 90%,80% 100%,0 100%);"></div>
+            <div style="width:140px;height:180px;background:linear-gradient(160deg,var(--color-secondary-container),transparent);clip-path:polygon(0 0,100% 0,100% 90%,80% 100%,0 100%);"/>
           </div>
           <div style="position:relative;">
             <div class="epk-dj-name">{{ djName.includes('\n') ? djName : djName.replace(' ', '\n') }}</div>
@@ -208,7 +208,7 @@ function onBioInput(e: Event) {
               class="photo-slot"
             >
               <template v-if="path">
-                <img :src="path" :alt="`Press photo ${idx + 1}`" style="width:100%;height:100%;object-fit:cover;" />
+                <img :src="path" :alt="`Press photo ${idx + 1}`" style="width:100%;height:100%;object-fit:cover;" >
               </template>
               <template v-else>
                 <Image style="width:20px;height:20px;stroke:var(--color-tertiary);stroke-width:1.5;" aria-hidden="true" />

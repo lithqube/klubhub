@@ -85,6 +85,9 @@ func (h *Handler) handlePutContent(w http.ResponseWriter, r *http.Request) {
 
 // handlePostPhoto accepts multipart/form-data with a "photo" field.
 func (h *Handler) handlePostPhoto(w http.ResponseWriter, r *http.Request) {
+	// ParseMultipartForm's maxMemory is not a request-size limit; apply
+	// an explicit cap first (10 MiB payload + 512 bytes form overhead).
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20+512)
 	if err := r.ParseMultipartForm(10<<20 + 512); err != nil {
 		h.writeError(w, http.StatusBadRequest, "failed to parse multipart form")
 		return
@@ -145,6 +148,9 @@ func (h *Handler) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 
 // handlePostStagePlot accepts multipart/form-data with an "image" field.
 func (h *Handler) handlePostStagePlot(w http.ResponseWriter, r *http.Request) {
+	// Same transport cap as photos; prevents disk-spooling arbitrarily
+	// large multipart bodies before service validation.
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20+512)
 	if err := r.ParseMultipartForm(10<<20 + 512); err != nil {
 		h.writeError(w, http.StatusBadRequest, "failed to parse multipart form")
 		return

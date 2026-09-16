@@ -72,6 +72,14 @@ func GenerateCalendar(ctx context.Context, gigSvc *Service, config CalendarConfi
 
 // ValidateSecret checks if the provided secret matches the expected secret
 // using constant-time comparison to prevent timing attacks.
+//
+// Deprecated: this helper compares raw byte slices with no minimum
+// length and is no longer used by the HTTP handler. Plan B.5 replaced
+// the calendar/PDF auth path with Handler.validateICalSecret, which
+// reads the secret from config.ICALSecret and explicitly rejects the
+// historical placeholder "ICAL_SECRET". Kept here only so the existing
+// TestValidateSecret unit test continues to compile; do not introduce
+// new callers.
 func ValidateSecret(provided, expected string) bool {
 	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 }

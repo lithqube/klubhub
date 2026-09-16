@@ -48,6 +48,10 @@ async function handleExport() {
   }
 }
 
+async function handleDeleteExport(id: string) {
+  await store.deleteExport(id)
+}
+
 function onSectionToggle(key: string, value: boolean) {
   sectionVisibility.value = { ...sectionVisibility.value, [key]: value }
   store.sectionVisibility = sectionVisibility.value
@@ -151,7 +155,7 @@ function formatDate(iso: string): string {
               class="text-tertiary hover:text-error font-terminal"
               type="button"
               :data-testid="`export-delete-${item.id}`"
-              @click="(store.deleteExport as (id: string) => Promise<void>)(item.id)"
+              @click="handleDeleteExport(item.id)"
             >
               ×
             </button>

@@ -19,7 +19,7 @@ async function copyICalUrl() {
     toastMessage.value = 'iCal feed URL copied!'
     showToast.value = true
     setTimeout(() => (showToast.value = false), 2000)
-  } catch (e) {
+  } catch {
     toastMessage.value = 'Failed to copy URL'
     showToast.value = true
     setTimeout(() => (showToast.value = false), 2000)

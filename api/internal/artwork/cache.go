@@ -12,7 +12,7 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-// StorageClient defines the minimal interface we need from MinIO client
+// StorageClient defines the minio-go S3 operations used against Garage.
 type StorageClient interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
 	GetObject(ctx context.Context, bucketName, objectName string, opts minio.GetObjectOptions) (*minio.Object, error)
@@ -20,7 +20,7 @@ type StorageClient interface {
 	PresignedGetObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, reqParams map[string]string) (string, error)
 }
 
-// ArtworkCache provides MinIO-backed artwork caching
+// ArtworkCache provides Garage-backed artwork caching through S3.
 type ArtworkCache struct {
 	store          StorageClient
 	bucket         string
@@ -67,12 +67,18 @@ func (c *ArtworkCache) Get(ctx context.Context, title, artist string) string {
 	return presignedURL
 }
 
-// Put downloads image from URL and stores in MinIO
+// Put downloads an image and stores it in Garage. The download goes
+// through artworkClient which enforces a 10s timeout, 5 MiB body cap,
+// and no redirects (Plan B.7). On redirect the body is rejected.
 func (c *ArtworkCache) Put(ctx context.Context, title, artist string, imageURL string) error {
 	key := cacheKey(title, artist)
 
-	// Download image from URL
-	resp, err := http.Get(imageURL)
+	// Build request with the artwork context so timeouts cascade.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to build image request: %w", err)
+	}
+	resp, err := artworkClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to download image: %w", err)
 	}
@@ -82,13 +88,15 @@ func (c *ArtworkCache) Put(ctx context.Context, title, artist string, imageURL s
 		return fmt.Errorf("failed to download image: status %d", resp.StatusCode)
 	}
 
-	// Read body
-	body, err := io.ReadAll(resp.Body)
+	// Cap body read so a malicious / misconfigured provider cannot
+	// stream us gigabytes of data. http.MaxBytesReader returns
+	// *http.MaxBytesError when the cap is exceeded.
+	body, err := io.ReadAll(http.MaxBytesReader(nil, resp.Body, artworkBodyCap))
 	if err != nil {
 		return fmt.Errorf("failed to read image body: %w", err)
 	}
 
-	// Upload to MinIO
+	// Upload to Garage through S3.
 	_, err = c.store.PutObject(
 		ctx,
 		c.bucket,
@@ -100,7 +108,7 @@ func (c *ArtworkCache) Put(ctx context.Context, title, artist string, imageURL s
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to upload to MinIO: %w", err)
+		return fmt.Errorf("failed to upload to object storage: %w", err)
 	}
 
 	return nil
@@ -108,3 +116,21 @@ func (c *ArtworkCache) Put(ctx context.Context, title, artist string, imageURL s
 
 // Ensure ArtworkCache implements ArtworkCacher interface
 var _ ArtworkCacher = (*ArtworkCache)(nil)
+
+// artworkClient is the HTTP client used to fetch cover art from external
+// providers (Spotify, Discogs, MusicBrainz, CAA). Plan B.7 enforces:
+//   - 10s per-request timeout (covers TLS handshake + headers + body).
+//   - Body capped at 5 MiB; oversized responses abort and return an error.
+//   - Redirects denied by default (http.ErrUseLastResponse). Provider
+//     URLs are expected to resolve directly; if a future provider
+//     requires redirects, the policy must additionally validate that
+//     the resolved IP is not private/link-local/loopback.
+var artworkClient = &http.Client{
+	Timeout: 10 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
+// artworkBodyCap is the maximum response body size we accept (5 MiB).
+const artworkBodyCap int64 = 5 << 20

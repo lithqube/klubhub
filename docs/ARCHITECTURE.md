@@ -1,5 +1,11 @@
 # KlubHub DJ — Architecture Blueprint
 
+> **Historical baseline:** This document predates the v1.0.0 Garage migration.
+> References to MinIO and its Compose examples describe the superseded design.
+> The supported deployment uses Garage through its S3 API; see `README.md`,
+> `CONFIGURATION.md`, and `SELF-HOSTING.md`. `minio-go` remains only as the
+> protocol client library.
+
 **Version:** 1.0
 **Date:** 2026-03-11
 **Status:** Approved baseline for implementation

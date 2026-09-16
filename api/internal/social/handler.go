@@ -12,9 +12,14 @@ import (
 )
 
 // serviceIface is the contract consumed by the HTTP handler.
+//
+// Note: HandleOAuthCallback takes an extra `bind` argument compared
+// to the original signature — it is the value of the OAuthStateCookieName
+// cookie that /auth/url set. The pair (state, bind) must match what
+// the service issued, and the store enforces single-use.
 type serviceIface interface {
-	GetOAuthURL(ctx context.Context) (string, error)
-	HandleOAuthCallback(ctx context.Context, code, state string) (*SocialAccount, error)
+	IssueOAuthState(ctx context.Context) (oauthURL, state, bind string, err error)
+	HandleOAuthCallback(ctx context.Context, code, state, bind string) (*SocialAccount, error)
 	GetAccount(ctx context.Context) (*SocialAccount, error)
 	DisconnectAccount(ctx context.Context, id uuid.UUID) error
 	ListPosts(ctx context.Context) ([]ScheduledPost, error)
@@ -57,13 +62,32 @@ func (h *Handler) Routes() http.Handler {
 	return r
 }
 
+// oauthStateCookieMaxAge matches the StateStore TTL (10 minutes). The
+// cookie lifetime must be at least as long as the state lifetime;
+// otherwise a callback arriving near the edge of validity will pass
+// the state check but the browser may have already evicted the
+// cookie, producing a spurious failure.
+const oauthStateCookieMaxAge = 600
+
 // handleGetOAuthURL returns a JSON object with the Instagram OAuth URL.
+// It also sets an HttpOnly `oauth_state_bind` cookie containing the
+// bind half of the state pair. The browser MUST echo that cookie on
+// the callback request; mismatches / missing cookies result in a 400.
 func (h *Handler) handleGetOAuthURL(w http.ResponseWriter, r *http.Request) {
-	oauthURL, err := h.svc.GetOAuthURL(r.Context())
+	oauthURL, _, bind, err := h.svc.IssueOAuthState(r.Context())
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		return
 	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     OAuthStateCookieName,
+		Value:    bind,
+		Path:     "/api/v1/social/",
+		MaxAge:   oauthStateCookieMaxAge,
+		HttpOnly: true,
+		Secure:   true, // production is HTTPS; set to false in test helpers if needed
+		SameSite: http.SameSiteLaxMode,
+	})
 	h.writeJSON(w, http.StatusOK, map[string]string{"url": oauthURL})
 }
 
@@ -92,9 +116,37 @@ func (h *Handler) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	acc, err := h.svc.HandleOAuthCallback(r.Context(), code, state)
+	// Read bind cookie AFTER code/state validation so we don't
+	// leak cookie-presence signals via differential responses.
+	//
+	// The cookie is the proof that the callback originates from
+	// the same browser that initiated /auth/url. If it is absent,
+	// we MUST reject BEFORE forwarding to the service so the state
+	// store is not consumed — otherwise an unauthenticated attacker
+	// who has only the state string (e.g. via a leaked URL, a
+	// referrer log, or a shoulder-surf) can grief the legitimate
+	// user by burning their pending OAuth state (DoS).
+	bindCookie, err := r.Cookie(OAuthStateCookieName)
+	if err != nil || bindCookie.Value == "" {
+		h.writeError(w, http.StatusBadRequest, "missing or empty oauth state cookie")
+		return
+	}
+	bind := bindCookie.Value
+
+	acc, err := h.svc.HandleOAuthCallback(r.Context(), code, state, bind)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		// Distinguish state-validation failures (client error) from
+		// upstream provider failures (server error). Both come back
+		// sanitized — no URLs, no credentials.
+		if errors.Is(err, ErrOAuthStateInvalid) {
+			h.writeError(w, http.StatusBadRequest, "invalid or expired oauth state")
+			return
+		}
+		if errors.Is(err, ErrProviderExchange) {
+			h.writeError(w, http.StatusBadGateway, ErrProviderExchange.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": acc})
@@ -104,7 +156,7 @@ func (h *Handler) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetAccount(w http.ResponseWriter, r *http.Request) {
 	acc, err := h.svc.GetAccount(r.Context())
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": acc})
@@ -123,7 +175,7 @@ func (h *Handler) handleDisconnectAccount(w http.ResponseWriter, r *http.Request
 		if errors.Is(err, ErrNotFound) {
 			h.writeError(w, http.StatusNotFound, err.Error())
 		} else {
-			h.writeError(w, http.StatusInternalServerError, err.Error())
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		}
 		return
 	}
@@ -134,7 +186,7 @@ func (h *Handler) handleDisconnectAccount(w http.ResponseWriter, r *http.Request
 func (h *Handler) handleListPosts(w http.ResponseWriter, r *http.Request) {
 	posts, err := h.svc.ListPosts(r.Context())
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		return
 	}
 	if posts == nil {
@@ -144,8 +196,12 @@ func (h *Handler) handleListPosts(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCreatePost handles multipart form POST /posts.
-// Form fields: caption, post_type, scheduled_at, timezone_name, image_id (MinIO path) or image_file (upload).
+// Form fields: caption, post_type, scheduled_at, timezone_name, image_id
+// (legacy-named Garage object key) or image_file (upload).
 func (h *Handler) handleCreatePost(w http.ResponseWriter, r *http.Request) {
+	// Plan B.6: ParseMultipartForm's maxMemory is NOT a total request
+	// limit; it spills larger payloads to disk. Cap the transport first.
+	r.Body = http.MaxBytesReader(w, r.Body, 12<<20+1024)
 	// Parse multipart (max 12 MB to accommodate 8 MB image + metadata)
 	if err := r.ParseMultipartForm(12 << 20); err != nil {
 		// Fall back to URL-encoded / JSON for tests
@@ -214,7 +270,7 @@ func (h *Handler) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrInvalidMIME) || errors.Is(err, ErrFileTooLarge) || errors.Is(err, ErrInvalidDimensions) {
 			h.writeError(w, http.StatusUnprocessableEntity, err.Error())
 		} else {
-			h.writeError(w, http.StatusInternalServerError, err.Error())
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		}
 		return
 	}
@@ -233,7 +289,7 @@ func (h *Handler) handleGetPost(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrNotFound) {
 			h.writeError(w, http.StatusNotFound, err.Error())
 		} else {
-			h.writeError(w, http.StatusInternalServerError, err.Error())
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		}
 		return
 	}
@@ -262,7 +318,7 @@ func (h *Handler) handleEditPost(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrNotFound):
 			h.writeError(w, http.StatusNotFound, err.Error())
 		default:
-			h.writeError(w, http.StatusInternalServerError, err.Error())
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		}
 		return
 	}
@@ -280,7 +336,7 @@ func (h *Handler) handleDeletePost(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrNotFound) {
 			h.writeError(w, http.StatusNotFound, err.Error())
 		} else {
-			h.writeError(w, http.StatusInternalServerError, err.Error())
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		}
 		return
 	}
@@ -298,7 +354,7 @@ func (h *Handler) handleRetryPost(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrNotFound) {
 			h.writeError(w, http.StatusNotFound, err.Error())
 		} else {
-			h.writeError(w, http.StatusInternalServerError, err.Error())
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		}
 		return
 	}
@@ -309,7 +365,7 @@ func (h *Handler) handleRetryPost(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // writeError writes a JSON error response.

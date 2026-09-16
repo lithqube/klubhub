@@ -24,7 +24,11 @@ services:
     container_name: klubhub-storage
     ports:
       - "127.0.0.1:39000:3900" # S3 API
-      - "39001:3901" # Admin API (internal only)
+      # Garage admin API (3903) and RPC (3901) MUST NEVER be published to
+      # the host — they're reachable from inside the `internal` network for
+      # scripts/garage-bootstrap.sh via `docker exec` (Plan C.2). The
+      # `container_name: klubhub-storage` above is what the bootstrap uses.
+      # Do not add a host port mapping here without a security review.
     volumes:
       - storage_data:/data
       - ./garage.toml:/etc/garage.toml:ro
@@ -41,8 +45,17 @@ services:
       context: ./api
       dockerfile: Dockerfile
     image: klubhub-dj-api:latest
+    # Stop grace period bounds SIGTERM -> SIGKILL. Must be >= the API's
+    # SHUTDOWN_TIMEOUT_SEC (default 30s) so in-flight requests can drain
+    # cleanly during `docker compose stop` / a deploy. See Plan B.3.
+    stop_grace_period: 30s
     environment:
-      DATABASE_URL: postgres://klubhub:${POSTGRES_PASSWORD}@db:5432/klubhub?sslmode=disable
+      # Built from POSTGRES_USER/POSTGRES_PASSWORD so the password is
+      # genuinely interpolated by `docker compose config`, not a literal
+      # `***` placeholder that silently fails the database handshake.
+      # Plan C.3: do not put a real password here; both halves come from
+      # the host env (.env or --env-file).
+      DATABASE_URL: postgres://${POSTGRES_USER:-klubhub}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-klubhub}?sslmode=disable
       # S3 Storage (Garage)
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
@@ -50,13 +63,7 @@ services:
       S3_REGION: ${S3_REGION:-europe-west-1}
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://127.0.0.1:39000}
       S3_BUCKET: ${S3_BUCKET:-klubhub}
-      # Backward aliases (deprecated, use S3_* vars above)
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_REGION: ${MINIO_REGION}
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
-      MINIO_BUCKET: ${MINIO_BUCKET}
+
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
       BIND_ADDRESS: ${BIND_ADDRESS:-127.0.0.1}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:3000}
@@ -66,6 +73,10 @@ services:
       DISCOGS_API_KEY: ${DISCOGS_API_KEY:-}
       INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
       INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
+      # Plan B.3: bounded graceful shutdown timeout. Must be <= api
+      # service `stop_grace_period` (30s) so docker doesn't SIGKILL us
+      # before we finish draining.
+      SHUTDOWN_TIMEOUT_SEC: ${SHUTDOWN_TIMEOUT_SEC:-30}
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
     networks: [ internal ]
@@ -73,7 +84,10 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -q -O- http://localhost:8080/api/v1/health || exit 1" ]
+      # Probe /api/v1/health via the binary itself — no shell, no wget, no
+      # busybox required (runtime image is distroless static + nonroot).
+      # Exit 0 only on HTTP 200; 503 from a degraded subsystem fails the check.
+      test: [ "CMD", "/api", "-healthcheck" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -85,6 +99,9 @@ services:
       context: .
       dockerfile: apps/dj/Dockerfile
     image: klubhub-dj-frontend:latest
+    # Plan B.3: Nuxt/Nitro will need a moment to finish rendering on stop;
+    # give it the same 30s budget as the api so deploys are clean.
+    stop_grace_period: 30s
     environment:
       NUXT_PUBLIC_API_BASE: http://api:8080
     ports:

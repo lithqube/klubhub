@@ -218,7 +218,7 @@ onBeforeUnmount(() => {
                     accept="image/*"
                     class="hidden"
                     @change="handleArtworkUpload(track.id, $event)"
-                  />
+                  >
                 </label>
               </div>
             </TableCell>

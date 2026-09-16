@@ -4,7 +4,6 @@ import { generateImage } from '@/composables/useTracklist';
 
 const tracklistStore = useTracklistStore();
 const uiStore = useUiStore();
-const settingsStore = useSettingsStore();
 
 const { tracklist } = storeToRefs(tracklistStore);
 const { exportLoading, exportError } = storeToRefs(uiStore);

@@ -58,7 +58,7 @@ function onFileChange(e: Event) {
         multiple
         class="hidden"
         @change="onFileChange"
-      />
+      >
     </div>
 
     <p
@@ -85,7 +85,7 @@ function onFileChange(e: Event) {
           :src="getPhotoUrl(path)"
           class="w-full h-full object-cover"
           alt="EPK photo"
-        />
+        >
         <!-- Delete overlay on hover -->
         <button
           :data-testid="`photo-delete-${index}`"

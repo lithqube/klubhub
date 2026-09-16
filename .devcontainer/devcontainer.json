@@ -10,7 +10,7 @@
     },
     "ghcr.io/devcontainers/features/docker-in-docker": {}
   },
-  "forwardPorts": [3000, 8080, 9000, 9001],
+  "forwardPorts": [3000, 8080, 39000],
   "portsAttributes": {
     "3000": {
       "label": "Frontend",
@@ -20,13 +20,9 @@
       "label": "API",
       "onAutoForward": "notify"
     },
-    "9000": {
-      "label": "MinIO S3",
+    "39000": {
+      "label": "Garage S3",
       "onAutoForward": "ignore"
-    },
-    "9001": {
-      "label": "MinIO Console",
-      "onAutoForward": "notify"
     }
   }
 }

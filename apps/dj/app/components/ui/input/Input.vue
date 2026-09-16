@@ -38,5 +38,5 @@ const modelValue = useVModel(props, 'modelValue', emits, {
       'transition-colors duration-150',
       props.class,
     )"
-  />
+  >
 </template>

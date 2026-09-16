@@ -1,0 +1,52 @@
+# api/.dockerignore — strictly scoped to the api/ build context.
+#
+# Audit finding (A.1): api/Dockerfile previously ran `COPY . .` with no
+# ignore, exposing the entire workspace tree (including .env, garage.toml,
+# backups/) to build context layers. Publishing to GHCR makes the build
+# context potentially observable via the build-attestation payload.
+
+# ---- Secrets and runtime config ----
+.env
+.env.*
+!.env.example
+garage.toml
+backups/
+
+# ---- VCS / IDE / agent trash ----
+.git/
+.gitignore
+.gitattributes
+.claude/
+.opencode/
+.idea/
+.vscode/
+.cursor/
+
+# ---- Monorepo artifacts that must not enter the API image ----
+../node_modules/
+../apps/
+../docs/
+../scripts/
+../docker-compose*.yml
+../garage.toml*
+../.env.example
+../.env
+../backups/
+../.git/
+../.github/
+../.claude/
+../.idea/
+../.vscode/
+../.nx/
+
+# ---- Go build/cache artifacts ----
+bin/
+dist/
+coverage.out
+*.test
+vendor/
+
+# ---- Local dev runtime data ----
+testdata/*.out
+*.log
+tmp/

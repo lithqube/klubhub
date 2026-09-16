@@ -44,7 +44,7 @@ async function handleFile(file: File) {
         data-testid="stage-plot-preview"
         class="w-full object-cover aspect-video"
         alt="Stage plot"
-      />
+      >
       <p class="text-xs text-tertiary font-data">{{ uploadedFilename || stagePlotPath }}</p>
     </template>
 
@@ -69,7 +69,7 @@ async function handleFile(file: File) {
           accept="image/jpeg,image/png"
           class="hidden"
           @change="onFileChange"
-        />
+        >
       </div>
     </template>
   </div>

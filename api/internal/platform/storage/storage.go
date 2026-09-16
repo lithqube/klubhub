@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"time"
@@ -11,7 +12,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// Client wraps a MinIO client with bucket configuration.
+// Client wraps the minio-go S3 client configured for Garage.
 // publicEndpoint is used for generating presigned URLs visible to external clients.
 // It should NOT be the internal Docker network endpoint.
 type Client struct {
@@ -20,7 +21,7 @@ type Client struct {
 	bucket         string
 }
 
-// New creates a new S3-compatible client (MinIO or Garage) from the given configuration.
+// New creates a Garage S3 client from the given configuration.
 // The internal client uses cfg.S3Endpoint for API calls.
 // cfg.S3PublicEndpoint is stored separately for presigned URL base generation.
 func New(cfg *config.Config) (*Client, error) {
@@ -65,29 +66,39 @@ func (c *Client) PublicEndpoint() string {
 	return c.publicEndpoint
 }
 
-// HealthCheck performs a lightweight probe against MinIO by checking if the
-// configured bucket exists. Returns nil if MinIO is reachable.
+// HealthCheck performs a lightweight probe against the S3-compatible storage
+// by checking if the configured bucket exists. The bucket existence bool is
+// tracked because a nil error with a missing bucket means the API is wired
+// to a storage target that has not been bootstrapped — that should fail the
+// healthcheck, not silently report ok. The caller still sees a non-nil
+// error so the upstream health handler can flip the response to 503.
 func (c *Client) HealthCheck(ctx context.Context) error {
-	_, err := c.mc.BucketExists(ctx, c.bucket)
-	return err
+	exists, err := c.mc.BucketExists(ctx, c.bucket)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("configured bucket %q does not exist on storage target", c.bucket)
+	}
+	return nil
 }
 
-// PutObject wraps minio.Client.PutObject
+// PutObject writes an object through Garage's S3 API.
 func (c *Client) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
 	return c.mc.PutObject(ctx, bucketName, objectName, reader, size, opts)
 }
 
-// GetObject wraps minio.Client.GetObject
+// GetObject reads an object through Garage's S3 API.
 func (c *Client) GetObject(ctx context.Context, bucketName, objectName string, opts minio.GetObjectOptions) (*minio.Object, error) {
 	return c.mc.GetObject(ctx, bucketName, objectName, opts)
 }
 
-// StatObject wraps minio.Client.StatObject
+// StatObject inspects an object through Garage's S3 API.
 func (c *Client) StatObject(ctx context.Context, bucketName, objectName string, opts minio.GetObjectOptions) (minio.ObjectInfo, error) {
 	return c.mc.StatObject(ctx, bucketName, objectName, opts)
 }
 
-// PresignedGetObject wraps minio.Client.PresignedGetObject
+// PresignedGetObject returns a signed Garage S3 URL.
 func (c *Client) PresignedGetObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, reqParams map[string]string) (string, error) {
 	reqValues := url.Values{}
 	for k, v := range reqParams {
@@ -100,7 +111,7 @@ func (c *Client) PresignedGetObject(ctx context.Context, bucketName, objectName 
 	return presignedURL.String(), nil
 }
 
-// RemoveObject wraps minio.Client.RemoveObject with default remove options.
+// RemoveObject deletes an object through Garage's S3 API.
 func (c *Client) RemoveObject(ctx context.Context, bucketName, objectName string) error {
 	return c.mc.RemoveObject(ctx, bucketName, objectName, minio.RemoveObjectOptions{})
 }

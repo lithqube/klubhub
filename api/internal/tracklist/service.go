@@ -83,7 +83,7 @@ func (s *Service) Upload(ctx context.Context, filename string, body []byte, size
 		ID:              tlID,
 		Title:           filename,
 		SourceFormat:    "rekordbox", // TODO: detect format properly
-		RawFilePath:     "",          // Will be set after storing in MinIO
+		RawFilePath:     "",          // Set after storing in Garage via S3
 		Preset:          "default",
 		VisibleFields:   `["title","artist","bpm","key","time_played"]`,
 		BgMode:          "solid",
@@ -96,7 +96,7 @@ func (s *Service) Upload(ctx context.Context, filename string, body []byte, size
 		DeletedAt:       nil,
 	}
 
-	// Store raw file in MinIO
+	// Store raw file in Garage via its S3-compatible API.
 	if s.storage != nil && s.config.StorageBucket != "" {
 		objectName := "raw-uploads/" + tlID.String() + "/" + filename
 		opts := minio.PutObjectOptions{ContentType: "application/octet-stream"}
@@ -160,7 +160,7 @@ func (s *Service) SoftDelete(ctx context.Context, id uuid.UUID) error {
 
 // SaveManualArtwork saves manual artwork for a track
 func (s *Service) SaveManualArtwork(ctx context.Context, tracklistID, trackID uuid.UUID, imageData []byte, contentType string) error {
-	// Store image in MinIO
+	// Store image in Garage via its S3-compatible API.
 	if s.storage != nil && s.config.StorageBucket != "" {
 		objectName := "cover-art/manual/" + trackID.String() + ".jpg"
 		opts := minio.PutObjectOptions{ContentType: contentType}
@@ -170,8 +170,14 @@ func (s *Service) SaveManualArtwork(ctx context.Context, tracklistID, trackID uu
 			return err
 		}
 
-		// Build artwork URL (in a real implementation, this would be a proper URL)
-		artworkURL := "http://localhost:9000/" + s.config.StorageBucket + "/" + objectName
+		// Use the configured Garage public endpoint via S3 signing. Never
+		// hard-code the legacy MinIO port; it breaks Garage deployments.
+		artworkURL, err := s.storage.PresignedGetObject(
+			ctx, s.config.StorageBucket, objectName, 7*24*time.Hour, nil,
+		)
+		if err != nil {
+			return fmt.Errorf("presign manual artwork: %w", err)
+		}
 
 		// Save to database
 		return s.repo.SaveManualArtwork(ctx, trackID, artworkURL)
@@ -182,7 +188,7 @@ func (s *Service) SaveManualArtwork(ctx context.Context, tracklistID, trackID uu
 }
 
 // GenerateImage calls the Nuxt screenshot endpoint for the given format ("story", "square", "both"),
-// stores the PNG(s) in MinIO, and returns presigned URL(s).
+// stores the PNG(s) in Garage via S3, and returns presigned URL(s).
 // format must be "story", "square", or "both".
 func (s *Service) GenerateImage(ctx context.Context, id uuid.UUID, format string) (map[string]string, error) {
 	validFormats := map[string]bool{"story": true, "square": true, "both": true}
@@ -214,7 +220,7 @@ func (s *Service) GenerateImage(ctx context.Context, id uuid.UUID, format string
 			resp.Body, resp.ContentLength,
 			minio.PutObjectOptions{ContentType: "image/png"})
 		if err != nil {
-			return nil, fmt.Errorf("minio store %s: %w", f, err)
+			return nil, fmt.Errorf("object storage write %s: %w", f, err)
 		}
 
 		presigned, err := s.storage.PresignedGetObject(ctx, s.config.StorageBucket, objectKey,

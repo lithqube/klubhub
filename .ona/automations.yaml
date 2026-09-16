@@ -19,14 +19,14 @@ tasks:
     command: |
       if [ ! -f .env ]; then
         cp .env.example .env
-        echo "⚠️  .env created from .env.example — set POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD, and TOKEN_ENCRYPTION_KEY before starting services."
+        echo "⚠️  .env created from .env.example — set POSTGRES_PASSWORD, Garage S3 credentials, and TOKEN_ENCRYPTION_KEY before starting services."
       fi
     triggeredBy:
       - postDevcontainerStart
 
   startInfra:
     name: Start infrastructure services
-    description: Start PostgreSQL and MinIO via Docker Compose (db and storage only; api and frontend run natively).
+    description: Start PostgreSQL and Garage via Docker Compose (db and storage only; api and frontend run natively).
     command: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
     triggeredBy:
       - manual

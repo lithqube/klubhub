@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -298,6 +299,67 @@ func TestWorker_RateLimitStopsRemainingPosts(t *testing.T) {
 	}
 }
 
+// TestWorker_RecordRateLimitSanitizesReason pins the B.4 fix-subagent
+// "429 sanitization bypass" finding: when CreateContainer returns a
+// RateLimitError, the worker MUST route the persisted reason through
+// SanitizeTransportError. Today RateLimitError.Error() is clean, but
+// the bypass is structural: any future change to the error string
+// (e.g. embedding provider body fragments) would expose credentials
+// in the DB.
+//
+// To exercise the sanitization path with a non-clean message, we
+// use a wrapper type that satisfies errors.As(*RateLimitError) but
+// overrides Error() to include a credential-shaped substring.
+// errors.As walks the chain via Unwrap; the wrapper embeds
+// *RateLimitError directly so the type assertion succeeds.
+func TestWorker_RecordRateLimitSanitizesReason(t *testing.T) {
+	postID := uuid.New()
+	accID := uuid.New()
+
+	repo := &mockWorkerRepo{}
+	w := makeTestWorker(repo, &mockInstagram{}, &mockStorage{})
+	post := ScheduledPost{ID: postID, AccountID: accID}
+
+	inner := &RateLimitError{RetryAfter: 15 * time.Minute}
+	tainted := &taintedRateLimitError{inner: inner}
+	w.recordRateLimit(context.Background(), post, tainted)
+
+	// Find the persisted reason.
+	var reason string
+	for _, s := range repo.updatedStatuses {
+		if s.id == postID && s.status == PostStatusFailed {
+			reason = s.errMsg
+		}
+	}
+	if reason == "" {
+		t.Fatal("expected UpdatePostStatus→failed with a reason")
+	}
+	// The fix routes through SanitizeTransportError; this asserts
+	// the credential substring is gone from the persisted reason.
+	if strings.Contains(reason, "LEAKED_TOKEN_429") {
+		t.Errorf("persisted rate-limit reason leaked credential: %s", reason)
+	}
+}
+
+// taintedRateLimitError embeds *RateLimitError so errors.As finds it
+// via the wrapper's Unwrap, while overriding Error() with a message
+// that includes a fake access_token fragment. It is the test-side
+// stand-in for a future RateLimitError whose Error() includes
+// provider-supplied content.
+type taintedRateLimitError struct {
+	inner *RateLimitError
+}
+
+func (e *taintedRateLimitError) Error() string {
+	return "instagram rate limited: retry after 15m0s; body=" +
+		`{"error":"OAuthException","error_message":"see access_token=LEAKED_TOKEN_429"}`
+}
+
+// Unwrap exposes the embedded *RateLimitError so errors.As can find it.
+func (e *taintedRateLimitError) Unwrap() error {
+	return e.inner
+}
+
 func TestWorker_SuccessfulPublish(t *testing.T) {
 	postID := uuid.New()
 	accID := uuid.New()
@@ -350,12 +412,12 @@ func TestWorker_RetryWithAlreadyPublishedContainer(t *testing.T) {
 	repo := &mockWorkerRepo{
 		duePosts: []ScheduledPost{
 			{
-				ID:          postID,
-				AccountID:   accID,
-				Status:      PostStatusScheduled,
-				RetryCount:  1, // retry
-				ContainerID: &containerIDVal,
-				PostType:    PostTypeFeed,
+				ID:             postID,
+				AccountID:      accID,
+				Status:         PostStatusScheduled,
+				RetryCount:     1, // retry
+				ContainerID:    &containerIDVal,
+				PostType:       PostTypeFeed,
 				ImageMinioPath: "img.jpg",
 			},
 		},
