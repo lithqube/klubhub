@@ -543,18 +543,22 @@ KlubHub DJ ships as a single `docker-compose.yml` with four services:
 
 | Service | Description |
 |---|---|
-| **klubhub-dj-frontend** | Nuxt 3 app serving the UI on port 3000 |
-| **klubhub-dj-api** | Go modular monolith API on port 8080; includes scheduler for social posts |
+| **klubhub-dj** | Single image (distroless Go API binary + Nuxt 3 frontend) listening on port 8080; API at `/api/v1/*`, UI at `/` |
 | **klubhub-dj-db** | PostgreSQL 16 with named volume for persistence |
-| **klubhub-dj-storage** | MinIO with named volume; S3 API on port 9000, console on 9001 |
+| **klubhub-dj-storage** | S3-compatible object store (Garage v2) with named volume; S3 API on port 3900 inside the container |
 
 Deployment is a single command:
 
 ```bash
-git clone https://github.com/<org>/klubhub && cd klubhub && cp .env.example .env && docker-compose up -d
+git clone https://github.com/lithqube/klubhub && cd klubhub && cp .env.example .env && docker compose -f docker-compose.prod.yml up -d
 ```
 
-The `.env` file configures: Spotify/Discogs/MusicBrainz API keys, Instagram/Facebook API credentials, PostgreSQL connection, MinIO credentials, ports, and timezone.
+The `.env` file configures: Spotify/Discogs/MusicBrainz API keys, Instagram/Facebook API credentials, PostgreSQL connection, S3 credentials, ports, and timezone.
+
+> **Image naming.** The published package is
+> `ghcr.io/lithqube/klubhub-dj:v1.0.0` (linux/arm64 only). The single
+> image carries both the API and the embedded UI; there is no separate
+> `klubhub-dj-frontend` image. See `docs/container-images.md`.
 
 ---
 

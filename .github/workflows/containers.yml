@@ -1,20 +1,33 @@
-name: Publish containers
+name: Publish KlubHub image
 
-# Builds the two production images (Go API, Nuxt frontend) and pushes them to
-# GitHub Container Registry (ghcr.io). See docs/container-images.md for the
-# one-time manual step required to make a package publicly visible.
+# Single-image release flow for KlubHub DJ v1.0.0.
+#
+#   - Triggers: pushes of a `v*` tag (e.g. v0.1.0-rc1, v1.0.0). Tag MUST match
+#     vMAJOR.MINOR.PATCH[-pre] and MUST be a descendant of origin/main.
+#   - Builds a linux/arm64 image from apps/dj/Dockerfile.
+#   - Pushes one package `ghcr.io/<owner>/<repo>:<tag>` derived from the
+#     apps/dj project (KlubHub DJ is the first product).
+#   - Verifies the published manifest exposes only linux/arm64.
+#   - Runs on `ubuntu-24.04-arm` (native arm64 runner, no QEMU emulation).
+#
+# Architecture: linux/arm64 ONLY for v1.0.0. linux/amd64 was deliberately
+# deferred so we ship a single native-arm64 image without QEMU emulation
+# (faster CI, smaller surface, matches the dominant KlubHub host: ARM SBCs
+# and Graviton-style cloud instances). CodeRabbit's suggestion to add a
+# multi-arch `linux/amd64,linux/arm64` matrix is intentionally NOT applied
+# here; amd64 support will be evaluated as a post-v1.0.0 point release.
+#
+# Container docs: docs/container-images.md
+# Release notes:  docs/release-notes/v1.0.0.md
 on:
   push:
-    branches: [main]
     tags: ['v*']
-    paths:
-      - 'api/**'
-      - 'apps/dj/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.github/workflows/containers.yml'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Override release tag (e.g. v0.1.0-rc1). Defaults to the pushed tag or "dev".'
+        required: false
+        default: ''
 
 concurrency:
   group: containers-${{ github.ref }}
@@ -25,21 +38,35 @@ permissions:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        include:
-          - service: api
-            context: ./api
-            dockerfile: ./api/Dockerfile
-          - service: frontend
-            context: .
-            dockerfile: ./apps/dj/Dockerfile
     steps:
+      - name: Resolve release tag
+        id: tag
+        env:
+          PUSHED: ${{ github.ref_name }}
+          OVERRIDE: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${OVERRIDE:-$PUSHED}"
+          if [ -z "$tag" ]; then tag=dev; fi
+          if [ "$tag" != "dev" ] && ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "tag $tag does not match vMAJOR.MINOR.PATCH[-pre]"
+            exit 1
+          fi
+          echo "release=$tag" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate ancestry for tag releases
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          REF: ${{ github.ref }}
+        run: git merge-base --is-ancestor HEAD origin/main
 
       - uses: docker/setup-buildx-action@v3
 
@@ -52,18 +79,37 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}-${{ matrix.service }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=,format=short
-            type=semver,pattern={{version}}
+            type=raw,value=${{ steps.tag.outputs.release }}
+          flavor: latest=false
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          context: .
+          file: ./apps/dj/Dockerfile
           push: true
+          # KlubHub v1.0.0 ships linux/arm64 only. amd64 will be evaluated
+          # post-release; multi-arch via QEMU is intentionally out of scope
+          # for the v1.0.0 release. See docs/container-images.md.
+          platforms: linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          cache-from: type=gha,scope=image
+          cache-to: type=gha,mode=max,scope=image
+
+      - name: Verify published platform
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE@$DIGEST" --raw > manifest.json
+          jq -e '
+            [.manifests[] | select(.annotations["vnd.docker.reference.type"] != "attestation-manifest") | .platform] as $platforms
+            | ($platforms | length) == 1
+              and $platforms[0].os == "linux"
+              and $platforms[0].architecture == "arm64"
+          ' manifest.json
+          cat manifest.json

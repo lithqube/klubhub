@@ -1,3 +1,24 @@
+/**
+ * Smoke-tests for the static KlubHub site. Each test re-runs
+ * `node apps/site/build.mjs` so a clean checkout (no dist/site yet)
+ * is exercised end-to-end and a CSS/theme regression cannot pass
+ * silently.
+ *
+ * What is asserted:
+ *   - The custom domain + canonical + sitemap + robots + .nojekyll
+ *     are published and mutually consistent.
+ *   - Every local href resolves on disk and every section id in
+ *     index.html is unique.
+ *   - The synthesised theme.css exposes the application's design
+ *     tokens (--color-surface, --color-primary, --radius) and bundles
+ *     exactly three local WOFF2 fonts.
+ *   - The marketing copy separates current product (KLUBHUB DJ) from
+ *     roadmap products (PROMOTER / LABEL) and ships no client-side
+ *     JavaScript or forms (this is a static disclosure page).
+ *
+ * Run via `node --test apps/site/site.test.mjs` or
+ * `pnpm exec nx run site:test`.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
