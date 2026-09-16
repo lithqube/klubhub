@@ -81,7 +81,7 @@ function clearFilters() {
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button
-          class="btn-hud"
+          class="btn-hud btn-hud-ghost"
           style="padding:0 14px;"
           title="Copy iCal feed URL"
           @click="copyICalUrl"
@@ -110,18 +110,16 @@ function clearFilters() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="display:flex;gap:6px;">
           <button
-            class="btn-hud"
-            :style="{ background: viewMode === 'list' ? 'rgba(150,248,255,0.15)' : 'transparent' }"
-            style="padding:4px 10px;font-size:9px;"
+            class="btn-hud btn-hud-ghost btn-hud-sm"
+            :style="viewMode === 'list' ? 'background:rgba(150,248,255,.08);border-color:rgba(150,248,255,.25);color:var(--color-primary);' : ''"
             @click="viewMode = 'list'"
           >
             <List style="width:10px;height:10px;display:inline;margin-right:4px;" />
             LIST
           </button>
           <button
-            class="btn-hud"
-            :style="{ background: viewMode === 'calendar' ? 'rgba(150,248,255,0.15)' : 'transparent' }"
-            style="padding:4px 10px;font-size:9px;"
+            class="btn-hud btn-hud-ghost btn-hud-sm"
+            :style="viewMode === 'calendar' ? 'background:rgba(150,248,255,.08);border-color:rgba(150,248,255,.25);color:var(--color-primary);' : ''"
             @click="viewMode = 'calendar'"
           >
             <Calendar style="width:10px;height:10px;display:inline;margin-right:4px;" />
@@ -134,7 +132,7 @@ function clearFilters() {
           <select
             :value="filters.status"
             class="hud-input"
-            style="font-size:9px;padding:4px 8px;width:auto;"
+            style="width:auto;height:28px;"
             @change="setStatusFilter(($event.target as HTMLSelectElement).value)"
           >
             <option value="">ALL STATUS</option>
@@ -149,13 +147,12 @@ function clearFilters() {
             type="text"
             class="hud-input"
             placeholder="City..."
-            style="font-size:9px;padding:4px 8px;width:80px;"
+            style="width:80px;height:28px;"
             @input="setCityFilter(($event.target as HTMLInputElement).value)"
           >
           <button
             v-if="filters.status || filters.city"
-            class="btn-hud"
-            style="padding:4px 8px;font-size:9px;"
+            class="btn-hud btn-hud-ghost btn-hud-xs"
             @click="clearFilters"
           >
             CLEAR

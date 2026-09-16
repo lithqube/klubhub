@@ -133,11 +133,11 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
 </script>
 
 <template>
-  <div class="glass-panel p-4 space-y-6">
+  <div class="glass-panel p-4 space-y-4">
     <!-- Error display -->
     <div
       v-if="saveError"
-      class="p-2 ghost-border shadow-glow-error"
+      class="p-2 border border-dashed border-error/30 shadow-glow-error"
     >
       <p class="font-terminal tracking-terminal text-error text-xs uppercase">
         ERROR: {{ saveError }}
@@ -146,7 +146,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
 
     <!-- ACTIVE_TEMPLATE section -->
     <div class="space-y-2">
-      <h3 class="font-terminal tracking-terminal text-tertiary text-xs uppercase border-b border-outline-variant/20 pb-1">
+      <h3 class="section-lbl border-b border-dashed border-outline-variant/40 pb-1">
         ACTIVE_TEMPLATE
       </h3>
       <div class="grid grid-cols-5 gap-1">
@@ -156,7 +156,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
           :class="[
             'py-2 px-1 text-center font-terminal tracking-terminal text-xs uppercase transition-colors',
             preset === opt.value
-              ? 'bg-primary text-on-primary'
+              ? 'bg-primary text-on-primary shadow-glow-primary'
               : 'ghost-border text-tertiary hover:text-on-surface',
           ]"
           @click="onPresetChange(opt.value)"
@@ -168,7 +168,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
 
     <!-- VISUAL_CONFIGURATION section -->
     <div class="space-y-3">
-      <h3 class="font-terminal tracking-terminal text-tertiary text-xs uppercase border-b border-outline-variant/20 pb-1">
+      <h3 class="section-lbl border-b border-dashed border-outline-variant/40 pb-1">
         VISUAL_CONFIGURATION
       </h3>
 
@@ -182,7 +182,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
             :class="[
               'py-1.5 px-3 font-terminal tracking-terminal text-xs uppercase transition-colors',
               bgMode === opt.value
-                ? 'bg-secondary text-on-surface'
+                ? 'bg-secondary text-on-primary'
                 : 'ghost-border text-tertiary hover:text-on-surface',
             ]"
             @click="onBgModeChange(opt.value)"
@@ -210,7 +210,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
 
     <!-- VISIBLE_FIELDS section -->
     <div class="space-y-3">
-      <h3 class="font-terminal tracking-terminal text-tertiary text-xs uppercase border-b border-outline-variant/20 pb-1">
+      <h3 class="section-lbl border-b border-dashed border-outline-variant/40 pb-1">
         VISIBLE_FIELDS
       </h3>
       <div class="space-y-2">
@@ -232,7 +232,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
 
     <!-- LOGO_UPLOAD section -->
     <div class="space-y-3">
-      <h3 class="font-terminal tracking-terminal text-tertiary text-xs uppercase border-b border-outline-variant/20 pb-1">
+      <h3 class="section-lbl border-b border-dashed border-outline-variant/40 pb-1">
         LOGO_UPLOAD
       </h3>
 
@@ -267,7 +267,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
             :class="[
               'py-1.5 px-2 font-terminal tracking-terminal text-xs uppercase transition-colors',
               logoPosition === opt.value
-                ? 'bg-secondary text-on-surface'
+                ? 'bg-secondary text-on-primary'
                 : 'ghost-border text-tertiary hover:text-on-surface',
             ]"
             @click="onLogoPositionChange(opt.value)"

@@ -4,22 +4,22 @@ import { cn } from '@/lib/utils'
 import { Check } from 'lucide-vue-next'
 
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 px-2 py-0.5 font-terminal tracking-terminal text-xs uppercase font-medium rounded-none',
+  'inline-flex items-center gap-1 px-2 py-0.5 font-terminal tracking-terminal text-[8px] uppercase font-semibold rounded-none',
   {
     variants: {
       variant: {
         // OUTLINE PILLS (ghost-border, no fill)
         ready:       'ghost-border text-primary',
         draft:       'ghost-border text-secondary',
-        archived:    'ghost-border text-tertiary',
-        confirmed:   'ghost-border text-on-surface',
+        archived:    'ghost-border text-status-archived',
+        confirmed:   'ghost-border text-primary',
         'soft-hold': 'ghost-border text-on-surface',
 
         // FILLED PILLS
-        failed:              'bg-error text-on-surface',
+        failed:              'bg-error text-white',
         scheduled:           'bg-primary text-on-primary',
         published:           'bg-surface-container-high text-tertiary',
-        'awaiting-deposit':  'bg-error text-on-surface',
+        'awaiting-deposit':  'bg-error text-white',
         nominal:             'bg-primary text-on-primary',
 
         // NON-PILL: left bar + text
@@ -27,7 +27,7 @@ const badgeVariants = cva(
         settled:     'accent-bar-published text-on-surface pl-3 border-0 outline-none',
 
         // TEXT ONLY
-        pending: 'text-error font-semibold border-0 outline-none px-0 py-0',
+        pending: 'text-secondary font-semibold border-0 outline-none px-0 py-0',
 
         // Default fallback
         default: 'ghost-border text-on-surface-variant',

@@ -104,8 +104,7 @@ onClickOutside(inputRef, () => {
       <button
         v-if="query && !isLoading"
         type="button"
-        class="btn-hud"
-        style="padding:0 8px;font-size:10px;"
+        class="btn-hud btn-hud-xs"
         @click="clear"
       >
         ✕
@@ -121,15 +120,15 @@ onClickOutside(inputRef, () => {
     <div
       v-if="isOpen && results.length > 0"
       class="glass"
-      style="position:absolute;top:100%;left:0;right:0;z-index:50;max-height:200px;overflow-y:auto;border-radius:2px;margin-top:2px;"
+      style="position:absolute;top:100%;left:0;right:0;z-index:50;max-height:200px;overflow-y:auto;margin-top:2px;"
     >
       <div
         v-for="(contact, idx) in results"
         :key="contact.id"
-        style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);"
+        style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(46,46,49,.2);"
         :style="{
           background: idx === highlightedIndex
-            ? 'rgba(255,255,255,0.08)'
+            ? 'rgba(150,248,255,.08)'
             : 'transparent',
         }"
         @click="selectContact(contact)"
@@ -138,7 +137,8 @@ onClickOutside(inputRef, () => {
         <div style="font-size:11px;font-weight:600;">{{ contact.name }}</div>
         <div
           v-if="contact.company"
-          style="font-size:9px;color:var(--color-tertiary);"
+          class="section-lbl"
+          style="margin-top:2px;"
         >
           {{ contact.company }}
         </div>
@@ -155,7 +155,7 @@ onClickOutside(inputRef, () => {
     <div
       v-if="isOpen && !isLoading && results.length === 0 && query.length >= 2"
       class="glass"
-      style="position:absolute;top:100%;left:0;right:0;z-index:50;padding:12px;text-align:center;border-radius:2px;margin-top:2px;"
+      style="position:absolute;top:100%;left:0;right:0;z-index:50;padding:12px;text-align:center;margin-top:2px;"
     >
       <div class="section-lbl" style="font-size:9px;color:var(--color-tertiary);">NO CONTACTS FOUND</div>
       <div

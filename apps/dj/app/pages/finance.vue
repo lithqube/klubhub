@@ -25,8 +25,8 @@ const transactions = [
   { id: 2, title: 'Tresor — Resident Night',          date: 'MAR 8',  amount: '€800',  type: 'income',  accentClass: 'accent-bar-ready' },
   { id: 3, title: 'Ostgut Ton — Royalties Q1',        date: 'MAR 15', amount: '€340',  type: 'income',  accentClass: 'accent-bar-ready' },
   { id: 4, title: 'Studio Session — Mixing Services', date: 'MAR 2',  amount: '€620',  type: 'income',  accentClass: 'accent-bar-ready' },
-  { id: 5, title: 'Travel & Accommodation',           date: 'MAR 27', amount: '-€180', type: 'expense', accentClass: 'accent-bar-failed' },
-  { id: 6, title: 'Gear: Pioneer CDJ USB Drives',    date: 'MAR 10', amount: '-€95',  type: 'expense', accentClass: 'accent-bar-failed' },
+  { id: 5, title: 'Travel & Accommodation',           date: 'MAR 27', amount: '-€180', type: 'expense', accentClass: 'accent-bar-published' },
+  { id: 6, title: 'Gear: Pioneer CDJ USB Drives',    date: 'MAR 10', amount: '-€95',  type: 'expense', accentClass: 'accent-bar-published' },
 ]
 
 const invoices = [
@@ -73,7 +73,7 @@ const invoices = [
         <div class="glass" style="padding:12px 14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
             <div class="section-lbl">YTD TOTAL</div>
-            <TrendingUp style="width:12px;height:12px;color:var(--color-primary);opacity:.5;" />
+            <TrendingUp style="width:12px;height:12px;color:var(--color-tertiary);opacity:.5;" />
           </div>
           <div style="font-family:var(--font-command);font-size:18px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;">{{ stats.ytd }}</div>
         </div>
@@ -145,7 +145,7 @@ const invoices = [
           <div
             v-for="inv in invoices"
             :key="inv.num"
-            style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid rgba(46,46,49,.15);"
+            class="tx-row"
           >
             <div style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);width:80px;flex-shrink:0;">
               {{ inv.num }}

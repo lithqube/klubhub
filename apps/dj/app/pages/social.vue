@@ -57,7 +57,7 @@ function handleQuickExport() {
         <div style="font-family:var(--font-command);font-size:11px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">
           CONNECT INSTAGRAM
         </div>
-        <div class="spost-meta" style="margin-top:2px;">
+        <div style="font-family:var(--font-data);font-size:12px;color:var(--color-tertiary);line-height:1.5;margin-top:2px;">
           Authorize to enable direct publishing. Queue works offline.
         </div>
       </div>
@@ -69,12 +69,13 @@ function handleQuickExport() {
     <!-- Token expiry warning -->
     <div
       v-else-if="account && account.tokenExpiry && isTokenExpiringSoon(account.tokenExpiry)"
-      style="margin:0 20px;margin-top:14px;padding:12px 16px;border:1px dashed rgba(245,197,24,.3);background:rgba(245,197,24,.05);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"
+      class="border border-dashed border-status-archived/30 bg-status-archived/5"
+      style="margin:0 20px;margin-top:14px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"
     >
-      <span style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:#F5C518;">
-        ⚠ INSTAGRAM TOKEN EXPIRING SOON — RE-AUTHORIZE
+      <span class="font-terminal tracking-terminal text-status-archived" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
+        INSTAGRAM TOKEN EXPIRING SOON — RE-AUTHORIZE
       </span>
-      <button class="btn-hud btn-hud-ghost btn-hud-sm" style="padding:0 12px;border-color:rgba(245,197,24,.3);color:#F5C518;">
+      <button class="btn-hud btn-hud-ghost btn-hud-sm border-status-archived/30 text-status-archived">
         RE-AUTHORIZE
       </button>
     </div>

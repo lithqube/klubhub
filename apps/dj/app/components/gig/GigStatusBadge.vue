@@ -8,13 +8,14 @@ const props = defineProps<{
 const badgeClass = computed(() => {
   switch (props.status) {
     case 'confirmed':
-    case 'inquiry':
       return 'badge-ready'
+    case 'inquiry':
     case 'advanced':
       return 'badge-draft'
     case 'played':
-    case 'cancelled':
       return 'badge-archived'
+    case 'cancelled':
+      return 'badge-failed'
     default:
       return 'badge-archived'
   }

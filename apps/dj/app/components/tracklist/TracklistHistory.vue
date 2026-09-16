@@ -141,14 +141,13 @@ onMounted(() => {
         <div style="display:flex;gap:6px;flex-shrink:0;" @click.stop>
           <button
             class="btn-hud btn-hud-ghost btn-hud-xs"
-            style="padding:0 10px;"
             @click="openTracklist(item.id)"
           >
             OPEN
           </button>
           <button
             class="btn-hud btn-hud-xs"
-            style="padding:0 10px;border-color:rgba(255,113,108,.3);color:var(--color-error);"
+            style="border:1px dashed rgba(255,113,108,.4);color:var(--color-error);"
             @click="confirmDelete(item.id, item.title || item.filename || 'Untitled')"
           >
             DEL
@@ -177,7 +176,7 @@ onMounted(() => {
             </button>
             <button
               class="btn-hud"
-              style="padding:0 14px;border-color:rgba(255,113,108,.4);color:var(--color-error);box-shadow:0 0 12px rgba(255,113,108,.15);"
+              style="padding:0 14px;border:1px dashed rgba(255,113,108,.4);color:var(--color-error);box-shadow:0 0 12px rgba(255,113,108,.15);"
               @click="performDelete"
             >
               DELETE

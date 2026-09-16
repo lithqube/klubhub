@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Send, Layers, TrendingUp } from 'lucide-vue-next'
+import { Send, Layers, TrendingUp, Zap } from 'lucide-vue-next'
 
 useHead({ title: 'Dashboard — KlubHub DJ' })
 
@@ -74,14 +74,14 @@ const finance = {
     <div class="page-body">
 
       <!-- ── Hero: Upcoming gig card ── -->
-      <div class="glass hud-card glow-card" style="display:flex;overflow:hidden;" aria-label="Upcoming gig">
-        <!-- Cyan accent bar -->
-        <div style="width:3px;flex-shrink:0;background:linear-gradient(180deg,var(--color-primary),var(--color-primary-container));" aria-hidden="true" />
-
+      <div class="glass hud-card glow-card accent-bar-ready" style="display:flex;overflow:hidden;" aria-label="Upcoming gig">
         <div style="flex:1;padding:16px 18px;min-width:0;">
           <!-- Badges -->
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-            <span class="badge-hud badge-ready" style="border-color:rgba(150,248,255,.5);box-shadow:0 0 12px rgba(150,248,255,.1);">⚡ UPCOMING</span>
+            <span class="badge-hud badge-ready" style="border-color:rgba(150,248,255,.5);box-shadow:0 0 12px rgba(150,248,255,.1);">
+              <Zap style="width:8px;height:8px;" aria-hidden="true" />
+              UPCOMING
+            </span>
             <span class="badge-hud badge-ready">{{ upcomingGig.status }}</span>
           </div>
 
@@ -229,7 +229,7 @@ const finance = {
           <div class="glass" style="padding:12px 14px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
               <div class="section-lbl">YTD TOTAL</div>
-              <TrendingUp style="width:12px;height:12px;color:var(--color-primary);opacity:.5;" />
+              <TrendingUp style="width:12px;height:12px;color:var(--color-tertiary);opacity:.5;" />
             </div>
             <div style="font-family:var(--font-command);font-size:18px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;">{{ finance.ytd }}</div>
           </div>

@@ -51,11 +51,11 @@ const statusLabel = computed(() => {
 
 const statusClass = computed(() => {
   switch (props.post.status) {
-    case 'scheduled': return 'bg-primary/20 text-primary border border-primary/40'
-    case 'publishing': return 'bg-primary/30 text-primary border border-primary/50 animate-pulse'
-    case 'published': return 'bg-surface-variant text-on-surface-dim border border-outline-variant/30'
-    case 'draft': return 'bg-transparent text-on-surface-dim border border-outline-variant/40'
-    default: return 'bg-surface-variant text-on-surface-dim border border-outline-variant/30'
+    case 'scheduled': return 'ghost-border text-primary'
+    case 'publishing': return 'bg-primary text-on-primary animate-pulse'
+    case 'published': return 'bg-surface-container-high text-tertiary'
+    case 'draft': return 'ghost-border text-secondary'
+    default: return 'bg-surface-container-high text-tertiary'
   }
 })
 
@@ -93,7 +93,7 @@ const platformTag = computed(() =>
         alt="Post image"
         @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
       >
-      <span v-else class="font-terminal tracking-terminal text-xs text-on-surface-dim uppercase">
+      <span v-else class="font-terminal tracking-terminal text-xs text-tertiary uppercase">
         NO IMAGE
       </span>
     </div>
@@ -111,7 +111,7 @@ const platformTag = computed(() =>
       </div>
 
       <!-- Datetime -->
-      <p class="font-data text-xs text-on-surface uppercase tracking-wide">
+      <p class="font-terminal tracking-terminal text-xs text-on-surface">
         {{ formattedDateTime }}
       </p>
 
@@ -127,13 +127,13 @@ const platformTag = computed(() =>
         <textarea
           v-model="editCaption"
           rows="3"
-          class="w-full bg-surface-container border border-outline-variant/30 px-2 py-1.5 font-data text-xs text-on-surface resize-none focus:outline-none focus:border-primary/60 transition-colors"
+          class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-2 py-1.5 font-data text-xs text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
           placeholder="Caption..."
         />
         <input
           v-model="editScheduledAt"
           type="datetime-local"
-          class="w-full bg-surface-container border border-outline-variant/30 px-2 py-1.5 font-data text-xs text-on-surface focus:outline-none focus:border-primary/60 transition-colors"
+          class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-2 py-1.5 font-data text-xs text-on-surface focus:outline-none focus:border-primary transition-colors"
         >
         <div class="flex gap-2 justify-end">
           <button

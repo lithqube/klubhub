@@ -8,7 +8,7 @@ We take security seriously and want to address issues before they become public.
 Use one of these private channels:
 
 1. **GitHub Security Advisories** — open a
-   [private security advisory](https://github.com/lithqube/klubhub-dj/security/advisories/new)
+   [private security advisory](https://github.com/lithqube/klubhub/security/advisories/new)
    on this repository. This is the preferred channel because it gives you a
    dedicated thread and lets us coordinate a fix and disclosure timeline.
 2. **Email** — `security@klubhub.app` (PGP key on request).

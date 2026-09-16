@@ -24,6 +24,10 @@ const getAccentBarClass = (status?: string): string => {
     case 'draft': return 'accent-bar-draft';
     case 'pending': return 'accent-bar-pending';
     case 'archived': return 'accent-bar-archived';
+    case 'failed': return 'accent-bar-failed';
+    case 'scheduled': return 'accent-bar-scheduled';
+    case 'published': return 'accent-bar-published';
+    case 'confirmed': return 'accent-bar-confirmed';
     case 'ready':
     default: return 'accent-bar-ready';
   }
@@ -134,7 +138,7 @@ onBeforeUnmount(() => {
     <!-- Warnings -->
     <div
       v-if="warnings && warnings.length > 0"
-      class="p-3 ghost-border shadow-glow-error space-y-1"
+      class="p-3 border border-dashed border-error/30 shadow-glow-error space-y-1"
     >
       <p
         v-for="(warning, i) in warnings"
@@ -148,7 +152,7 @@ onBeforeUnmount(() => {
     <!-- Edit error -->
     <div
       v-if="editError"
-      class="p-3 ghost-border shadow-glow-error"
+      class="p-3 border border-dashed border-error/30 shadow-glow-error"
     >
       <p class="font-terminal tracking-terminal text-error text-xs uppercase">
         ERROR: {{ editError }}
@@ -178,7 +182,7 @@ onBeforeUnmount(() => {
             :class="[
               getAccentBarClass(track.status),
               selectedTrackId === track.id ? 'row-selected' : '',
-              'cursor-pointer hover:bg-surface-bright transition-colors',
+              'cursor-pointer transition-colors',
             ]"
             @click="selectRow(track.id)"
           >
@@ -224,7 +228,7 @@ onBeforeUnmount(() => {
               <template v-if="editingCell?.trackId === track.id && editingCell.field === 'title'">
                 <Input
                   v-model="editingValue"
-                  class="h-7 font-data text-on-surface text-xs"
+                  class="h-7 font-data text-on-surface text-sm"
                   autofocus
                   @blur="commitEdit(track.id, 'title')"
                   @keydown.enter="commitEdit(track.id, 'title')"
@@ -245,7 +249,7 @@ onBeforeUnmount(() => {
               <template v-if="editingCell?.trackId === track.id && editingCell.field === 'artist'">
                 <Input
                   v-model="editingValue"
-                  class="h-7 font-data text-on-surface text-xs"
+                  class="h-7 font-data text-on-surface text-sm"
                   autofocus
                   @blur="commitEdit(track.id, 'artist')"
                   @keydown.enter="commitEdit(track.id, 'artist')"
@@ -267,7 +271,7 @@ onBeforeUnmount(() => {
                 <Input
                   v-model="editingValue"
                   type="number"
-                  class="h-7 font-data text-primary text-xs w-16"
+                  class="h-7 font-data text-on-surface text-sm w-16"
                   autofocus
                   @blur="commitEdit(track.id, 'bpm')"
                   @keydown.enter="commitEdit(track.id, 'bpm')"
@@ -277,7 +281,7 @@ onBeforeUnmount(() => {
               </template>
               <template v-else>
                 <span
-                  class="font-data text-primary text-sm"
+                  class="font-data text-on-surface text-sm"
                   @click.stop="startEdit(track.id, 'bpm', track.bpm)"
                 >{{ track.bpm || '—' }}</span>
               </template>

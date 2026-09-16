@@ -13,11 +13,21 @@ Self-hosted. Open-source. Built for DJs who want to own their workflow.
 [![pnpm](https://img.shields.io/badge/pnpm-9-F69220.svg)](https://pnpm.io)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
 
-[Features](#features) · [Quick start](#quick-start) · [Roadmap](#roadmap) · [Docs](./docs/INDEX.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
+[Features](#features) · [Quick start](#quick-start) · [Roadmap](#roadmap) · [Docs](./docs/INDEX.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [klubhub.io](https://klubhub.io)
 
 </div>
 
 ---
+
+## A monorepo for the KlubHub family
+
+This repository is the shared home for the **[KlubHub](https://klubhub.io)** product family — one scene, a growing toolkit — managed as a single Nx + pnpm workspace under `apps/`. **KlubHub DJ** is the first product to live here; **KlubHub Promoter** and **KlubHub Label** are coming soon and will land the same way: a new `apps/<product>` workspace project sharing this repo's tooling, CI, and design system rather than starting from scratch.
+
+Most KlubHub DJ features will stay open source under this repository's MIT license; some future features across the family may be offered as SaaS. SaaS scope, pricing, and availability have not been announced.
+
+The public brand site for the whole family lives at `apps/site/` and deploys to **[klubhub.io](https://klubhub.io)** — see [GitHub Pages setup](./docs/github-pages.md) for local preview, deployment, and DNS configuration.
+
+Everything else in this README describes **KlubHub DJ** specifically, unless noted otherwise.
 
 ## Why KlubHub DJ?
 
@@ -131,9 +141,9 @@ NUXT_PUBLIC_API_BASE=http://localhost:8080 pnpm nx serve dj
 ## Project structure
 
 ```
-klubhub-dj/
-├── apps/
-│   ├── dj/                          # Nuxt 4 frontend
+klubhub/
+├── apps/                            # KlubHub product family workspace — future products land here as apps/<product>
+│   ├── dj/                          # KlubHub DJ — Nuxt 4 frontend (first product in the family)
 │   │   ├── app/
 │   │   │   ├── pages/               # index, tracklist, social, epk, gigs, finance
 │   │   │   ├── components/          # TheNav, tracklist/, social/, epk/, ui/
@@ -144,9 +154,10 @@ klubhub-dj/
 │   │   └── server/
 │   │       ├── api/v1/              # Mock data handlers (when NUXT_PUBLIC_API_BASE unset)
 │   │       └── plugins/             # Playwright singleton (graceful fallback)
-│   └── dj-e2e/                      # Playwright end-to-end tests
+│   ├── dj-e2e/                      # Playwright end-to-end tests for KlubHub DJ
+│   └── site/                        # klubhub.io — public brand site for the whole family
 │
-├── api/                             # Go backend
+├── api/                             # Go backend for KlubHub DJ (future products bring their own)
 │   ├── cmd/api/main.go              # Entry point (chi router, worker goroutine, SIGTERM)
 │   ├── internal/
 │   │   ├── platform/                # config, db, storage, crypto, http, migrations

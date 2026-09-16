@@ -31,29 +31,29 @@ async function reAuthorize() {
   <!-- Disconnected: magenta banner -->
   <div
     v-if="showDisconnected"
-    class="banner bg-secondary/10 border border-secondary px-6 py-4 flex items-center justify-between gap-6"
+    class="glass-panel border border-error px-6 py-4 flex items-center justify-between gap-6"
   >
-    <span class="font-terminal tracking-terminal text-xs uppercase text-secondary">
-      ● INSTAGRAM DISCONNECTED — RE-AUTHORIZE
+    <span class="font-terminal tracking-terminal text-xs uppercase text-error">
+      INSTAGRAM DISCONNECTED — RE-AUTHORIZE
     </span>
     <button
-      class="ghost-border px-4 py-2 font-terminal tracking-terminal text-xs uppercase text-secondary border-secondary hover:bg-secondary/10 transition-colors"
+      class="ghost-border px-4 py-2 font-terminal tracking-terminal text-xs uppercase text-error border-error hover:bg-error-container/40 transition-colors"
       @click="reAuthorize"
     >
       RE-AUTHORIZE
     </button>
   </div>
 
-  <!-- Expiring soon: amber/orange banner -->
+  <!-- Expiring soon: amber warning banner -->
   <div
     v-else-if="showExpiryWarning"
-    class="banner bg-amber-500/10 border border-amber-500 px-6 py-4 flex items-center justify-between gap-6"
+    class="glass-panel border border-status-archived px-6 py-4 flex items-center justify-between gap-6"
   >
-    <span class="font-terminal tracking-terminal text-xs uppercase text-amber-400">
-      ⚠ INSTAGRAM TOKEN EXPIRING IN {{ daysUntilExpiry }} DAYS — RE-AUTHORIZE
+    <span class="font-terminal tracking-terminal text-xs uppercase text-status-archived">
+      INSTAGRAM TOKEN EXPIRING IN {{ daysUntilExpiry }} DAYS — RE-AUTHORIZE
     </span>
     <button
-      class="ghost-border px-4 py-2 font-terminal tracking-terminal text-xs uppercase text-amber-400 border-amber-400 hover:bg-amber-500/10 transition-colors"
+      class="ghost-border px-4 py-2 font-terminal tracking-terminal text-xs uppercase text-status-archived border-status-archived hover:bg-status-archived/10 transition-colors"
       @click="reAuthorize"
     >
       RE-AUTHORIZE

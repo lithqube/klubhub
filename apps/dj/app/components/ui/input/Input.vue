@@ -33,7 +33,7 @@ const modelValue = useVModel(props, 'modelValue', emits, {
       'flex h-9 w-full rounded-none bg-surface-container-high px-3 py-1 text-sm text-on-surface',
       'border-0 border-l-2 border-transparent',
       'focus-visible:outline-none focus-visible:border-primary focus-visible:ring-0',
-      'placeholder:text-tertiary',
+      'placeholder:text-tertiary placeholder:font-terminal placeholder:uppercase placeholder:tracking-terminal placeholder:text-[10px]',
       'disabled:cursor-not-allowed disabled:opacity-50',
       'transition-colors duration-150',
       props.class,

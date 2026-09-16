@@ -16,7 +16,7 @@ const delegatedProps = computed(() => {
   <TabsTrigger
     v-bind="delegatedProps"
     :class="cn(
-      'inline-flex items-center justify-center px-4 py-2 text-sm font-command tracking-command',
+      'inline-flex items-center justify-center px-4 py-2 font-terminal tracking-terminal text-[9px] uppercase',
       'border-b-2 border-transparent rounded-none',
       'text-tertiary hover:text-on-surface transition-colors duration-150',
       'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary',

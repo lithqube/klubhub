@@ -42,12 +42,12 @@ async function handleDownload() {
 <template>
   <div
     data-testid="failed-card"
-    class="glass-panel border border-secondary/30 flex flex-col overflow-hidden"
+    class="glass-panel border border-error/30 flex flex-col overflow-hidden"
   >
-    <!-- Magenta attention banner -->
-    <div class="px-3 py-2 bg-secondary/10 border-b border-secondary/30 flex items-center gap-2">
-      <span class="font-terminal tracking-terminal text-xs text-secondary uppercase">
-        ⚠ ATTENTION REQUIRED: SYNC ERROR
+    <!-- Attention banner -->
+    <div class="px-3 py-2 bg-error-container/40 border-b border-error/30 flex items-center gap-2">
+      <span class="font-terminal tracking-terminal text-xs text-error uppercase">
+        ATTENTION REQUIRED: SYNC ERROR
       </span>
     </div>
 
@@ -60,7 +60,7 @@ async function handleDownload() {
         alt="Post image"
         @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
       >
-      <span v-else class="font-terminal tracking-terminal text-xs text-on-surface-dim uppercase">
+      <span v-else class="font-terminal tracking-terminal text-xs text-tertiary uppercase">
         NO IMAGE
       </span>
     </div>
@@ -69,18 +69,18 @@ async function handleDownload() {
     <div class="flex flex-col gap-2 p-3 flex-1">
       <!-- Status badge -->
       <div class="flex items-center gap-2">
-        <span class="px-2 py-0.5 font-terminal tracking-terminal text-[10px] uppercase bg-secondary/20 text-secondary border border-secondary/40">
+        <span class="px-2 py-0.5 font-terminal tracking-terminal text-[10px] uppercase bg-error text-white">
           {{ statusLabel }}
         </span>
       </div>
 
       <!-- Datetime -->
-      <p class="font-data text-xs text-on-surface uppercase tracking-wide">
+      <p class="font-terminal tracking-terminal text-xs text-on-surface">
         {{ formattedDateTime }}
       </p>
 
       <!-- Error reason -->
-      <p v-if="post.lastError" class="font-data text-xs text-secondary/70">
+      <p v-if="post.lastError" class="font-data text-xs text-error/80">
         {{ post.lastError }}
       </p>
 
@@ -101,7 +101,7 @@ async function handleDownload() {
     <div class="flex items-center gap-3 px-3 py-2.5 border-t border-outline-variant/20">
       <button
         data-testid="retry-btn"
-        class="font-terminal tracking-terminal text-[10px] uppercase text-secondary hover:text-secondary/80 transition-colors"
+        class="font-terminal tracking-terminal text-[10px] uppercase text-error hover:text-error/80 transition-colors"
         @click="handleRetry"
       >
         RETRY SYNC

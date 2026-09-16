@@ -39,7 +39,7 @@ function formatCurrency(value: number): string {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <div class="section-lbl">YTD EARNED</div>
         <TrendingUp
-          style="width:12px;height:12px;color:var(--color-primary);opacity:.5;"
+          style="width:12px;height:12px;color:var(--color-tertiary);opacity:.5;"
         />
       </div>
       <div

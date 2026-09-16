@@ -34,7 +34,7 @@ function onFileChange(e: Event) {
 <template>
   <div class="glass-panel p-4 space-y-4">
     <!-- Section label -->
-    <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">PHOTOS</p>
+    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">PHOTOS</p>
 
     <!-- Upload zone or limit label -->
     <div
@@ -45,11 +45,11 @@ function onFileChange(e: Event) {
       @drop.prevent="onDrop"
       @click="fileInput?.click()"
     >
-      <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">
+      <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">
         DROP PHOTOS HERE
       </p>
-      <p class="text-xs text-muted-foreground font-terminal">
-        {{ photoCount }} / 20 UPLOADED — JPEG or PNG
+      <p class="text-xs text-tertiary font-terminal uppercase">
+        {{ photoCount }} / 20 UPLOADED — JPEG OR PNG
       </p>
       <input
         ref="fileInput"
@@ -64,7 +64,7 @@ function onFileChange(e: Event) {
     <p
       v-else
       data-testid="photo-limit-label"
-      class="text-xs tracking-widest text-muted-foreground uppercase font-terminal text-center py-3"
+      class="text-xs tracking-terminal text-tertiary uppercase font-terminal text-center py-3"
     >
       20 / 20 PHOTOS — REMOVE ONE TO ADD MORE
     </p>
@@ -73,7 +73,7 @@ function onFileChange(e: Event) {
     <div
       v-if="photoPaths.length > 0"
       data-testid="photo-grid"
-      class="grid grid-cols-4 gap-2"
+      class="photo-grid"
     >
       <div
         v-for="(path, index) in photoPaths"

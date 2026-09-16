@@ -3,13 +3,15 @@
   "configurations": [
     {
       "name": "Nuxt Frontend (dj)",
-      "runtimeExecutable": "/Users/admin/.nvm/versions/node/v25.2.1/bin/node",
-      "runtimeArgs": [
-        "node_modules/nx/bin/nx.js",
-        "serve",
-        "dj"
-      ],
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["nx", "serve", "dj"],
       "port": 4200
+    },
+    {
+      "name": "KlubHub Site (static)",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4300", "--directory", "/Users/admin/dev/klubhub-dj/dist/site"],
+      "port": 4300
     },
     {
       "name": "Go API",

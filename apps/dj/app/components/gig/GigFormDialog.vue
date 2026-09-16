@@ -188,13 +188,13 @@ function close() {
         @click.self="close"
       >
         <div
-          class="glass-panel"
-          style="width:90%;max-width:520px;max-height:90vh;overflow-y:auto;border-radius:4px;"
+          class="glass"
+          style="width:90%;max-width:520px;max-height:90vh;overflow-y:auto;"
         >
           <!-- Dialog header -->
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.08);">
-            <div style="font-family:var(--font-command);font-size:13px;font-weight:700;letter-spacing:-.02em;">{{ title }}</div>
-            <button class="btn-hud" style="padding:4px 8px;font-size:10px;" @click="close">✕</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid rgba(150,248,255,.08);">
+            <div style="font-family:var(--font-command);font-size:13px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase;">{{ title }}</div>
+            <button class="btn-hud btn-hud-xs" @click="close">✕</button>
           </div>
 
           <!-- Form body -->
@@ -348,7 +348,7 @@ function close() {
                 <label class="section-lbl" style="display:block;margin-bottom:6px;">STATUS</label>
                 <select v-model="form.status" class="hud-input" style="width:100%;">
                   <option v-for="s in STATUS_OPTIONS" :key="s" :value="s">
-                    {{ s.charAt(0).toUpperCase() + s.slice(1) }}
+                    {{ s.toUpperCase() }}
                   </option>
                 </select>
               </div>
@@ -356,7 +356,7 @@ function close() {
                 <label class="section-lbl" style="display:block;margin-bottom:6px;">PAYMENT</label>
                 <select v-model="form.payment_status" class="hud-input" style="width:100%;">
                   <option v-for="p in PAYMENT_OPTIONS" :key="p" :value="p">
-                    {{ p.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }}
+                    {{ p.replace(/_/g, ' ').toUpperCase() }}
                   </option>
                 </select>
               </div>
@@ -387,29 +387,28 @@ function close() {
               <div
                 v-if="copyResults.length > 0"
                 class="glass"
-                style="margin-top:4px;max-height:120px;overflow-y:auto;border-radius:2px;"
+                style="margin-top:4px;max-height:120px;overflow-y:auto;"
               >
                 <div
                   v-for="gig in copyResults"
                   :key="gig.id"
-                  style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);"
+                  style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(46,46,49,.2);"
                   @click="copyFromGig(gig)"
                 >
                   <div style="font-size:11px;font-weight:600;">{{ gig.event_name || gig.venue }}</div>
-                  <div style="font-size:9px;color:var(--color-tertiary);">{{ gig.date?.split('T')[0] }}</div>
+                  <div class="section-lbl" style="margin-top:2px;">{{ gig.date?.split('T')[0] }}</div>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- Dialog footer -->
-          <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;border-top:1px solid rgba(255,255,255,0.08);">
-            <button class="btn-hud" style="padding:8px 16px;font-size:10px;" @click="close">
+          <div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 20px;border-top:1px solid rgba(150,248,255,.08);">
+            <button class="btn-hud" @click="close">
               CANCEL
             </button>
             <button
               class="btn-hud btn-hud-cta"
-              style="padding:8px 16px;font-size:10px;"
               :disabled="isSaving"
               @click="save"
             >
@@ -432,9 +431,9 @@ function close() {
           v-if="showCancelConfirm"
           style="position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);"
         >
-          <div class="glass-panel" style="padding:24px;max-width:360px;border-radius:4px;text-align:center;">
+          <div class="glass" style="padding:24px;max-width:360px;text-align:center;">
             <div
-              style="font-family:var(--font-command);font-size:12px;font-weight:700;margin-bottom:12px;letter-spacing:-.02em;"
+              style="font-family:var(--font-command);font-size:12px;font-weight:700;margin-bottom:12px;letter-spacing:-.02em;text-transform:uppercase;"
             >
               CONFIRM CANCELLATION
             </div>
@@ -442,12 +441,11 @@ function close() {
               Cancelling a gig is permanent and cannot be undone. Are you sure?
             </div>
             <div style="display:flex;justify-content:center;gap:10px;">
-              <button class="btn-hud" style="padding:8px 16px;font-size:10px;" @click="showCancelConfirm = false">
+              <button class="btn-hud" @click="showCancelConfirm = false">
                 GO BACK
               </button>
               <button
-                class="btn-hud"
-                style="padding:8px 16px;font-size:10px;background:var(--color-error);"
+                class="btn-hud btn-hud-error"
                 @click="doSave"
               >
                 CONFIRM CANCEL

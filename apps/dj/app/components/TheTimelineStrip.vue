@@ -23,7 +23,7 @@ function hasEvent(date: Date) {
   <div class="bg-surface-container-low px-4 py-3">
     <!-- Header: label left + chevrons right -->
     <div class="flex justify-between items-center mb-3">
-      <span class="font-terminal tracking-terminal text-tertiary text-xs uppercase">
+      <span class="font-terminal tracking-terminal text-tertiary text-[8px] uppercase">
         TIMELINE_VIEW
       </span>
       <div class="flex gap-1">
@@ -49,13 +49,13 @@ function hasEvent(date: Date) {
       >
         <!-- Day number -->
         <span
-          class="font-command text-sm font-medium"
+          class="font-command text-sm font-bold"
           :class="isSameDay(date, selectedDate) ? 'text-primary' : ''"
         >
           {{ date.getDate() }}
         </span>
         <!-- Day name -->
-        <span class="font-terminal tracking-terminal text-xs uppercase mt-0.5">
+        <span class="font-terminal tracking-terminal text-[8px] uppercase mt-0.5">
           {{ dayNames[date.getDay()] }}
         </span>
         <!-- Event indicator dot (below date) -->

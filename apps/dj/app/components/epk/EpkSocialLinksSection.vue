@@ -69,7 +69,7 @@ function onLinkChange(key: string, value: string | number) {
 <template>
   <div class="glass-panel p-4 space-y-4">
     <!-- Section label -->
-    <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">SOCIAL LINKS</p>
+    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">SOCIAL LINKS</p>
 
     <div class="space-y-3">
       <div
@@ -77,7 +77,7 @@ function onLinkChange(key: string, value: string | number) {
         :key="platform.key"
         class="space-y-1"
       >
-        <label class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">
+        <label class="text-xs tracking-terminal text-tertiary uppercase font-terminal">
           {{ platform.label }}
         </label>
         <Input

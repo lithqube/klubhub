@@ -551,7 +551,7 @@ KlubHub DJ ships as a single `docker-compose.yml` with four services:
 Deployment is a single command:
 
 ```bash
-git clone https://github.com/<org>/klubhub-dj && cd klubhub-dj && cp .env.example .env && docker-compose up -d
+git clone https://github.com/<org>/klubhub && cd klubhub && cp .env.example .env && docker-compose up -d
 ```
 
 The `.env` file configures: Spotify/Discogs/MusicBrainz API keys, Instagram/Facebook API credentials, PostgreSQL connection, MinIO credentials, ports, and timezone.

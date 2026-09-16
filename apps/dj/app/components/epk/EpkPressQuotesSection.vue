@@ -55,14 +55,14 @@ function onSourceChange(index: number, value: string | number) {
 <template>
   <div class="glass-panel p-4 space-y-4">
     <!-- Section label -->
-    <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">PRESS QUOTES</p>
+    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">PRESS QUOTES</p>
 
     <!-- Quotes list -->
     <div class="space-y-4">
       <div
         v-for="(quote, index) in quotes"
         :key="index"
-        class="space-y-2 border border-surface-container-high p-2"
+        class="space-y-2 ghost-border p-2"
         :data-testid="`quote-item-${index}`"
       >
         <Textarea
@@ -83,7 +83,7 @@ function onSourceChange(index: number, value: string | number) {
           />
           <button
             :data-testid="`quote-delete-${index}`"
-            class="text-muted-foreground hover:text-on-surface px-2 py-1 font-terminal text-xs"
+            class="text-tertiary hover:text-on-surface px-2 py-1 font-terminal text-xs"
             type="button"
             @click="removeQuote(index)"
           >

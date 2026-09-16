@@ -63,7 +63,9 @@ function gigStatusColor(status: string) {
     case 'advanced':
       return 'var(--color-secondary)'
     case 'played':
-      return 'var(--color-tertiary)'
+      return 'var(--color-status-archived)'
+    case 'cancelled':
+      return 'var(--color-error)'
     default:
       return 'var(--color-tertiary)'
   }
@@ -75,24 +77,22 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="glass" style="padding:16px;">
+  <div class="glass" style="padding:14px;">
     <!-- Calendar header -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <button
-        class="btn-hud"
-        style="padding:4px 8px;font-size:10px;"
+        class="btn-hud btn-hud-ghost btn-hud-xs"
         @click="prevMonth"
       >
         ← PREV
       </button>
       <div
-        style="font-family:var(--font-command);font-size:14px;font-weight:700;letter-spacing:-.02em;"
+        style="font-family:var(--font-command);font-size:14px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase;"
       >
         {{ viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }}
       </div>
       <button
-        class="btn-hud"
-        style="padding:4px 8px;font-size:10px;"
+        class="btn-hud btn-hud-ghost btn-hud-xs"
         @click="nextMonth"
       >
         NEXT →
@@ -100,31 +100,27 @@ const emit = defineEmits<{
     </div>
 
     <!-- Day labels -->
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;">
+    <div class="cal-grid" style="margin-bottom:4px;">
       <div
         v-for="day in ['MON','TUE','WED','THU','FRI','SAT','SUN']"
         :key="day"
         class="section-lbl"
-        style="text-align:center;font-size:8px;"
+        style="text-align:center;"
       >
         {{ day }}
       </div>
     </div>
 
     <!-- Calendar grid -->
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">
+    <div class="cal-grid">
       <div
         v-for="(day, idx) in daysInMonth"
         :key="idx"
-        style="min-height:48px;padding:4px;border-radius:2px;"
-        :style="{
-          background: day.getMonth() === viewDate.getMonth()
-            ? 'rgba(255,255,255,0.03)'
-            : 'transparent',
-        }"
+        class="cal-day"
+        :style="{ opacity: day.getMonth() === viewDate.getMonth() ? 1 : 0.4 }"
       >
         <div
-          style="font-size:10px;font-family:var(--font-command);margin-bottom:4px;"
+          class="cal-day-num"
           :style="{
             color: day.getMonth() === viewDate.getMonth()
               ? 'var(--color-on-surface)'
@@ -142,7 +138,7 @@ const emit = defineEmits<{
               :key="gig.id"
             >
               <div
-                style="width:8px;height:8px;border-radius:50%;"
+                style="width:6px;height:6px;"
                 :style="{ background: gigStatusColor(gig.status) }"
                 :title="gig.event_name"
                 @click="emit('gig-click', gig)"
@@ -150,7 +146,7 @@ const emit = defineEmits<{
             </template>
             <div
               v-if="(gigsByDate.get(day.toISOString().split('T')[0]) || []).length > 3"
-              style="font-size:7px;color:var(--color-tertiary);"
+              class="bar-lbl"
             >
               +{{ (gigsByDate.get(day.toISOString().split('T')[0]) || []).length - 3 }}
             </div>

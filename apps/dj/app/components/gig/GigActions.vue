@@ -46,8 +46,7 @@ async function downloadPdf() {
 <template>
   <div style="display:flex;gap:6px;align-items:center;">
     <button
-      class="btn-hud"
-      style="padding:4px 8px;font-size:9px;letter-spacing:.04em;"
+      class="btn-hud btn-hud-xs"
       title="Copy iCal feed URL"
       @click="copyICalUrl"
     >
@@ -55,8 +54,7 @@ async function downloadPdf() {
     </button>
     <button
       v-if="gig.status === 'confirmed'"
-      class="btn-hud"
-      style="padding:4px 8px;font-size:9px;letter-spacing:.04em;"
+      class="btn-hud btn-hud-xs"
       title="Download booking confirmation PDF"
       @click="downloadPdf"
     >
@@ -72,7 +70,8 @@ async function downloadPdf() {
     >
       <div
         v-if="showToast"
-        style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;padding:8px 16px;background:rgba(0,0,0,0.9);border:1px solid var(--color-primary);border-radius:2px;"
+        class="glass"
+        style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;padding:8px 16px;box-shadow:var(--shadow-glow-primary);"
       >
         <span class="section-lbl" style="font-size:10px;color:var(--color-primary);">
           {{ toastMessage }}

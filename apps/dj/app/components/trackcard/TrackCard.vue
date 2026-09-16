@@ -65,14 +65,15 @@ const backgroundStyle = computed(() => {
 
     <!-- Slot for logo, header, tracklist, footer -->
     <div
-      style="
-        position: relative;
-        width: 100%;
-        height: 100%;
-        padding: 40px;
-        box-sizing: border-box;
-        color: #ffffff;
-      "
+      :style="{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        padding: '40px',
+        boxSizing: 'border-box',
+        color: colors.text,
+        fontFamily: 'var(--font-data)',
+      }"
     >
       <slot />
     </div>

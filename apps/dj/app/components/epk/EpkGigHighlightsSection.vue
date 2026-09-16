@@ -45,7 +45,7 @@ function onHighlightChange(index: number, value: string | number) {
 <template>
   <div class="glass-panel p-4 space-y-4">
     <!-- Section label -->
-    <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">GIG HIGHLIGHTS</p>
+    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">GIG HIGHLIGHTS</p>
 
     <!-- Highlights list -->
     <div class="space-y-2">
@@ -64,7 +64,7 @@ function onHighlightChange(index: number, value: string | number) {
         />
         <button
           :data-testid="`highlight-delete-${index}`"
-          class="text-muted-foreground hover:text-on-surface px-2 py-1 font-terminal text-xs"
+          class="text-tertiary hover:text-on-surface px-2 py-1 font-terminal text-xs"
           type="button"
           @click="removeHighlight(index)"
         >

@@ -47,12 +47,12 @@ function onFieldChange(field: keyof ContactInfo, value: string | number) {
 <template>
   <div class="glass-panel p-4 space-y-4">
     <!-- Section label -->
-    <p class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">CONTACT INFO</p>
+    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">CONTACT INFO</p>
 
     <div class="space-y-3">
       <!-- Name -->
       <div class="space-y-1">
-        <label class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">NAME</label>
+        <label class="text-xs tracking-terminal text-tertiary uppercase font-terminal">NAME</label>
         <Input
           :model-value="contact.name"
           data-testid="contact-name-input"
@@ -63,7 +63,7 @@ function onFieldChange(field: keyof ContactInfo, value: string | number) {
 
       <!-- Email -->
       <div class="space-y-1">
-        <label class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">EMAIL</label>
+        <label class="text-xs tracking-terminal text-tertiary uppercase font-terminal">EMAIL</label>
         <Input
           :model-value="contact.email"
           data-testid="contact-email-input"
@@ -75,7 +75,7 @@ function onFieldChange(field: keyof ContactInfo, value: string | number) {
 
       <!-- Phone -->
       <div class="space-y-1">
-        <label class="text-xs tracking-widest text-muted-foreground uppercase font-terminal">PHONE</label>
+        <label class="text-xs tracking-terminal text-tertiary uppercase font-terminal">PHONE</label>
         <Input
           :model-value="contact.phone"
           data-testid="contact-phone-input"
