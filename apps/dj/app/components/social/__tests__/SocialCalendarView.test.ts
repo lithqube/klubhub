@@ -24,28 +24,28 @@ function makePost(overrides: Partial<ScheduledPost> = {}): ScheduledPost {
 }
 
 describe('dotColorForStatus', () => {
-  it('returns bg-secondary for failed status', () => {
-    expect(dotColorForStatus('failed')).toBe('bg-secondary')
+  it('returns bg-error for failed status', () => {
+    expect(dotColorForStatus('failed')).toBe('bg-error')
   })
 
-  it('returns bg-secondary for permanently_failed status', () => {
-    expect(dotColorForStatus('permanently_failed')).toBe('bg-secondary')
+  it('returns bg-error for permanently_failed status', () => {
+    expect(dotColorForStatus('permanently_failed')).toBe('bg-error')
   })
 
   it('returns bg-primary for scheduled status', () => {
     expect(dotColorForStatus('scheduled')).toBe('bg-primary')
   })
 
-  it('returns bg-primary for draft status', () => {
-    expect(dotColorForStatus('draft')).toBe('bg-primary')
+  it('returns bg-secondary for draft status', () => {
+    expect(dotColorForStatus('draft')).toBe('bg-secondary')
   })
 
-  it('returns bg-on-surface-dim for published status', () => {
-    expect(dotColorForStatus('published')).toBe('bg-on-surface-dim')
+  it('returns bg-tertiary for published status', () => {
+    expect(dotColorForStatus('published')).toBe('bg-tertiary')
   })
 
-  it('returns bg-on-surface-dim for publishing status', () => {
-    expect(dotColorForStatus('publishing')).toBe('bg-on-surface-dim')
+  it('returns bg-tertiary for publishing status', () => {
+    expect(dotColorForStatus('publishing')).toBe('bg-tertiary')
   })
 })
 
