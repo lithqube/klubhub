@@ -10,6 +10,13 @@ name: Publish KlubHub image
 #   - Verifies the published manifest exposes only linux/arm64.
 #   - Runs on `ubuntu-24.04-arm` (native arm64 runner, no QEMU emulation).
 #
+# Architecture: linux/arm64 ONLY for v1.0.0. linux/amd64 was deliberately
+# deferred so we ship a single native-arm64 image without QEMU emulation
+# (faster CI, smaller surface, matches the dominant KlubHub host: ARM SBCs
+# and Graviton-style cloud instances). CodeRabbit's suggestion to add a
+# multi-arch `linux/amd64,linux/arm64` matrix is intentionally NOT applied
+# here; amd64 support will be evaluated as a post-v1.0.0 point release.
+#
 # Container docs: docs/container-images.md
 # Release notes:  docs/release-notes/v1.0.0.md
 on:

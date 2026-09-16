@@ -1,3 +1,27 @@
+/**
+ * Wraps `nuxt build` for the KlubHub DJ frontend with two safety
+ * guarantees a raw `nuxt build` does not give us:
+ *
+ *   1. NUXT_PUBLIC_API_BASE must be set, otherwise the script exits
+ *      with a clear message instead of producing an output that
+ *      silently assumes `http://127.0.0.1:8080` (the value baked into
+ *      the production runtime image, but never what a dev or CI build
+ *      should ship).
+ *   2. The in-tree mock handlers under apps/dj/server/api/v1 are
+ *      physically moved out of the `server/` tree before Nitro
+ *      discovers routes, then restored in a `finally` block (including
+ *      the cross-filesystem cp+rm fallback for Docker BuildKit
+ *      overlays). This means a stale cached build cannot re-bundle
+ *      the mocks, and a crash mid-build still leaves the working
+ *      tree in a recoverable state.
+ *
+ * Run via `node apps/dj/scripts/build-prod.mjs` or
+ * `pnpm exec nx run @dev/dj:build`. Used by apps/dj/Dockerfile.
+ *
+ * @returns {void} Exits the process with Nuxt's status on success
+ *   (`process.exitCode` set on failure). Re-throws on
+ *   non-recoverable staging errors so the wrapper surfaces them.
+ */
 import { copyFileSync, cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
