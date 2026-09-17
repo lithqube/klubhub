@@ -1,20 +1,32 @@
-# docker-compose.dev.yml — overlay for local development
-# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# docker-compose.dev.yml — local-only overlay for v1.0.0+ (single-image model)
+#
+# The base docker-compose.yml starts db + storage + the published KlubHub
+# image on :8080. This overlay does NOT add a separate frontend service;
+# for fast UI iteration with mock handlers, run:
+#
+#   pnpm nx serve dj         # serves the Nuxt app on :3000 against in-tree mocks
+#
+# Or override the base to pin the api image to a local build:
+#
+#   LOCAL_BUILD=1 IMAGE_TAG=local docker compose -f docker-compose.yml up -d api
+#
+# This overlay only enables extra host port mappings and a frontend port
+# reservation (for the optional pnpm nx serve dj flow). No api/frontend
+# service definitions — those do not exist in the single-image model.
 
 name: klubhub-dj
 
 services:
-  storage:
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:39002:39002"   # Garage web UI
-
   db:
+    # Re-declare for clarity: same host port as the base, exposed only on
+    # loopback by default. Operators set POSTGRES_BIND="" to drop the host
+    # mapping entirely.
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:5432:5432"   # already in base, re-declared for clarity
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
 
-  # api and frontend are NOT started in dev; run them locally
-  api:
-    profiles: ["prod-only"]
-
-  frontend:
-    profiles: ["prod-only"]
+  storage:
+    # Same Garage S3 + admin UI mappings as the base. The admin UI port
+    # (39002) is only useful for local debugging.
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${S3_PORT:-39000}:3900"
+      - "${BIND_ADDRESS:-127.0.0.1}:39002:39002"

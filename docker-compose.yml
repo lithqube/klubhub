@@ -1,116 +1,134 @@
+# docker-compose.yml — KlubHub DJ v1.0.0+ local stack
+#
+# Same model as docker-compose.prod.yml (single image), tuned for local
+# development. Frontend and API live in ONE container; Nuxt's Nitro
+# output is embedded at /opt/frontend and proxied by the API at :8080.
+# Operators who want a faster UI iteration loop can still run the
+# frontend outside Compose with `pnpm nx serve dj` (NUXT_PUBLIC_API_BASE
+# unset → mock handlers). See docker-compose.dev.yml.
+#
+# Required env (or generate via the bootstrap dance in
+# docs/container-images.md / docs/SELF-HOSTING.md):
+#   POSTGRES_PASSWORD, TOKEN_ENCRYPTION_KEY, ICAL_SECRET,
+#   GARAGE_RPC_SECRET, GARAGE_ADMIN_TOKEN,
+#   S3_ACCESS_KEY, S3_SECRET_KEY (after Garage bootstrap).
+
 name: klubhub-dj
+
+secrets:
+  postgres_password:
+    file: ${SECRET_DIR:-./secrets}/postgres_password
+  garage_rpc_secret:
+    file: ${SECRET_DIR:-./secrets}/garage_rpc_secret
+  garage_admin_token:
+    file: ${SECRET_DIR:-./secrets}/garage_admin_token
+  token_encryption_key:
+    file: ${SECRET_DIR:-./secrets}/token_encryption_key
+  ical_secret:
+    file: ${SECRET_DIR:-./secrets}/ical_secret
+  s3_access_key:
+    file: ${SECRET_DIR:-./secrets}/s3_access_key
+  s3_secret_key:
+    file: ${SECRET_DIR:-./secrets}/s3_secret_key
 
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: klubhub
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: klubhub
+      POSTGRES_USER: ${POSTGRES_USER:-klubhub}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:-klubhub}
+    secrets:
+      - postgres_password
     volumes:
       - db_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:5432:5432"
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     networks: [ internal ]
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U klubhub -d klubhub" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-klubhub} -d ${POSTGRES_DB:-klubhub}" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    stop_grace_period: 30s
 
   storage:
     image: dxflrs/garage:v2.2.0
     container_name: klubhub-storage
+    restart: unless-stopped
     ports:
-      - "127.0.0.1:39000:3900" # S3 API
-      # Garage admin API (3903) and RPC (3901) MUST NEVER be published to
-      # the host — they're reachable from inside the `internal` network for
-      # scripts/garage-bootstrap.sh via `docker exec` (Plan C.2). The
-      # `container_name: klubhub-storage` above is what the bootstrap uses.
-      # Do not add a host port mapping here without a security review.
+      - "${BIND_ADDRESS:-127.0.0.1}:${S3_PORT:-39000}:3900"
     volumes:
       - storage_data:/data
       - ./garage.toml:/etc/garage.toml:ro
     environment:
-      - GARAGE_RPC_SECRET=${GARAGE_RPC_SECRET}
-      - GARAGE_ADMIN_TOKEN=${GARAGE_ADMIN_TOKEN}
-    # Healthcheck omitted: Garage does not support anonymous access,
-    # and the S3 API requires authentication for all requests including /.
-    # Use 'docker exec klubhub-storage /garage status' to verify manually.
-    restart: unless-stopped
+      - GARAGE_RPC_SECRET_FILE=/run/secrets/garage_rpc_secret
+      - GARAGE_ADMIN_TOKEN_FILE=/run/secrets/garage_admin_token
+    secrets:
+      - garage_rpc_secret
+      - garage_admin_token
+    networks: [ internal ]
+    stop_grace_period: 30s
 
   api:
+    # Local stack can either pull the published image (IMAGE_REPOSITORY +
+    # IMAGE_TAG) or build from source (set LOCAL_BUILD=1).
+    image: ${IMAGE_REPOSITORY:-ghcr.io/lithqube/klubhub-dj}:${IMAGE_TAG:-v0.1.0-rc1}
     build:
-      context: ./api
-      dockerfile: Dockerfile
-    image: klubhub-dj-api:latest
-    # Stop grace period bounds SIGTERM -> SIGKILL. Must be >= the API's
-    # SHUTDOWN_TIMEOUT_SEC (default 30s) so in-flight requests can drain
-    # cleanly during `docker compose stop` / a deploy. See Plan B.3.
+      context: .
+      dockerfile: apps/dj/Dockerfile
+      platforms: [linux/arm64]
+    pull_policy: ${PULL_POLICY:-missing}
+    restart: unless-stopped
     stop_grace_period: 30s
     environment:
-      # Built from POSTGRES_USER/POSTGRES_PASSWORD so the password is
-      # genuinely interpolated by `docker compose config`, not a literal
-      # `***` placeholder that silently fails the database handshake.
-      # Plan C.3: do not put a real password here; both halves come from
-      # the host env (.env or --env-file).
-      DATABASE_URL: postgres://${POSTGRES_USER:-klubhub}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-klubhub}?sslmode=disable
-      # S3 Storage (Garage)
-      S3_ENDPOINT: ${S3_ENDPOINT}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_REGION: ${S3_REGION:-europe-west-1}
+      POSTGRES_USER: ${POSTGRES_USER:-klubhub}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-klubhub}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-}
+      S3_ENDPOINT: storage:3900
+      S3_ACCESS_KEY_FILE: /run/secrets/s3_access_key
+      S3_SECRET_KEY_FILE: /run/secrets/s3_secret_key
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://127.0.0.1:39000}
       S3_BUCKET: ${S3_BUCKET:-klubhub}
-
-      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
+      TOKEN_ENCRYPTION_KEY_FILE: /run/secrets/token_encryption_key
+      ICAL_SECRET_FILE: /run/secrets/ical_secret
       BIND_ADDRESS: ${BIND_ADDRESS:-127.0.0.1}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:3000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      SHUTDOWN_TIMEOUT_SEC: ${SHUTDOWN_TIMEOUT_SEC:-30}
+      NUXT_INTERNAL_URL: http://127.0.0.1:3000
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       DISCOGS_API_KEY: ${DISCOGS_API_KEY:-}
       INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
       INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
-      # Plan B.3: bounded graceful shutdown timeout. Must be <= api
-      # service `stop_grace_period` (30s) so docker doesn't SIGKILL us
-      # before we finish draining.
-      SHUTDOWN_TIMEOUT_SEC: ${SHUTDOWN_TIMEOUT_SEC:-30}
+    secrets:
+      - postgres_password
+      - token_encryption_key
+      - ical_secret
+      - s3_access_key
+      - s3_secret_key
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
+      - "${BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8080}:8080"
     networks: [ internal ]
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      # Probe /api/v1/health via the binary itself — no shell, no wget, no
-      # busybox required (runtime image is distroless static + nonroot).
-      # Exit 0 only on HTTP 200; 503 from a degraded subsystem fails the check.
       test: [ "CMD", "/api", "-healthcheck" ]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: .
-      dockerfile: apps/dj/Dockerfile
-    image: klubhub-dj-frontend:latest
-    # Plan B.3: Nuxt/Nitro will need a moment to finish rendering on stop;
-    # give it the same 30s budget as the api so deploys are clean.
-    stop_grace_period: 30s
-    environment:
-      NUXT_PUBLIC_API_BASE: http://api:8080
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:3000:3000"
-    networks: [ internal ]
-    depends_on:
-      api:
-        condition: service_healthy
-    restart: unless-stopped
+    mem_limit: 768m
+    cpus: "1.0"
+    pids_limit: 200
 
 volumes:
   db_data:
