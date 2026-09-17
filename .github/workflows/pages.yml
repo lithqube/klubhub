@@ -1,4 +1,10 @@
 name: Deploy KlubHub site
+
+# Static GitHub Pages site for klubhub.io. Three independent Plunk
+# projects (staging, production, preview) keep a leaked staging key
+# from touching the production newsletter list. The public keys are
+# read from the GitHub Actions environment secrets at build time; the
+# secret keys (sk_*) never enter this workflow.
 on:
   push:
     branches: [main]
@@ -28,8 +34,23 @@ jobs:
         with:
           node-version: '22'
       # Dependency-free static build; do not install the application stack.
-      - run: node --test apps/site/site.test.mjs
-      - run: node apps/site/build.mjs
+      - name: Test static site
+        run: node --test apps/site/site.test.mjs
+        env:
+          # Tests inject a fixture public key so the build does not fail
+          # closed when this job runs in environments without the real
+          # production secret (forks, public PRs from forks).
+          PLUNK_PUBLIC_KEY: pk_test_abcd1234abcd1234abcd1234abcd1234
+      - name: Build static site
+        run: node apps/site/build.mjs
+        env:
+          # Production deploys use PLUNK_PUBLIC_KEY from the
+          # `github-pages` environment secret. Staging and preview
+          # environments override PLUNK_PUBLIC_KEY_STAGING and
+          # PLUNK_PUBLIC_KEY_PREVIEW respectively.
+          PLUNK_PUBLIC_KEY: ${{ secrets.PLUNK_PUBLIC_KEY }}
+          PLUNK_PUBLIC_KEY_STAGING: ${{ secrets.PLUNK_PUBLIC_KEY_STAGING }}
+          PLUNK_PUBLIC_KEY_PREVIEW: ${{ secrets.PLUNK_PUBLIC_KEY_PREVIEW }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/site
