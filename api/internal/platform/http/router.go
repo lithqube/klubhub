@@ -90,5 +90,9 @@ func NewRouter(
 	// Contact database routes
 	r.Mount("/api/v1/contacts", contactHandler)
 
+	if cfg.ServeFrontend {
+		r.NotFound(frontendHandler(cfg.NuxtInternalURL))
+	}
+
 	return r
 }

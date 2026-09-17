@@ -1,36 +1,15 @@
-# Garage Configuration — SINGLE NODE
-# Copy to garage.toml and fill in real secrets before running docker compose up -d
-# Generate secrets: openssl rand -hex 32 (rpc_secret) and openssl rand -base64 32 (admin_token)
-# See Garage docs: https://Garage.deuxfleurs.fr/documentation/quick-start/
-
+# Non-secret single-node Garage v2.2 template, copied by scripts/setup.sh.
+# RPC/admin secrets are mounted files selected by GARAGE_*_FILE in Compose.
 metadata_dir = "/data/meta"
 data_dir = "/data/storage"
 db_engine = "sqlite"
-
 replication_factor = 1
-
 rpc_bind_addr = "[::]:3901"
 rpc_public_addr = "127.0.0.1:3901"
-rpc_secret = "REPLACE_WITH_REAL_RPC_SECRET"  # 32 bytes of random hex
 
 [s3_api]
 s3_region = "garage"
 api_bind_addr = "[::]:3900"
-root_domain = ".s3.garage.localhost"
-
-[s3_web]
-bind_addr = "[::]:3902"
-root_domain = ".web.garage.localhost"
-index = "index.html"
-
-[k2v_api]
-api_bind_addr = "[::]:3904"
 
 [admin]
 api_bind_addr = "[::]:3903"
-admin_token = "REPLACE_WITH_REAL_ADMIN_TOKEN"  # generate with: openssl rand -base64 32
-
-# NOTE: Real secrets are injected via docker-compose.yml environment vars:
-#   GARAGE_RPC_SECRET and GARAGE_ADMIN_TOKEN
-# The placeholder values above are REQUIRED when running outside Docker
-# (e.g., garage server locally) but ignored when docker-compose starts the container.

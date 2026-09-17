@@ -47,23 +47,13 @@ in [`AGENTS.md`](./AGENTS.md) and the Claude-specific notes in [`CLAUDE.md`](./C
 
 ### First run
 
-```bash
-# 1. Install JS dependencies (monorepo + Nuxt app)
-pnpm install
+Install dependencies with `pnpm install`. For frontend-only work, leave `NUXT_PUBLIC_API_BASE` unset and run `pnpm nx serve @dev/dj`, then open http://localhost:4200.
 
-# 2. Frontend-only mode (no backend needed — uses Nitro mock handlers)
-pnpm nx serve dj
-# Open http://localhost:4200
+For a real backend, follow the [canonical setup guide](./docs/SELF-HOSTING.md#development-with-a-real-backend). `bash scripts/setup.sh dev` starts db, storage, and the locally built API, not a frontend container. Run Nuxt locally with the documented API URL and host/port flags so rendering callbacks can reach it.
 
-# 3. Full stack (db + storage + api + frontend)
-cp .env.example .env
-cp garage.toml.example garage.toml
-# Edit garage.toml and .env — see README "Garage storage setup"
-docker compose up -d
-```
+Production uses `docker-compose.prod.yml` alone and a published combined app image. It does not build the local checkout. Setup keeps secrets/configuration in mode-specific `.local/` directories and uses separate project volumes. Do not reuse production data for development, and do not reset volumes unless they are disposable.
 
-See the [README quick-start](./README.md#quick-start) for the three supported
-run modes.
+The `@dev/dj` typecheck target currently prints a disabled notice. Its exit status is not evidence of TypeScript validation; report that limitation when recording checks.
 
 ---
 
@@ -92,7 +82,7 @@ run modes.
 
 - 2-space indentation, LF line endings (see [`.editorconfig`](./.editorconfig))
 - Prettier formatting (`pnpm exec prettier --write .`)
-- No secrets in source — use `.env` (gitignored) and `.env.example` as the template
+- No secrets in source — keep generated `.local/` state and any `.env` overrides private; use the setup guide.
 
 ### Frontend (`apps/dj`)
 

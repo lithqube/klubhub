@@ -1,65 +1,23 @@
-# docker-compose.prod.yml
-#
-# KlubHub v1.0.0 single-image production stack.
-#
-# Compared to docker-compose.yml (the dev stack) it:
-#   - Replaces `build:` blocks with a single `image:` reference to the GHCR
-#     package `ghcr.io/<owner>/<repo>:<tag>`. One package carries both the
-#     distroless Go API binary and the Nuxt frontend .output.
-#   - Defaults BIND_ADDRESS to 127.0.0.1 so the stack is reachable only on
-#     the loopback interface; ops must explicitly opt in to broader exposure
-#     by setting BIND_ADDRESS=0.0.0.0 or via a reverse proxy.
-#   - Pins Garage's S3 API (port 3900 inside the container) to 127.0.0.1
-#     only on the host. Garage admin RPC ports (3901, 3903) are NEVER
-#     published — only the bootstrap script (scripts/garage-bootstrap.sh)
-#     reaches the admin API via `docker exec`.
-#   - Uses Docker `secrets:` for every required credential, mounted as files
-#     into the api + storage containers. The api binary resolves
-#     `<NAME>_FILE` env vars to the secret value at startup (see
-#     api/internal/platform/config/config.go).
-#   - Adds stop_grace_period + resource limits consistent with the prod
-#     hardening in plan Group C.
-#   - Separates internal Postgres port from the host-published port so the
-#     API can always reach the DB even when ops change POSTGRES_PORT.
-#
-# Usage:
-#   # 1. Generate secrets once (one per file):
-#   mkdir -p ./secrets && chmod 0700 ./secrets
-#   for f in postgres_password garage_rpc_secret garage_admin_token \
-#            token_encryption_key ical_secret s3_access_key s3_secret_key; do
-#     openssl rand -hex 32 > ./secrets/$f && chmod 0600 ./secrets/$f
-#   done
-#
-#   # 2. Bootstrap Garage and capture S3 access/secret keys into ./secrets/:
-#   docker compose -f docker-compose.prod.yml up -d storage
-#   bash scripts/garage-bootstrap.sh -f docker-compose.prod.yml
-#   # (copy S3_ACCESS_KEY and S3_SECRET_KEY from the bootstrap output into
-#   #  ./secrets/s3_access_key and ./secrets/s3_secret_key, chmod 0600)
-#
-#   # 3. Bring the full stack up:
-#   IMAGE_TAG=v1.0.0 docker compose -f docker-compose.prod.yml pull
-#   IMAGE_TAG=v1.0.0 docker compose -f docker-compose.prod.yml up -d
-#
-# To customize the image tag, set IMAGE_TAG (default: v1.0.0).
-# IMAGE_REPOSITORY overrides the GHCR owner/name (default: ghcr.io/<gh-repo>).
-
-name: klubhub-dj
+# Standalone production stack (not an overlay): scripts/setup.sh prod
+# Only published images. The `app` service runs Go (port 8080) and Node/Nuxt
+# (internal port 3000, not published); Go proxies non-/api/v1 traffic to it.
+name: klubhub-dj-prod
 
 secrets:
   postgres_password:
-    file: ${SECRET_DIR:-./secrets}/postgres_password
+    file: ${SECRET_DIR:-./secrets/prod}/postgres_password
   garage_rpc_secret:
-    file: ${SECRET_DIR:-./secrets}/garage_rpc_secret
+    file: ${SECRET_DIR:-./secrets/prod}/garage_rpc_secret
   garage_admin_token:
-    file: ${SECRET_DIR:-./secrets}/garage_admin_token
+    file: ${SECRET_DIR:-./secrets/prod}/garage_admin_token
   token_encryption_key:
-    file: ${SECRET_DIR:-./secrets}/token_encryption_key
+    file: ${SECRET_DIR:-./secrets/prod}/token_encryption_key
   ical_secret:
-    file: ${SECRET_DIR:-./secrets}/ical_secret
+    file: ${SECRET_DIR:-./secrets/prod}/ical_secret
   s3_access_key:
-    file: ${SECRET_DIR:-./secrets}/s3_access_key
+    file: ${SECRET_DIR:-./secrets/prod}/s3_access_key
   s3_secret_key:
-    file: ${SECRET_DIR:-./secrets}/s3_secret_key
+    file: ${SECRET_DIR:-./secrets/prod}/s3_secret_key
 
 services:
   db:
@@ -67,22 +25,14 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-klubhub}
-      # POSTGRES_PASSWORD_FILE: reads from the docker-mounted secret.
-      # The official postgres image supports `*_FILE` env vars natively
-      # and substitutes the file contents into the matching POSTGRES_PASSWORD.
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${POSTGRES_DB:-klubhub}
     secrets:
       - postgres_password
     volumes:
       - db_data:/var/lib/postgresql/data
-    # Internal port is fixed; only the HOST mapping uses POSTGRES_PORT.
-    # This avoids the v1 release plan bug where changing POSTGRES_PORT
-    # also broke API→DB connectivity inside the internal network.
     expose:
       - "5432"
-    ports:
-      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     networks: [ internal ]
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-klubhub} -d ${POSTGRES_DB:-klubhub}" ]
@@ -90,22 +40,15 @@ services:
       timeout: 5s
       retries: 5
     stop_grace_period: 30s
-    mem_limit: 512m
-    cpus: "1.0"
-    pids_limit: 100
 
   storage:
     image: dxflrs/garage:v2.2.0
-    container_name: klubhub-storage
     restart: unless-stopped
-    # Only the S3 port is published (loopback-only by default). Admin and
-    # RPC ports are reached exclusively via `docker exec` from
-    # scripts/garage-bootstrap.sh.
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${S3_PORT:-39000}:3900"
+      - "${S3_BIND:-127.0.0.1}:${S3_PORT:-39000}:3900"
     volumes:
       - storage_data:/data
-      - ./garage.toml:/etc/garage.toml:ro
+      - ${GARAGE_CONFIG_FILE:-./secrets/prod/garage.toml}:/etc/garage.toml:ro
     environment:
       - GARAGE_RPC_SECRET_FILE=/run/secrets/garage_rpc_secret
       - GARAGE_ADMIN_TOKEN_FILE=/run/secrets/garage_admin_token
@@ -113,24 +56,24 @@ services:
       - garage_rpc_secret
       - garage_admin_token
     networks: [ internal ]
-    # No healthcheck — Garage's S3 API requires auth even for HEAD /,
-    # and the admin API doesn't expose an anonymous liveness probe.
-    # Use `docker exec klubhub-storage /garage status` instead.
+    # RPC probe works in Garage's shell-free image, before S3 provisioning.
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
     stop_grace_period: 30s
-    mem_limit: 512m
-    cpus: "1.0"
-    pids_limit: 200
 
-  api:
-    # Single image carries the distroless API binary AND the Nuxt
-    # frontend .output/. The API proxies /api/v1/* and serves the UI.
-    image: ${IMAGE_REPOSITORY:-ghcr.io/lithqube/klubhub-dj}:${IMAGE_TAG:-v1.0.0}
+  app:
+    # Per-product image: each KlubHub product publishes its own API
+    # package (`<product>-api`). DJ ships `ghcr.io/lithqube/klubhub-dj-api`;
+    # future products use e.g. `klubhub-promoter-api`. Operators can
+    # override IMAGE_REPOSITORY to pin a fork or local build.
+    image: ${IMAGE_REPOSITORY:-ghcr.io/lithqube/klubhub-dj-api}:${IMAGE_TAG:-v1.0.0}
+    platform: linux/arm64
     restart: unless-stopped
     stop_grace_period: 30s
-    # DATABASE_URL is built inside the api binary from POSTGRES_*
-    # parts. The password comes from the docker-mounted secret via
-    # POSTGRES_PASSWORD_FILE. The bare DATABASE_URL is still supported
-    # for ops who prefer to set it directly (e.g. external managed DB).
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-klubhub}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
@@ -138,9 +81,6 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-klubhub}
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-}
-      # Garage v2 listens on 3900 inside the container (see
-      # garage.toml.example). S3_PUBLIC_ENDPOINT below is what the API
-      # uses to generate presigned URLs for the browser.
       S3_ENDPOINT: storage:3900
       S3_ACCESS_KEY_FILE: /run/secrets/s3_access_key
       S3_SECRET_KEY_FILE: /run/secrets/s3_secret_key
@@ -148,15 +88,13 @@ services:
       S3_BUCKET: ${S3_BUCKET:-klubhub}
       TOKEN_ENCRYPTION_KEY_FILE: /run/secrets/token_encryption_key
       ICAL_SECRET_FILE: /run/secrets/ical_secret
-      BIND_ADDRESS: ${BIND_ADDRESS:-127.0.0.1}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:3000}
+      BIND_ADDRESS: 0.0.0.0
+      SERVE_FRONTEND: "true"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:8080}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SHUTDOWN_TIMEOUT_SEC: ${SHUTDOWN_TIMEOUT_SEC:-30}
-      # The single image serves both the API and the embedded frontend;
-      # screenshots call back to the loopback listener.
       NUXT_INTERNAL_URL: http://127.0.0.1:3000
-      # Optional integrations stay as env vars (not file-backed) so ops
-      # can set them to empty without creating empty files.
+      NUXT_PUBLIC_API_BASE: http://127.0.0.1:8080
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       DISCOGS_API_KEY: ${DISCOGS_API_KEY:-}
@@ -169,14 +107,14 @@ services:
       - s3_access_key
       - s3_secret_key
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8080}:8080"
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
     networks: [ internal ]
     depends_on:
+      storage:
+        condition: service_healthy
       db:
         condition: service_healthy
     healthcheck:
-      # Probe /api/v1/health via the binary itself — no shell, no wget,
-      # no busybox required (runtime image is distroless static + nonroot).
       test: [ "CMD", "/api", "-healthcheck" ]
       interval: 30s
       timeout: 5s
@@ -185,7 +123,6 @@ services:
     mem_limit: 768m
     cpus: "1.0"
     pids_limit: 200
-    # Distroless nonroot already runs as UID 65532; no USER directive needed.
 
 volumes:
   db_data:

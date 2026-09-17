@@ -70,55 +70,31 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for what hardened between the last feature 
 
 ## Quick start
 
-Three supported run modes — pick the one that matches what you're doing.
+Choose a mode. The [canonical setup guide](./docs/SELF-HOSTING.md) covers prerequisites, first startup, networking, and safe upgrades. The [production runbook](./docs/PRODUCTION.md) is the agent-focused operator reference for verify, upgrade, rotate, and troubleshoot.
 
-### 1. Frontend-only (mock data, no backend)
+| Mode | Command | What runs |
+|---|---|---|
+| Frontend mocks | `pnpm install`, then `pnpm nx serve @dev/dj` | Local Nuxt at http://localhost:4200; leave `NUXT_PUBLIC_API_BASE` unset. |
+| Backend development | `bash scripts/setup.sh dev` | Postgres, Garage, and a locally built API in Docker; run Nuxt locally as shown below. |
+| Production | `bash scripts/setup.sh prod` | Postgres, Garage, and one published app image; UI and API at http://127.0.0.1:8080. |
 
-The fastest way to explore the UI or do frontend work. Nitro serves mock
-handlers at `apps/dj/server/api/v1/`.
-
-```bash
-pnpm install
-pnpm nx serve dj
-```
-
-→ Opens at **http://localhost:4200**.
-
-### 2. Full stack (Docker Compose)
-
-Production-like environment: Postgres, Garage S3, Go API, Nuxt frontend — all
-containerised.
+For development with the real API, run this in another terminal:
 
 ```bash
-cp .env.example .env
-cp garage.toml.example garage.toml
-
-# Generate secrets — see "Garage storage setup" below
-openssl rand -hex 32      # → GARAGE_RPC_SECRET
-openssl rand -base64 32   # → GARAGE_ADMIN_TOKEN
-openssl rand -hex 32      # → TOKEN_ENCRYPTION_KEY
-
-# Edit garage.toml: replace the REPLACE_WITH_REAL_* placeholders
-
-docker compose up -d
+NUXT_PUBLIC_API_BASE=http://127.0.0.1:8080 pnpm nx serve @dev/dj --host 0.0.0.0 --port 4200
 ```
 
-→ Frontend: **http://localhost:3000** &nbsp;·&nbsp; API health: **http://localhost:8080/api/v1/health** &nbsp;·&nbsp; Garage S3: **http://localhost:39000**
+The API calls the host Nuxt server at `http://host.docker.internal:4200` for image rendering. The all-interface Nuxt bind allows that callback; use a trusted development network and firewall.
 
-### 3. Hybrid (db + storage in Docker, api + frontend locally)
+Setup defaults to `dev`, preserves existing credentials, creates private file secrets and Garage configuration under `.local/dev` or `.local/prod`, bootstraps Garage, and starts the selected stack. Development and production use separate Compose projects and volumes, but their default host ports overlap: stop one before starting the other, or configure distinct ports.
 
-Best for backend development — fast Go rebuilds, hot-reloading Nuxt, full data persistence.
+**Publication caveat:** the production file defaults to `IMAGE_TAG=v1.0.0`. These local runtime fixes require a newly published image; that default does not mean the existing tag contains them. Anonymous requests for the existing v1.0.0 package returned 403. Confirm GHCR access and select a release containing the fixes before production use; see [container images](./docs/container-images.md).
 
-```bash
-# Start only db and storage
-docker compose up -d db storage
+**Existing installation?** Do not start a new project over an old deployment without a migration plan. The old `klubhub-dj` project's volumes need explicit reuse or migration; see [safe upgrades](./docs/SELF-HOSTING.md#upgrades-and-existing-installations).
 
-# Run Go API
-pnpm nx serve api
+**Security:** this is a network-private, single-user app, not an authenticated public SaaS. TLS and CORS do not provide authentication. Keep it private or add an authentication gateway before any public exposure.
 
-# Run Nuxt, proxying API requests to the local Go service
-NUXT_PUBLIC_API_BASE=http://localhost:8080 pnpm nx serve dj
-```
+**Production operators** (agents or humans) should read [`docs/PRODUCTION.md`](./docs/PRODUCTION.md) for the verify / upgrade / rotate / troubleshoot checklist. The setup guide covers first-time install; the production doc covers ongoing operation.
 
 ---
 
@@ -203,7 +179,7 @@ Always run tasks through `pnpm nx …` — never `nx`, `go`, `nuxt`, `vitest`, o
 
 ```bash
 # Start the frontend (mock data mode)
-pnpm nx serve dj
+pnpm nx serve @dev/dj
 
 # Build, lint, typecheck
 pnpm nx build <project>
@@ -219,6 +195,8 @@ pnpm nx run-many -t test
 # End-to-end tests (requires Docker stack)
 pnpm nx e2e dj-e2e
 ```
+
+The `@dev/dj` typecheck target currently prints a disabled notice rather than checking TypeScript. Do not report its exit status as a typecheck pass.
 
 ### Code conventions
 
@@ -239,7 +217,7 @@ Full conventions in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 # Unit tests (Vitest)
 pnpm nx run-many -t test
 
-# End-to-end tests (Playwright) — requires `docker compose up -d`
+# End-to-end tests (Playwright) — configure the real backend per SELF-HOSTING.md
 pnpm nx e2e dj-e2e
 
 # CI mode (non-watch) for individual projects
@@ -250,18 +228,7 @@ pnpm nx test-ci <project>
 
 ## Backup & restore
 
-The stack includes two scripts that handle Postgres + Garage S3 together:
-
-```bash
-# Dump Postgres and mirror Garage S3 into a timestamped .tar.gz
-bash scripts/backup.sh                      # writes to ./backups/
-
-# Restore from an archive — DROPS and recreates the klubhub database
-bash scripts/restore.sh backups/klubhub-backup-20260914-120000.tar.gz
-```
-
-Both scripts require the Docker stack to be running. See [`SECURITY.md`](./SECURITY.md)
-for secret-rotation guidance.
+Back up both Postgres and Garage, along with the private configuration needed to restore them. See [Operations](./docs/OPERATIONS.md#backup-and-restore) for script prerequisites and destructive-restore precautions. Always target the correct Compose project and mode.
 
 ---
 
@@ -281,76 +248,9 @@ roadmap doc. Releases follow [semver](https://semver.org) once v1.0.0 ships.
 
 ## Environment variables
 
-All variables live in `.env` (gitignored) using `.env.example` as the template.
-Bind addresses are sanitised to `*********` in `.env.example`; replace with
-`localhost` for local-only or your LAN IP for remote access.
+Setup stores mode-specific private state under `.local/dev` and `.local/prod` (gitignored). Do not print, commit, or copy those credentials into bug reports. See the [configuration reference](./docs/CONFIGURATION.md) for bind addresses, browser-visible S3 URLs, and optional integrations.
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `POSTGRES_PASSWORD` | Yes | PostgreSQL password for the `klubhub` user |
-| `S3_ACCESS_KEY` | Yes | Garage access key (created via `garage key create`) |
-| `S3_SECRET_KEY` | Yes | Garage secret key |
-| `S3_REGION` | No | S3 region (default: `europe-west-1`) |
-| `S3_ENDPOINT` | No | Internal Docker endpoint (default: `storage:39000`) |
-| `S3_PUBLIC_ENDPOINT` | No | Public S3 URL for presigned URLs (default: `http://*********:39000`) |
-| `S3_BUCKET` | No | S3 bucket name (default: `klubhub`) |
-| `GARAGE_RPC_SECRET` | Yes | RPC secret for Garage node communication |
-| `GARAGE_ADMIN_TOKEN` | Yes | Admin API token for Garage |
-| `TOKEN_ENCRYPTION_KEY` | Yes | 32-byte key for encrypting OAuth tokens (AES-256-GCM) |
-| `BIND_ADDRESS` | No | Service bind address (default: `*********`) |
-| `CORS_ORIGIN` | No | Allowed CORS origin (default: `http://*********:3000`) |
-| `LOG_LEVEL` | No | `debug` / `info` / `warn` / `error` (default: `info`) |
-| `NUXT_PUBLIC_API_BASE` | No | Go API URL (enables proxy); omit for mock-data dev mode |
-| `SPOTIFY_CLIENT_ID` | No | Spotify API — cover art fetching |
-| `SPOTIFY_CLIENT_SECRET` | No | Spotify API — cover art fetching |
-| `DISCOGS_API_KEY` | No | Discogs API — cover art fallback |
-| `INSTAGRAM_CLIENT_ID` | No | Instagram OAuth |
-| `INSTAGRAM_CLIENT_SECRET` | No | Instagram OAuth |
-
-`MINIO_*` variables are no longer supported. Existing deployments must rename
-them to the matching `S3_*` variables before upgrading to v1.0.0.
-
----
-
-## Garage storage setup
-
-Garage is an S3-compatible, self-hosted object store designed for small
-clusters. We use it for cover art, generated tracklist images, EPK photos,
-and any other binary blob.
-
-### One-time setup (after the first `docker compose up -d`)
-
-```bash
-docker compose up -d storage
-
-# 1. Assign layout (get the node id from `garage status`)
-docker exec klubhub-storage /garage layout assign -z dc1 -c 1G <node_id>
-
-# 2. Apply layout
-docker exec klubhub-storage /garage layout apply --version 1
-
-# 3. Create bucket + key, then grant access
-docker exec klubhub-storage /garage bucket create klubhub
-docker exec klubhub-storage /garage key create klubhub-app-key
-docker exec klubhub-storage /garage bucket allow \
-  --read --write --owner klubhub --key klubhub-app-key
-
-# 4. Copy the printed Key ID and Secret into .env as S3_ACCESS_KEY / S3_SECRET_KEY
-docker compose up -d   # start the rest of the stack
-```
-
-The full Garage docs are at <https://garage.deuxfleurs.fr/documentation/>.
-
-### Why Garage, not MinIO?
-
-| Feature | Garage | MinIO |
-|---------|--------|-------|
-| S3 API compatibility | ✅ Native | ✅ Native |
-| Docker image | ✅ `dxflrs/garage` | ✅ `minio/minio` |
-| Config file | ✅ `garage.toml` | ❌ Env vars only |
-| Anonymous health probe | ❌ Requires auth | ✅ |
-| Multi-node clustering | ✅ | ✅ |
-| Footprint | Lightweight | Heavier (Java) |
+Garage provisioning belongs to `scripts/setup.sh`; do not manually copy printed keys or evaluate bootstrap output. Follow the [single setup guide](./docs/SELF-HOSTING.md) for both modes.
 
 ---
 
@@ -360,7 +260,7 @@ The frontend can run in two modes:
 
 - **Mock mode** (default, no env vars): Nitro serves mock JSON from
   `apps/dj/server/api/v1/`. Great for frontend-only work and design reviews.
-- **Backend mode**: set `NUXT_PUBLIC_API_BASE=http://localhost:8080` and Nitro
+- **Backend mode**: set `NUXT_PUBLIC_API_BASE=http://127.0.0.1:8080` and Nitro
   proxies `/api/v1/*` to the Go API.
 
 ### Per-page status

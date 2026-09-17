@@ -1,35 +1,26 @@
-# docker-compose.yml — KlubHub DJ v1.0.0+ local stack
-#
-# Same model as docker-compose.prod.yml (single image), tuned for local
-# development. Frontend and API live in ONE container; Nuxt's Nitro
-# output is embedded at /opt/frontend and proxied by the API at :8080.
-# Operators who want a faster UI iteration loop can still run the
-# frontend outside Compose with `pnpm nx serve dj` (NUXT_PUBLIC_API_BASE
-# unset → mock handlers). See docker-compose.dev.yml.
-#
-# Required env (or generate via the bootstrap dance in
-# docs/container-images.md / docs/SELF-HOSTING.md):
-#   POSTGRES_PASSWORD, TOKEN_ENCRYPTION_KEY, ICAL_SECRET,
-#   GARAGE_RPC_SECRET, GARAGE_ADMIN_TOKEN,
-#   S3_ACCESS_KEY, S3_SECRET_KEY (after Garage bootstrap).
-
-name: klubhub-dj
+# Development backends: scripts/setup.sh dev
+# Host UI: NUXT_PUBLIC_API_BASE=http://127.0.0.1:8080 pnpm nx serve dj --host 0.0.0.0 --port 4200
+# API_BIND and S3_BIND control host publication, never container listeners.
+# The `app` service is a single Linux container running Go + Nuxt/Node +
+# Chromium; dev disables the embedded frontend proxy (`SERVE_FRONTEND=false`)
+# so the host Nuxt serves the UI.
+name: klubhub-dj-dev
 
 secrets:
   postgres_password:
-    file: ${SECRET_DIR:-./secrets}/postgres_password
+    file: ${SECRET_DIR:-./secrets/dev}/postgres_password
   garage_rpc_secret:
-    file: ${SECRET_DIR:-./secrets}/garage_rpc_secret
+    file: ${SECRET_DIR:-./secrets/dev}/garage_rpc_secret
   garage_admin_token:
-    file: ${SECRET_DIR:-./secrets}/garage_admin_token
+    file: ${SECRET_DIR:-./secrets/dev}/garage_admin_token
   token_encryption_key:
-    file: ${SECRET_DIR:-./secrets}/token_encryption_key
+    file: ${SECRET_DIR:-./secrets/dev}/token_encryption_key
   ical_secret:
-    file: ${SECRET_DIR:-./secrets}/ical_secret
+    file: ${SECRET_DIR:-./secrets/dev}/ical_secret
   s3_access_key:
-    file: ${SECRET_DIR:-./secrets}/s3_access_key
+    file: ${SECRET_DIR:-./secrets/dev}/s3_access_key
   s3_secret_key:
-    file: ${SECRET_DIR:-./secrets}/s3_secret_key
+    file: ${SECRET_DIR:-./secrets/dev}/s3_secret_key
 
 services:
   db:
@@ -57,13 +48,12 @@ services:
 
   storage:
     image: dxflrs/garage:v2.2.0
-    container_name: klubhub-storage
     restart: unless-stopped
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${S3_PORT:-39000}:3900"
+      - "${S3_BIND:-127.0.0.1}:${S3_PORT:-39000}:3900"
     volumes:
       - storage_data:/data
-      - ./garage.toml:/etc/garage.toml:ro
+      - ${GARAGE_CONFIG_FILE:-./secrets/dev/garage.toml}:/etc/garage.toml:ro
     environment:
       - GARAGE_RPC_SECRET_FILE=/run/secrets/garage_rpc_secret
       - GARAGE_ADMIN_TOKEN_FILE=/run/secrets/garage_admin_token
@@ -71,17 +61,24 @@ services:
       - garage_rpc_secret
       - garage_admin_token
     networks: [ internal ]
+    # RPC probe works in Garage's shell-free image, before S3 provisioning.
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
     stop_grace_period: 30s
 
-  api:
-    # Local stack can either pull the published image (IMAGE_REPOSITORY +
-    # IMAGE_TAG) or build from source (set LOCAL_BUILD=1).
-    image: ${IMAGE_REPOSITORY:-ghcr.io/lithqube/klubhub-dj}:${IMAGE_TAG:-v0.1.0-rc1}
+  app:
+    # Single Go + Nuxt container. In dev SERVE_FRONTEND=false so the embedded
+    # Nuxt is not proxied; the host Nuxt (pnpm nx serve dj --host 0.0.0.0)
+    # serves the UI and is reached via host.docker.internal.
     build:
-      context: .
-      dockerfile: apps/dj/Dockerfile
+      context: ./api
+      dockerfile: Dockerfile
       platforms: [linux/arm64]
-    pull_policy: ${PULL_POLICY:-missing}
+    platform: linux/arm64
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
@@ -98,11 +95,12 @@ services:
       S3_BUCKET: ${S3_BUCKET:-klubhub}
       TOKEN_ENCRYPTION_KEY_FILE: /run/secrets/token_encryption_key
       ICAL_SECRET_FILE: /run/secrets/ical_secret
-      BIND_ADDRESS: ${BIND_ADDRESS:-127.0.0.1}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:3000}
+      BIND_ADDRESS: 0.0.0.0
+      SERVE_FRONTEND: "false"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:4200}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SHUTDOWN_TIMEOUT_SEC: ${SHUTDOWN_TIMEOUT_SEC:-30}
-      NUXT_INTERNAL_URL: http://127.0.0.1:3000
+      NUXT_INTERNAL_URL: http://host.docker.internal:4200
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       DISCOGS_API_KEY: ${DISCOGS_API_KEY:-}
@@ -115,9 +113,13 @@ services:
       - s3_access_key
       - s3_secret_key
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8080}:8080"
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
     networks: [ internal ]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
+      storage:
+        condition: service_healthy
       db:
         condition: service_healthy
     healthcheck:
