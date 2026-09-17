@@ -63,6 +63,44 @@ reverse proxy, TLS, and authentication in front of it.
 - Rotate `TOKEN_ENCRYPTION_KEY` will invalidate all stored OAuth tokens —
   re-authorize Instagram after rotation.
 
+## Plunk API keys (newsletter signup)
+
+The KlubHub site uses [Plunk](https://useplunk.com) for the newsletter signup
+form on `klubhub.io`. Plunk has two keys per project, and they are kept
+strictly separate:
+
+| Key | Prefix | Where it lives | Where it is used |
+|---|---|---|---|
+| Public key | `pk_*` | GitHub Actions environment secrets (`PLUNK_PUBLIC_KEY`, `PLUNK_PUBLIC_KEY_STAGING`, `PLUNK_PUBLIC_KEY_PREVIEW`) | Injected into `<meta name="plunk-public-key">` at build time, read by the browser-side `newsletter.js`. Safe to ship in static HTML. |
+| Secret key | `sk_*` | Operator's password manager / vault | Server-side only. Never enters the repo, never enters CI, never enters the static site. Wired in Compose as a Docker secret (`/run/secrets/plunk_secret_key`) for the day a KlubHub DJ feature needs transactional email. |
+
+Three independent Plunk projects keep leaked keys from crossing blast
+radii:
+
+- **production** — feeds the real newsletter list at `klubhub.io`.
+- **staging** — feeds a Plunk sandbox list used by staging deployments.
+- **preview** — feeds a Plunk sandbox list used by PR preview deployments.
+
+Per [Plunk's API-keys guide](https://docs.useplunk.com/guides/api-keys):
+"Use separate Plunk projects for staging and production so a leaked staging
+key can't touch production data."
+
+### Rotation
+
+Both keys rotate together as a single pair; Plunk provides no grace period.
+To rotate:
+
+1. Open **Settings → API Keys** in the Plunk dashboard for the affected
+   project, or call `POST /users/@me/projects/:id/regenerate-keys`.
+2. The old keys stop working immediately.
+3. Update the GitHub Actions environment secret (or operator vault) with
+   the new value.
+4. Re-run the affected deployment(s).
+
+If a `pk_*` is compromised, audit the **Activity** tab in Plunk for
+unexpected subscriptions and check **Billing → Consumption** for usage
+spikes that suggest abuse before rotating.
+
 ## Out of scope
 
 - Vulnerabilities in dependencies that have no exploitable path in this

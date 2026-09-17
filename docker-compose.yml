@@ -21,6 +21,13 @@ secrets:
     file: ${SECRET_DIR:-./secrets/dev}/s3_access_key
   s3_secret_key:
     file: ${SECRET_DIR:-./secrets/dev}/s3_secret_key
+  # Optional: Plunk secret key (sk_*). The KlubHub DJ app does not
+  # currently send transactional email, so the secret is mounted
+  # unconditionally but left unread until a future feature wires a
+  # plunkClient. Mounting the file unconditionally avoids a Compose
+  # redesign the first time server-side Plunk calls land.
+  plunk_secret_key:
+    file: ${SECRET_DIR:-./secrets/dev}/plunk_secret_key
 
 services:
   db:
@@ -106,12 +113,21 @@ services:
       DISCOGS_API_KEY: ${DISCOGS_API_KEY:-}
       INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
       INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
+      # Optional Plunk secret file path. The Go config loader reads
+      # the file at startup if PLUNK_SECRET_KEY itself is unset, then
+      # passes the value to envconfig. Leave the file absent (or empty)
+      # until a future feature actually sends transactional email.
+      PLUNK_SECRET_KEY_FILE: /run/secrets/plunk_secret_key
     secrets:
       - postgres_password
       - token_encryption_key
       - ical_secret
       - s3_access_key
       - s3_secret_key
+      # Optional Plunk secret. The Go config loader honors *_FILE
+      # siblings for every secret env var; PLUNK_SECRET_KEY_FILE will
+      # resolve to /run/secrets/plunk_secret_key when set.
+      - plunk_secret_key
     ports:
       - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
     networks: [ internal ]
