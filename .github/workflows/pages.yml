@@ -41,7 +41,21 @@ jobs:
           # closed when this job runs in environments without the real
           # production secret (forks, public PRs from forks).
           PLUNK_PUBLIC_KEY: pk_test_abcd1234abcd1234abcd1234abcd1234
-      - name: Build static site
+      # The build step needs a real Plunk pk_* from the matching
+      # environment secret (production / staging / preview). PR builds
+      # cannot read GitHub Actions environment secrets, so they run a
+      # smoke build against a clearly-marked preview placeholder
+      # instead. Push builds to main require the operator to have
+      # configured the secrets; the build script fails closed when the
+      # env vars are empty, still equal to the placeholder, or wrong-
+      # prefixed (sk_*).
+      - name: Build static site (PR preview)
+        if: github.event_name == 'pull_request'
+        run: node apps/site/build.mjs
+        env:
+          PLUNK_PUBLIC_KEY: pk_ci_pr_preview_only_do_not_subscribe
+      - name: Build static site (push)
+        if: github.event_name != 'pull_request'
         run: node apps/site/build.mjs
         env:
           # Production deploys use PLUNK_PUBLIC_KEY from the
@@ -52,6 +66,7 @@ jobs:
           PLUNK_PUBLIC_KEY_STAGING: ${{ secrets.PLUNK_PUBLIC_KEY_STAGING }}
           PLUNK_PUBLIC_KEY_PREVIEW: ${{ secrets.PLUNK_PUBLIC_KEY_PREVIEW }}
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           path: dist/site
   deploy:

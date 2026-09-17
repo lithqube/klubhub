@@ -153,3 +153,21 @@ test('build fails closed when key is the wrong prefix (sk_*)', () => {
   assert.notEqual(result.status, 0, 'build should fail when key is secret-prefixed');
   assert.match(result.stderr + result.stdout, /must start with `pk_`/);
 });
+
+// The CI workflow (`.github/workflows/pages.yml`) injects this exact
+// placeholder on PR builds because PR runs cannot read environment
+// secrets. The build must accept it (it does) — this test pins the
+// placeholder so a rename of the workflow string surfaces as a CI
+// failure rather than a silent "PR build fails closed" regression.
+test('PR preview placeholder is accepted by the build', () => {
+  const result = spawnSync(process.execPath, ['apps/site/build.mjs'], {
+    env: {
+      ...process.env,
+      PLUNK_PUBLIC_KEY: 'pk_ci_pr_preview_only_do_not_subscribe',
+      PLUNK_PUBLIC_KEY_STAGING: '',
+      PLUNK_PUBLIC_KEY_PREVIEW: '',
+    },
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, 'PR preview placeholder must build cleanly');
+});
