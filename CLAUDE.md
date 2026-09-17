@@ -28,9 +28,15 @@ Browser → Nuxt 4 (SSR/SPA) → Go API (chi) → PostgreSQL + Garage (S3 API)
 
 **Backend:** Go 1.26 / chi router / pgx v5 / goose migrations / go-pdf/fpdf
 
-**Dev mode:** `pnpm nx serve dj` runs frontend with mock data (no backend needed)
+**Dev mode:** `pnpm nx serve @dev/dj` runs frontend with mock data (no backend needed)
 
-**Full stack:** `docker compose up -d` runs all 4 services (frontend, api, db, storage)
+**Development stack:** `bash scripts/setup.sh dev` starts db, storage, and a locally built API. Nuxt runs on the host at port 4200; the container callback uses `host.docker.internal:4200`.
+
+**Production stack:** `bash scripts/setup.sh prod` uses three image-only services: db, storage, and one supervised Go + Nuxt/Node + Playwright app. Go exposes UI and API on port 8080; internal Nuxt port 3000 is not published. `SERVE_FRONTEND=true` is production-only.
+
+Use the [canonical setup guide](./docs/SELF-HOSTING.md), not manual secret/bootstrap commands. Mode-specific `.local/dev` and `.local/prod` state and separate Compose projects prevent credential/data mixing. Existing `klubhub-dj` volumes require explicit reuse or migration. Never use `down -v` unless data is disposable.
+
+Local fixes are not automatically in GHCR: publish a new version and verify package access. The default v1.0.0 package returned 403 to anonymous requests. The app has no general user authentication; TLS and CORS are not access control.
 
 ---
 
@@ -63,7 +69,7 @@ Browser → Nuxt 4 (SSR/SPA) → Go API (chi) → PostgreSQL + Garage (S3 API)
 
 ## Critical Rules
 
-1. **Never commit secrets** — `.env` contains real credentials, never commit it
+1. **Never commit secrets** — keep `.env`, generated Garage configuration, and `.local/` private.
 2. **Use `pnpm nx`** — never call nx/go/nuxt directly; always through pnpm nx
 3. **Run lint/typecheck** — after any code changes, run `pnpm nx lint` and `pnpm nx typecheck`
 4. **Test before commit** — run `pnpm nx run-many -t test` for unit tests, `pnpm nx e2e` for E2E
@@ -75,20 +81,20 @@ Browser → Nuxt 4 (SSR/SPA) → Go API (chi) → PostgreSQL + Garage (S3 API)
 
 ```bash
 # Start frontend with mock data (dev mode)
-pnpm nx serve dj
+pnpm nx serve @dev/dj
 
-# Start full stack (requires Docker)
-docker compose up -d
+# Start development backend (run local Nuxt per SELF-HOSTING.md)
+bash scripts/setup.sh dev
 
 # Run tests
 pnpm nx run-many -t test
 pnpm nx e2e dj-e2e
 
-# Type checking
-pnpm nx typecheck dj
+# Typecheck target currently only echoes a disabled notice; not a real check
+pnpm nx typecheck @dev/dj
 
 # Linting
-pnpm nx lint dj
+pnpm nx lint @dev/dj
 ```
 
 ---

@@ -81,6 +81,16 @@ func NewHealthHandler(pool DBPinger, store StorageHealthChecker, cfg *config.Con
 			integrations["instagram"] = IntegrationStatus{Status: "ok"}
 		}
 
+		// Probe Nuxt directly, never its /api/v1 proxy back into this handler.
+		if cfg.ServeFrontend {
+			if err := checkFrontend(r.Context(), cfg.NuxtInternalURL); err != nil {
+				integrations["frontend"] = IntegrationStatus{Status: "error", Message: err.Error()}
+				unhealthy = true
+			} else {
+				integrations["frontend"] = IntegrationStatus{Status: "ok"}
+			}
+		}
+
 		// 4. Compute overall status and HTTP status code.
 		//    Any required subsystem (database or storage) being unhealthy flips
 		//    the response to HTTP 503 so Docker's healthcheck (and external

@@ -1,10 +1,8 @@
 # KlubHub DJ — Architecture Blueprint
 
-> **Historical baseline:** This document predates the v1.0.0 Garage migration.
-> References to MinIO and its Compose examples describe the superseded design.
-> The supported deployment uses Garage through its S3 API; see `README.md`,
-> `CONFIGURATION.md`, and `SELF-HOSTING.md`. `minio-go` remains only as the
-> protocol client library.
+> **Scope:** The module and data-model sections retain the original architecture blueprint, including historical MinIO and pure-Go rendering proposals. They are not a deployment runbook or a claim that every planned feature is implemented. The runtime/deployment sections below describe the current Compose contract: Garage, host Nuxt in development, and one supervised Go + Nuxt/Node + Playwright app image in production. Use [Setup and Self-Hosting](./SELF-HOSTING.md) for provisioning and upgrades.
+>
+> Local runtime changes require a new image publication. The default production v1.0.0 tag does not establish that these fixes are released; anonymous requests for the existing package returned 403.
 
 **Version:** 1.0
 **Date:** 2026-03-11
@@ -96,46 +94,35 @@
    └───────────────────────┘
 ```
 
-### 2.3 C4 Container Diagram
+### 2.3 Runtime boundaries
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Docker Compose Network: klubhub-dj-net                                     │
-│                                                                             │
-│  ┌──────────────────────────────────┐                                       │
-│  │  klubhub-dj-frontend             │                                       │
-│  │  Image: node:22-alpine           │                                       │
-│  │  Port: 3000 (host-bound)         │  ◄── Browser (HTTP)                  │
-│  │  Framework: Nuxt 3 / Vue 3       │                                       │
-│  │  Role: SSR + SPA, proxies /api   │                                       │
-│  └───────────────┬──────────────────┘                                       │
-│                  │ /api/v1/* (proxied)                                       │
-│  ┌───────────────▼──────────────────┐      ┌────────────────────────────┐  │
-│  │  klubhub-dj-api                  │      │  klubhub-dj-storage        │  │
-│  │  Image: golang:1.23-alpine       │      │  Image: minio/minio        │  │
-│  │  Port: 8080 (internal only)      │─────►│  Port: 9000 (internal)     │  │
-│  │  Role: REST API + Scheduler      │ S3   │  Port: 9001 (dev only)     │  │
-│  │  Modules: 7 feature packages     │ API  │  Volume: storage-data      │  │
-│  │  Migrations: embedded/goose      │      └────────────────────────────┘  │
-│  └───────────────┬──────────────────┘                                       │
-│                  │ pgx driver                                                │
-│  ┌───────────────▼──────────────────┐                                       │
-│  │  klubhub-dj-db                   │                                       │
-│  │  Image: postgres:16-alpine       │                                       │
-│  │  Port: 5432 (internal only)      │                                       │
-│  │  Volume: db-data                 │                                       │
-│  └──────────────────────────────────┘                                       │
-└─────────────────────────────────────────────────────────────────────────────┘
+```text
+Development (docker-compose.yml):
+  browser -> host Nuxt :4200 -> host loopback :8080 -> API container
+  API -> db:5432 / storage:3900
+  API rendering callback -> host.docker.internal:4200
+
+Production (docker-compose.prod.yml alone):
+  browser -> host loopback :8080 -> combined app container
+                                   Go API :8080
+                                      -> Nuxt/Node :3000 (internal)
+                                         + Playwright renderer
+                                   Go -> db:5432 / storage:3900
+
+Both modes:
+  browser -> explicit S3_PUBLIC_ENDPOINT -> Garage S3
+  default host S3 publication: 127.0.0.1:39000 -> storage:3900
 ```
 
-### 2.4 Startup Ordering
+Production has three services: PostgreSQL, Garage, and the combined app. The app's supervisor manages Go and Node; the image includes Playwright and its browser dependencies. It is not a distroless static-frontend deployment. Go and the UI share the external port 8080; Nuxt port 3000 and the production database are not published.
 
-```
-postgres (healthy) ──► api (migrations, then serve) ──► frontend (proxy ready)
-minio   (healthy) ──┘
-```
+Development builds only the API locally and runs Nuxt on the host. `SERVE_FRONTEND=true` is production-only. The optional `docker-compose.dev.yml` publishes Garage administration, not a frontend service. Compose service names replace fixed container names, and separate project-scoped volumes isolate development from production.
 
-All services use Docker `depends_on` with `condition: service_healthy`. The API exits with non-zero if migrations fail (NFR-703).
+### 2.4 Startup ordering
+
+`scripts/setup.sh dev|prod` defaults to development. It creates private mode-specific file secrets and Garage configuration, starts infrastructure, bootstraps the Garage layout/bucket/key, and starts the selected stack. Reruns preserve existing credentials. Default private-state directories are `.local/dev` and `.local/prod` (gitignored).
+
+Database migrations run during API startup. Runtime verification must check both UI and API, browser-visible objects, and rendering; a healthy API alone does not prove a working frontend or Playwright runtime. Published image verification is separate from local build verification.
 
 ---
 
@@ -706,21 +693,7 @@ Cover art is the highest-value cache: 4,000 unique covers × ~500 KB = ~2 GB sav
 
 ### 5.6 Backup Strategy (NFR-107)
 
-```bash
-# scripts/backup.sh
-# 1. pg_dump → compressed SQL dump
-docker exec klubhub-dj-db pg_dump -U $POSTGRES_USER $POSTGRES_DB \
-  | gzip > backup/db-$(date +%Y%m%d-%H%M%S).sql.gz
-
-# 2. MinIO mirror → local directory
-docker exec klubhub-dj-storage \
-  mc mirror /data backup/storage-$(date +%Y%m%d-%H%M%S)/
-
-# 3. Archive both
-tar -czf klubhub-backup-$(date +%Y%m%d).tar.gz backup/
-```
-
-Restore is non-destructive by default; requires `--force` to overwrite existing data.
+Back up PostgreSQL and Garage together, and preserve matching private configuration and encryption keys separately in secure storage. Target the correct Compose project and verify recovery in an isolated restore drill. Restore is destructive, not a guaranteed non-destructive operation; see [Operations](./OPERATIONS.md#backup-and-restore) for script prerequisites and safeguards.
 
 ---
 
@@ -731,9 +704,10 @@ Restore is non-destructive by default; requires `--force` to overwrite existing 
 **v1: No authentication.** The API accepts all requests without credentials. All data is owned by a single implicit user.
 
 **Network security instead of auth** (NFR-500):
-- All services bind to `127.0.0.1` by default
-- Frontend at `:3000`, API at `:8080` (internal), DB at `:5432` (internal), MinIO at `:9000` (internal)
-- Only the frontend port is exposed to the host
+- Host-published app/API and S3 ports default to `127.0.0.1`; the API listens on `0.0.0.0` inside its container so Docker forwarding works.
+- Production UI and API share host port `8080`. Nuxt `3000` and PostgreSQL `5432` remain internal. S3 is published separately on host port `39000` by default.
+- `S3_BIND` is independent of the app bind. Remote browsers require an explicit reachable `S3_PUBLIC_ENDPOINT` for presigned URLs.
+- TLS and CORS are not authentication. Keep the app network-private or add an authentication gateway before any public exposure.
 
 **v3 guardrail structure** (NFR-507, NFR-512):
 - Rate-limiting middleware exists but is disabled (`RATE_LIMIT_ENABLED=false`)
@@ -908,9 +882,9 @@ All request bodies validated before handler logic:
 | CORS | Allowlist from `CORS_ORIGIN` env var | NFR-506 |
 | File upload safety | Extension + MIME + magic-byte checks | NFR-502 |
 | CSP | Nuxt CSP header with nonces | NFR-510 |
-| Secrets | `.env` only, never in code or logs | NFR-508 |
+| Secrets | Private mode-specific file secrets, never in code or logs | NFR-508 |
 | Rate limiting | Middleware present but disabled | NFR-507 |
-| MinIO access | No host port; API is sole gateway | NFR-511 |
+| Garage access | Independent loopback S3 publication; explicit browser endpoint | NFR-511 |
 | Dependency audit | CI vuln scan on deps + images | NFR-509 |
 
 ---
@@ -955,14 +929,14 @@ Every choice maps to a specific requirement.
 
 ### 7.3 Infrastructure
 
-| Component | Choice | Version | Justification |
-|---|---|---|---|
-| Database | **PostgreSQL** | 16-alpine | Relational integrity, JSONB, WAL durability (NFR-103), pg_dump (NFR-107) |
-| Object storage | **MinIO** | latest stable | S3-compatible, self-hosted, single-drive mode (NFR-104), no cost (NFR-402) |
-| Containerization | **Docker + Compose v2** | Engine 24+ | NFR-700, single-command deploy |
-| Base image (API) | `golang:1.23-alpine` → `scratch` | — | Multi-stage; final image <100 MB (NFR-403) |
-| Base image (Frontend) | `node:22-alpine` | — | Minimal size (NFR-403) |
-| Multi-arch build | `linux/amd64` + `linux/arm64` | — | macOS Apple Silicon support (NFR-701) |
+| Component | Current deployment choice |
+|---|---|
+| Database | `postgres:16-alpine`; production has no host database port. |
+| Object storage | `dxflrs/garage:v2.2.0`; S3-compatible, with private Garage configuration. |
+| Development | Default Compose file builds the API; Nuxt runs on the host. |
+| Production app | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.0.0}`; supervised Go + Nuxt/Node + Playwright. |
+| Production platform | `linux/arm64`; no native amd64 release claim. |
+| Containerization | Docker Engine 24+ and Compose v2; distinct mode projects and volumes. |
 
 ### 7.4 Stack Evaluation Against BRD Preferred Stack
 
@@ -1008,8 +982,9 @@ klubhub/                        (git root — this directory)
 │   ├── backup.sh               # NFR-107
 │   └── restore.sh              # NFR-107
 │
-├── docker-compose.yml          # Production deployment
-├── docker-compose.dev.yml      # Dev overrides (MinIO console, hot reload)
+├── docker-compose.yml          # Development db/storage/API (local API build)
+├── docker-compose.dev.yml      # Optional Garage admin exposure
+├── docker-compose.prod.yml     # Image-only production deployment
 ├── .env.example                # All env vars documented
 ├── UPGRADING.md                # Version-specific migration notes
 └── .gitignore
@@ -1019,115 +994,25 @@ klubhub/                        (git root — this directory)
 
 ## 9. Deployment Architecture
 
-### 9.1 docker-compose.yml Structure
+The [canonical setup guide](./SELF-HOSTING.md) owns startup commands, secret provisioning, networking, and upgrade instructions. Do not duplicate Compose definitions or manual Garage key-generation steps here. [Configuration](./CONFIGURATION.md) documents settings; [container images](./container-images.md) documents the publishing/access boundary.
 
-```yaml
-services:
-  db:
-    image: postgres:16-alpine
-    container_name: klubhub-dj-db
-    environment:
-      POSTGRES_DB: klubhub
-      POSTGRES_USER: klubhub
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - klubhub-dj-db-data:/var/lib/postgresql/data
-    networks: [internal]
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "klubhub"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    # resource limits: commented-out defaults per NFR-400
+### 9.1 Development versus production
 
-  storage:
-    image: minio/minio:latest
-    container_name: klubhub-dj-storage
-    command: server /data
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    volumes:
-      - klubhub-dj-storage-data:/data
-    networks: [internal]
-    # No host port binding — internal only (NFR-511)
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+The default `docker-compose.yml` provides db, Garage storage, and a locally built API-only service. Host Nuxt runs on port 4200 with `NUXT_PUBLIC_API_BASE=http://127.0.0.1:8080`; the API rendering callback reaches `host.docker.internal:4200`. Mock-only development leaves the API setting unset and requires no containers.
 
-  api:
-    image: klubhub-dj-api:latest
-    build: ./api
-    container_name: klubhub-dj-api
-    environment:
-      DATABASE_URL: postgres://klubhub:${POSTGRES_PASSWORD}@db:5432/klubhub
-      MINIO_ENDPOINT: storage:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
-      BIND_ADDRESS: ${BIND_ADDRESS:-127.0.0.1}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:3000}
-      TZ: ${TZ:-UTC}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
-    networks: [internal]
-    depends_on:
-      db:
-        condition: service_healthy
-      storage:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/api/v1/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+The standalone production file contains image references only. One combined app container runs supervised Go and Nuxt/Node plus Playwright. Go handles API routes and proxies frontend requests to internal Nuxt port 3000. UI and API use external port 8080; `SERVE_FRONTEND=true` is production-only. Production PostgreSQL stays internal.
 
-  frontend:
-    image: klubhub-dj-frontend:latest
-    build: ./dev/apps/dj
-    container_name: klubhub-dj-frontend
-    environment:
-      NUXT_PUBLIC_API_BASE: http://api:8080
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:3000:3000"
-    networks: [internal]
-    depends_on:
-      api:
-        condition: service_healthy
+### 9.2 Persistent state and upgrade safety
 
-volumes:
-  klubhub-dj-db-data:
-  klubhub-dj-storage-data:
+Setup defaults to separate `.local/dev` and `.local/prod` private state. Separate Compose projects give each mode its own volumes and avoid fixed container-name collisions, but default published host ports still overlap.
 
-networks:
-  internal:
-    driver: bridge
-```
+An old `klubhub-dj` project's volumes require explicit reuse or migration. A newly created empty project is not a successful upgrade. Back up and inspect the existing mounts, stop old writers, and verify restored/reused records and objects before removing anything. Never use `down -v` unless the data is explicitly disposable.
 
-### 9.2 Environment Variables Reference
+### 9.3 Exposure and publication boundaries
 
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `POSTGRES_PASSWORD` | Yes | — | Database password |
-| `MINIO_ROOT_USER` | Yes | — | Object storage admin user |
-| `MINIO_ROOT_PASSWORD` | Yes | — | Object storage admin password |
-| `TOKEN_ENCRYPTION_KEY` | Yes | — | AES-256-GCM key (`openssl rand -hex 32`) |
-| `BIND_ADDRESS` | No | `127.0.0.1` | Network bind (⚠️ set `0.0.0.0` for LAN only if understood) |
-| `TZ` | No | `UTC` | Default scheduling timezone |
-| `CORS_ORIGIN` | No | `http://127.0.0.1:3000` | Allowed frontend origin |
-| `LOG_LEVEL` | No | `info` | API log level |
-| `MAX_UPLOAD_SIZE_MB` | No | `50` | Max DJ history file size |
-| `COVER_ART_CONCURRENCY` | No | `10` | Concurrent cover art fetch workers |
-| `SCHEDULER_INTERVAL` | No | `60s` | Social post scheduler poll interval |
-| `RATE_LIMIT_ENABLED` | No | `false` | Enable API rate limiting |
-| `SPOTIFY_CLIENT_ID` | No | — | Spotify Web API credentials |
-| `SPOTIFY_CLIENT_SECRET` | No | — | |
-| `DISCOGS_TOKEN` | No | — | Discogs API token |
-| `INSTAGRAM_APP_ID` | No | — | Facebook/Instagram App credentials |
-| `INSTAGRAM_APP_SECRET` | No | — | |
+Host loopback publication and the API's all-interface container listener serve different purposes. S3 publication uses its own `S3_BIND`, and remote browsers need an explicit reachable `S3_PUBLIC_ENDPOINT`. CORS and TLS do not turn this unauthenticated single-user app into a public SaaS.
+
+Production does not execute local source edits: the fixes need a new image publication and verified GHCR access. The default tag remains v1.0.0; anonymous requests for that existing package returned 403. Do not infer released functionality from the local Dockerfile or documentation.
 
 ---
 

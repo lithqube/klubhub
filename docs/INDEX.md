@@ -9,6 +9,7 @@ matches your role.
 | Doc | Why read it |
 |-----|-------------|
 | [`SELF-HOSTING.md`](./SELF-HOSTING.md) | End-to-end local install with the production compose file, reverse-proxy examples (Caddy / nginx), backup schedule, restore runbook, upgrade procedure |
+| [`PRODUCTION.md`](./PRODUCTION.md) | Operator runbook focused on agents (verify, upgrade, rotate, troubleshoot) with a short "For humans" section for the small set of decisions only a human can make |
 | [`CONFIGURATION.md`](./CONFIGURATION.md) | Every env var, type, default, and example. Required vs. optional. |
 | [`OPERATIONS.md`](./OPERATIONS.md) | Day-to-day operations: health, log shipping, key rotation, restore drills, container resource limits |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | What changed between the last feature branch and v1.0.0; what's shipping in this release |

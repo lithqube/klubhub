@@ -93,7 +93,10 @@ type Config struct {
 	InstagramClientSecret string `envconfig:"INSTAGRAM_CLIENT_SECRET"`
 	InstagramRedirectURI  string `envconfig:"INSTAGRAM_REDIRECT_URI" default:"http://localhost:3000/auth/instagram/callback"`
 
-	// Optional: Nuxt internal URL for screenshot generation
+	// Opt-in only: API-only development must not depend on Nuxt.
+	ServeFrontend bool `envconfig:"SERVE_FRONTEND" default:"false"`
+
+	// Optional: Nuxt internal URL for screenshot generation and frontend proxying.
 	NuxtInternalURL string `envconfig:"NUXT_INTERNAL_URL" default:"http://localhost:3000"`
 }
 

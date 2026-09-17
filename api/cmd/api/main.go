@@ -35,9 +35,16 @@ import (
 // still exits with a clear status within a known time window.
 const healthcheckTimeout = 5 * time.Second
 
-// Package version. Bumped to 1.0.0 at the v1.0.0 release tag.
-// Build via `-ldflags="-X main.version=1.2.3"` for release builds;
-// otherwise this default applies.
+// Package identifier. Each KlubHub product builds its own binary under a
+// distinct image (e.g. ghcr.io/lithqube/klubhub-dj-api). The product name is
+// injected at build time so `/api -version` reports both the product and
+// the released version in a single line.
+//
+// Build via:
+//   -ldflags="-X main.productName=KlubHub-DJ -X main.version=1.2.3"
+//
+// for release builds. The defaults below apply when no ldflags are passed.
+var productName = "KlubHub-DJ"
 var version = "1.0.0"
 
 func main() {
@@ -62,7 +69,10 @@ func main() {
 		}
 	}
 	if *printVersion {
-		fmt.Println(version)
+		// Emit "<product> <version>" so operators can identify which
+		// KlubHub product (dj, promoter, label, ...) a given binary
+		// belongs to alongside its released version.
+		fmt.Printf("%s %s\n", productName, version)
 		os.Exit(0)
 	}
 	if *healthcheck {
