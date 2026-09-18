@@ -70,6 +70,12 @@ garage.toml
 secrets/
 secrets/*.txt
 
+# Plunk secret key (sk_*). Mounted as a Docker secret in
+# docker-compose*.yml so the API binary can read it via PLUNK_SECRET_KEY_FILE
+# if/when server-side transactional email lands. Never commit contents.
+plunk_secret_key
+*.plunk_secret_key
+
 # Transient dir created during Plan D production config evaluation in
 # apps/dj/nuxt.config.ts. Moved back on build:done. Never commit.
 apps/dj/.mock-api-v1/
