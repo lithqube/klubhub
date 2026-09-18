@@ -11,6 +11,10 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {"command": "node --test apps/site/site.test.mjs"}
+    },
+    "test-responsive": {
+      "executor": "nx:run-commands",
+      "options": {"command": "node --test apps/site/responsive.test.mjs"}
     }
   }
 }
