@@ -28,6 +28,15 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Bind the build job to the `github-pages` environment so it can
+    # read environment secrets (PLUNK_PUBLIC_KEY, _STAGING, _PREVIEW).
+    # Inherits any branch / reviewer protection rules configured on
+    # the environment. The deploy job below also runs in this
+    # environment; binding both keeps the secret-access contract
+    # consistent and prevents accidental deploys from forks or
+    # unrelated branches.
+    environment:
+      name: github-pages
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
