@@ -3,7 +3,7 @@
  *
  * Endpoint:  POST https://next-api.useplunk.com/v1/track
  * Auth:      Bearer pk_<your-public-key>  (read from <meta name="plunk-public-key">)
- * Body:      { email, event: "subscribed" }
+ * Body:      { email, event: "klubhub.subscribed" }
  *
  * The pk_* key is safe to ship in static HTML; Plunk issues it exactly
  * for browser-side event tracking. It cannot send emails or read
@@ -108,7 +108,7 @@
         },
         body: JSON.stringify({
           email: email.trim(),
-          event: 'subscribed',
+          event: 'klubhub.subscribed',
         }),
       })
         .then(function (response) {

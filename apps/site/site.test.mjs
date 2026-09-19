@@ -95,13 +95,17 @@ test('newsletter form is wired to Plunk public-key track endpoint', async () => 
   assert.match(html, /id="newsletter-email"[^>]*type="email"/);
   assert.match(html, /aria-live="polite"/);
 
-  // JS wiring — POSTs to Plunk's /v1/track with Bearer pk_* and event subscribed,
-  // and only treats the response as success when Plunk's documented envelope is
-  // present (success === true with a data.contact string). Permissive parsing
-  // would mask an upstream regression that returns a non-envelope 200.
+  // JS wiring — POSTs to Plunk's /v1/track with Bearer pk_* and the namespaced
+  // custom event `klubhub.subscribed`. Plunk's documented `contact.subscribed`
+  // system event is unreliable on /v1/track upserts, so the static site
+  // fires its own custom event that the welcome workflow listens for.
+  // The handler only treats the response as success when Plunk's documented
+  // envelope is present (success === true with a data.contact string).
+  // Permissive parsing would mask an upstream regression that returns a
+  // non-envelope 200.
   assert.match(js, /https:\/\/next-api\.useplunk\.com\/v1\/track/);
   assert.match(js, /Bearer ' \+ publicKey/);
-  assert.match(js, /event:\s*'subscribed'/);
+  assert.match(js, /event:\s*'klubhub\.subscribed'/);
   assert.match(js, /Subscribing\.\.\./);
   assert.match(js, /Subscribed\. We will be in touch/);
   assert.match(js, /body\.success === true/);
