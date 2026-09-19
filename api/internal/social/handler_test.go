@@ -128,7 +128,7 @@ func (m *handlerMockService) ValidateImage(data []byte, postType social.PostType
 }
 
 func newTestRouter(svc *handlerMockService) http.Handler {
-	h := social.NewHandler(svc)
+	h := social.NewHandler(svc, nil)
 	r := chi.NewRouter()
 	r.Mount("/api/v1/social", h.Routes())
 	return r

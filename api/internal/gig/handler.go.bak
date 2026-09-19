@@ -40,7 +40,6 @@ type ServiceIface interface {
 	LinkContact(ctx context.Context, gigID, contactID uuid.UUID, role string) error
 	GenerateCalendar(ctx context.Context, config CalendarConfig) (string, error)
 	GenerateBookingPDF(ctx context.Context, gigID uuid.UUID, djName string) ([]byte, string, error)
-	GetGigDetail(ctx context.Context, id uuid.UUID) (*GigDetailResponse, error)
 }
 
 // NewHandler creates a Handler backed by the given service. The icalSecret
@@ -87,7 +86,6 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/{id}/link-venue", h.handleLinkVenue)
 	r.Post("/{id}/link-contact", h.handleLinkContact)
 	r.Get("/{id}/pdf", h.handleGetBookingPDF)
-	r.Get("/{id}/detail", h.handleGetGigDetail)
 
 	return r
 }
@@ -353,23 +351,6 @@ func (h *Handler) handleGetBookingPDF(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=booking-confirmation.pdf")
 	_, _ = w.Write(pdfData)
 	_ = storagePath // TODO: return storage path or presigned URL
-}
-
-// handleGetGigDetail returns a gig by ID with linked venues, contacts, and tracklists.
-func (h *Handler) handleGetGigDetail(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid gig id")
-		return
-	}
-
-	detail, err := h.svc.GetGigDetail(r.Context(), id)
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	h.writeJSON(w, http.StatusOK, detail)
 }
 
 // ─── Response helpers ─────────────────────────────────────────────────────────

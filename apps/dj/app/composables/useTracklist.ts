@@ -9,12 +9,6 @@ interface UploadTracklistResponse {
   message?: string;
 }
 
-interface TracklistResponse {
-  tracklists: Tracklist[];
-  error?: string;
-  message?: string;
-}
-
 interface TracklistDetailResponse {
   tracklist: Tracklist;
   tracks: Track[];
@@ -58,9 +52,12 @@ export function uploadTracklist(file: File): Promise<{
 // List all tracklists
 export function listTracklists(): Promise<Tracklist[]> {
   return $fetch(`/api/v1/tracklists`).then((res) => {
-    const response = res as TracklistResponse;
-    if (response.error) throw new Error(response.message ?? response.error);
-    return response.tracklists;
+    // Check if the response is an error object
+    if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
+      throw new Error((res as any).message ?? (res as any).error);
+    }
+    // The API returns a raw array of tracklists
+    return res as Tracklist[];
   });
 }
 
@@ -88,9 +85,12 @@ export function updateTrack(
     method: 'PUT',
     body: fields,
   }).then((res) => {
-    const response = res as TrackResponse;
-    if (response.error) throw new Error(response.message ?? response.error);
-    return response.track;
+    // Check if the response is an error object
+    if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
+      throw new Error((res as any).message ?? (res as any).error);
+    }
+    // The API returns the updated track directly
+    return res as Track;
   });
 }
 
@@ -111,12 +111,16 @@ export function uploadTrackArtwork(
     method: 'PUT',
     body: formData,
   }).then((res) => {
-    const response = res as ArtworkResponse;
-    if (response.error) throw new Error(response.message ?? response.error);
+    // Check if the response is an error object
+    if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
+      throw new Error((res as any).message ?? (res as any).error);
+    }
+    // The API returns { track: Track }
+    const track = (res as { track: Track }).track;
     return {
-      artworkUrl: response.artwork_url,
-      artworkStatus: response.artwork_status,
-      artworkSource: response.artwork_source,
+      artworkUrl: track.artworkUrl,
+      artworkStatus: track.artworkStatus,
+      artworkSource: track.artworkSource,
     };
   });
 }
@@ -126,8 +130,9 @@ export function deleteTracklist(id: string): Promise<void> {
   return $fetch(`/api/v1/tracklists/${id}`, {
     method: 'DELETE',
   }).then((res) => {
-    const response = res as { error?: string; message?: string };
-    if (response.error) throw new Error(response.message ?? response.error);
+    if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
+      throw new Error((res as any).message ?? (res as any).error);
+    }
   });
 }
 
@@ -141,8 +146,11 @@ export function pollArtworkStatus(
   const fetchTracks = async () => {
     try {
       const res = await $fetch(`/api/v1/tracklists/${tracklistId}`);
-      const response = res as TracklistDetailResponse;
-      if (response.error) throw new Error(response.message ?? response.error);
+      // Check if the response is an error object
+      if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
+        throw new Error((res as any).message ?? (res as any).error);
+      }
+      const response = res as { tracklist: Tracklist; tracks: Track[] };
       onUpdate(response.tracks);
     } catch (err) {
       console.error('Failed to poll artwork status:', err);
@@ -168,15 +176,11 @@ export function generateImage(
     `/api/v1/tracklists/${tracklistId}/generate-image?format=${format}`,
     {
       method: 'POST',
-    },
+    }
   ).then((res) => {
-    const response = res as {
-      story?: string;
-      square?: string;
-      error?: string;
-      message?: string;
-    };
-    if (response.error) throw new Error(response.message ?? response.error);
-    return response;
+    if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
+      throw new Error((res as any).message ?? (res as any).error);
+    }
+    return res as { story?: string; square?: string };
   });
 }

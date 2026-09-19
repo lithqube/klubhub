@@ -117,7 +117,7 @@ func newRealServiceRouter(repo *realServiceRepo, store *social.StateStore) http.
 		// are unaffected; tests that do pass a 32-byte key.
 		TokenEncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 	}, store)
-	h := social.NewHandler(realServiceAdapter{svc: svc})
+	h := social.NewHandler(realServiceAdapter{svc: svc}, nil)
 	return mountHandlerForTest(h)
 }
 

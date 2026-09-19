@@ -57,12 +57,23 @@ export const useGigStore = defineStore('gig', () => {
     }
   }
 
+  async function fetchGigDetail(id: string): Promise<Gig | null> {
+    try {
+      const result = await $fetch<{ data: Gig }>(`/api/v1/gigs/${id}/detail`)
+      return result.data
+    } catch (e) {
+      console.error('fetchGigDetail failed:', e)
+      return null
+    }
+  }
+
   async function createGig(gig: GigCreate): Promise<Gig | null> {
     try {
-      const created = await $fetch<Gig>('/api/v1/gigs', {
+      const result = await $fetch<{ data: Gig }>('/api/v1/gigs', {
         method: 'POST',
         body: gig,
       })
+      const created = result.data
       gigs.value.unshift(created)
       return created
     } catch (e) {
@@ -73,10 +84,11 @@ export const useGigStore = defineStore('gig', () => {
 
   async function updateGig(id: string, gig: GigUpdate): Promise<Gig | null> {
     try {
-      const updated = await $fetch<Gig>(`/api/v1/gigs/${id}`, {
+      const result = await $fetch<{ data: Gig }>(`/api/v1/gigs/${id}`, {
         method: 'PUT',
         body: gig,
       })
+      const updated = result.data
       const idx = gigs.value.findIndex((g) => g.id === id)
       if (idx !== -1) {
         gigs.value[idx] = updated
@@ -174,6 +186,7 @@ export const useGigStore = defineStore('gig', () => {
     ytdEarned,
     avgFee,
     fetchGigs,
+    fetchGigDetail,
     createGig,
     updateGig,
     deleteGig,
@@ -183,5 +196,5 @@ export const useGigStore = defineStore('gig', () => {
     generateICalUrl,
     setFilter,
     clearFilters,
-  }
+  };
 })

@@ -1,29 +1,40 @@
-import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import type { Tracklist, Track, ParseWarning } from '../types/tracklist'
 
 export const useTracklistStore = defineStore('tracklist', () => {
-  const tracklist = ref<Record<string, any> | null>(null);
-  const tracks = ref<Record<string, any>[]>([]);
-  const warnings = ref<string[]>([]);
-  const uploadFile = ref<File | null>(null);
-  const uploadFilename = ref<string>('');
-  const uploadFileSize = ref<string>('');
-  const pastTracklists = ref<Record<string, any>[]>([]);
+  const tracklist = ref<Tracklist | null>(null)
+  const tracks = ref<Track[]>([])
+  const warnings = ref<ParseWarning[]>([])
+  const uploadFile = ref<File | null>(null)
+  const uploadFilename = ref<string>('')
+  const uploadFileSize = ref<string>('')
+  const pastTracklists = ref<Tracklist[]>([])
 
   // Internal state - not returned (private implementation detail)
-  const abortController = ref<AbortController | null>(null);
+  const abortController = ref<AbortController | null>(null)
 
-  const trackCount = computed(() => tracks.value.length);
+  const trackCount = computed(() => tracks.value.length)
+
+  async function loadPastTracklists(): Promise<void> {
+    try {
+      const result = await $fetch<{ data: Tracklist[] }>('/api/v1/tracklists')
+      pastTracklists.value = result.data || []
+    } catch (e) {
+      console.error('loadPastTracklists failed:', e)
+      pastTracklists.value = []
+    }
+  }
 
   function reset(): void {
-    tracklist.value = null;
-    tracks.value = [];
-    warnings.value = [];
-    uploadFile.value = null;
-    uploadFilename.value = '';
-    uploadFileSize.value = '';
-    pastTracklists.value = [];
-    abortController.value = null;
+    tracklist.value = null
+    tracks.value = []
+    warnings.value = []
+    uploadFile.value = null
+    uploadFilename.value = ''
+    uploadFileSize.value = ''
+    pastTracklists.value = []
+    abortController.value = null
   }
 
   return {
@@ -35,6 +46,7 @@ export const useTracklistStore = defineStore('tracklist', () => {
     uploadFileSize,
     pastTracklists,
     trackCount,
+    loadPastTracklists,
     reset,
   };
-});
+})

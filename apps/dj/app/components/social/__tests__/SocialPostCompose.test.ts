@@ -4,12 +4,16 @@ import { setActivePinia, createPinia } from 'pinia'
 import { ref } from 'vue'
 import SocialPostCompose from '../SocialPostCompose.vue'
 
+const mockCreatePost = vi.fn().mockResolvedValue(undefined)
+const mockCloseComposePanel = vi.fn()
+const mockLoadPosts = vi.fn().mockResolvedValue(undefined)
+
 // Mock the social store
 vi.mock('~/stores/social', () => ({
   useSocialStore: vi.fn(() => ({
-    createPost: vi.fn().mockResolvedValue(undefined),
-    closeComposePanel: vi.fn(),
-    loadPosts: vi.fn().mockResolvedValue(undefined),
+    createPost: mockCreatePost,
+    closeComposePanel: mockCloseComposePanel,
+    loadPosts: mockLoadPosts,
   })),
 }))
 

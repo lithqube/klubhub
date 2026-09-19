@@ -35,6 +35,13 @@ function handleAddToQueue() {
 function handleQuickExport() {
   store.openComposePanel()
 }
+
+async function handleAuthorize() {
+  const url = await store.initiateOAuth()
+  if (url) {
+    window.location.href = url
+  }
+}
 </script>
 
 <template>
@@ -61,7 +68,7 @@ function handleQuickExport() {
           Authorize to enable direct publishing. Queue works offline.
         </div>
       </div>
-      <button class="btn-hud btn-hud-cta btn-hud-sm" style="padding:0 14px;">
+      <button class="btn-hud btn-hud-cta btn-hud-sm" style="padding:0 14px;" @click="handleAuthorize">
         AUTHORIZE →
       </button>
     </div>
@@ -75,7 +82,7 @@ function handleQuickExport() {
       <span class="font-terminal tracking-terminal text-status-archived" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
         INSTAGRAM TOKEN EXPIRING SOON — RE-AUTHORIZE
       </span>
-      <button class="btn-hud btn-hud-ghost btn-hud-sm border-status-archived/30 text-status-archived">
+      <button class="btn-hud btn-hud-ghost btn-hud-sm border-status-archived/30 text-status-archived" @click="handleAuthorize">
         RE-AUTHORIZE
       </button>
     </div>

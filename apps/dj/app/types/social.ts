@@ -35,6 +35,7 @@ export interface CreatePostRequest {
   timezoneName: string
   imageId?: string     // existing Garage object key (legacy API field)
   imageFile?: File     // custom upload
+  accountId?: string   // optional account ID to override the current account
 }
 
 export interface EditPostRequest {

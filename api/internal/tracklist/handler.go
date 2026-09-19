@@ -123,7 +123,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusOK, tracklists)
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": tracklists})
 }
 
 // handleGet handles GET /{id}

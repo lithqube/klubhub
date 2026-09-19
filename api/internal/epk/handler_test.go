@@ -25,6 +25,7 @@ type mockService struct {
 	getContentErr       error
 	upsertContentResult *epk.EPKContent
 	upsertContentErr    error
+	upsertContentRequest epk.UpsertEPKContentRequest
 	uploadPhotoPath     string
 	uploadPhotoErr      error
 	deletePhotoErr      error
@@ -41,7 +42,8 @@ func (m *mockService) GetContent(_ context.Context) (*epk.EPKContent, error) {
 	return m.getContentResult, m.getContentErr
 }
 
-func (m *mockService) UpsertContent(_ context.Context, _ epk.UpsertEPKContentRequest) (*epk.EPKContent, error) {
+func (m *mockService) UpsertContent(_ context.Context, req epk.UpsertEPKContentRequest) (*epk.EPKContent, error) {
+	m.upsertContentRequest = req
 	return m.upsertContentResult, m.upsertContentErr
 }
 
@@ -107,7 +109,10 @@ func TestHandler_GetContent_200(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	var body map[string]interface{}
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
-	assert.NotEmpty(t, body["id"])
+	require.Contains(t, body, "data")
+	data, ok := body["data"].(map[string]interface{})
+	require.True(t, ok)
+	assert.NotEmpty(t, data["id"])
 }
 
 // TestHandler_PutContent_200 verifies PUT /content returns 200 with updated EPKContent.
@@ -229,8 +234,11 @@ func TestHandler_GetExports_200(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-	var resp []interface{}
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
+	require.Contains(t, body, "data")
+	resp, ok := body["data"].([]interface{})
+	require.True(t, ok)
 	assert.Len(t, resp, 1)
 }
 
