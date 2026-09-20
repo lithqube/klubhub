@@ -18,13 +18,13 @@ definePageMeta({ layout: false });
 
 // Set title for not found case
 useHead({
-  title: !tracklistData.value ? 'Not Found' : undefined,
+  title: !tracklistData?.value ? 'Not Found' : undefined,
 });
 </script>
 
 <template>
   <div
-    v-if="tracklistData.value && settingsData.value"
+    v-if="tracklistData?.value && settingsData?.value"
     style="margin: 0; padding: 0; overflow: hidden; background-color: white"
   >
     <!-- Only render if we have data -->

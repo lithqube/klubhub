@@ -111,6 +111,40 @@ export const useGigStore = defineStore('gig', () => {
     }
   }
 
+  async function linkVenue(
+    gigId: string,
+    venueId: string,
+    isPrimary: boolean
+  ): Promise<boolean> {
+    try {
+      await $fetch(`/api/v1/gigs/${gigId}/link-venue`, {
+        method: 'POST',
+        body: { venueId, isPrimary },
+      })
+      return true
+    } catch (e) {
+      console.error('linkVenue failed:', e)
+      return false
+    }
+  }
+
+  async function linkContact(
+    gigId: string,
+    contactId: string,
+    role: string
+  ): Promise<boolean> {
+    try {
+      await $fetch(`/api/v1/gigs/${gigId}/link-contact`, {
+        method: 'POST',
+        body: { contactId, role },
+      })
+      return true
+    } catch (e) {
+      console.error('linkContact failed:', e)
+      return false
+    }
+  }
+
   async function linkTracklist(
     gigId: string,
     tracklistId: string
