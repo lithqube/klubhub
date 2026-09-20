@@ -149,13 +149,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: Users can manage their complete gig history and pipeline, with a reusable venue/contact database, iCal export, and booking confirmation PDF; downstream modules can read gig data via a stable interface
 **Depends on**: Phase 0
 **Requirements**: GIG-01 through GIG-12, CONT-01 through CONT-06, INT-02, INT-03
-**Status**: Not started — NEXT
+**Status**: All complete — 2026-09-20
 **Plans**:
 
-- [ ] 04-01-PLAN.md — Go backend: gig CRUD + status/payment workflow + GigReader interface
-- [ ] 04-02-PLAN.md — Contacts & Venue database: venues + contacts tables, gig FK links, autocomplete search
-- [ ] 04-03-PLAN.md — Booking confirmation PDF + iCal feed endpoint
-- [ ] 04-04-PLAN.md — Nuxt frontend: gig calendar/list views + contact/venue autocomplete + iCal export button + confirmation PDF download
+- [x] 04-01-PLAN.md — Go backend: gig CRUD + status/payment workflow + GigReader interface
+- [x] 04-02-PLAN.md — Contacts & Venue database: venues + contacts tables, gig FK links, autocomplete search
+- [x] 04-03-PLAN.md — Booking confirmation PDF + iCal feed endpoint
+- [x] 04-04-PLAN.md — Nuxt frontend: gig calendar/list views + contact/venue autocomplete + iCal export button + confirmation PDF download
+- [x] 04-05-PLAN.md — Gig ↔ tracklist linking: LinkTracklist/UnlinkTracklist backend ops, Nuxt proxy routes, TracklistGigLinker component, GigFormDialog linked-tracklists panel, GigListRow tracklist badge
 
 > Note: `gigs.vue` page already exists with HUD-styled static mock data from Phase 1.5.5. Phase 04-04 will wire it to the real API.
 
@@ -279,7 +280,7 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 | 1.5.5. Kinetic HUD Migration     | —              | ✅ Complete  | 2026-04-27 |
 | 2. Social Media Scheduler        | 7/7            | ✅ Complete  | 2026-03-22 |
 | 3. EPK / Press Kit Builder       | 7/7            | ✅ Complete  | 2026-03-23 |
-| 4. Gig Tracker                   | 4/5            | In Progress|            |
+| 4. Gig Tracker                   | 5/5            | ✅ Complete 2026-09-20 | —          |
 || 4.5. Rider Templates             | 0/TBD          | Future       | —          |
 || 4.8. Spotify Integration (INSERTED) | 0/TBD       | Future       | —          |
 || 4.9. RA Integration (INSERTED)    | 3/3            | ✅ Complete  | 2026-09-20 |

@@ -12,6 +12,7 @@ import (
 // tracklistRepoIface is the subset of the tracklist repository needed by GigService.
 type tracklistRepoIface interface {
 	Get(ctx context.Context, id uuid.UUID) (*tracklist.Tracklist, []tracklist.Track, error)
+	Exists(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 // venueRepoIface is the subset of the venue repository needed by GigService.
@@ -244,7 +245,18 @@ func (s *Service) UnlinkContact(ctx context.Context, gigID, contactID uuid.UUID)
 	return s.repo.UnlinkContact(ctx, gigID, contactID)
 }
 
-// GenerateCalendar generates an RFC 5545 compliant iCal feed for all non-cancelled gigs.
+// LinkTracklist links a gig to a tracklist record.
+func (s *Service) LinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error {
+	if _, _, err := s.tracklistRepo.Get(ctx, tracklistID); err != nil {
+		return err
+	}
+	return s.repo.LinkTracklist(ctx, gigID, tracklistID)
+}
+
+// UnlinkTracklist unlinks a gig from a tracklist.
+func (s *Service) UnlinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error {
+	return s.repo.UnlinkTracklist(ctx, gigID, tracklistID)
+}
 func (s *Service) GenerateCalendar(ctx context.Context, config CalendarConfig) (string, error) {
 	return GenerateCalendar(ctx, s, config)
 }

@@ -326,6 +326,26 @@ func (r *Repository) UnlinkContact(ctx context.Context, gigID, contactID uuid.UU
 	return err
 }
 
+// LinkTracklist creates a tracklist_gigs association.
+func (r *Repository) LinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO tracklist_gigs (gig_id, tracklist_id)
+		VALUES ($1, $2)
+		ON CONFLICT (gig_id, tracklist_id) DO NOTHING`,
+		gigID, tracklistID,
+	)
+	return err
+}
+
+// UnlinkTracklist removes a tracklist_gigs association.
+func (r *Repository) UnlinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM tracklist_gigs WHERE gig_id = $1 AND tracklist_id = $2`,
+		gigID, tracklistID,
+	)
+	return err
+}
+
 // GetLinkedVenueID returns the primary venue ID for a gig, or nil.
 func (r *Repository) GetLinkedVenueID(ctx context.Context, gigID uuid.UUID) (*uuid.UUID, error) {
 	var venueID uuid.UUID

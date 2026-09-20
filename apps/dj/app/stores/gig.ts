@@ -111,40 +111,35 @@ export const useGigStore = defineStore('gig', () => {
     }
   }
 
-  async function linkVenue(
+  async function linkTracklist(
     gigId: string,
-    venueId: string,
-    isPrimary: boolean
+    tracklistId: string
   ): Promise<boolean> {
     try {
-      await $fetch(`/api/v1/gigs/${gigId}/link-venue`, {
+      await $fetch(`/api/v1/gigs/${gigId}/tracklists/${tracklistId}`, {
         method: 'POST',
-        body: { venue_id: venueId, is_primary: isPrimary },
       })
       return true
     } catch (e) {
-      console.error('linkVenue failed:', e)
+      console.error('linkTracklist failed:', e)
       return false
     }
   }
 
-  async function linkContact(
+  async function unlinkTracklist(
     gigId: string,
-    contactId: string,
-    role: string
+    tracklistId: string
   ): Promise<boolean> {
     try {
-      await $fetch(`/api/v1/gigs/${gigId}/link-contact`, {
-        method: 'POST',
-        body: { contact_id: contactId, role },
+      await $fetch(`/api/v1/gigs/${gigId}/tracklists/${tracklistId}`, {
+        method: 'DELETE',
       })
       return true
     } catch (e) {
-      console.error('linkContact failed:', e)
+      console.error('unlinkTracklist failed:', e)
       return false
     }
   }
-
   async function fetchGigsAutocomplete(q: string): Promise<Gig[]> {
     try {
       const data = await $fetch<Gig[]>(
@@ -192,6 +187,8 @@ export const useGigStore = defineStore('gig', () => {
     deleteGig,
     linkVenue,
     linkContact,
+    linkTracklist,
+    unlinkTracklist,
     fetchGigsAutocomplete,
     generateICalUrl,
     setFilter,

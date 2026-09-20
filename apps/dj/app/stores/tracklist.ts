@@ -11,10 +11,20 @@ export const useTracklistStore = defineStore('tracklist', () => {
   const uploadFileSize = ref<string>('')
   const pastTracklists = ref<Tracklist[]>([])
 
-  // Internal state - not returned (private implementation detail)
   const abortController = ref<AbortController | null>(null)
+  const linkedGigs = ref<Record<string, string[]>>({})
 
   const trackCount = computed(() => tracks.value.length)
+
+  async function fetchTracklist(id: string): Promise<Tracklist | null> {
+    try {
+      const result = await $fetch<{ data: Tracklist }>(`/api/v1/tracklists/${id}`)
+      return result.data || null
+    } catch (e) {
+      console.error('fetchTracklist failed:', e)
+      return null
+    }
+  }
 
   async function loadPastTracklists(): Promise<void> {
     try {
@@ -46,7 +56,9 @@ export const useTracklistStore = defineStore('tracklist', () => {
     uploadFileSize,
     pastTracklists,
     trackCount,
+    linkedGigs,
+    fetchTracklist,
     loadPastTracklists,
     reset,
-  };
+  }
 })

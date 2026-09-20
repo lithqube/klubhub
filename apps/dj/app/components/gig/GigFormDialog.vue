@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { useGigStore } from '../../stores/gig'
+import { useTracklistStore } from '../../stores/tracklist'
+import { ref, computed, watch } from 'vue'
 import type { Gig, GigCreate, Venue, Contact, GigStatus, PaymentStatus } from '../../types/gig'
+import { Tracklist as TracklistType } from '../../types/tracklist'
 import VenueAutocomplete from './VenueAutocomplete.vue'
 import ContactAutocomplete from './ContactAutocomplete.vue'
+
+const gigStore = useGigStore()
+const tracklistStore = useTracklistStore()
 
 const props = defineProps<{
   open: boolean
@@ -14,10 +20,62 @@ const emit = defineEmits<{
   saved: []
 }>()
 
-const gigStore = useGigStore()
-
 const isEdit = computed(() => !!props.gig?.id)
-const title = computed(() => (isEdit.value ? 'EDIT GIG' : 'ADD GIG'))
+
+const linkedTracklists = ref<TracklistType[]>([])
+const availableTracklists = ref<TracklistType[]>([])
+const tracklistsLoaded = ref(false)
+const linkingTlId = ref('')
+const unlinkingTl = ref(false)
+
+async function loadTracklists() {
+  if (!props.gig?.id) return
+  tracklistsLoaded.value = false
+  try {
+    const detail = await gigStore.fetchGigDetail(props.gig.id)
+    if (detail?.tracklists && Array.isArray(detail.tracklists)) {
+      linkedTracklists.value = detail.tracklists.map((t: any) => ({
+        id: t.id,
+        title: t.title,
+      }))
+    }
+    const all = await tracklistStore.loadPastTracklists()
+    availableTracklists.value = tracklistStore.pastTracklists.filter(
+      (tl) => !linkedTracklists.value.some((l) => l.id === tl.id)
+    )
+  } catch (e) {
+    console.error('loadTracklists failed:', e)
+  } finally {
+    tracklistsLoaded.value = true
+  }
+}
+
+async function linkTracklist(tlId: string) {
+  if (!props.gig?.id) return
+  linkingTlId.value = tlId
+  const ok = await gigStore.linkTracklist(props.gig.id, tlId)
+  if (ok) {
+    const tl = await tracklistStore.fetchTracklist(tlId)
+    linkedTracklists.value.push({ id: tlId, title: tl?.title || tlId })
+    availableTracklists.value = availableTracklists.value.filter((t) => t.id !== tlId)
+    tracklistStore.linkedGigs[tlId] = tracklistStore.linkedGigs[tlId] || []
+    tracklistStore.linkedGigs[tlId].push(props.gig.id)
+  }
+  linkingTlId.value = ''
+}
+
+async function unlinkTracklist(tlId: string) {
+  if (!props.gig?.id) return
+  unlinkingTl.value = true
+  const ok = await gigStore.unlinkTracklist(props.gig.id, tlId)
+  if (ok) {
+    linkedTracklists.value = linkedTracklists.value.filter((t) => t.id !== tlId)
+    delete tracklistStore.linkedGigs[tlId]
+  }
+  unlinkingTl.value = false
+}
+
+watch(() => props.gig?.id, () => { if (props.gig?.id) loadTracklists() }, { immediate: true })
 
 // Form state
 const form = reactive({
@@ -371,6 +429,33 @@ function close() {
                 style="width:100%;min-height:80px;"
                 placeholder="Additional notes..."
               />
+            </div>
+
+            <!-- Linked tracklists -->
+            <div v-if="isEdit && props.gig?.id">
+              <label class="section-lbl" style="display:block;margin-bottom:6px;">LINKED TRACKLISTS</label>
+              <div v-for="tl in linkedTracklists" :key="tl.id" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(150,248,255,.06);border-radius:6px;margin-bottom:4px;">
+                <span style="flex:1;font-family:var(--font-ui);font-size:13px;color:var(--green);font-weight:600;">{{ tl.title }}</span>
+                <button class="btn-hud btn-hud-xs" style="color:var(--red);" @click="unlinkTracklist(tl.id)" :disabled="unlinkingTl">✕</button>
+              </div>
+              <div v-if="linkedTracklists.length === 0" style="font-size:12px;color:var(--muted);padding:4px 0;">No tracklists linked yet.</div>
+              <div style="margin-top:8px;">
+                <label class="section-lbl" style="display:block;margin-bottom:4px;font-size:11px;color:var(--muted);">SELECT TRACKLIST TO LINK</label>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button
+                    v-for="tl in availableTracklists"
+                    :key="tl.id"
+                    class="btn-hud"
+                    style="font-size:12px;padding:4px 10px;"
+                    :disabled="linkingTlId === tl.id"
+                    @click="linkTracklist(tl.id)"
+                  >
+                    <span v-if="linkingTlId === tl.id">...</span>
+                    <span v-else>{{ tl.title }}</span>
+                  </button>
+                </div>
+              </div>
+              <div v-if="!tracklistsLoaded" style="font-size:12px;color:var(--muted);padding:4px 0;">Loading tracklists...</div>
             </div>
 
             <!-- Copy from previous gig -->

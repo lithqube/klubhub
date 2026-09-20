@@ -39,6 +39,8 @@ type ServiceIface interface {
 	DeleteGig(ctx context.Context, id uuid.UUID) error
 	LinkVenue(ctx context.Context, gigID, venueID uuid.UUID, isPrimary bool) error
 	LinkContact(ctx context.Context, gigID, contactID uuid.UUID, role string) error
+	LinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error
+	UnlinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error
 	GenerateCalendar(ctx context.Context, config CalendarConfig) (string, error)
 	GenerateBookingPDF(ctx context.Context, gigID uuid.UUID, djName string) ([]byte, string, error)
 	GetGigDetail(ctx context.Context, id uuid.UUID) (*GigDetailResponse, error)
@@ -87,6 +89,8 @@ func (h *Handler) Routes() http.Handler {
 	r.Delete("/{id}", h.handleDeleteGig)
 	r.Post("/{id}/link-venue", h.handleLinkVenue)
 	r.Post("/{id}/link-contact", h.handleLinkContact)
+	r.Post("/{id}/tracklists/{tracklistId}", h.handleLinkTracklist)
+	r.Delete("/{id}/tracklists/{tracklistId}", h.handleUnlinkTracklist)
 	r.Get("/{id}/pdf", h.handleGetBookingPDF)
 	r.Get("/{id}/detail", h.handleGetGigDetail)
 
@@ -284,14 +288,56 @@ func (h *Handler) handleLinkContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.LinkContact(r.Context(), gigID, contactID, body.Role); err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
-		return
+		if err := h.svc.LinkContact(r.Context(), gigID, contactID, body.Role); err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
-	w.WriteHeader(http.StatusNoContent)
-}
 
-// handleAutocomplete returns gigs for "Copy from Previous Gig" dropdown.
+	// handleLinkTracklist links a tracklist to a gig.
+	func (h *Handler) handleLinkTracklist(w http.ResponseWriter, r *http.Request) {
+		gigID, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid gig id")
+			return
+		}
+
+		tracklistID, err := uuid.Parse(chi.URLParam(r, "tracklistId"))
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
+			return
+		}
+
+		if err := h.svc.LinkTracklist(r.Context(), gigID, tracklistID); err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+
+	// handleUnlinkTracklist unlinks a tracklist from a gig.
+	func (h *Handler) handleUnlinkTracklist(w http.ResponseWriter, r *http.Request) {
+		gigID, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid gig id")
+			return
+		}
+
+		tracklistID, err := uuid.Parse(chi.URLParam(r, "tracklistId"))
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
+			return
+		}
+
+		if err := h.svc.UnlinkTracklist(r.Context(), gigID, tracklistID); err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+
+	// handleAutocomplete returns gigs for "Copy from Previous Gig" dropdown.
 func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if len(q) < 2 {

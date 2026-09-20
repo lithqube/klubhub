@@ -259,3 +259,13 @@ Wave 1  ────────────────────────
 **Wave 3** depends on Wave 2 (API endpoints wired).
 **Wave 4** depends on Wave 1 + Wave 2 (GigReader + CRUD API).
 **Wave 5** depends on Wave 1 + Wave 2 + Wave 3 (full linking table + API + form UI).
+
+## Wave 5 Status: ✅ Complete (2026-09-20)
+
+Tracklist ↔ gig bidirectional linking shipped on `feat/phase-4-full`. The `tracklist_gigs` join table (migration `005f`) is populated by `LinkTracklist` / `UnlinkTracklist` ops on the gig service, exposed via `POST /api/v1/gigs/{id}/tracklists/{tracklistId}` and `DELETE` variants, proxied by Nitro routes, and surfaced in the UI as:
+
+- `TracklistGigLinker.vue` — embedded in `render/tracklist/[id].vue`, shows linked status buttons (JOIN/BOOKED/PAST) + "Link existing gig" autocomplete dialog
+- `GigFormDialog.vue` — "Linked Tracklists" section in Edit gig form with unlink buttons + select row for unlinked past tracklists
+- `GigListRow.vue` — `tracklist-badge` pill showing count when `g.tracklists?.length > 0`
+- `useGigStore.linkTracklist` / `unlinkTracklist` — store actions hitting proxy routes
+- `useTracklistStore.linkedGigs` — bidirectional `Record<string, string[]>` cache
