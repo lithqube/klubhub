@@ -49,6 +49,18 @@ contract are unchanged.
   at build time; the SK is mounted as a Docker secret consumed via
   `PLUNK_SECRET_KEY_FILE` and never enters the repo. (PR #7, commit
   `8749bb4`)
+- **Module contracts wired to the existing product**: the gig, epk,
+  tracklist, and social modules now talk to the live Go API instead
+  of local mocks. `apps/dj/app/stores/{gig,epk,tracklist,social}.ts`
+  use the real fetch endpoints; `apps/dj/app/composables/useTracklist.ts`
+  uses the live tracklist contract; `apps/dj/app/pages/{index,finance,social}.vue`
+  consume the real APIs. New contract tests at
+  `api/internal/{gig,epk,tracklist}/contract_test.go` cover the
+  handler-to-service boundary. Followup commit `8fee098` hardens the
+  gig service to return 404 on `ErrNotFound`, the social store to map
+  snake_case responses, and the gig detail query to join venues and
+  contacts in a single round-trip. (PR #13, commits `f5fce61`,
+  `8fee098`)
 
 #### Changed
 
