@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -111,8 +110,8 @@ func (h *RAImportHandler) HandleImportFromRA(w http.ResponseWriter, r *http.Requ
 	}
 	_ = artist // Artist fetched successfully, use for events retrieval
 
-		// Get artist events from RA — use artist.ID since GetArtistEvents takes an artist ID
-		events, err := h.raClient.GetArtistEvents(ctx, strconv.Itoa(artist.ID), 50)
+		// Get artist events from RA — use artist.ID directly (it's already a string)
+		events, err := h.raClient.GetArtistEvents(ctx, artist.ID, 50)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to fetch events from RA: "+err.Error())
 			return

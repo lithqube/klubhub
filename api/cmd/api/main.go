@@ -245,7 +245,7 @@ func run() error {
 	epkStorage := epk.NewStorageAdapter(storeClient)
 	epkSettingsSvc := epk.NewSettingsServiceAdapter(settingsSvc)
 	epkSvc := epk.NewService(epkRepo, epkStorage, epkSettingsSvc)
-	epkHandler := epk.NewHandler(epkSvc)
+	epkHandler := epk.NewHandler(epkSvc, nil) // nil = create default RA client internally
 
 	// 9. Wire gig, venue, and contact modules.
 	gigRepo := gig.NewRepository(pool)
