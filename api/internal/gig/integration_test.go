@@ -31,16 +31,8 @@ import (
 
 		"github.com/klubhub/dj/api/internal/gig"
 		"github.com/klubhub/dj/api/internal/platform/migrations"
-		"github.com/klubhub/dj/api/internal/tracklist"
-)
-
-// dummyRAHandler is a no-op stub for the RA import sub-router during integration tests.
-type dummyRAHandler struct{}
-func (dummyRAHandler) Routes() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
-	})
-}
+				"github.com/klubhub/dj/api/internal/tracklist"
+	)
 
 var (
 	testPool     *pgxpool.Pool
@@ -268,7 +260,7 @@ func TestIntegration_MigrationsRunClean(t *testing.T) {
 
 		// Create tracklist repository and service (no storage/artwork needed for this test)
 		trackRepo := tracklist.NewRepository(testPool)
-		trackSvc := tracklist.NewService(trackRepo, nil, nil, tracklist.ServiceConfig{})
+		// tracklist service not needed for this test
 
 		// Create a tracklist
 		tlID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
@@ -467,9 +459,9 @@ func TestIntegration_MigrationsRunClean(t *testing.T) {
 		gigSvc := gig.NewService(gigRepo, nil, nil, trackRepo, nil)
 
 		h := gig.NewHandler(gigSvc, "test-secret")
-		h.SetRAImportHandler(&dummyRAHandler{})
+	h.SetRAImportHandler(gig.NewRAImportHandler(nil, nil, nil, nil))
 
-		router := h.Routes()
+	router := h.Routes()
 
 		// Create tracklist + gig via services
 		tlID := uuid.MustParse("cccccccc-cccc-dddd-eeee-ffffffffffff")
@@ -553,14 +545,15 @@ func TestIntegration_MigrationsRunClean(t *testing.T) {
 			t.Skip("postgres unavailable")
 		}
 
-			h := gig.NewHandler(nil, "test-secret")
-			h.SetRAImportHandler(&dummyRAHandler{})
-			rust := h.Routes()
+	h := gig.NewHandler(nil, "test-secret")
+	h.SetRAImportHandler(gig.NewRAImportHandler(nil, nil, nil, nil))
 
-		// Bad gig UUID
-		req := httptest.NewRequest(http.MethodPost, "/not-a-uuid/tracklists/some-tracklist", nil)
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
+	router := h.Routes()
+
+	// Bad gig UUID
+	req := httptest.NewRequest(http.MethodPost, "/not-a-uuid/tracklists/some-tracklist", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("POST bad gig UUID: status=%d want 400", rec.Code)
 		}

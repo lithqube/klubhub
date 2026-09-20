@@ -25,7 +25,15 @@ type Client struct {
 // The internal client uses cfg.S3Endpoint for API calls.
 // cfg.S3PublicEndpoint is stored separately for presigned URL base generation.
 func New(cfg *config.Config) (*Client, error) {
-	mc, err := minio.New(cfg.S3Endpoint, &minio.Options{
+	// strip any path from the endpoint URL — minio-go rejects URLs with
+	// path components ("Endpoint url cannot have fully qualified paths")
+	endpoint := cfg.S3Endpoint
+	if u, err := url.Parse(endpoint); err == nil && u.Path != "" && u.Path != "/" {
+		u.Path = ""
+		endpoint = u.String()
+	}
+
+	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.S3AccessKey, cfg.S3SecretKey, ""),
 		Secure: cfg.S3UseSSL,
 	})

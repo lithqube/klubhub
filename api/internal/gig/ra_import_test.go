@@ -434,6 +434,12 @@ func (m *mockGigServiceForTest) GenerateCalendar(ctx context.Context, config Cal
 func (m *mockGigServiceForTest) GenerateBookingPDF(ctx context.Context, gigID uuid.UUID, djName string) ([]byte, string, error) {
 	return nil, "", nil
 }
+func (m *mockGigServiceForTest) LinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error {
+	return nil
+}
+func (m *mockGigServiceForTest) UnlinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error {
+	return nil
+}
 
 // mockRAClientForTest implements a minimal RA client interface for testing
 type mockRAClientForTest struct {
