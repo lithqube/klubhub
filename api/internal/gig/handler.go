@@ -25,8 +25,9 @@ import (
 // comparison uses crypto/subtle.ConstantTimeCompare to mitigate timing
 // attacks.
 type Handler struct {
-	svc        ServiceIface
-	icalSecret []byte
+	svc            ServiceIface
+	icalSecret     []byte
+	raImportHandler *RAImportHandler
 }
 
 // ServiceIface defines the interface exposed by the gig service to the HTTP layer.
@@ -89,7 +90,15 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/{id}/pdf", h.handleGetBookingPDF)
 	r.Get("/{id}/detail", h.handleGetGigDetail)
 
+	// RA import sub-router
+	r.Mount("/import-ra", h.raImportHandler.Routes())
+
 	return r
+}
+
+// SetRAImportHandler sets the RA import handler (for dependency injection)
+func (h *Handler) SetRAImportHandler(handler *RAImportHandler) {
+	h.raImportHandler = handler
 }
 
 // handleListGigs returns gigs with optional query filters.
