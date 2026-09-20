@@ -41,15 +41,17 @@ jobs:
 
       - name: Resolve tags
         id: tags
+        env:
+          TAG_OVERRIDE: ${{ github.event.inputs.tag_override }}
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
-          if [ -n "${{ github.event.inputs.tag_override }}" ]; then
-            TAG="${{ github.event.inputs.tag_override }}"
+          if [ -n "$TAG_OVERRIDE" ]; then
+            TAG="$TAG_OVERRIDE"
           else
             TAG="sha-${SHORT_SHA}"
           fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6

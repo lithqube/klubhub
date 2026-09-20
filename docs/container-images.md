@@ -24,12 +24,16 @@ The publishing workflow targets **`linux/arm64` only**, using the native `ubuntu
 
 ## Tags and publishing
 
-`.github/workflows/containers.yml` builds from the repository root and uses `apps/dj/Dockerfile`. It publishes to `ghcr.io/${{ github.repository }}`; verify that repository-derived path agrees with the deployment's `IMAGE_REPOSITORY` when renaming or forking the repository.
+`.github/workflows/containers-ci.yml` builds from the repository root and uses `apps/dj/Dockerfile`. It publishes to `ghcr.io/lithqube/klubhub-dj-api`; verify that path agrees with the deployment's `IMAGE_REPOSITORY` when renaming or forking the repository.
 
-- A pushed `v*` release tag must match the workflow's semantic-version format and descend from `origin/main`.
-- The workflow publishes the resolved release tag and a bare short commit SHA. It does not add `sha-` to the short-SHA tag.
-- Manual `workflow_dispatch` supports an explicit release-tag override. Supply one deliberately and inspect the resolved tag in the run.
-- The workflow disables `latest`. Pin a known release or exact published build, not an assumed moving tag.
+Two tag paths are supported:
+
+- **Automatic runs from `main`:** when `tag_override` is empty, the workflow publishes `sha-<short SHA>`. This is the rolling CI path; it does not create stable release tags.
+- **Manual `workflow_dispatch` runs:** supply `tag_override` for release-style tags such as `v1.0.1`. Inspect the resolved tag in the run before relying on it.
+
+The workflow disables `latest`. Pin a known release or exact published build, not an assumed moving tag.
+
+Release tags are not created automatically by `v*` push events in this workflow; they remain a manual operator action via `workflow_dispatch` or a separate release workflow.
 
 Publish a new version containing the runtime fixes rather than silently implying that the old v1.0.0 artifact changed. Verify the build, tag, digest, and package access before directing operators to upgrade.
 
