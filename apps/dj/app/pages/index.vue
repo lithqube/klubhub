@@ -47,11 +47,6 @@ function statusAccentClass(status: string): string {
   }
 }
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase().replace(' ', ' ')
-}
-
 function formatDateTime(dateStr: string): string {
   const date = new Date(dateStr)
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).toUpperCase().replace(',', ' ·')
@@ -59,10 +54,6 @@ function formatDateTime(dateStr: string): string {
 
 function formatCurrency(amount: number, currency = 'EUR'): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(amount)
-}
-
-function formatNumber(num: number): string {
-  return new Intl.NumberFormat('de-DE').format(num)
 }
 
 // Computed: upcoming gig (first confirmed/advanced/played gig in the future)
@@ -80,6 +71,7 @@ const socialQueue = computed(() => {
     badgeClass: statusBadgeClass(post.status),
     accentClass: statusAccentClass(post.status),
     time: formatDateTime(post.scheduledAtUtc),
+    platform: socialStore.account?.platform?.toUpperCase() || 'INSTAGRAM',
   }))
 })
 
@@ -206,29 +198,30 @@ const finance = computed(() => {
             <NuxtLink to="/social" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);opacity:.7;cursor:pointer;text-decoration:none;" @mouseenter="($event.target as HTMLElement).style.opacity='1'" @mouseleave="($event.target as HTMLElement).style.opacity='.7'">VIEW ALL →</NuxtLink>
           </div>
 
-          <NuxtLink
-            v-if="socialQueue.length > 0"
-            v-for="post in socialQueue"
-            :key="post.id"
-            to="/social"
-            class="glass spost"
-            :class="post.accentClass"
-            style="text-decoration:none;cursor:pointer;"
-          >
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span class="badge-hud" :class="post.badgeClass">
-                <span v-if="post.status === 'scheduled'" style="width:4px;height:4px;background:var(--color-on-primary);display:inline-block;" />
-                {{ post.status.toUpperCase() }}
-              </span>
-              <span class="spost-meta">{{ post.platform }}</span>
-            </div>
-            <div class="spost-caption">{{ post.caption }}</div>
-            <div class="spost-meta" :style="post.status === 'failed' ? 'color:var(--color-error)' : ''">
-              <svg v-if="post.status !== 'failed'" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <svg v-else width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-              {{ post.status === 'failed' ? post.lastError : post.time }}
-            </div>
-          </NuxtLink>
+          <template v-if="socialQueue.length > 0">
+            <NuxtLink
+              v-for="post in socialQueue"
+              :key="post.id"
+              to="/social"
+              class="glass spost"
+              :class="post.accentClass"
+              style="text-decoration:none;cursor:pointer;"
+            >
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="badge-hud" :class="post.badgeClass">
+                  <span v-if="post.status === 'scheduled'" style="width:4px;height:4px;background:var(--color-on-primary);display:inline-block;" />
+                  {{ post.status.toUpperCase() }}
+                </span>
+                <span class="spost-meta">{{ post.platform }}</span>
+              </div>
+              <div class="spost-caption">{{ post.caption }}</div>
+              <div class="spost-meta" :style="post.status === 'failed' ? 'color:var(--color-error)' : ''">
+                <svg v-if="post.status !== 'failed'" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <svg v-else width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                {{ post.status === 'failed' ? post.lastError : post.time }}
+              </div>
+            </NuxtLink>
+          </template>
 
           <div v-else class="glass accent-bar-draft" style="padding:16px;text-align:center;">
             <Send style="width:24px;height:24px;color:var(--color-tertiary);margin:0 auto 8px;" aria-hidden="true" />
@@ -238,45 +231,46 @@ const finance = computed(() => {
         </section>
 
         <!-- Column 2: Tracklists -->
-        <section aria-label="Recent tracklists" style="display:flex;flex-direction:column;gap:7px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-            <div class="section-lbl">TRACKLISTS</div>
-            <NuxtLink to="/tracklist" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);opacity:.7;cursor:pointer;text-decoration:none;" @mouseenter="($event.target as HTMLElement).style.opacity='1'" @mouseleave="($event.target as HTMLElement).style.opacity='.7'">VIEW ALL →</NuxtLink>
-          </div>
+                <section aria-label="Recent tracklists" style="display:flex;flex-direction:column;gap:7px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+                    <div class="section-lbl">TRACKLISTS</div>
+                    <NuxtLink to="/tracklist" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);opacity:.7;cursor:pointer;text-decoration:none;" @mouseenter="($event.target as HTMLElement).style.opacity='1'" @mouseleave="($event.target as HTMLElement).style.opacity='.7'">VIEW ALL →</NuxtLink>
+                  </div>
 
-          <NuxtLink
-            v-if="recentTracklists.length > 0"
-            v-for="tl in recentTracklists"
-            :key="tl.id"
-            to="/tracklist"
-            class="glass"
-            :class="tl.accentClass"
-            style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;cursor:pointer;transition:all .15s;text-decoration:none;"
-          >
-            <div>
-              <div style="font-family:var(--font-command);font-size:11px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">{{ tl.title }}</div>
-              <div style="display:flex;gap:6px;margin-top:3px;">
-                <span class="data-frag">{{ tl.tracks }} TRK</span>
-                <span class="data-frag">{{ tl.bpm }} BPM</span>
-              </div>
-            </div>
-            <span class="badge-hud" :class="tl.badgeClass">{{ tl.badgeLabel }}</span>
-          </NuxtLink>
+                  <template v-if="recentTracklists.length > 0">
+                    <NuxtLink
+                      v-for="tl in recentTracklists"
+                      :key="tl.id"
+                      to="/tracklist"
+                      class="glass"
+                      :class="tl.accentClass"
+                      style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;cursor:pointer;transition:all .15s;text-decoration:none;"
+                    >
+                      <div>
+                        <div style="font-family:var(--font-command);font-size:11px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">{{ tl.title }}</div>
+                        <div style="display:flex;gap:6px;margin-top:3px;">
+                          <span class="data-frag">{{ tl.tracks }} TRK</span>
+                          <span class="data-frag">{{ tl.bpm }} BPM</span>
+                        </div>
+                      </div>
+                      <span class="badge-hud" :class="tl.badgeClass">{{ tl.badgeLabel }}</span>
+                    </NuxtLink>
+                  </template>
 
-          <div v-else class="glass accent-bar-draft" style="padding:16px;text-align:center;">
-            <Layers style="width:24px;height:24px;color:var(--color-tertiary);margin:0 auto 8px;" aria-hidden="true" />
-            <div style="font-family:var(--font-command);font-size:12px;color:var(--color-on-surface-variant);">NO TRACKLISTS YET</div>
-            <div style="font-family:var(--font-data);font-size:10px;color:var(--color-tertiary);margin-top:4px;">Upload a tracklist to get started.</div>
-          </div>
+                  <div v-else class="glass accent-bar-draft" style="padding:16px;text-align:center;">
+                    <Layers style="width:24px;height:24px;color:var(--color-tertiary);margin:0 auto 8px;" aria-hidden="true" />
+                    <div style="font-family:var(--font-command);font-size:12px;color:var(--color-on-surface-variant);">NO TRACKLISTS YET</div>
+                    <div style="font-family:var(--font-data);font-size:10px;color:var(--color-tertiary);margin-top:4px;">Upload a tracklist to get started.</div>
+                  </div>
 
-          <NuxtLink
-            to="/tracklist"
-            class="btn-hud btn-hud-ghost"
-            style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;text-decoration:none;"
-          >
-            + NEW TRACKLIST
-          </NuxtLink>
-        </section>
+                  <NuxtLink
+                    to="/tracklist"
+                    class="btn-hud btn-hud-ghost"
+                    style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;text-decoration:none;"
+                  >
+                    + NEW TRACKLIST
+                  </NuxtLink>
+                </section>
 
         <!-- Column 3: Finance -->
         <section aria-label="Financial overview" style="display:flex;flex-direction:column;gap:7px;">
