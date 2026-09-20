@@ -91,7 +91,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/{id}/detail", h.handleGetGigDetail)
 
 	// RA import sub-router
-	r.Mount("/import-ra", h.raImportHandler.Routes())
+	r.Mount("/", h.raImportHandler.Routes())
 
 	return r
 }

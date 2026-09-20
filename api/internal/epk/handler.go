@@ -18,11 +18,14 @@ type Handler struct {
 	raClient *ra.RAClient
 }
 
-// NewHandler creates a Handler backed by the given service.
-func NewHandler(svc serviceIface) *Handler {
+// NewHandler creates a Handler backed by the given service and RA client.
+func NewHandler(svc serviceIface, raClient *ra.RAClient) *Handler {
+	if raClient == nil {
+		raClient = ra.NewRAClient()
+	}
 	return &Handler{
 		svc:      svc,
-		raClient: ra.NewRAClient(),
+		raClient: raClient,
 	}
 }
 
@@ -59,13 +62,12 @@ func (h *Handler) HandleImportFromRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create RA client and fetch artist
-	raClient := ra.NewRAClient()
-	artist, err := raClient.GetArtist(r.Context(), body.ArtistSlug)
-	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "failed to fetch artist from RA: "+err.Error())
-		return
-	}
+		// Use the injected RA client (not a new instance, to preserve cache)
+		artist, err := h.raClient.GetArtist(r.Context(), body.ArtistSlug)
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "failed to fetch artist from RA: "+err.Error())
+			return
+		}
 
 	// Build result
 	result := RAImportResult{

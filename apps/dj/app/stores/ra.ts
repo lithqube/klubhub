@@ -58,15 +58,16 @@ export const useRaStore = defineStore('ra', () => {
     }
   }
 
-  async function importFromEpk(slug: string): Promise<void> {
+  async function importFromEpk(request: RAImportRequest): Promise<RAImportResult> {
     loading.value = true
     error.value = null
     try {
-      const result = await $fetch<{ data: { data: RAArtist } }>(`/api/v1/epk/import-ra`, {
+      const result = await $fetch<RAImportResult>('/api/v1/epk/import-ra', {
         method: 'POST',
-        body: { artist_slug: slug },
+        body: request,
       })
-      artist.value = result.data.data
+      error.value = null
+      return result
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'EPK import failed'
       throw e

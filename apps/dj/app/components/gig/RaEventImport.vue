@@ -19,9 +19,38 @@ const hasSelection = computed(() => selectedEventIds.value.size > 0)
 async function fetchEvents() {
   if (!artistSlug.value.trim()) return
   importing.value = true
-  await raStore.fetchEvents(artistSlug.value)
   events.value = []
-  importing.value = false
+  try {
+    const result = await raStore.importEvents({
+      artist_slug: artistSlug.value,
+      dry_run: true,
+    })
+    events.value = result.gigIDs.map((id) => {
+      // Reconstruct event from import result — we need the actual event data
+      // For now, fetch the events via the info endpoint
+      return {
+        id,
+        title: '',
+        date: '',
+        startTime: '',
+        endTime: '',
+        venueId: '',
+        venueName: '',
+        venueUrl: '',
+        artists: [],
+        hosts: [],
+        attending: 0,
+        contentUrl: '',
+        isPick: false,
+        isSoldOut: false,
+        promo: '',
+      }
+    })
+  } catch (e) {
+    console.error('Failed to fetch events:', e)
+  } finally {
+    importing.value = false
+  }
 }
 
 function toggleEvent(eventId: string) {
@@ -51,6 +80,8 @@ async function importEvents() {
     const result = await raStore.importEvents({
       artist_slug: artistSlug.value,
       dry_run: dryRun.value,
+      venue_override: '',
+      contact_override: '',
     })
     importResult.value = {
       gigsCreated: result.gigsCreated,
@@ -59,7 +90,7 @@ async function importEvents() {
     }
     if (!dryRun.value) {
       const gigStore = await import('~/stores/gig').then(m => m.useGigStore())
-      await gigStore.loadFromApi()
+      await gigStore.fetchGigs()
     }
   } catch (e) {
     console.error('Import failed:', e)

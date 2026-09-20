@@ -14,7 +14,7 @@ export interface RAArtist {
   bandcamp: string
   discogs: string
   website: string
-  areas: RAEditorialArea[]
+  areas: RAArea[]
   venues: RAArtistVenue[]
   followers: number
   headerImage: string

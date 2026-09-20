@@ -102,11 +102,12 @@ type RAAreaResult struct {
 
 // RACache provides in-memory caching for RA data
 type RACache struct {
-	mu       sync.RWMutex
-	artists  map[string]*cachedArtist // slug -> artist
-	events   map[string][]RAEVENT     // artistID -> events
-	areas    map[string][]RAAreaResult // query -> areas
-	clearedAt time.Time
+	mu            sync.RWMutex
+	artists       map[string]*cachedArtist // slug -> artist
+	events        map[string][]RAEVENT    // artistID -> events
+	areas         map[string][]RAAreaResult // query -> areas
+	eventExpires  map[string]time.Time    // artistID -> expiration time
+	clearedAt     time.Time
 }
 
 type cachedArtist struct {
@@ -117,9 +118,10 @@ type cachedArtist struct {
 // NewRACache creates a new RA cache
 func NewRACache() *RACache {
 	return &RACache{
-		artists: make(map[string]*cachedArtist),
-		events:  make(map[string][]RAEVENT),
-		areas:   make(map[string][]RAAreaResult),
+		artists:      make(map[string]*cachedArtist),
+		events:       make(map[string][]RAEVENT),
+		areas:        make(map[string][]RAAreaResult),
+		eventExpires: make(map[string]time.Time),
 	}
 }
 
@@ -151,30 +153,34 @@ func (c *RACache) SetArtist(artist *RAArtist) {
 	// (in a real implementation, we'd have a separate ID index)
 }
 
-// GetEvents retrieves events from cache
+// GetEvents retrieves events from cache with per-entry expiration
 func (c *RACache) GetEvents(artistID string) ([]RAEVENT, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	events, ok := c.events[artistID]
-	if !ok {
+	if !ok || events == nil {
 		return nil, false
 	}
-	// Check if cache is stale (more than cacheTTL old)
-	// For simplicity, we'll clear events cache periodically
-	if time.Since(c.clearedAt) > cacheTTL {
+
+	// Check per-entry expiration
+	if expiresAt, hasExpiry := c.eventExpires[artistID]; hasExpiry && time.Now().After(expiresAt) {
+		delete(c.events, artistID)
+		delete(c.eventExpires, artistID)
 		return nil, false
 	}
+
 	return events, true
 }
 
-// SetEvents stores events in cache
+// SetEvents stores events in cache with per-entry expiration
 func (c *RACache) SetEvents(artistID string, events []RAEVENT) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.events[artistID] = events
-	c.clearedAt = time.Now()
+	// Set per-entry expiration instead of shared clearedAt
+	c.eventExpires[artistID] = time.Now().Add(cacheTTL)
 }
 
 // GetAreas retrieves areas from cache
