@@ -119,7 +119,7 @@ export const useGigStore = defineStore('gig', () => {
     try {
       await $fetch(`/api/v1/gigs/${gigId}/link-venue`, {
         method: 'POST',
-        body: { venueId, isPrimary },
+        body: { venue_id: venueId, is_primary: isPrimary },
       })
       return true
     } catch (e) {
@@ -136,7 +136,7 @@ export const useGigStore = defineStore('gig', () => {
     try {
       await $fetch(`/api/v1/gigs/${gigId}/link-contact`, {
         method: 'POST',
-        body: { contactId, role },
+        body: { contact_id: contactId, role },
       })
       return true
     } catch (e) {

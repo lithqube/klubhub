@@ -28,10 +28,12 @@ func New(cfg *config.Config) (*Client, error) {
 	// strip any path from the endpoint URL — minio-go rejects URLs with
 	// path components ("Endpoint url cannot have fully qualified paths")
 	endpoint := cfg.S3Endpoint
-	if u, err := url.Parse(endpoint); err == nil && u.Path != "" && u.Path != "/" {
-		u.Path = ""
-		endpoint = u.String()
+	if u, err := url.Parse(endpoint); err == nil {
+		// minio.New expects bare host:port; strip scheme + path.
+		endpoint = u.Host
 	}
+
+	fmt.Printf("[DEBUG] storage.New: S3Endpoint=[%s] -> bare=[%s]\n", cfg.S3Endpoint, endpoint)
 
 	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.S3AccessKey, cfg.S3SecretKey, ""),

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/klubhub/dj/api/internal/tracklist"
 	"github.com/shopspring/decimal"
 )
 
@@ -310,6 +311,10 @@ func (h *Handler) handleLinkContact(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.svc.LinkTracklist(r.Context(), gigID, tracklistID); err != nil {
+			if errors.Is(err, tracklist.ErrNotFound) {
+				h.writeError(w, http.StatusNotFound, "tracklist not found")
+				return
+			}
 			h.writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}

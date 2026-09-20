@@ -3,7 +3,7 @@ import { useGigStore } from '../../stores/gig'
 import { useTracklistStore } from '../../stores/tracklist'
 import { ref, computed, watch } from 'vue'
 import type { Gig, GigCreate, Venue, Contact, GigStatus, PaymentStatus } from '../../types/gig'
-import { Tracklist as TracklistType } from '../../types/tracklist'
+import type { Tracklist as TracklistType } from '../../types/tracklist'
 import VenueAutocomplete from './VenueAutocomplete.vue'
 import ContactAutocomplete from './ContactAutocomplete.vue'
 
@@ -22,7 +22,7 @@ const emit = defineEmits<{
 
 const isEdit = computed(() => !!props.gig?.id)
 
-const linkedTracklists = ref<TracklistType[]>([])
+const linkedTracklists = ref<Pick<TracklistType, 'id' | 'title'>[]>([])
 const availableTracklists = ref<TracklistType[]>([])
 const tracklistsLoaded = ref(false)
 const linkingTlId = ref('')
@@ -70,12 +70,30 @@ async function unlinkTracklist(tlId: string) {
   const ok = await gigStore.unlinkTracklist(props.gig.id, tlId)
   if (ok) {
     linkedTracklists.value = linkedTracklists.value.filter((t) => t.id !== tlId)
-    delete tracklistStore.linkedGigs[tlId]
+    // Re-add to available tracklists so it can be re-linked
+    const tl = await tracklistStore.fetchTracklist(tlId).catch(() => null)
+    if (tl && !availableTracklists.value.some((t) => t.id === tlId)) {
+      availableTracklists.value.push(tl)
+    }
+    // Remove only this gig's association, preserve other gigs'
+    if (tracklistStore.linkedGigs[tlId]) {
+      tracklistStore.linkedGigs[tlId] = tracklistStore.linkedGigs[tlId].filter(
+        (gigId) => gigId !== props.gig!.id,
+      )
+    }
   }
   unlinkingTl.value = false
 }
 
 watch(() => props.gig?.id, () => { if (props.gig?.id) loadTracklists() }, { immediate: true })
+
+// Dialog header title
+const title = computed(() => {
+  if (!props.gig) return ''
+  if (props.gig.event_name) return props.gig.event_name
+  if (props.gig.venue?.name) return props.gig.venue.name
+  return ''
+})
 
 // Form state
 const form = reactive({
