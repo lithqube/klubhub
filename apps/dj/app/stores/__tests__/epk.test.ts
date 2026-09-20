@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { useEpkStore } from '../epk';
-import type { EPKContent, EPKExport } from '../../types/epk';
+import type { EPKContent, EPKExport, EPKExportCreateResult } from '../../types/epk';
 
 const mockEpkContent: EPKContent = {
   id: 'epk-1',
@@ -20,6 +20,11 @@ const mockEpkContent: EPKContent = {
 const mockExport: EPKExport = {
   id: 'export-1',
   minioPath: 'epk/exports/export-1.pdf',
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+const mockExportCreateResult: EPKExportCreateResult = {
+  id: 'export-1',
   downloadUrl: 'https://minio.example.com/presigned?token=abc',
   createdAt: '2026-01-01T00:00:00Z',
 };
@@ -98,7 +103,7 @@ describe('useEpkStore', () => {
     it('populates bioShort from API response', async () => {
       const store = useEpkStore();
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue(mockEpkContent);
+      global.$fetch = vi.fn().mockResolvedValue({ data: mockEpkContent });
       await store.loadFromApi();
       expect(store.bioShort).toBe('Short bio');
     });
@@ -106,7 +111,7 @@ describe('useEpkStore', () => {
     it('populates bioLong from API response', async () => {
       const store = useEpkStore();
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue(mockEpkContent);
+      global.$fetch = vi.fn().mockResolvedValue({ data: mockEpkContent });
       await store.loadFromApi();
       expect(store.bioLong).toBe('Long bio text');
     });
@@ -114,7 +119,7 @@ describe('useEpkStore', () => {
     it('populates gigHighlights from API response', async () => {
       const store = useEpkStore();
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue(mockEpkContent);
+      global.$fetch = vi.fn().mockResolvedValue({ data: mockEpkContent });
       await store.loadFromApi();
       expect(store.gigHighlights).toEqual(['Club Tresor', 'Fabric London']);
     });
@@ -122,14 +127,14 @@ describe('useEpkStore', () => {
     it('populates photoPaths from API response', async () => {
       const store = useEpkStore();
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue(mockEpkContent);
+      global.$fetch = vi.fn().mockResolvedValue({ data: mockEpkContent });
       await store.loadFromApi();
       expect(store.photoPaths).toEqual(['epk/photo1.jpg', 'epk/photo2.jpg']);
     });
 
     it('calls GET /api/v1/epk/content', async () => {
       const store = useEpkStore();
-      const mockFetch = vi.fn().mockResolvedValue(mockEpkContent);
+      const mockFetch = vi.fn().mockResolvedValue({ data: mockEpkContent });
       // @ts-expect-error - mocking global $fetch
       global.$fetch = mockFetch;
       await store.loadFromApi();
@@ -144,7 +149,7 @@ describe('useEpkStore', () => {
       // @ts-expect-error - mocking global $fetch
       global.$fetch = vi.fn().mockImplementation(async () => {
         statusDuringFetch = store.saveStatus;
-        return mockEpkContent;
+        return { data: mockEpkContent };
       });
       await store.updateContent({ bioShort: 'New bio' });
       expect(statusDuringFetch).toBe('saving');
@@ -153,7 +158,7 @@ describe('useEpkStore', () => {
     it('sets saveStatus to saved on success', async () => {
       const store = useEpkStore();
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue(mockEpkContent);
+      global.$fetch = vi.fn().mockResolvedValue({ data: mockEpkContent });
       await store.updateContent({ bioShort: 'New bio' });
       expect(store.saveStatus).toBe('saved');
     });
@@ -162,13 +167,13 @@ describe('useEpkStore', () => {
       const store = useEpkStore();
       // @ts-expect-error - mocking global $fetch
       global.$fetch = vi.fn().mockRejectedValue(new Error('Network error'));
-      await store.updateContent({ bioShort: 'New bio' });
+      await expect(store.updateContent({ bioShort: 'New bio' })).rejects.toThrow('Network error');
       expect(store.saveStatus).toBe('error');
     });
 
     it('calls PUT /api/v1/epk/content with patch body', async () => {
       const store = useEpkStore();
-      const mockFetch = vi.fn().mockResolvedValue(mockEpkContent);
+      const mockFetch = vi.fn().mockResolvedValue({ data: mockEpkContent });
       // @ts-expect-error - mocking global $fetch
       global.$fetch = mockFetch;
       await store.updateContent({ bioShort: 'Updated bio' });
@@ -182,7 +187,7 @@ describe('useEpkStore', () => {
       const store = useEpkStore();
       const updated = { ...mockEpkContent, bioShort: 'Updated bio' };
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue(updated);
+      global.$fetch = vi.fn().mockResolvedValue({ data: updated });
       await store.updateContent({ bioShort: 'Updated bio' });
       expect(store.bioShort).toBe('Updated bio');
     });
@@ -239,13 +244,33 @@ describe('useEpkStore', () => {
     });
   });
 
+  describe('uploadStagePlot()', () => {
+    it('posts the file using the image multipart field', async () => {
+      const store = useEpkStore();
+      const mockFetch = vi.fn().mockResolvedValue({ path: 'epk/stage-plot/new.png' });
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+      const file = new File(['img'], 'stage.png', { type: 'image/png' });
+
+      await store.uploadStagePlot(file);
+
+      const options = mockFetch.mock.calls[0]?.[1] as { body: FormData };
+      expect(mockFetch).toHaveBeenCalledWith('/api/v1/epk/stage-plot', {
+        method: 'POST',
+        body: expect.any(FormData),
+      });
+      expect(options.body.get('stagePlot')).toBe(file);
+      expect(options.body.has('image')).toBe(false);
+    });
+  });
+
   describe('generateExport()', () => {
-    it('prepends new EPKExport to exports list', async () => {
+    it('returns the create result without treating it as a list entry', async () => {
       const store = useEpkStore();
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue(mockExport);
-      await store.generateExport();
-      expect(store.exports[0]).toEqual(mockExport);
+      global.$fetch = vi.fn().mockResolvedValue(mockExportCreateResult);
+      await expect(store.generateExport()).resolves.toEqual(mockExportCreateResult);
+      expect(store.exports).toEqual([]);
     });
   });
 
@@ -255,7 +280,7 @@ describe('useEpkStore', () => {
       store.exports = [mockExport];
       const newExport = { ...mockExport, id: 'export-2' };
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue([newExport]);
+      global.$fetch = vi.fn().mockResolvedValue({ data: [newExport] });
       await store.loadExports();
       expect(store.exports).toEqual([newExport]);
     });

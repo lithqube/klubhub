@@ -215,7 +215,7 @@ func run() error {
 		InstagramRedirectURI: cfg.InstagramRedirectURI,
 		TokenEncryptionKey:   []byte(cfg.TokenEncryptionKey),
 	}, socialStateStore)
-	socialHandler := social.NewHandler(socialSvc)
+	socialHandler := social.NewHandler(socialSvc, storeClient)
 
 	// 7a. Wire and start the background publish worker. The returned
 	// `workerDone` channel is closed when the worker goroutine has fully

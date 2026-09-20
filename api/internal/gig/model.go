@@ -35,26 +35,26 @@ const (
 
 // Gig represents a DJ gig/booking
 type Gig struct {
-	ID                   uuid.UUID    `db:"id"`
-	Date                 time.Time    `db:"date"`
-	Venue                string       `db:"venue"`
-	City                 string       `db:"city"`
-	Country              string       `db:"country"`
-	EventName            string       `db:"event_name"`
-	PromoterName         string       `db:"promoter_name"`
-	PromoterEmail        string       `db:"promoter_email"`
-	PromoterPhone        string       `db:"promoter_phone"`
-	FeeAmount            decimal.Decimal `db:"fee_amount"`
-	FeeCurrency          string       `db:"fee_currency"` // ISO 4217
-	SetLengthMinutes     int          `db:"set_length_minutes"`
-	Notes                string       `db:"notes"`
-	Status               GigStatus    `db:"status"`
-	PaymentStatus        PaymentStatus `db:"payment_status"`
-	GigReaderVenueID     *uuid.UUID   `db:"gig_reader_venue_id"`   // FK to reusable venue record
-	GigReaderContactID   *uuid.UUID   `db:"gig_reader_contact_id"` // FK to reusable contact record
-	CreatedAt            time.Time    `db:"created_at"`
-	UpdatedAt            time.Time    `db:"updated_at"`
-	DeletedAt            *time.Time   `db:"deleted_at"` // soft delete
+	ID                   uuid.UUID       `json:"id" db:"id"`
+	Date                 time.Time       `json:"date" db:"date"`
+	Venue                string          `json:"venue" db:"venue"`
+	City                 string          `json:"city" db:"city"`
+	Country              string          `json:"country" db:"country"`
+	EventName            string          `json:"event_name" db:"event_name"`
+	PromoterName         string          `json:"promoter_name" db:"promoter_name"`
+	PromoterEmail        string          `json:"promoter_email" db:"promoter_email"`
+	PromoterPhone        string          `json:"promoter_phone" db:"promoter_phone"`
+	FeeAmount            decimal.Decimal `json:"fee_amount" db:"fee_amount"`
+	FeeCurrency          string          `json:"fee_currency" db:"fee_currency"` // ISO 4217
+	SetLengthMinutes     int             `json:"set_length_minutes" db:"set_length_minutes"`
+	Notes                string          `json:"notes" db:"notes"`
+	Status               GigStatus       `json:"status" db:"status"`
+	PaymentStatus        PaymentStatus   `json:"payment_status" db:"payment_status"`
+	GigReaderVenueID     *uuid.UUID      `json:"gig_reader_venue_id" db:"gig_reader_venue_id"`   // FK to reusable venue record
+	GigReaderContactID   *uuid.UUID      `json:"gig_reader_contact_id" db:"gig_reader_contact_id"` // FK to reusable contact record
+	CreatedAt            time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt            time.Time       `json:"updated_at" db:"updated_at"`
+	DeletedAt            *time.Time      `json:"deleted_at" db:"deleted_at"` // soft delete
 }
 
 // GigCreate contains fields required to create a new gig
@@ -114,6 +114,60 @@ type GigReader interface {
 	GetGig(ctx context.Context, id uuid.UUID) (*Gig, error)
 	ListGigs(ctx context.Context, f GigFilter) ([]*Gig, error)
 	Tracklists(ctx context.Context, gigID uuid.UUID) ([]*tracklist.Tracklist, error)
+	// GetVenue returns the venue by ID.
+	GetVenue(ctx context.Context, id uuid.UUID) (*Venue, error)
+	// GetContact returns the contact by ID.
+	GetContact(ctx context.Context, id uuid.UUID) (*Contact, error)
+}
+
+// Venue represents a reusable venue record.
+type Venue struct {
+	ID   uuid.UUID `json:"id" db:"id"`
+	Name string    `json:"name" db:"name"`
+}
+
+// Contact represents a reusable contact record.
+type Contact struct {
+	ID   uuid.UUID `json:"id" db:"id"`
+	Name string    `json:"name" db:"name"`
+}
+
+// GigDetailResponse represents the detailed gig response including linked venues, contacts, and tracklists.
+type GigDetailResponse struct {
+	Gig
+	Venues  []LinkedVenueResponse  `json:"venues"`
+	Contacts []LinkedContactResponse `json:"contacts"`
+	Tracklists []TracklistResponse    `json:"tracklists"`
+}
+
+// LinkedVenueResponse represents a venue linked to a gig.
+type LinkedVenueResponse struct {
+	Venue   VenueResponse `json:"venue"`
+	IsPrimary bool          `json:"is_primary"`
+}
+
+// VenueResponse represents a venue in the API response.
+type VenueResponse struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+// LinkedContactResponse represents a contact linked to a gig.
+type LinkedContactResponse struct {
+	Contact ContactResponse `json:"contact"`
+	Role    string          `json:"role"`
+}
+
+// ContactResponse represents a contact in the API response.
+type ContactResponse struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+// TracklistResponse represents a tracklist in the API response.
+type TracklistResponse struct {
+	ID   uuid.UUID `json:"id"`
+	Title string    `json:"title"`
 }
 
 // Sentinel errors

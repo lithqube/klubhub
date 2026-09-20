@@ -3,6 +3,8 @@ import { TrendingUp, Download } from 'lucide-vue-next'
 
 useHead({ title: 'Finance — KlubHub DJ' })
 
+const isDevOrStaging = import.meta.env.DEV || import.meta.env.MODE === 'staging'
+
 // Mock finance data (future phases will wire to API)
 const stats = {
   mtd: '€3,400',
@@ -40,14 +42,18 @@ const invoices = [
 
 <template>
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-
     <!-- Page header -->
     <div class="page-header">
       <div>
         <div class="page-title">FINANCE</div>
         <div class="page-sub">EARNINGS · INVOICES · TRANSACTIONS</div>
       </div>
-      <button class="btn-hud btn-hud-ghost" style="padding:0 14px;">
+      <button 
+        class="btn-hud btn-hud-ghost" 
+        style="padding:0 14px;"
+        :disabled="true"
+        title="Coming soon - Phase 5"
+      >
         <Download style="width:12px;height:12px;" aria-hidden="true" />
         EXPORT CSV
       </button>
@@ -55,112 +61,140 @@ const invoices = [
 
     <!-- Scrollable body -->
     <div class="page-body">
-
-      <!-- Stats row -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;" class="stats-grid">
-        <div class="glass accent-bar-ready" style="padding:12px 14px;">
-          <div class="section-lbl" style="margin-bottom:4px;">EARNED — MAR</div>
-          <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-primary);letter-spacing:-.02em;text-shadow:0 0 30px rgba(150,248,255,.2);">{{ stats.mtd }}</div>
+      <!-- Production: honest empty state -->
+      <div v-if="!isDevOrStaging" class="glass hud-card" style="padding:32px 24px;text-align:center;">
+        <TrendingUp style="width:48px;height:48px;color:var(--color-tertiary);margin:0 auto 16px;" aria-hidden="true" />
+        <div style="font-family:var(--font-command);font-size:18px;font-weight:600;color:var(--color-on-surface);margin-bottom:8px;">
+          PHASE 5 — NOT YET WIRED
         </div>
-        <div class="glass accent-bar-draft" style="padding:12px 14px;">
-          <div class="section-lbl" style="margin-bottom:4px;">PENDING</div>
-          <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-secondary);letter-spacing:-.02em;">{{ stats.pending }}</div>
-          <div class="spost-meta" style="margin-top:3px;">
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            PAYOUT {{ stats.nextPayout }}
-          </div>
+        <div style="font-family:var(--font-data);font-size:13px;color:var(--color-on-surface-variant);max-width:400px;margin:0 auto 24px;">
+          The finance module (invoicing, payments, transaction tracking, CSV export) is scheduled for Phase 5. 
+          No data is available until the backend is implemented.
         </div>
-        <div class="glass" style="padding:12px 14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <div class="section-lbl">YTD TOTAL</div>
-            <TrendingUp style="width:12px;height:12px;color:var(--color-tertiary);opacity:.5;" />
-          </div>
-          <div style="font-family:var(--font-command);font-size:18px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;">{{ stats.ytd }}</div>
+        <div style="font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);">
+          This page will be replaced when the finance module ships.
         </div>
       </div>
 
-      <!-- 2-col layout: chart + transactions -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" class="finance-grid">
+      <!-- Dev/Staging: labelled mock preview -->
+      <div v-else>
+        <div class="glass accent-bar-ready" style="margin:0 20px 14px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px dashed rgba(150,248,255,.4);">
+          <span class="font-terminal tracking-terminal text-primary" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
+            ⚠ DEMO DATA — FINANCE NOT YET WIRED
+          </span>
+          <span class="font-terminal tracking-terminal text-primary" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;opacity:.7;">
+            This preview will not appear in production
+          </span>
+        </div>
 
-        <!-- Monthly earnings chart -->
-        <div>
-          <div class="section-lbl" style="margin-bottom:8px;">MONTHLY EARNINGS</div>
-          <div class="glass hud-card" style="padding:16px 14px;">
-            <div class="bar-chart" style="margin-bottom:8px;">
-              <div
-                v-for="bar in barData"
-                :key="bar.label"
-                class="bar-col"
-              >
+        <!-- Stats row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;" class="stats-grid">
+          <div class="glass accent-bar-ready" style="padding:12px 14px;">
+            <div class="section-lbl" style="margin-bottom:4px;">EARNED — MAR</div>
+            <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-primary);letter-spacing:-.02em;text-shadow:0 0 30px rgba(150,248,255,.2);">{{ stats.mtd }}</div>
+          </div>
+          <div class="glass accent-bar-draft" style="padding:12px 14px;">
+            <div class="section-lbl" style="margin-bottom:4px;">PENDING</div>
+            <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-secondary);letter-spacing:-.02em;">{{ stats.pending }}</div>
+            <div class="spost-meta" style="margin-top:3px;">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              PAYOUT {{ stats.nextPayout }}
+            </div>
+          </div>
+          <div class="glass" style="padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <div class="section-lbl">YTD TOTAL</div>
+              <TrendingUp style="width:12px;height:12px;color:var(--color-tertiary);opacity:.5;" />
+            </div>
+            <div style="font-family:var(--font-command);font-size:18px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;">{{ stats.ytd }}</div>
+          </div>
+        </div>
+
+        <!-- 2-col layout: chart + transactions -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" class="finance-grid">
+          <!-- Monthly earnings chart -->
+          <div>
+            <div class="section-lbl" style="margin-bottom:8px;">MONTHLY EARNINGS <span class="font-terminal tracking-terminal text-primary" style="font-size:7px;letter-spacing:.04em;text-transform:uppercase;">(MOCK)</span></div>
+            <div class="glass hud-card" style="padding:16px 14px;">
+              <div class="bar-chart" style="margin-bottom:8px;">
                 <div
-                  class="bar"
-                  :style="{ height: bar.value + '%' }"
-                />
-                <div class="bar-lbl">{{ bar.label }}</div>
+                  v-for="bar in barData"
+                  :key="bar.label"
+                  class="bar-col"
+                >
+                  <div
+                    class="bar"
+                    :style="{ height: bar.value + '%' }"
+                  />
+                  <div class="bar-lbl">{{ bar.label }}</div>
+                </div>
+              </div>
+              <div class="prog-track">
+                <div class="prog-fill" style="width:68%;" />
+              </div>
+              <div class="spost-meta" style="margin-top:5px;">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                68% OF MONTHLY TARGET
               </div>
             </div>
-            <div class="prog-track">
-              <div class="prog-fill" style="width:68%;" />
-            </div>
-            <div class="spost-meta" style="margin-top:5px;">
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              68% OF MONTHLY TARGET
+          </div>
+
+          <!-- Recent transactions -->
+          <div>
+            <div class="section-lbl" style="margin-bottom:8px;">RECENT TRANSACTIONS <span class="font-terminal tracking-terminal text-primary" style="font-size:7px;letter-spacing:.04em;text-transform:uppercase;">(MOCK)</span></div>
+            <div class="glass" style="overflow:hidden;">
+              <div
+                v-for="tx in transactions"
+                :key="tx.id"
+                class="tx-row"
+                :class="tx.accentClass"
+              >
+                <div class="tx-info">
+                  <div class="tx-title">{{ tx.title }}</div>
+                  <div class="tx-meta">{{ tx.date }}</div>
+                </div>
+                <div
+                  class="tx-amount"
+                  :style="tx.type === 'income' ? 'color:var(--color-primary)' : 'color:var(--color-error)'"
+                >
+                  {{ tx.amount }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Recent transactions -->
+        <!-- Invoices -->
         <div>
-          <div class="section-lbl" style="margin-bottom:8px;">RECENT TRANSACTIONS</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div class="section-lbl">INVOICES <span class="font-terminal tracking-terminal text-primary" style="font-size:7px;letter-spacing:.04em;text-transform:uppercase;">(MOCK)</span></div>
+            <button 
+              class="btn-hud btn-hud-cta btn-hud-xs" 
+              style="padding:0 10px;"
+              :disabled="true"
+              title="Coming soon - Phase 5"
+            >+ NEW INVOICE</button>
+          </div>
           <div class="glass" style="overflow:hidden;">
             <div
-              v-for="tx in transactions"
-              :key="tx.id"
+              v-for="inv in invoices"
+              :key="inv.num"
               class="tx-row"
-              :class="tx.accentClass"
             >
-              <div class="tx-info">
-                <div class="tx-title">{{ tx.title }}</div>
-                <div class="tx-meta">{{ tx.date }}</div>
+              <div style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);width:80px;flex-shrink:0;">
+                {{ inv.num }}
               </div>
-              <div
-                class="tx-amount"
-                :style="tx.type === 'income' ? 'color:var(--color-primary)' : 'color:var(--color-error)'"
-              >
-                {{ tx.amount }}
+              <div style="flex:1;font-family:var(--font-command);font-size:11px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">
+                {{ inv.client }}
               </div>
+              <div style="font-family:var(--font-command);font-size:13px;font-weight:700;letter-spacing:-.02em;flex-shrink:0;color:var(--color-on-surface);">
+                {{ inv.amount }}
+              </div>
+              <span class="badge-hud" :class="inv.badgeClass">{{ inv.badgeLabel }}</span>
             </div>
           </div>
         </div>
-
       </div>
-
-      <!-- Invoices -->
-      <div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div class="section-lbl">INVOICES</div>
-          <button class="btn-hud btn-hud-cta btn-hud-xs" style="padding:0 10px;">+ NEW INVOICE</button>
-        </div>
-        <div class="glass" style="overflow:hidden;">
-          <div
-            v-for="inv in invoices"
-            :key="inv.num"
-            class="tx-row"
-          >
-            <div style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);width:80px;flex-shrink:0;">
-              {{ inv.num }}
-            </div>
-            <div style="flex:1;font-family:var(--font-command);font-size:11px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">
-              {{ inv.client }}
-            </div>
-            <div style="font-family:var(--font-command);font-size:13px;font-weight:700;letter-spacing:-.02em;flex-shrink:0;color:var(--color-on-surface);">
-              {{ inv.amount }}
-            </div>
-            <span class="badge-hud" :class="inv.badgeClass">{{ inv.badgeLabel }}</span>
-          </div>
-        </div>
-      </div>
-
     </div>
   </div>
 </template>

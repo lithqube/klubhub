@@ -4,9 +4,11 @@ import { useSocialStore } from '../social';
 import type { ScheduledPost, SocialAccount } from '../../types/social';
 
 // Mock useUiStore
+const mockShowError = vi.fn();
+
 vi.mock('../ui', () => ({
   useUiStore: () => ({
-    showError: vi.fn(),
+    showError: mockShowError,
     showSuccess: vi.fn(),
   }),
 }));
@@ -36,6 +38,33 @@ const mockAccount: SocialAccount = {
   status: 'connected',
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
+};
+
+const rawPost = {
+  id: 'post-1',
+  account_id: 'acc-1',
+  status: 'scheduled',
+  post_type: 'feed',
+  caption: 'Test caption',
+  image_minio_path: 'tracklists/img.png',
+  scheduled_at_utc: '2026-10-24T21:45:00Z',
+  timezone_name: 'Europe/Berlin',
+  retry_count: 0,
+  next_retry_at: null,
+  last_error: '',
+  created_at: '2026-10-01T00:00:00Z',
+  updated_at: '2026-10-01T00:00:00Z',
+};
+
+const rawAccount = {
+  id: 'acc-1',
+  platform: 'instagram',
+  ig_user_id: '12345',
+  account_name: 'dj_techno',
+  token_expiry: '2027-01-01T00:00:00Z',
+  status: 'connected',
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
 };
 
 describe('useSocialStore', () => {
@@ -78,7 +107,7 @@ describe('useSocialStore', () => {
     it('populates posts ref from API response', async () => {
       const store = useSocialStore();
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue({ data: [mockPost] });
+      global.$fetch = vi.fn().mockResolvedValue({ data: [rawPost] });
       await store.loadPosts();
       expect(store.posts).toEqual([mockPost]);
     });
@@ -110,7 +139,7 @@ describe('useSocialStore', () => {
     it('populates account ref from API response', async () => {
       const store = useSocialStore();
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue({ data: mockAccount });
+      global.$fetch = vi.fn().mockResolvedValue({ data: rawAccount });
       await store.loadAccount();
       expect(store.account).toEqual(mockAccount);
     });
@@ -129,7 +158,8 @@ describe('useSocialStore', () => {
       const store = useSocialStore();
       store.posts = [mockPost];
       const mockFetch = vi.fn()
-        .mockResolvedValueOnce({ data: { ...mockPost, status: 'scheduled' } });
+        .mockResolvedValueOnce({ status: 'retrying' })
+        .mockResolvedValueOnce({ data: [rawPost] });
       // @ts-expect-error - mocking global $fetch
       global.$fetch = mockFetch;
       await store.retryPost('post-1');
@@ -142,9 +172,12 @@ describe('useSocialStore', () => {
       store.posts = [failedPost];
       const retriedPost = { ...mockPost, status: 'scheduled' as const };
       // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockResolvedValue({ data: retriedPost });
+      global.$fetch = vi.fn()
+        .mockResolvedValueOnce({ status: 'retrying' })
+        .mockResolvedValueOnce({ data: [{ ...rawPost, status: retriedPost.status }] });
       await store.retryPost('post-1');
       expect(store.posts[0].status).toBe('scheduled');
+      expect(global.$fetch).toHaveBeenLastCalledWith('/api/v1/social/posts');
     });
   });
 
@@ -186,7 +219,7 @@ describe('useSocialStore', () => {
   });
 
   describe('createPost()', () => {
-    it('builds FormData with imageFile when file provided', async () => {
+    it('builds FormData with the exact snake_case handler field names', async () => {
       const store = useSocialStore();
       const mockFetch = vi.fn().mockResolvedValue({ data: mockPost });
       // @ts-expect-error - mocking global $fetch
@@ -200,6 +233,8 @@ describe('useSocialStore', () => {
         caption: 'Test',
         scheduledAt: '2026-10-24T23:45',
         timezoneName: 'Europe/Berlin',
+        accountId: 'acc-1',
+        imageId: 'existing-key',
         imageFile: file,
       });
 
@@ -209,7 +244,24 @@ describe('useSocialStore', () => {
       }));
 
       const formData = mockFetch.mock.calls[0][1].body as FormData;
-      expect(formData.get('imageFile')).toBe(file);
+      expect([...formData.keys()]).toEqual([
+        'post_type',
+        'caption',
+        'scheduled_at',
+        'timezone_name',
+        'image_id',
+        'image_file',
+        'account_id',
+      ]);
+      expect(formData.get('post_type')).toBe('feed');
+      expect(formData.get('caption')).toBe('Test');
+      expect(formData.get('scheduled_at')).toBe('2026-10-24T23:45');
+      expect(formData.get('timezone_name')).toBe('Europe/Berlin');
+      expect(formData.get('image_id')).toBe('existing-key');
+      expect(formData.get('image_file')).toBe(file);
+      expect(formData.get('account_id')).toBe('acc-1');
+      expect(formData.get('postType')).toBeNull();
+      expect(formData.get('imageFile')).toBeNull();
     });
 
     it('refreshes posts after creating post (calls GET /api/v1/social/posts)', async () => {
@@ -228,6 +280,21 @@ describe('useSocialStore', () => {
       // Should have been called twice: POST then GET
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch).toHaveBeenLastCalledWith('/api/v1/social/posts');
+    });
+
+    it('shows the error and rejects when creation fails', async () => {
+      const store = useSocialStore();
+      const failure = new Error('upload failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      await expect(store.createPost({
+        postType: 'feed',
+        caption: 'Test',
+        scheduledAt: '2026-10-24T23:45',
+        timezoneName: 'Europe/Berlin',
+      })).rejects.toBe(failure);
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
     });
   });
 });

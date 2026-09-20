@@ -47,6 +47,9 @@ func (stubServiceIface) GenerateCalendar(context.Context, CalendarConfig) (strin
 func (stubServiceIface) GenerateBookingPDF(context.Context, uuid.UUID, string) ([]byte, string, error) {
 	return nil, "", nil
 }
+func (stubServiceIface) GetGigDetail(context.Context, uuid.UUID) (*GigDetailResponse, error) {
+	return nil, nil
+}
 
 func newHandlerWithSecret(t *testing.T) *Handler {
 	t.Helper()

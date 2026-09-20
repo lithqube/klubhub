@@ -2,14 +2,14 @@ export interface Tracklist {
   id: string;
   title: string;
   sourceFormat: string;
-  rawFilePath: string | null;
+  rawFilePath: string;
   preset: string;
   visibleFields: string[];
   bgMode: 'solid' | 'upload' | 'mosaic';
-  bgValue: string | null;
+  bgValue: string;
   maxTracks: number;
-  trackRangeStart: number | null;
-  trackRangeEnd: number | null;
+  trackRangeStart: number;
+  trackRangeEnd: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -19,16 +19,17 @@ export interface Track {
   tracklistId: string;
   position: number;
   title: string;
-  artist: string | null;
-  album: string | null;
-  genre: string | null;
-  bpm: number | null;
-  rating: number | null;
-  durationSecs: number | null;
-  musicalKey: string | null;
-  dateAdded: string | null;
+  artist: string;
+  album: string;
+  genre: string;
+  bpm: number;
+  rating: number;
+  durationSecs: number;
+  musicalKey: string;
+  dateAdded: string;
   artworkStatus: 'pending' | 'fetched' | 'placeholder' | 'manual';
-  artworkUrl: string | null;
+  artworkUrl: string;
+  artworkSource: string;
 }
 
 export interface ParseWarning {

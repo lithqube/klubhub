@@ -10,11 +10,34 @@ export const useSocialStore = defineStore('social', () => {
   const composePanelOpen = ref(false);
   const prefilledImageId = ref<string | null>(null);
 
+  // Helper to convert snake_case object keys to camelCase
+  function toCamelCase(str: string): string {
+    return str.replace(/(_\w)/g, (match) => match[1].toUpperCase());
+  }
+
+  function mapSocialAccount(raw: any): SocialAccount {
+    const mapped: any = {};
+    for (const [key, value] of Object.entries(raw)) {
+      const camelKey = toCamelCase(key);
+      mapped[camelKey] = value;
+    }
+    return mapped as SocialAccount;
+  }
+
+  function mapScheduledPost(raw: any): ScheduledPost {
+    const mapped: any = {};
+    for (const [key, value] of Object.entries(raw)) {
+      const camelKey = toCamelCase(key);
+      mapped[camelKey] = value;
+    }
+    return mapped as ScheduledPost;
+  }
+
   async function loadPosts(): Promise<void> {
     loading.value = true;
     try {
       const result = await $fetch<{ data: ScheduledPost[] }>('/api/v1/social/posts');
-      posts.value = result.data;
+      posts.value = result.data ? result.data.map(mapScheduledPost) : [];
     } catch (e) {
       useUiStore().showError(String(e));
     } finally {
@@ -25,25 +48,31 @@ export const useSocialStore = defineStore('social', () => {
   async function loadAccount(): Promise<void> {
     try {
       const result = await $fetch<{ data: SocialAccount | null }>('/api/v1/social/accounts');
-      account.value = result.data;
+      account.value = result.data ? mapSocialAccount(result.data) : null;
     } catch (e) {
       useUiStore().showError(String(e));
     }
   }
 
   async function createPost(req: CreatePostRequest): Promise<void> {
+    const formData = new FormData();
+    formData.append('post_type', req.postType);
+    formData.append('caption', req.caption);
+    formData.append('scheduled_at', req.scheduledAt);
+    formData.append('timezone_name', req.timezoneName);
+    if (req.imageId) {
+      formData.append('image_id', req.imageId);
+    }
+    if (req.imageFile) {
+      formData.append('image_file', req.imageFile);
+    }
+    // Add account_id: prefer request, then store
+    if (req.accountId) {
+      formData.append('account_id', req.accountId);
+    } else if (account.value?.id) {
+      formData.append('account_id', account.value.id);
+    }
     try {
-      const formData = new FormData();
-      formData.append('postType', req.postType);
-      formData.append('caption', req.caption);
-      formData.append('scheduledAt', req.scheduledAt);
-      formData.append('timezoneName', req.timezoneName);
-      if (req.imageId) {
-        formData.append('imageId', req.imageId);
-      }
-      if (req.imageFile) {
-        formData.append('imageFile', req.imageFile);
-      }
       await $fetch('/api/v1/social/posts', {
         method: 'POST',
         body: formData,
@@ -51,6 +80,7 @@ export const useSocialStore = defineStore('social', () => {
       await loadPosts();
     } catch (e) {
       useUiStore().showError(String(e));
+      throw e; // re-throw so caller knows it failed
     }
   }
 
@@ -62,7 +92,7 @@ export const useSocialStore = defineStore('social', () => {
       });
       const idx = posts.value.findIndex((p) => p.id === id);
       if (idx !== -1) {
-        posts.value[idx] = result.data;
+        posts.value[idx] = mapScheduledPost(result.data);
       }
     } catch (e) {
       useUiStore().showError(String(e));
@@ -80,31 +110,32 @@ export const useSocialStore = defineStore('social', () => {
 
   async function retryPost(id: string): Promise<void> {
     try {
-      const result = await $fetch<{ data: ScheduledPost }>(`/api/v1/social/posts/${id}/retry`, {
-        method: 'POST',
-      });
-      const idx = posts.value.findIndex((p) => p.id === id);
-      if (idx !== -1) {
-        posts.value[idx] = result.data;
-      }
+      await $fetch(`/api/v1/social/posts/${id}/retry`, { method: 'POST' });
+      await loadPosts();
     } catch (e) {
       useUiStore().showError(String(e));
     }
   }
 
-  async function downloadImage(id: string): Promise<void> {
+  async function downloadImage(id: string): Promise<Blob | null> {
     try {
       const blob = await $fetch<Blob>(`/api/v1/social/posts/${id}/image`, {
         responseType: 'blob',
       });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `social-post-${id}.jpg`;
-      a.click();
-      URL.revokeObjectURL(url);
+      return blob;
     } catch (e) {
       useUiStore().showError(String(e));
+      return null;
+    }
+  }
+
+  async function initiateOAuth(): Promise<string | null> {
+    try {
+      const result = await $fetch<{ url: string }>('/api/v1/social/auth/url');
+      return result.url ?? null;
+    } catch (e) {
+      useUiStore().showError(String(e));
+      return null;
     }
   }
 
@@ -140,6 +171,7 @@ export const useSocialStore = defineStore('social', () => {
     deletePost,
     retryPost,
     downloadImage,
+    initiateOAuth,
     disconnectAccount,
     openComposePanel,
     closeComposePanel,

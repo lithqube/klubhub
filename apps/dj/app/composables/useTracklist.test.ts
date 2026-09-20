@@ -6,12 +6,15 @@ vi.stubGlobal('$fetch', mockFetch);
 
 // Import after stubbing
 // NOTE: adjust import path if Nuxt auto-imports make direct import needed
-// import { uploadTracklist, pollArtworkStatus } from './useTracklist'
+import { uploadTracklist, listTracklists, getTracklist, updateTrack, uploadTrackArtwork } from './useTracklist';
+
+beforeEach(() => {
+  mockFetch.mockReset();
+  console.log('Before each: mockFetch call count:', mockFetch.mock.calls.length);
+});
 
 describe('useTracklist — uploadFile', () => {
-  beforeEach(() => {
-    mockFetch.mockReset();
-  });
+  const fakeFile = new File(['content'], 'test.txt', { type: 'text/plain' });
 
   it('sends a FormData with a "file" field to /api/v1/tracklists/upload', async () => {
     // Arrange
@@ -21,38 +24,113 @@ describe('useTracklist — uploadFile', () => {
       warnings: [],
     });
 
-    // Act — this will fail until useTracklist.ts is created
-    // const result = await uploadTracklist(fakeFile)
-    // TODO: uncomment once composable exists
+    // Act
+    const result = await uploadTracklist(fakeFile);
 
     // Assert $fetch was called with FormData containing a 'file' field
-    // expect(mockFetch).toHaveBeenCalledOnce()
-    // const [url, opts] = mockFetch.mock.calls[0]
-    // expect(url).toBe('/api/v1/tracklists/upload')
-    // expect(opts.method).toBe('POST')
-    // expect(opts.body).toBeInstanceOf(FormData)
-    // expect(opts.body.get('file')).toBe(fakeFile)
+    expect(mockFetch).toHaveBeenCalledOnce();
+    const call = mockFetch.mock.calls[0];
+    expect(call[0]).toBe('/api/v1/tracklists/upload');
+    expect(call[1].method).toBe('POST');
+    expect(call[1].body).toBeInstanceOf(FormData);
+    expect(call[1].body.get('file')).toBe(fakeFile);
 
-    // Wave 0: stub always passes — implementation will un-comment assertions
-    expect(true).toBe(true);
+    // Also check the result shape
+    expect(result).toEqual({
+      tracklist: { id: 'abc', title: 'test.txt' },
+      tracks: [],
+      warnings: [],
+    });
   });
 });
 
-describe('useTracklist — pollArtworkStatus', () => {
-  it('stops polling when AbortSignal is aborted', async () => {
-    // Arrange
-    const controller = new AbortController();
-    mockFetch.mockResolvedValue({
-      tracklist: { id: 'abc' },
-      tracks: [{ id: 't1', artworkStatus: 'pending', artworkUrl: null }],
+describe('useTracklist — listTracklists', () => {
+  it('returns a raw array of tracklists', async () => {
+    mockFetch.mockResolvedValueOnce([
+      { id: '1', title: 'List 1', sourceFormat: 'rekordbox', rawFilePath: '/tmp/1.txt', preset: 'story', visibleFields: ['title'], bgMode: 'solid', bgValue: '#000', maxTracks: 20, trackRangeStart: 1, trackRangeEnd: 10, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+      { id: '2', title: 'List 2', sourceFormat: 'serato', rawFilePath: '/tmp/2.txt', preset: 'club', visibleFields: ['artist'], bgMode: 'upload', bgValue: '#fff', maxTracks: 30, trackRangeStart: 5, trackRangeEnd: 15, createdAt: '2026-01-02T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' }
+    ]);
+
+    const result = await listTracklists();
+
+    const call = mockFetch.mock.calls[0];
+    expect(call[0]).toBe('/api/v1/tracklists');
+    // If there is a second argument, check its method; otherwise, it's a GET by default
+    if (call[1]) {
+      expect(call[1].method).toBe('GET');
+    }
+
+    expect(result).toEqual([
+      { id: '1', title: 'List 1', sourceFormat: 'rekordbox', rawFilePath: '/tmp/1.txt', preset: 'story', visibleFields: ['title'], bgMode: 'solid', bgValue: '#000', maxTracks: 20, trackRangeStart: 1, trackRangeEnd: 10, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+      { id: '2', title: 'List 2', sourceFormat: 'serato', rawFilePath: '/tmp/2.txt', preset: 'club', visibleFields: ['artist'], bgMode: 'upload', bgValue: '#fff', maxTracks: 30, trackRangeStart: 5, trackRangeEnd: 15, createdAt: '2026-01-02T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' }
+    ]);
+  });
+});
+
+describe('useTracklist — getTracklist', () => {
+  it('returns an object with tracklist and tracks', async () => {
+    mockFetch.mockResolvedValueOnce({
+      tracklist: { id: '1', title: 'List 1', sourceFormat: 'rekordbox', rawFilePath: '/tmp/1.txt', preset: 'story', visibleFields: ['title'], bgMode: 'solid', bgValue: '#000', maxTracks: 20, trackRangeStart: 1, trackRangeEnd: 10, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+      tracks: [{ id: 't1', tracklistId: '1', position: 1, title: 'Track 1', artist: 'Artist', album: 'Album', genre: 'Genre', bpm: 120, rating: 5, durationSecs: 180, musicalKey: '8A', dateAdded: '2026-01-01T00:00:00Z', artworkStatus: 'fetched', artworkUrl: 'http://example.com/art.jpg', artworkSource: 'spotify' }]
     });
 
-    // Act — stub: abort immediately
-    controller.abort();
+    const result = await getTracklist('1');
 
-    // Assert: after abort, onUpdate should not be called repeatedly
-    // Wave 0: stub always passes
-    expect(controller.signal.aborted).toBe(true);
-    expect(true).toBe(true);
+    const call = mockFetch.mock.calls[0];
+    expect(call[0]).toBe('/api/v1/tracklists/1');
+    // If there is a second argument, check its method; otherwise, it's a GET by default
+    if (call[1]) {
+      expect(call[1].method).toBe('GET');
+    }
+
+    expect(result).toEqual({
+      tracklist: { id: '1', title: 'List 1', sourceFormat: 'rekordbox', rawFilePath: '/tmp/1.txt', preset: 'story', visibleFields: ['title'], bgMode: 'solid', bgValue: '#000', maxTracks: 20, trackRangeStart: 1, trackRangeEnd: 10, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+      tracks: [{ id: 't1', tracklistId: '1', position: 1, title: 'Track 1', artist: 'Artist', album: 'Album', genre: 'Genre', bpm: 120, rating: 5, durationSecs: 180, musicalKey: '8A', dateAdded: '2026-01-01T00:00:00Z', artworkStatus: 'fetched', artworkUrl: 'http://example.com/art.jpg', artworkSource: 'spotify' }]
+    });
+  });
+});
+
+describe('useTracklist — updateTrack', () => {
+  it('sends a PUT request with the fields and returns the updated track', async () => {
+    const updatedTrack = { id: 't1', tracklistId: '1', position: 1, title: 'Updated Title', artist: 'Artist', album: 'Album', genre: 'Genre', bpm: 120, rating: 5, durationSecs: 180, musicalKey: '8A', dateAdded: '2026-01-01T00:00:00Z', artworkStatus: 'fetched', artworkUrl: 'http://example.com/art.jpg', artworkSource: 'spotify' };
+    mockFetch.mockResolvedValueOnce(updatedTrack);
+
+    const result = await updateTrack('1', 't1', { title: 'Updated Title' });
+
+    expect(mockFetch).toHaveBeenCalledOnce();
+    const call = mockFetch.mock.calls[0];
+    expect(call[0]).toBe('/api/v1/tracklists/1/tracks/t1');
+    expect(call[1].method).toBe('PUT');
+    expect(call[1].body).toEqual({ title: 'Updated Title' });
+
+    expect(result).toEqual(updatedTrack);
+  });
+});
+
+describe('useTracklist — uploadTrackArtwork', () => {
+  it('sends a PUT request with FormData and returns the artwork info', async () => {
+    const fakeFile = new File(['content'], 'art.jpg', { type: 'image/jpeg' });
+    mockFetch.mockResolvedValueOnce({
+      track: {
+        artworkUrl: 'http://example.com/art.jpg',
+        artworkStatus: 'manual',
+        artworkSource: 'manual'
+      }
+    });
+
+    const result = await uploadTrackArtwork('1', 't1', fakeFile);
+
+    expect(mockFetch).toHaveBeenCalledOnce();
+    const call = mockFetch.mock.calls[0];
+    expect(call[0]).toBe('/api/v1/tracklists/1/tracks/t1/artwork');
+    expect(call[1].method).toBe('PUT');
+    expect(call[1].body).toBeInstanceOf(FormData);
+    expect(call[1].body.get('file')).toBe(fakeFile);
+
+    expect(result).toEqual({
+      artworkUrl: 'http://example.com/art.jpg',
+      artworkStatus: 'manual',
+      artworkSource: 'manual'
+    });
   });
 });

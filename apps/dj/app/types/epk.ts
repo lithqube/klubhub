@@ -22,6 +22,11 @@ export interface EPKContent {
 export interface EPKExport {
   id: string
   minioPath: string
+  createdAt: string
+}
+
+export interface EPKExportCreateResult {
+  id: string
   downloadUrl: string
   createdAt: string
 }

@@ -22,6 +22,35 @@ export interface Gig {
   created_at: string
   updated_at: string
   deleted_at: string | null
+  // Linked relationships (populated by GET /{id}/detail)
+  linked_venues?: LinkedVenue[]
+  linked_contacts?: LinkedContact[]
+  linked_tracklists?: LinkedTracklist[]
+}
+
+export interface LinkedVenue {
+  venue: VenueResponse
+  is_primary: boolean
+}
+
+export interface VenueResponse {
+  id: string
+  name: string
+}
+
+export interface LinkedContact {
+  contact: ContactResponse
+  role: string
+}
+
+export interface ContactResponse {
+  id: string
+  name: string
+}
+
+export interface LinkedTracklist {
+  id: string
+  title: string
 }
 
 export interface GigCreate {

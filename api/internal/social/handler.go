@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/klubhub/dj/api/internal/platform/storage"
+	"github.com/minio/minio-go/v7"
 )
 
 // serviceIface is the contract consumed by the HTTP handler.
@@ -33,12 +36,13 @@ type serviceIface interface {
 
 // Handler handles HTTP requests for the social package.
 type Handler struct {
-	svc serviceIface
+	svc     serviceIface
+	storage *storage.Client
 }
 
-// NewHandler creates a Handler with the given service.
-func NewHandler(svc serviceIface) *Handler {
-	return &Handler{svc: svc}
+// NewHandler creates a Handler with the given service and storage client.
+func NewHandler(svc serviceIface, storage *storage.Client) *Handler {
+	return &Handler{svc: svc, storage: storage}
 }
 
 // Routes returns an http.Handler with all social routes mounted.
@@ -58,6 +62,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Put("/posts/{id}", h.handleEditPost)
 	r.Delete("/posts/{id}", h.handleDeletePost)
 	r.Post("/posts/{id}/retry", h.handleRetryPost)
+	r.Get("/posts/{id}/image", h.handleGetPostImage)
 
 	return r
 }
@@ -359,6 +364,56 @@ func (h *Handler) handleRetryPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]string{"status": "retrying"})
+}
+
+// handleGetPostImage streams the post's image from Garage S3.
+func (h *Handler) handleGetPostImage(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid post ID")
+		return
+	}
+
+	post, err := h.svc.GetPost(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, err.Error())
+		} else {
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
+		}
+		return
+	}
+
+	if post.ImageMinioPath == "" {
+		h.writeError(w, http.StatusNotFound, "no image associated with this post")
+		return
+	}
+
+	if h.storage == nil {
+		h.writeError(w, http.StatusInternalServerError, "storage client not configured")
+		return
+	}
+
+	ctx := r.Context()
+	obj, err := h.storage.GetObject(ctx, h.storage.Bucket(), post.ImageMinioPath, minio.GetObjectOptions{})
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
+		return
+	}
+	defer obj.Close()
+
+	info, err := obj.Stat()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
+		return
+	}
+
+	w.Header().Set("Content-Type", info.ContentType)
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size))
+	// Cache for 1 hour since images are immutable once uploaded
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+
+	_, _ = io.Copy(w, obj)
 }
 
 // writeJSON writes a JSON response with the given status code.

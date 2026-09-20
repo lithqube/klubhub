@@ -44,20 +44,20 @@ func (h *Handler) handleGetContent(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusOK, contentToJSON(content))
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": contentToJSON(content)})
 }
 
 // handlePutContent accepts a partial JSON body and returns the updated EPKContent.
 func (h *Handler) handlePutContent(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		BioShort          *string          `json:"bio_short"`
-		BioLong           *string          `json:"bio_long"`
-		TechRider         *string          `json:"tech_rider"`
-		StagePlotPath     *string          `json:"stage_plot_path"`
-		GigHighlights     []string         `json:"gig_highlights"`
-		PressQuotes       []PressQuote     `json:"press_quotes"`
-		PhotoPaths        []string         `json:"photo_paths"`
-		SectionVisibility map[string]bool  `json:"section_visibility"`
+		BioShort          *string         `json:"bioShort"`
+		BioLong           *string         `json:"bioLong"`
+		TechRider         *string         `json:"techRider"`
+		StagePlotPath     *string         `json:"stagePlotPath"`
+		GigHighlights     []string        `json:"gigHighlights"`
+		PressQuotes       []PressQuote    `json:"pressQuotes"`
+		PhotoPaths        []string        `json:"photoPaths"`
+		SectionVisibility map[string]bool `json:"sectionVisibility"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -80,7 +80,7 @@ func (h *Handler) handlePutContent(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusOK, contentToJSON(content))
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": contentToJSON(content)})
 }
 
 // handlePostPhoto accepts multipart/form-data with a "photo" field.
@@ -146,7 +146,7 @@ func (h *Handler) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handlePostStagePlot accepts multipart/form-data with an "image" field.
+// handlePostStagePlot handles multipart/form-data with a "stagePlot" field.
 func (h *Handler) handlePostStagePlot(w http.ResponseWriter, r *http.Request) {
 	// Same transport cap as photos; prevents disk-spooling arbitrarily
 	// large multipart bodies before service validation.
@@ -156,9 +156,9 @@ func (h *Handler) handlePostStagePlot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, header, err := r.FormFile("image")
+	file, header, err := r.FormFile("stagePlot")
 	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "image field required")
+		h.writeError(w, http.StatusBadRequest, "stagePlot field required")
 		return
 	}
 	defer file.Close()
@@ -216,7 +216,7 @@ func (h *Handler) handleGetExports(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	h.writeJSON(w, http.StatusOK, resp)
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": resp})
 }
 
 // handleDeleteExport deletes an export record and MinIO object.
@@ -258,16 +258,16 @@ func contentToJSON(c *EPKContent) map[string]interface{} {
 		return nil
 	}
 	return map[string]interface{}{
-		"id":                 c.ID.String(),
-		"bio_short":          c.BioShort,
-		"bio_long":           c.BioLong,
-		"tech_rider":         c.TechRider,
-		"stage_plot_path":    c.StagePlotPath,
-		"gig_highlights":     c.GigHighlights,
-		"press_quotes":       c.PressQuotes,
-		"photo_paths":        c.PhotoPaths,
-		"section_visibility": c.SectionVisibility,
-		"created_at":         c.CreatedAt.Format(time.RFC3339),
-		"updated_at":         c.UpdatedAt.Format(time.RFC3339),
+		"id":                c.ID.String(),
+		"bioShort":          c.BioShort,
+		"bioLong":           c.BioLong,
+		"techRider":         c.TechRider,
+		"stagePlotPath":     c.StagePlotPath,
+		"gigHighlights":     c.GigHighlights,
+		"pressQuotes":       c.PressQuotes,
+		"photoPaths":        c.PhotoPaths,
+		"sectionVisibility": c.SectionVisibility,
+		"createdAt":         c.CreatedAt.Format(time.RFC3339),
+		"updatedAt":         c.UpdatedAt.Format(time.RFC3339),
 	}
 }

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { EPKContent, EPKExport, PressQuote, SectionVisibility, UpdateEPKContentRequest } from '../types/epk';
+import type { EPKContent, EPKExport, EPKExportCreateResult, PressQuote, SectionVisibility, UpdateEPKContentRequest } from '../types/epk';
 
 export const useEpkStore = defineStore('epk', () => {
   // State
@@ -22,7 +22,8 @@ export const useEpkStore = defineStore('epk', () => {
 
   // Actions
   async function loadFromApi(): Promise<void> {
-    const data = await $fetch<EPKContent>('/api/v1/epk/content');
+    const result = await $fetch<{ data: EPKContent }>('/api/v1/epk/content');
+    const data = result.data;
     id.value = data.id;
     bioShort.value = data.bioShort;
     bioLong.value = data.bioLong;
@@ -37,10 +38,11 @@ export const useEpkStore = defineStore('epk', () => {
   async function updateContent(patch: UpdateEPKContentRequest): Promise<void> {
     saveStatus.value = 'saving';
     try {
-      const data = await $fetch<EPKContent>('/api/v1/epk/content', {
+      const result = await $fetch<{ data: EPKContent }>('/api/v1/epk/content', {
         method: 'PUT',
         body: patch,
       });
+      const data = result.data;
       bioShort.value = data.bioShort;
       bioLong.value = data.bioLong;
       techRider.value = data.techRider;
@@ -50,8 +52,9 @@ export const useEpkStore = defineStore('epk', () => {
       photoPaths.value = data.photoPaths;
       sectionVisibility.value = data.sectionVisibility;
       saveStatus.value = 'saved';
-    } catch {
+    } catch (error) {
       saveStatus.value = 'error';
+      throw error;
     }
   }
 
@@ -82,16 +85,15 @@ export const useEpkStore = defineStore('epk', () => {
     stagePlotPath.value = result.path;
   }
 
-  async function generateExport(): Promise<void> {
-    const result = await $fetch<EPKExport>('/api/v1/epk/export', {
+  async function generateExport(): Promise<EPKExportCreateResult> {
+    return await $fetch<EPKExportCreateResult>('/api/v1/epk/export', {
       method: 'POST',
     });
-    exports.value = [result, ...exports.value];
   }
 
   async function loadExports(): Promise<void> {
-    const result = await $fetch<EPKExport[]>('/api/v1/epk/exports');
-    exports.value = result;
+    const result = await $fetch<{ data: EPKExport[] }>('/api/v1/epk/exports');
+    exports.value = result.data;
   }
 
   async function deleteExport(id: string): Promise<void> {
