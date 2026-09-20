@@ -92,7 +92,7 @@ export const useSocialStore = defineStore('social', () => {
       });
       const idx = posts.value.findIndex((p) => p.id === id);
       if (idx !== -1) {
-        posts.value[idx] = result.data;
+        posts.value[idx] = mapScheduledPost(result.data);
       }
     } catch (e) {
       useUiStore().showError(String(e));
