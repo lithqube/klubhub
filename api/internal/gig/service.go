@@ -106,63 +106,83 @@ func (s *Service) GetGigDetail(ctx context.Context, id uuid.UUID) (*GigDetailRes
 		return nil, err
 	}
 
-	var venueResp *LinkedVenueResponse
-	if gig.GigReaderVenueID != nil {
-		venue, err := s.venueRepo.GetByID(ctx, *gig.GigReaderVenueID)
-		if err != nil {
+	// Get linked venues from gig_venues join table
+	var venues []LinkedVenueResponse
+	venueRows, err := s.repo.pool.Query(ctx, `
+		SELECT v.id, v.name, gv.is_primary
+		FROM venues v
+		JOIN gig_venues gv ON gv.venue_id = v.id
+		WHERE gv.gig_id = $1 AND v.deleted_at IS NULL
+		ORDER BY gv.is_primary DESC, v.name`,
+		id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer venueRows.Close()
+	for venueRows.Next() {
+		var v venue.Venue
+		var isPrimary bool
+		if err := venueRows.Scan(&v.ID, &v.Name, &isPrimary); err != nil {
 			return nil, err
 		}
-		venueResp = &LinkedVenueResponse{
+		venues = append(venues, LinkedVenueResponse{
 			Venue: VenueResponse{
-				ID:   venue.ID,
-				Name: venue.Name,
+				ID:   v.ID,
+				Name: v.Name,
 			},
-			IsPrimary: true, // Assuming the linked venue is primary for now
-		}
+			IsPrimary: isPrimary,
+		})
 	}
 
-	var contactResp *LinkedContactResponse
-	if gig.GigReaderContactID != nil {
-		contact, err := s.contactRepo.GetByID(ctx, *gig.GigReaderContactID)
-		if err != nil {
+	// Get linked contacts from gig_contacts join table
+	var contacts []LinkedContactResponse
+	contactRows, err := s.repo.pool.Query(ctx, `
+		SELECT c.id, c.name, gc.role
+		FROM contacts c
+		JOIN gig_contacts gc ON gc.contact_id = c.id
+		WHERE gc.gig_id = $1 AND c.deleted_at IS NULL
+		ORDER BY gc.role`,
+		id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer contactRows.Close()
+	for contactRows.Next() {
+		var c contact.Contact
+		var role string
+		if err := contactRows.Scan(&c.ID, &c.Name, &role); err != nil {
 			return nil, err
 		}
-		contactResp = &LinkedContactResponse{
+		contacts = append(contacts, LinkedContactResponse{
 			Contact: ContactResponse{
-				ID:   contact.ID,
-				Name: contact.Name,
+				ID:   c.ID,
+				Name: c.Name,
 			},
-			Role: "promoter", // Assuming the linked contact is promoter for now
-		}
+			Role: role,
+		})
 	}
 
+	// Get tracklists
 	tracklists, err := s.Tracklists(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	var tracklistResponses []TracklistResponse
+	// Initialize with capacity for empty array serialization
+	tracklistResponses := make([]TracklistResponse, 0, len(tracklists))
 	for _, tl := range tracklists {
 		tracklistResponses = append(tracklistResponses, TracklistResponse{
-			ID:   tl.ID,
+			ID:    tl.ID,
 			Title: tl.Title,
 		})
 	}
 
 	return &GigDetailResponse{
-		Gig:     *gig,
-		Venues:  func() []LinkedVenueResponse {
-			if venueResp != nil {
-				return []LinkedVenueResponse{*venueResp}
-			}
-			return []LinkedVenueResponse{}
-		}(),
-		Contacts: func() []LinkedContactResponse {
-			if contactResp != nil {
-				return []LinkedContactResponse{*contactResp}
-			}
-			return []LinkedContactResponse{}
-		}(),
+		Gig:        *gig,
+		Venues:     venues,
+		Contacts:   contacts,
 		Tracklists: tracklistResponses,
 	}, nil
 }

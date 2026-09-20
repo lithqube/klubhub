@@ -365,11 +365,15 @@ func (h *Handler) handleGetGigDetail(w http.ResponseWriter, r *http.Request) {
 
 	detail, err := h.svc.GetGigDetail(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, detail)
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": detail})
 }
 
 // ─── Response helpers ─────────────────────────────────────────────────────────
