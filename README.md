@@ -88,7 +88,7 @@ The API calls the host Nuxt server at `http://host.docker.internal:4200` for ima
 
 Setup defaults to `dev`, preserves existing credentials, creates private file secrets and Garage configuration under `.local/dev` or `.local/prod`, bootstraps Garage, and starts the selected stack. Development and production use separate Compose projects and volumes, but their default host ports overlap: stop one before starting the other, or configure distinct ports.
 
-**Publication caveat:** the production file defaults to `IMAGE_TAG=v1.0.0`. These local runtime fixes require a newly published image; that default does not mean the existing tag contains them. Anonymous requests for the existing v1.0.0 package returned 403. Confirm GHCR access and select a release containing the fixes before production use; see [container images](./docs/container-images.md).
+**Publication caveat:** the production file defaults to `IMAGE_TAG=v1.0.1`. This default does not mean the existing tag contains the fixes in `v1.0.1`; v1.0.1 must be published to GHCR before production pull succeeds. See [container images](./docs/container-images.md) for tag verification, and [release notes](./docs/release-notes/v1.0.1.md) for the operator follow-up steps (Plunk workflow rename, GHCR publish trigger).
 
 **Existing installation?** Do not start a new project over an old deployment without a migration plan. The old `klubhub-dj` project's volumes need explicit reuse or migration; see [safe upgrades](./docs/SELF-HOSTING.md#upgrades-and-existing-installations).
 

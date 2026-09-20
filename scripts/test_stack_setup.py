@@ -94,7 +94,7 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(dev["services"]["app"]["environment"]["NUXT_INTERNAL_URL"], "http://host.docker.internal:4200")
         self.assertNotIn("build", prod["services"]["app"])
         self.assertNotIn("ports", prod["services"]["db"])
-        self.assertEqual(prod["services"]["app"]["image"], "ghcr.io/lithqube/klubhub-dj-api:v1.0.0")
+        self.assertEqual(prod["services"]["app"]["image"], "ghcr.io/lithqube/klubhub-dj-api:v1.0.1")
         self.assertEqual(prod["services"]["app"]["environment"]["SERVE_FRONTEND"], "true")
         admin = [p for p in configs["debug"]["services"]["storage"]["ports"] if p["target"] == 3903]
         self.assertEqual(len(admin), 1)
