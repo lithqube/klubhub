@@ -152,6 +152,11 @@ function onBioInput(e: Event) {
 
         <div class="section-divider" />
 
+        <!-- RA Import -->
+        <EpkRaImportPanel />
+
+        <div class="section-divider" />
+
         <button class="btn-hud btn-hud-violet" style="width:100%;padding:0 14px;" @click="handleExportPdf">
           <Download style="width:12px;height:12px;" aria-hidden="true" />
           EXPORT PDF

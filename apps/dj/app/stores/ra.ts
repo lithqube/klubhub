@@ -1,0 +1,97 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import type { RAArtist, RAEVENT, RAImportResult, RAImportRequest } from '../types/ra'
+
+export const useRaStore = defineStore('ra', () => {
+  // State
+  const artist = ref<RAArtist | null>(null)
+  const events = ref<RAEVENT[]>([])
+  const importResult = ref<RAImportResult | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  // Actions
+  async function fetchArtist(slug: string): Promise<void> {
+    loading.value = true
+    error.value = null
+    try {
+      const result = await $fetch<{ data: RAArtist }>(`/api/v1/gigs/info/${slug}`)
+      artist.value = result.data
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch artist'
+      artist.value = null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchEvents(slug: string): Promise<void> {
+    loading.value = true
+    error.value = null
+    try {
+      // Fetch artist first to get the events
+      await fetchArtist(slug)
+      // For now, events will be fetched via the import endpoint
+      // The backend handles event fetching internally
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch events'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function importEvents(request: RAImportRequest): Promise<RAImportResult> {
+    loading.value = true
+    error.value = null
+    try {
+      const result = await $fetch<RAImportResult>('/api/v1/gigs/import-ra', {
+        method: 'POST',
+        body: request,
+      })
+      importResult.value = result
+      return result
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Import failed'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function importFromEpk(slug: string): Promise<void> {
+    loading.value = true
+    error.value = null
+    try {
+      const result = await $fetch<{ data: { data: RAArtist } }>(`/api/v1/epk/import-ra`, {
+        method: 'POST',
+        body: { artist_slug: slug },
+      })
+      artist.value = result.data.data
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'EPK import failed'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function clear() {
+    artist.value = null
+    events.value = []
+    importResult.value = null
+    error.value = null
+  }
+
+  return {
+    artist,
+    events,
+    importResult,
+    loading,
+    error,
+    fetchArtist,
+    fetchEvents,
+    importEvents,
+    importFromEpk,
+    clear,
+  }
+})
