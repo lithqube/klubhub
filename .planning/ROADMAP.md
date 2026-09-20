@@ -167,14 +167,51 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Status**: Not started
 **Plans**: TBD
 
-### Phase 4.8: Bandsintown Outbound Sync (INSERTED — optional)
+### Phase 4.8: Spotify Integration (INSERTED)
 
-**Goal**: When a gig is confirmed and a Bandsintown API key is configured, the event is automatically pushed to the DJ's Bandsintown artist page
+**Goal**: Import artist data from Spotify into EPK (profile images, albums, releases, top tracks) and use track audio features for tracklist image generation.
+
 **Depends on**: Phase 4
-**Requirements**: INT-01
+**Requirements**: SPOT-01 through SPOT-04, EPK-12, TRKL-31
+**Status**: Not started — DOCUMENTED FOR LATER
+**Plans**: 04.8-01-PLAN.md
+
+**Key deliverables:**
+- Spotify Web API Go client with OAuth (client credentials flow)
+- EPK import: artist images, genres, followers, external URLs, albums list, top tracks
+- Tracklist audio features: tempo, energy, danceability, valence, key, loudness for image generation
+- Image suggestion generation from audio features (tempo→color, energy→contrast, danceability→layout)
+- Frontend: EpKSpotifyImportPanel component, TracklistAudioFeatures component
+- Config: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET env vars
+
+**Notes:**
+- Spotify Web API has no artist biography (only available via Spotify for Artists dashboard)
+- Requires SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET env vars
+- Rate limit: 180,000 requests per 24 hours (client credentials flow)
+- Preview URLs are 30-second snippets, may not be available for all tracks
+
+### Phase 4.9: RA (Resident Advisor) Integration (INSERTED)
+
+**Goal**: Import artist data from RA into EPK (bio, social links) and import RA events as gig records.
+
+**Depends on**: Phase 4
+**Requirements**: RA-01 through RA-05, EPK-11, GIG-13
 **Status**: Not started
-**Plans**: TBD
-**Note**: Optional — defer to v1.x if Bandsintown API access is unavailable
+**Plans**: 04.9-01-PLAN.md
+
+**Key deliverables:**
+- RA GraphQL Go client (no auth required, ra.co/graphql)
+- RA cache to avoid re-fetching artist/events
+- EPK import from RA: artist bio, social links (Instagram, SoundCloud, Bandcamp, etc.)
+- Gig import from RA: create gig records from RA events with venue matching
+- Frontend: EpkRaImportPanel component, RaEventImport component
+- Use case: DJ enters RA artist slug → fetches profile → imports to EPK or creates gigs
+
+**Notes:**
+- RA has no official API — uses public GraphQL endpoint
+- Existing scrapers (github.com/djb-gt/resident-advisor-events-scraper) demonstrate queries
+- Our implementation replaces Bandsintown (Phase 4.8 in original roadmap) as the optional event sync feature
+- RA is the primary platform for electronic music — more relevant than Bandsintown for DJs
 
 ### Phase 5: Finance Tracker
 
@@ -231,7 +268,7 @@ After v1.0.0 release, SaaS migration work begins in a separate repository (`klub
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 → 4 → 4.5 → 4.8 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 → 4 → 4.5 → 4.8 → 4.9 → 5 → 6 → 7 → 8 → 9
 
 | Phase                            | Plans Complete | Status       | Completed  |
 | -------------------------------- | -------------- | ------------ | ---------- |
@@ -243,9 +280,10 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 | 2. Social Media Scheduler        | 7/7            | ✅ Complete  | 2026-03-22 |
 | 3. EPK / Press Kit Builder       | 7/7            | ✅ Complete  | 2026-03-23 |
 | 4. Gig Tracker                   | 4/5            | In Progress|            |
-| 4.5. Rider Templates             | 0/TBD          | Future       | —          |
-| 4.8. Bandsintown Sync (optional) | 0/TBD          | Future       | —          |
-| 5. Finance Tracker               | 0/TBD          | Future       | —          |
+|| 4.5. Rider Templates             | 0/TBD          | Future       | —          |
+|| 4.8. Spotify Integration (INSERTED) | 0/TBD       | Future       | —          |
+|| 4.9. RA Integration (INSERTED)    | 3/3            | ✅ Complete  | 2026-09-20 |
+|| 5. Finance Tracker               | 0/TBD          | Future       | —          |
 | 6. Release Planner               | 0/TBD          | Future       | —          |
 | 7. Tour Manager                  | 0/TBD          | Future       | —          |
 | 8. Unified Dashboard             | 0/TBD          | Future       | —          |

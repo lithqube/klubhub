@@ -7,6 +7,7 @@ import GigStatsCards from '../components/gig/GigStatsCards.vue'
 import GigListRow from '../components/gig/GigListRow.vue'
 import GigCalendarView from '../components/gig/GigCalendarView.vue'
 import GigFormDialog from '../components/gig/GigFormDialog.vue'
+import RaEventImport from '../components/gig/RaEventImport.vue'
 
 
 useHead({ title: 'Gigs — KlubHub DJ' })
@@ -105,6 +106,11 @@ function clearFilters() {
 
       <!-- Stats row -->
       <GigStatsCards />
+
+      <!-- RA Event Import Panel -->
+      <div style="margin-bottom:12px;">
+        <RaEventImport />
+      </div>
 
       <!-- View toggle + filters -->
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">

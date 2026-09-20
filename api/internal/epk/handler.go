@@ -9,16 +9,24 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/klubhub/dj/api/internal/ra"
 )
 
 // Handler handles HTTP requests for the EPK package.
 type Handler struct {
-	svc serviceIface
+	svc      serviceIface
+	raClient *ra.RAClient
 }
 
-// NewHandler creates a Handler backed by the given service.
-func NewHandler(svc serviceIface) *Handler {
-	return &Handler{svc: svc}
+// NewHandler creates a Handler backed by the given service and RA client.
+func NewHandler(svc serviceIface, raClient *ra.RAClient) *Handler {
+	if raClient == nil {
+		raClient = ra.NewRAClient()
+	}
+	return &Handler{
+		svc:      svc,
+		raClient: raClient,
+	}
 }
 
 // Routes returns an http.Handler with all EPK routes registered.
@@ -33,8 +41,55 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/export", h.handlePostExport)
 	r.Get("/exports", h.handleGetExports)
 	r.Delete("/exports/{id}", h.handleDeleteExport)
+	r.Post("/import-ra", h.HandleImportFromRA)
 
 	return r
+}
+
+// HandleImportFromRA handles POST /api/v1/epk/import-ra
+func (h *Handler) HandleImportFromRA(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ArtistSlug string `json:"artist_slug"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if body.ArtistSlug == "" {
+		h.writeError(w, http.StatusBadRequest, "artist_slug is required")
+		return
+	}
+
+		// Use the injected RA client (not a new instance, to preserve cache)
+		artist, err := h.raClient.GetArtist(r.Context(), body.ArtistSlug)
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "failed to fetch artist from RA: "+err.Error())
+			return
+		}
+
+	// Build result
+	result := RAImportResult{
+		Success:      true,
+		ArtistName:   artist.Name,
+		Biography:    artist.Biography.Blurb,
+		Instagram:    artist.Instagram,
+		Soundcloud:   artist.Soundcloud,
+		Bandcamp:     artist.Bandcamp,
+		Discogs:      artist.Discogs,
+		Website:      artist.Website,
+		Facebook:     artist.Facebook,
+		Twitter:      artist.Twitter,
+		Followers:    artist.Followers,
+		HeaderImage:  artist.HeaderImage,
+		ProfileImage: artist.ProfileImage,
+		NeedsUpdate:  true,
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": result,
+	})
 }
 
 // handleGetContent returns the singleton EPK content.
