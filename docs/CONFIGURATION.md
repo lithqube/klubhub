@@ -33,7 +33,7 @@ Production runs Go, Nuxt/Node, and Playwright in one supervised app container. P
 | `S3_REGION` | `europe-west-1` | Must match the Garage configuration. |
 | `S3_BUCKET` | `klubhub` | Bucket provisioned by setup. |
 | `CORS_ORIGIN` | Frontend origin for the selected mode | Match scheme, host, and port when changing frontend access. CORS is not authentication. |
-| `IMAGE_TAG` | `v1.0.0` | Production only. Select an accessible published release containing the desired fixes. |
+| `IMAGE_TAG` | `v1.0.1` | Production only. Select an accessible published release containing the desired fixes. |
 | `IMAGE_REPOSITORY` | `ghcr.io/lithqube/klubhub-dj-api` | Production app image repository. |
 
 For a remote browser, its `127.0.0.1` is not the server. Provide an explicitly reachable S3 endpoint and matching publication/proxy route. HTTPS frontend pages need HTTPS object URLs to avoid mixed content. Do not expose Garage admin/RPC as a way to fix object downloads.

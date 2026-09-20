@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-KH_VER="${KH_VER:-v1.0.0}"
+KH_VER="${KH_VER:-v1.0.1}"
 KH_DIR="${KH_DIR:-./klubhub-release-check}"
 KH_SECRETS="${KH_SECRETS:-$KH_DIR/secrets}"
 KH_LOGS="${KH_LOGS:-$KH_DIR/logs}"

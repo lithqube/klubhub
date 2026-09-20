@@ -1,6 +1,6 @@
 {
   "name": "@dev/source",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "scripts": {
     "test:api": "cd tests/bruno && pnpm dlx @usebruno/cli@4.1.0 run --env local",

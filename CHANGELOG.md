@@ -4,6 +4,88 @@ All notable changes to KlubHub DJ are documented in this file. The
 format follows [Keep a Changelog](https://keepachangelog.com/) and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-09-19
+
+### Runtime, CI, and onboarding fixes since v1.0.0
+
+This release hardens the runtime contract, the CI pipeline, and the
+newsletter onboarding flow. No breaking changes. The Compose runtime,
+GHCR image name (`ghcr.io/lithqube/klubhub-dj-api`), and the static site
+contract are unchanged.
+
+#### Fixed
+
+- **Compose runtime**: renamed the service `api` → `app` and rewired
+  the dev/prod contract. The dev compose binds `0.0.0.0:8080` inside
+  the container and maps to host `127.0.0.1:8080:8080`; the prod
+  compose pulls the per-product image `ghcr.io/lithqube/klubhub-dj-api`
+  and serves the frontend at `/` (`SERVE_FRONTEND=true`). Dev and prod
+  use distinct compose project names, distinct volumes, and no fixed
+  `container_name` so both can coexist on the same host.
+  (PR #5, commit `3842419`)
+- **GitHub Pages build**: the `build` job now binds to the
+  `github-pages` environment so it can read `PLUNK_PUBLIC_KEY` from
+  environment secrets. PR builds skip the secret and use the inline
+  placeholder `pk_ci_pr_preview_only_do_not_subscribe`. Fixes the
+  empty-`PLUNK_PUBLIC_KEY` failure observed on the post-merge workflow
+  run. (PR #9, commit `e40ea7f`)
+- **Plunk welcome workflow**: the static site's newsletter signup now
+  fires `event: 'klubhub.subscribed'` (a namespaced custom event)
+  instead of relying on Plunk's documented `contact.subscribed` system
+  event, which does not fire on contact upserts created via
+  `POST /v1/track`. The Plunk workflow's trigger event name must be
+  renamed to `klubhub.subscribed` in the Plunk UI for the welcome to
+  fire. (PR #11, commit `1290340`)
+- **Newsletter signup mobile layout**: the static site newsletter
+  form is now responsive on mobile viewports. (PR #10, commit
+  `c1549b3`)
+- **GitHub Pages site copy**: replaced em dashes with commas in
+  recipient-facing copy on the static site (page title, og:title,
+  newsletter lede) for cleaner rendering across older email and
+  RSS clients. (PR #12, commit `afb468c`)
+- **Plunk newsletter key wiring**: the static site fails closed if
+  `PLUNK_PUBLIC_KEY` is missing, placeholder, or the wrong prefix
+  (`sk_*`). The PK is injected into `<meta name="plunk-public-key">`
+  at build time; the SK is mounted as a Docker secret consumed via
+  `PLUNK_SECRET_KEY_FILE` and never enters the repo. (PR #7, commit
+  `8749bb4`)
+- **Module contracts wired to the existing product**: the gig, epk,
+  tracklist, and social modules now talk to the live Go API instead
+  of local mocks. `apps/dj/app/stores/{gig,epk,tracklist,social}.ts`
+  use the real fetch endpoints; `apps/dj/app/composables/useTracklist.ts`
+  uses the live tracklist contract; `apps/dj/app/pages/{index,finance,social}.vue`
+  consume the real APIs. New contract tests at
+  `api/internal/{gig,epk,tracklist}/contract_test.go` cover the
+  handler-to-service boundary. Followup commit `8fee098` hardens the
+  gig service to return 404 on `ErrNotFound`, the social store to map
+  snake_case responses, and the gig detail query to join venues and
+  contacts in a single round-trip. (PR #13, commits `f5fce61`,
+  `8fee098`)
+
+#### Changed
+
+- Default production image tag in `docker-compose.prod.yml` bumped
+  from `v1.0.0` to `v1.0.1`. Operators override with `IMAGE_TAG`.
+- `package.json` version bumped to `1.0.1`.
+- `scripts/release-day-check.sh` default `KH_VER` bumped to `v1.0.1`.
+- `scripts/test_stack_setup.py` assertion updated to pin the new
+  default tag (`v1.0.1`).
+
+#### Known gaps (not blockers)
+
+- **GHCR publish for `v1.0.1`** is not yet complete at the time of
+  this entry. The default `IMAGE_TAG=v1.0.1` will pull successfully
+  only after `ghcr.io/lithqube/klubhub-dj-api:v1.0.1` is published.
+  Triggered via `gh workflow run containers.dj.yml --ref main -f
+  tag=v1.0.1` post-merge.
+- **Plunk workflow trigger rename**: an operator action in the Plunk
+  UI is required to rename the trigger event name from
+  `contact.subscribed` to `klubhub.subscribed`. Zero executions have
+  run, so the rename is allowed.
+- **Plunk onboarding template body**: the live Plunk copy has a
+  stray `;` in its footer paragraph that the local repo file does
+  not. Edit the Plunk copy to match `apps/site/emails/onboarding.html`.
+
 ## [1.0.0] - 2026-09-16
 
 ### Hardening for the first public release
