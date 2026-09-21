@@ -120,6 +120,7 @@ const copyQuery = ref('')
 const copyResults = ref<Gig[]>([])
 const showCancelConfirm = ref(false)
 const isSaving = ref(false)
+const saveError = ref<string | null>(null)
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'DKK', 'SEK', 'NOK']
 const STATUS_OPTIONS: GigStatus[] = ['inquiry', 'confirmed', 'advanced', 'played', 'cancelled']
@@ -210,10 +211,25 @@ async function save() {
 }
 
 async function doSave() {
+  saveError.value = null
+  if (!form.date) {
+    saveError.value = 'Date is required.'
+    showCancelConfirm.value = false
+    return
+  }
+  if (!form.venue?.name && !form.event_name) {
+    saveError.value = 'Add a venue or an event name.'
+    showCancelConfirm.value = false
+    return
+  }
+
   isSaving.value = true
   try {
     const gigData: GigCreate = {
-      date: form.date,
+      // The Go API decodes `date` as time.Time (RFC 3339 only); a bare
+      // YYYY-MM-DD from the date input is rejected as invalid JSON.
+      // Midnight UTC round-trips with the `split('T')[0]` used on read.
+      date: `${form.date}T00:00:00Z`,
       venue: form.venue?.name || form.event_name || '',
       city: form.city,
       country: form.country,
@@ -229,10 +245,17 @@ async function doSave() {
       payment_status: form.payment_status,
     }
 
-    if (isEdit.value && props.gig?.id) {
-      await gigStore.updateGig(props.gig.id, gigData)
-    } else {
-      await gigStore.createGig(gigData)
+    // The gig store swallows request errors and resolves to null, so a
+    // falsy result is the only failure signal — keep the dialog open.
+    // Updates are guarded by optimistic concurrency: the API matches on
+    // the `updated_at` we last saw and answers 409 without it.
+    const result = isEdit.value && props.gig?.id
+      ? await gigStore.updateGig(props.gig.id, { ...gigData, updated_at: props.gig.updated_at })
+      : await gigStore.createGig(gigData)
+
+    if (!result) {
+      saveError.value = 'Could not save the gig. Check the fields and try again.'
+      return
     }
 
     emit('saved')
@@ -506,7 +529,15 @@ function close() {
           </div>
 
           <!-- Dialog footer -->
-          <div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 20px;border-top:1px solid rgba(150,248,255,.08);">
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid rgba(150,248,255,.08);">
+            <div
+              v-if="saveError"
+              role="alert"
+              class="section-lbl"
+              style="margin-right:auto;color:var(--color-error);"
+            >
+              {{ saveError }}
+            </div>
             <button class="btn-hud" @click="close">
               CANCEL
             </button>

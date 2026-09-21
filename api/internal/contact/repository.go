@@ -3,6 +3,7 @@ package contact
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -53,12 +54,12 @@ func (r *Repository) List(ctx context.Context, name *string, contactType *Contac
 	argID := 1
 
 	if name != nil && *name != "" {
-		query += " AND name ILIKE $" + string(rune('0'+argID))
+		query += " AND name ILIKE $" + strconv.Itoa(argID)
 		args = append(args, "%"+*name+"%")
 		argID++
 	}
 	if contactType != nil {
-		query += " AND type = $" + string(rune('0'+argID))
+		query += " AND type = $" + strconv.Itoa(argID)
 		args = append(args, *contactType)
 		argID++
 	}
@@ -116,32 +117,32 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *ContactUpdate)
 	argID := 1
 
 	if u.Name != nil {
-		setClauses = append(setClauses, "name = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "name = $"+strconv.Itoa(argID))
 		args = append(args, *u.Name)
 		argID++
 	}
 	if u.Company != nil {
-		setClauses = append(setClauses, "company = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "company = $"+strconv.Itoa(argID))
 		args = append(args, *u.Company)
 		argID++
 	}
 	if u.Email != nil {
-		setClauses = append(setClauses, "email = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "email = $"+strconv.Itoa(argID))
 		args = append(args, *u.Email)
 		argID++
 	}
 	if u.Phone != nil {
-		setClauses = append(setClauses, "phone = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "phone = $"+strconv.Itoa(argID))
 		args = append(args, *u.Phone)
 		argID++
 	}
 	if u.Type != nil {
-		setClauses = append(setClauses, "type = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "type = $"+strconv.Itoa(argID))
 		args = append(args, *u.Type)
 		argID++
 	}
 	if u.Notes != nil {
-		setClauses = append(setClauses, "notes = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "notes = $"+strconv.Itoa(argID))
 		args = append(args, *u.Notes)
 		argID++
 	}
@@ -154,7 +155,7 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *ContactUpdate)
 	query := `
 		UPDATE contacts
 		SET ` + strings.Join(setClauses, ", ") + `
-		WHERE id = $` + string(rune('0'+argID)) + ` AND deleted_at IS NULL`
+		WHERE id = $` + strconv.Itoa(argID) + ` AND deleted_at IS NULL`
 	args = append(args, id)
 
 	tag, err := r.pool.Exec(ctx, query, args...)

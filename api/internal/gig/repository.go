@@ -3,6 +3,7 @@ package gig
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -62,37 +63,37 @@ func (r *Repository) List(ctx context.Context, f GigFilter) ([]*Gig, error) {
 	argID := 1
 
 	if f.Status != nil {
-		query += " AND status = $" + string(rune('0'+argID))
+		query += " AND status = $" + strconv.Itoa(argID)
 		args = append(args, *f.Status)
 		argID++
 	}
 	if f.VenueID != nil {
-		query += " AND gig_reader_venue_id = $" + string(rune('0'+argID))
+		query += " AND gig_reader_venue_id = $" + strconv.Itoa(argID)
 		args = append(args, *f.VenueID)
 		argID++
 	}
 	if f.City != nil {
-		query += " AND city ILIKE $" + string(rune('0'+argID))
+		query += " AND city ILIKE $" + strconv.Itoa(argID)
 		args = append(args, "%"+*f.City+"%")
 		argID++
 	}
 	if f.FeeMin != nil {
-		query += " AND fee_amount >= $" + string(rune('0'+argID))
+		query += " AND fee_amount >= $" + strconv.Itoa(argID)
 		args = append(args, *f.FeeMin)
 		argID++
 	}
 	if f.FeeMax != nil {
-		query += " AND fee_amount <= $" + string(rune('0'+argID))
+		query += " AND fee_amount <= $" + strconv.Itoa(argID)
 		args = append(args, *f.FeeMax)
 		argID++
 	}
 	if f.From != nil {
-		query += " AND date >= $" + string(rune('0'+argID))
+		query += " AND date >= $" + strconv.Itoa(argID)
 		args = append(args, *f.From)
 		argID++
 	}
 	if f.To != nil {
-		query += " AND date <= $" + string(rune('0'+argID))
+		query += " AND date <= $" + strconv.Itoa(argID)
 		args = append(args, *f.To)
 		argID++
 	}
@@ -167,82 +168,82 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *GigUpdate) (*G
 	argID := 1
 
 	if u.Date != nil {
-		setClauses = append(setClauses, "date = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "date = $"+strconv.Itoa(argID))
 		args = append(args, *u.Date)
 		argID++
 	}
 	if u.Venue != nil {
-		setClauses = append(setClauses, "venue = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "venue = $"+strconv.Itoa(argID))
 		args = append(args, *u.Venue)
 		argID++
 	}
 	if u.City != nil {
-		setClauses = append(setClauses, "city = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "city = $"+strconv.Itoa(argID))
 		args = append(args, *u.City)
 		argID++
 	}
 	if u.Country != nil {
-		setClauses = append(setClauses, "country = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "country = $"+strconv.Itoa(argID))
 		args = append(args, *u.Country)
 		argID++
 	}
 	if u.EventName != nil {
-		setClauses = append(setClauses, "event_name = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "event_name = $"+strconv.Itoa(argID))
 		args = append(args, *u.EventName)
 		argID++
 	}
 	if u.PromoterName != nil {
-		setClauses = append(setClauses, "promoter_name = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "promoter_name = $"+strconv.Itoa(argID))
 		args = append(args, *u.PromoterName)
 		argID++
 	}
 	if u.PromoterEmail != nil {
-		setClauses = append(setClauses, "promoter_email = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "promoter_email = $"+strconv.Itoa(argID))
 		args = append(args, *u.PromoterEmail)
 		argID++
 	}
 	if u.PromoterPhone != nil {
-		setClauses = append(setClauses, "promoter_phone = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "promoter_phone = $"+strconv.Itoa(argID))
 		args = append(args, *u.PromoterPhone)
 		argID++
 	}
 	if u.FeeAmount != nil {
-		setClauses = append(setClauses, "fee_amount = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "fee_amount = $"+strconv.Itoa(argID))
 		args = append(args, *u.FeeAmount)
 		argID++
 	}
 	if u.FeeCurrency != nil {
-		setClauses = append(setClauses, "fee_currency = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "fee_currency = $"+strconv.Itoa(argID))
 		args = append(args, *u.FeeCurrency)
 		argID++
 	}
 	if u.SetLengthMinutes != nil {
-		setClauses = append(setClauses, "set_length_minutes = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "set_length_minutes = $"+strconv.Itoa(argID))
 		args = append(args, *u.SetLengthMinutes)
 		argID++
 	}
 	if u.Notes != nil {
-		setClauses = append(setClauses, "notes = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "notes = $"+strconv.Itoa(argID))
 		args = append(args, *u.Notes)
 		argID++
 	}
 	if u.Status != nil {
-		setClauses = append(setClauses, "status = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "status = $"+strconv.Itoa(argID))
 		args = append(args, *u.Status)
 		argID++
 	}
 	if u.PaymentStatus != nil {
-		setClauses = append(setClauses, "payment_status = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "payment_status = $"+strconv.Itoa(argID))
 		args = append(args, *u.PaymentStatus)
 		argID++
 	}
 	if u.GigReaderVenueID != nil {
-		setClauses = append(setClauses, "gig_reader_venue_id = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "gig_reader_venue_id = $"+strconv.Itoa(argID))
 		args = append(args, *u.GigReaderVenueID)
 		argID++
 	}
 	if u.GigReaderContactID != nil {
-		setClauses = append(setClauses, "gig_reader_contact_id = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "gig_reader_contact_id = $"+strconv.Itoa(argID))
 		args = append(args, *u.GigReaderContactID)
 		argID++
 	}
@@ -257,7 +258,7 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *GigUpdate) (*G
 	query := `
 		UPDATE gigs
 		SET ` + strings.Join(setClauses, ", ") + `
-		WHERE id = $` + string(rune('0'+argID)) + ` AND deleted_at IS NULL AND updated_at = $` + string(rune('0'+argID+1))
+		WHERE id = $` + strconv.Itoa(argID) + ` AND deleted_at IS NULL AND updated_at = $` + strconv.Itoa(argID+1)
 	args = append(args, id, u.UpdatedAt)
 
 	tag, err := r.pool.Exec(ctx, query, args...)

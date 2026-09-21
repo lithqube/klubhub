@@ -16,8 +16,10 @@ const daysInMonth = computed(() => {
   const days: Date[] = []
   // Add padding for day of week
   const startPadding = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1
+  // Day 0 is the last day of the previous month, so the final padding
+  // cell (i = startPadding - 1) must resolve to day 0, not day -1.
   for (let i = 0; i < startPadding; i++) {
-    days.push(new Date(year, month, -startPadding + i))
+    days.push(new Date(year, month, -startPadding + i + 1))
   }
   for (let d = 1; d <= lastDay.getDate(); d++) {
     days.push(new Date(year, month, d))
@@ -28,6 +30,15 @@ const daysInMonth = computed(() => {
   }
   return days
 })
+
+// Build the YYYY-MM-DD key from local date parts. toISOString() converts
+// local midnight to UTC, which is the previous day in any UTC+ timezone
+// and would file gigs under the wrong cell.
+function dayKey(day: Date): string {
+  const m = String(day.getMonth() + 1).padStart(2, '0')
+  const d = String(day.getDate()).padStart(2, '0')
+  return `${day.getFullYear()}-${m}-${d}`
+}
 
 const gigsByDate = computed(() => {
   const map = new Map<string, typeof gigs.value>()
@@ -131,10 +142,10 @@ const emit = defineEmits<{
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:2px;">
           <template
-            v-if="gigsByDate.has(day.toISOString().split('T')[0])"
+            v-if="gigsByDate.has(dayKey(day))"
           >
             <template
-              v-for="gig in (gigsByDate.get(day.toISOString().split('T')[0]) || []).slice(0, 3)"
+              v-for="gig in (gigsByDate.get(dayKey(day)) || []).slice(0, 3)"
               :key="gig.id"
             >
               <div
@@ -145,10 +156,10 @@ const emit = defineEmits<{
               />
             </template>
             <div
-              v-if="(gigsByDate.get(day.toISOString().split('T')[0]) || []).length > 3"
+              v-if="(gigsByDate.get(dayKey(day)) || []).length > 3"
               class="bar-lbl"
             >
-              +{{ (gigsByDate.get(day.toISOString().split('T')[0]) || []).length - 3 }}
+              +{{ (gigsByDate.get(dayKey(day)) || []).length - 3 }}
             </div>
           </template>
         </div>
