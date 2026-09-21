@@ -26,6 +26,12 @@ useHead(computed(() => ({
 
 onMounted(() => initTheme())
 
+// The app shell lives here rather than in a layout, so `layout: false` on a
+// page cannot remove it. Screenshot targets under /render must be a bare
+// canvas, otherwise Playwright captures the nav and status bar too.
+const route = useRoute()
+const isBareRoute = computed(() => route.path.startsWith('/render/'))
+
 function handleError(error: Error) {
   console.error('[KlubHub] Unhandled error:', error)
 }
@@ -36,7 +42,9 @@ function handleError(error: Error) {
     Root layout: horizontal flex (sidebar + main column).
     min-h-dvh: avoids 100vh mobile-browser-chrome bug (UX law: viewport-units).
   -->
-  <div class="hud-bg min-h-dvh font-data text-on-surface flex" style="position:relative;">
+  <NuxtPage v-if="isBareRoute" />
+
+  <div v-else class="hud-bg min-h-dvh font-data text-on-surface flex" style="position:relative;">
 
     <!-- Desktop sidebar (hidden on mobile via TheNav's own hidden lg:flex) -->
     <TheNav />

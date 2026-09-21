@@ -56,8 +56,12 @@ export function listTracklists(): Promise<Tracklist[]> {
     if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
       throw new Error((res as any).message ?? (res as any).error);
     }
-    // The API returns a raw array of tracklists
-    return res as Tracklist[];
+    // The Go API wraps the list as `{ data: Tracklist[] | null }` (null when
+    // empty); older mocks returned a raw array. Always hand back an array —
+    // returning the envelope made v-for iterate its values and crash on null.
+    if (Array.isArray(res)) return res as Tracklist[];
+    const data = (res as { data?: Tracklist[] | null } | null)?.data;
+    return Array.isArray(data) ? data : [];
   });
 }
 

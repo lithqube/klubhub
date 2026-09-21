@@ -13,6 +13,11 @@ const { data: settingsData } = await useAsyncData(() =>
   $fetch(`/api/v1/settings`),
 );
 
+// Template note: refs are auto-unwrapped there, so the template must use
+// `tracklistData`, not `tracklistData.value` — the latter reads a property
+// named "value" on the payload (always undefined) and rendered "Not Found"
+// for every tracklist. Settings arrive snake_case from the Go API.
+
 // Disable layout for pure white-canvas page for Playwright screenshots
 definePageMeta({ layout: false });
 
@@ -24,23 +29,23 @@ useHead({
 
 <template>
   <div
-    v-if="tracklistData?.value && settingsData?.value"
+    v-if="tracklistData && settingsData"
     style="margin: 0; padding: 0; overflow: hidden; background-color: white"
   >
     <!-- Only render if we have data -->
     <TrackcardPreview
-      :tracklist="tracklistData.value.tracklist"
-      :tracks="tracklistData.value.tracks"
-      :dj-name="settingsData.value.djName ?? 'KlubHub DJ'"
-      :logo-path="settingsData.value.logoPath"
+      :tracklist="tracklistData.tracklist"
+      :tracks="tracklistData.tracks"
+      :dj-name="settingsData.dj_name || settingsData.djName || 'KlubHub DJ'"
+      :logo-path="settingsData.logo_path || settingsData.logoPath"
       :logo-position="
-        settingsData.value.tracklist_preferences?.logoPosition ?? 'top-left'
+        settingsData.tracklist_preferences?.logoPosition ?? 'top-left'
       "
-      :preset="settingsData.value.tracklist_preferences?.preset ?? 'default'"
-      :bg-mode="settingsData.value.tracklist_preferences?.bgMode ?? 'solid'"
-      :bg-value="settingsData.value.tracklist_preferences?.bgValue"
+      :preset="settingsData.tracklist_preferences?.preset ?? 'default'"
+      :bg-mode="settingsData.tracklist_preferences?.bgMode ?? 'solid'"
+      :bg-value="settingsData.tracklist_preferences?.bgValue"
       :visible-fields="
-        settingsData.value.tracklist_preferences?.visibleFields ?? [
+        settingsData.tracklist_preferences?.visibleFields ?? [
           'title',
           'artist',
           'bpm',
@@ -48,12 +53,12 @@ useHead({
           'durationSecs',
         ]
       "
-      :max-tracks="settingsData.value.tracklist_preferences?.maxTracks ?? 50"
+      :max-tracks="settingsData.tracklist_preferences?.maxTracks ?? 50"
       :track-range-start="
-        settingsData.value.tracklist_preferences?.trackRangeStart
+        settingsData.tracklist_preferences?.trackRangeStart
       "
-      :track-range-end="settingsData.value.tracklist_preferences?.trackRangeEnd"
-      :custom-placeholder-path="settingsData.value.custom_placeholder_path"
+      :track-range-end="settingsData.tracklist_preferences?.trackRangeEnd"
+      :custom-placeholder-path="settingsData.custom_placeholder_path"
     />
   </div>
 
