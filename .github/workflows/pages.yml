@@ -44,7 +44,9 @@ jobs:
     # placeholder key below, cannot read environment secrets, and skip the
     # artifact upload. Push and dispatch runs, and the deploy job, keep the
     # binding and its protection rules unchanged.
-    environment: ${{ github.event_name == 'pull_request' && '' || 'github-pages' }}
+    # Note the shape: `cond && 'name' || ''`. The `cond && '' || 'name'` form
+    # is a trap, because '' is falsy and it falls through to 'name'.
+    environment: ${{ github.event_name != 'pull_request' && 'github-pages' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
