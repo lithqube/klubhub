@@ -12,6 +12,8 @@ export const useEpkStore = defineStore('epk', () => {
   const gigHighlights = ref<string[]>([]);
   const pressQuotes = ref<PressQuote[]>([]);
   const photoPaths = ref<string[]>([]);
+  // photoPaths are storage keys; the API signs a display URL for each one.
+  const photoUrls = ref<Record<string, string>>({});
   const sectionVisibility = ref<SectionVisibility>({});
   const exports = ref<EPKExport[]>([]);
   const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -20,19 +22,25 @@ export const useEpkStore = defineStore('epk', () => {
   const photoCount = computed(() => photoPaths.value.length);
   const canAddPhoto = computed(() => photoPaths.value.length < 20);
 
+  // The Go API serializes empty slices/maps as JSON null (nil values) on a
+  // fresh profile, so collections are coalesced to keep the refs usable.
+  function applyContent(data: EPKContent): void {
+    bioShort.value = data.bioShort ?? '';
+    bioLong.value = data.bioLong ?? '';
+    techRider.value = data.techRider ?? '';
+    stagePlotPath.value = data.stagePlotPath ?? '';
+    gigHighlights.value = data.gigHighlights ?? [];
+    pressQuotes.value = data.pressQuotes ?? [];
+    photoPaths.value = data.photoPaths ?? [];
+    photoUrls.value = data.photoUrls ?? {};
+    sectionVisibility.value = data.sectionVisibility ?? {};
+  }
+
   // Actions
   async function loadFromApi(): Promise<void> {
     const result = await $fetch<{ data: EPKContent }>('/api/v1/epk/content');
-    const data = result.data;
-    id.value = data.id;
-    bioShort.value = data.bioShort;
-    bioLong.value = data.bioLong;
-    techRider.value = data.techRider;
-    stagePlotPath.value = data.stagePlotPath;
-    gigHighlights.value = data.gigHighlights;
-    pressQuotes.value = data.pressQuotes;
-    photoPaths.value = data.photoPaths;
-    sectionVisibility.value = data.sectionVisibility;
+    id.value = result.data.id;
+    applyContent(result.data);
   }
 
   async function updateContent(patch: UpdateEPKContentRequest): Promise<void> {
@@ -42,15 +50,7 @@ export const useEpkStore = defineStore('epk', () => {
         method: 'PUT',
         body: patch,
       });
-      const data = result.data;
-      bioShort.value = data.bioShort;
-      bioLong.value = data.bioLong;
-      techRider.value = data.techRider;
-      stagePlotPath.value = data.stagePlotPath;
-      gigHighlights.value = data.gigHighlights;
-      pressQuotes.value = data.pressQuotes;
-      photoPaths.value = data.photoPaths;
-      sectionVisibility.value = data.sectionVisibility;
+      applyContent(result.data);
       saveStatus.value = 'saved';
     } catch (error) {
       saveStatus.value = 'error';
@@ -61,11 +61,13 @@ export const useEpkStore = defineStore('epk', () => {
   async function uploadPhoto(file: File): Promise<void> {
     const formData = new FormData();
     formData.append('photo', file);
-    const result = await $fetch<{ path: string }>('/api/v1/epk/photos', {
+    const result = await $fetch<{ path: string; url?: string }>('/api/v1/epk/photos', {
       method: 'POST',
       body: formData,
     });
     photoPaths.value = [...photoPaths.value, result.path];
+    // `path` is a storage key; `url` is the signed address the <img> needs.
+    if (result.url) photoUrls.value = { ...photoUrls.value, [result.path]: result.url };
   }
 
   async function deletePhoto(path: string): Promise<void> {
@@ -110,6 +112,7 @@ export const useEpkStore = defineStore('epk', () => {
     gigHighlights,
     pressQuotes,
     photoPaths,
+    photoUrls,
     sectionVisibility,
     exports,
     saveStatus,

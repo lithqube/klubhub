@@ -100,6 +100,7 @@ type settingsServiceIface interface {
 // serviceIface is the contract exposed to the HTTP handler layer.
 type serviceIface interface {
 	GetContent(ctx context.Context) (*EPKContent, error)
+	PhotoURLs(ctx context.Context, paths []string) map[string]string
 	UpsertContent(ctx context.Context, req UpsertEPKContentRequest) (*EPKContent, error)
 	UploadPhoto(ctx context.Context, data []byte, mimeType string) (string, error)
 	DeletePhoto(ctx context.Context, path string) error
@@ -130,6 +131,19 @@ func NewService(repo repoIface, storage storageIface, settingsSvc settingsServic
 		storage:     storage,
 		settingsSvc: settingsSvc,
 	}
+}
+
+// PhotoURLs returns a time-limited, browser-reachable URL for each stored
+// photo path. PhotoPaths are raw storage keys and cannot be used as an image
+// source; paths that fail to sign are left out rather than failing the call.
+func (s *Service) PhotoURLs(ctx context.Context, paths []string) map[string]string {
+	urls := make(map[string]string, len(paths))
+	for _, p := range paths {
+		if u, err := s.storage.PresignedGetObject(ctx, storageBucket, p, time.Hour); err == nil {
+			urls[p] = u
+		}
+	}
+	return urls
 }
 
 // GetContent returns the singleton EPK content, seeding an empty default if none exists.

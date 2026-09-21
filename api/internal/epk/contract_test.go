@@ -18,6 +18,7 @@ import (
 
 var contentContractKeys = []string{
 	"bioLong", "bioShort", "createdAt", "gigHighlights", "id", "photoPaths",
+	"photoUrls", // signed display URL per photoPaths entry (paths are storage keys)
 	"pressQuotes", "sectionVisibility", "stagePlotPath", "techRider", "updatedAt",
 }
 

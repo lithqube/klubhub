@@ -1,6 +1,7 @@
 package epk
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -99,7 +100,7 @@ func (h *Handler) handleGetContent(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": contentToJSON(content)})
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": h.contentJSON(r.Context(), content)})
 }
 
 // handlePutContent accepts a partial JSON body and returns the updated EPKContent.
@@ -135,7 +136,7 @@ func (h *Handler) handlePutContent(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": contentToJSON(content)})
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": h.contentJSON(r.Context(), content)})
 }
 
 // handlePostPhoto accepts multipart/form-data with a "photo" field.
@@ -177,7 +178,11 @@ func (h *Handler) handlePostPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.writeJSON(w, http.StatusCreated, map[string]string{"path": path})
+	// path is a storage key; url is what the browser can actually display.
+	h.writeJSON(w, http.StatusCreated, map[string]string{
+		"path": path,
+		"url":  h.svc.PhotoURLs(r.Context(), []string{path})[path],
+	})
 }
 
 // handleDeletePhoto removes a photo by URL-encoded path.
@@ -308,6 +313,16 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 // contentToJSON converts EPKContent to a JSON-serialisable map.
+// contentJSON is contentToJSON plus photoUrls: photoPaths are storage keys,
+// so the browser needs a signed URL per photo to display it.
+func (h *Handler) contentJSON(ctx context.Context, c *EPKContent) map[string]interface{} {
+	out := contentToJSON(c)
+	if out != nil {
+		out["photoUrls"] = h.svc.PhotoURLs(ctx, c.PhotoPaths)
+	}
+	return out
+}
+
 func contentToJSON(c *EPKContent) map[string]interface{} {
 	if c == nil {
 		return nil
