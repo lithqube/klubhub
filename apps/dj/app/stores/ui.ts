@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import { useToast } from '~/components/ui/toast/use-toast';
 
 export const useUiStore = defineStore('ui', () => {
   const step = ref<string>('upload');
@@ -15,6 +16,12 @@ export const useUiStore = defineStore('ui', () => {
 
   const pastTracklistsLoading = ref<boolean>(false);
   const pastTracklistsError = ref<string | null>(null);
+
+  function showError(message: string): void {
+    // Toasts are browser UI; skip during SSR so no timers leak on the server.
+    if (!import.meta.client) return;
+    useToast().toast({ title: 'Error', description: message, variant: 'destructive' });
+  }
 
   function clearErrors(): void {
     uploadError.value = null;
@@ -33,6 +40,7 @@ export const useUiStore = defineStore('ui', () => {
     exportError,
     pastTracklistsLoading,
     pastTracklistsError,
+    showError,
     clearErrors,
   };
 });

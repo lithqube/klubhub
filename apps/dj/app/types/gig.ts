@@ -25,7 +25,9 @@ export interface Gig {
   // Linked relationships (populated by GET /{id}/detail)
   linked_venues?: LinkedVenue[]
   linked_contacts?: LinkedContact[]
-  linked_tracklists?: LinkedTracklist[]
+  // The detail endpoint serializes linked tracklists as `tracklists` (not
+  // `linked_tracklists`); the gig form reads them under that name.
+  tracklists?: LinkedTracklist[]
 }
 
 export interface LinkedVenue {

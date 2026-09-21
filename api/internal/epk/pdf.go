@@ -23,6 +23,17 @@ var italicRe = regexp.MustCompile(`(?:^|[^*])\*([^*]+?)\*(?:[^*]|$)`)
 // linkRe matches [text](url) spans.
 var linkRe = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
 
+// tr converts UTF-8 to cp1252, the encoding of fpdf's built-in core fonts.
+// Writing UTF-8 straight into them garbles anything non-ASCII ("•" printed as
+// "â€¢", "·" as "Â·"). Characters outside cp1252 still degrade; rendering
+// those needs an embedded UTF-8 font.
+var tr = fpdf.New("P", "mm", "A4", "").UnicodeTranslatorFromDescriptor("")
+
+// Section heading text is printed in dark ink: the accent defaults to the
+// app's light cyan, which is unreadable as text on a white page. The accent
+// is still used for the rules so the brand colour carries through.
+const headingInkR, headingInkG, headingInkB = 26, 26, 26
+
 // renderEPKPDF generates a white A4 portrait PDF with 20mm margins.
 // The PDF includes all non-empty sections that are enabled in sectionVisibility.
 // Section order: Bio → Photos → Gig Highlights → Press Quotes → Tech Rider → Stage Plot → Social Links → Contact Info
@@ -45,12 +56,12 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 
 	// ── Header: DJ name (and logo placeholder) ──────────────────────────────
 	f.SetFont("Helvetica", "B", 18)
-	f.SetTextColor(ar, ag, ab)
+	f.SetTextColor(headingInkR, headingInkG, headingInkB)
 	djName := userSettings.DJName
 	if djName == "" {
 		djName = "ARTIST EPK"
 	}
-	f.MultiCell(0, 12, strings.ToUpper(djName), "", "L", false)
+	f.MultiCell(0, 12, tr(strings.ToUpper(djName)), "", "L", false)
 	f.SetDrawColor(ar, ag, ab)
 	f.SetLineWidth(0.8)
 	f.Line(20, f.GetY(), 190, f.GetY())
@@ -65,11 +76,12 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 			if !isBlank(content.BioShort) {
 				f.SetFont("Helvetica", "B", 10)
 				f.SetTextColor(26, 26, 26)
-				f.MultiCell(0, 5, content.BioShort, "", "L", false)
+				f.MultiCell(0, 5, tr(content.BioShort), "", "L", false)
 				f.Ln(3)
 			}
 
-			if !isBlank(content.BioLong) {
+			// An imported bio often fills both fields with the same text.
+			if !isBlank(content.BioLong) && strings.TrimSpace(content.BioLong) != strings.TrimSpace(content.BioShort) {
 				f.SetFont("Helvetica", "", 10)
 				f.SetTextColor(26, 26, 26)
 				renderMarkdown(f, content.BioLong)
@@ -86,7 +98,7 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 		writeSectionHeading(f, "PRESS PHOTOS", ar, ag, ab)
 		f.SetFont("Helvetica", "", 9)
 		f.SetTextColor(26, 26, 26)
-		f.MultiCell(0, 5, fmt.Sprintf("%d press photo(s) available on request.", len(content.PhotoPaths)), "", "L", false)
+		f.MultiCell(0, 5, tr(fmt.Sprintf("%d press photo(s) available on request.", len(content.PhotoPaths))), "", "L", false)
 		f.Ln(3)
 	}
 
@@ -97,7 +109,7 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 		f.SetTextColor(26, 26, 26)
 		for _, h := range content.GigHighlights {
 			if !isBlank(h) {
-				f.MultiCell(0, 5, "• "+h, "", "L", false)
+				f.MultiCell(0, 5, tr("• "+h), "", "L", false)
 			}
 		}
 		f.Ln(3)
@@ -111,11 +123,11 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 		for _, q := range content.PressQuotes {
 			if !isBlank(q.Text) {
 				f.SetFont("Helvetica", "I", 10)
-				f.MultiCell(0, 5, fmt.Sprintf("\"%s\"", q.Text), "", "L", false)
+				f.MultiCell(0, 5, tr(fmt.Sprintf("\"%s\"", q.Text)), "", "L", false)
 				if !isBlank(q.Source) {
 					f.SetFont("Helvetica", "", 9)
 					f.SetTextColor(80, 80, 80)
-					f.MultiCell(0, 4, "— "+q.Source, "", "R", false)
+					f.MultiCell(0, 4, tr("— "+q.Source), "", "R", false)
 					f.SetTextColor(26, 26, 26)
 				}
 				f.Ln(2)
@@ -129,7 +141,7 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 		writeSectionHeading(f, "TECH RIDER", ar, ag, ab)
 		f.SetFont("Helvetica", "", 10)
 		f.SetTextColor(26, 26, 26)
-		f.MultiCell(0, 5, content.TechRider, "", "L", false)
+		f.MultiCell(0, 5, tr(content.TechRider), "", "L", false)
 		f.Ln(3)
 	}
 
@@ -138,7 +150,7 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 		writeSectionHeading(f, "STAGE PLOT", ar, ag, ab)
 		f.SetFont("Helvetica", "I", 9)
 		f.SetTextColor(80, 80, 80)
-		f.MultiCell(0, 5, "Stage plot available on request.", "", "L", false)
+		f.MultiCell(0, 5, tr("Stage plot available on request."), "", "L", false)
 		f.Ln(3)
 	}
 
@@ -149,7 +161,7 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 			writeSectionHeading(f, "SOCIAL LINKS", ar, ag, ab)
 			f.SetFont("Helvetica", "", 10)
 			f.SetTextColor(26, 26, 26)
-			f.MultiCell(0, 5, socialLinks, "", "L", false)
+			f.MultiCell(0, 5, tr(socialLinks), "", "L", false)
 			f.Ln(3)
 		}
 	}
@@ -159,7 +171,7 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 		writeSectionHeading(f, "CONTACT", ar, ag, ab)
 		f.SetFont("Helvetica", "", 10)
 		f.SetTextColor(26, 26, 26)
-		f.MultiCell(0, 5, userSettings.ContactInfo, "", "L", false)
+		f.MultiCell(0, 5, tr(userSettings.ContactInfo), "", "L", false)
 		f.Ln(3)
 	}
 
@@ -169,8 +181,8 @@ func renderEPKPDF(content *EPKContent, userSettings *settings.UserSettings, buf 
 // writeSectionHeading renders an ALL_CAPS section heading in accent colour followed by a divider.
 func writeSectionHeading(f *fpdf.Fpdf, title string, r, g, b int) {
 	f.SetFont("Helvetica", "B", 11)
-	f.SetTextColor(r, g, b)
-	f.MultiCell(0, 8, title, "", "L", false)
+	f.SetTextColor(headingInkR, headingInkG, headingInkB)
+	f.MultiCell(0, 8, tr(title), "", "L", false)
 	f.SetDrawColor(r, g, b)
 	f.SetLineWidth(0.3)
 	f.Line(20, f.GetY(), 190, f.GetY())
@@ -187,26 +199,26 @@ func renderMarkdown(f *fpdf.Fpdf, md string) {
 		case strings.HasPrefix(trimmed, "### "):
 			f.SetFont("Helvetica", "B", 10)
 			f.SetTextColor(26, 26, 26)
-			f.MultiCell(0, 5, strings.TrimPrefix(trimmed, "### "), "", "L", false)
+			f.MultiCell(0, 5, tr(strings.TrimPrefix(trimmed, "### ")), "", "L", false)
 			f.SetFont("Helvetica", "", 10)
 
 		case strings.HasPrefix(trimmed, "## "):
 			f.SetFont("Helvetica", "B", 11)
 			f.SetTextColor(26, 26, 26)
-			f.MultiCell(0, 6, strings.TrimPrefix(trimmed, "## "), "", "L", false)
+			f.MultiCell(0, 6, tr(strings.TrimPrefix(trimmed, "## ")), "", "L", false)
 			f.SetFont("Helvetica", "", 10)
 
 		case strings.HasPrefix(trimmed, "- "):
 			text := renderInline(strings.TrimPrefix(trimmed, "- "))
 			f.SetFont("Helvetica", "", 10)
 			f.SetTextColor(26, 26, 26)
-			f.MultiCell(0, 5, "• "+text, "", "L", false)
+			f.MultiCell(0, 5, tr("• "+text), "", "L", false)
 
 		case listItemRe.MatchString(trimmed):
 			text := renderInline(trimmed)
 			f.SetFont("Helvetica", "", 10)
 			f.SetTextColor(26, 26, 26)
-			f.MultiCell(0, 5, text, "", "L", false)
+			f.MultiCell(0, 5, tr(text), "", "L", false)
 
 		case trimmed == "":
 			f.Ln(3)
@@ -215,7 +227,7 @@ func renderMarkdown(f *fpdf.Fpdf, md string) {
 			text := renderInline(trimmed)
 			f.SetFont("Helvetica", "", 10)
 			f.SetTextColor(26, 26, 26)
-			f.MultiCell(0, 5, text, "", "L", false)
+			f.MultiCell(0, 5, tr(text), "", "L", false)
 		}
 	}
 }

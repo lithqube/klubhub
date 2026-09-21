@@ -34,7 +34,7 @@ Three families, three fixed roles — never interchangeable:
 - **Radius: `0px`, enforced globally** (`--radius-*` all zero). No rounded corners anywhere. This is a hard rule, not a default — a `rounded-md`/`rounded-lg` anywhere in product UI is off-system.
 - **Separation language: dashed 1px borders**, not shadows-as-elevation. `ghost-border`, badges, `nav-item-active/inactive`, `upload-zone`, `social-chip`, `photo-slot` all use dashed borders as the signature "schematic line" motif.
 - Glow (`shadow-glow-*`) is reserved for primary CTA / active-state emphasis, not general card elevation.
-- Corner brackets (`.hud-card`, `.bracket-box` ::before/::after) are a targeting-reticle accent on key panels — a specific motif, not applied everywhere.
+- Corner brackets (`.hud-card`, `.bracket-box` ::before/::after) are a targeting-reticle accent on key panels — a specific motif, not applied everywhere. `.hud-card` brackets are token-derived (since 2026-09-21): `--hud-bracket-color` picks the signal token (`--color-primary`; `.hud-card-v` → `--color-secondary`) and `--hud-bracket-alpha` the strength (40% dark, 30% light), mixed with `color-mix()`. Add a variant by setting `--hud-bracket-color` — never by pasting an `rgba()` copy of a token.
 - Glass: `backdrop-filter: blur(20–24px)` panels at 60–70% opacity (`.glass`, `.page-header`, `.tabs-bar`) for chrome that floats over the `.hud-bg` dot-grid + scanline background.
 
 ## Motion
@@ -52,6 +52,8 @@ Three families, three fixed roles — never interchangeable:
 - **Toggle** (`hud-toggle`): square, not pill — consistent with the zero-radius rule.
 - **Button, destructive** (`btn-hud-error`, extension added 2026-09-16): solid `--color-error` fill + `shadow-glow-error`, mirroring `btn-hud-cta`/`btn-hud-violet`'s treatment. Added because destructive confirmations (e.g. cancelling a gig) previously faked this with an inline `background` override on bare `.btn-hud`.
 - **Bottom nav bar** (`bottom-nav-bar`, extension added 2026-09-16): same glass/blur/hairline recipe as `.page-header`, flipped to `border-top`. Added because the mobile bottom nav previously hardcoded dark-only rgba values inline, which can't be reached by a `[data-theme="light"]` override — it broke in Daytime HUD.
+
+- **EPK hero** (`epk-preview-hero` + `epk-eyebrow` / `epk-dj-name` / `epk-meta`, revised 2026-09-21): flat `--color-surface-container-low` panel, 3px left bar in `--color-secondary` (the EPK accent), dashed `--color-outline-variant` rule underneath. Eyebrow and label/value readouts in the terminal register; the name in the command register at `--tracking-command`, colored `--color-on-surface`. No gradient, glow, or brackets (the BIO card below already carries the reticle). Revised because the previous hero was a hardcoded dark gradient with `#fff` text, a blurred `border-radius:50%` blob and a `text-shadow` glow — the same dark-only-rgba failure as the old bottom nav (it turned muddy grey in Daytime HUD), plus a radius and an off-role glow.
 
 ## Voice
 

@@ -58,16 +58,21 @@ export interface RAArtistRef {
   slug: string
 }
 
+// Mirrors the Go RAImportResult JSON exactly (snake_case). The previous
+// camelCase version matched nothing the API sends, so every field read
+// as undefined.
 export interface RAImportResult {
   success: boolean
-  artistSlug: string
-  eventsImported: number
-  eventsSkipped: number
-  gigsCreated: number
-  gigsSkipped: number
-  gigIDs: string[]
-  skippedReasons: string[]
-  dryRun: boolean
+  artist_slug: string
+  events_imported: number
+  events_skipped: number
+  gigs_created: number
+  gigs_skipped: number
+  gig_ids: string[]
+  skipped_reasons: string[]
+  dry_run: boolean
+  /** Events that passed the import filters; a dry run returns them as the preview. */
+  events: RAEVENT[]
 }
 
 export interface RAImportRequest {
@@ -75,4 +80,6 @@ export interface RAImportRequest {
   venue_override?: string
   contact_override?: string
   dry_run?: boolean
+  /** Only import these RA event IDs (the selection made in the preview). */
+  event_ids?: string[]
 }

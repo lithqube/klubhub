@@ -50,6 +50,12 @@ func (stubServiceIface) GenerateBookingPDF(context.Context, uuid.UUID, string) (
 func (stubServiceIface) GetGigDetail(context.Context, uuid.UUID) (*GigDetailResponse, error) {
 	return nil, nil
 }
+func (stubServiceIface) LinkTracklist(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+func (stubServiceIface) UnlinkTracklist(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
 
 func newHandlerWithSecret(t *testing.T) *Handler {
 	t.Helper()

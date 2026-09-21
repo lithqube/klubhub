@@ -2,6 +2,21 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Gig, GigCreate, GigUpdate, GigFilter } from '../types/gig'
 
+// The Go API returns bare resources while older handlers wrapped them in
+// `{ data }`; accept both so the store works against either.
+function unwrap<T>(result: T | { data: T } | null | undefined): T | null {
+  if (result == null) return null
+  if (typeof result === 'object' && 'data' in (result as object)) {
+    return (result as { data: T }).data ?? null
+  }
+  return result as T
+}
+
+// fee_amount is a decimal on the API and arrives as a string ("1500").
+function feeOf(g: Gig): number {
+  return Number(g.fee_amount) || 0
+}
+
 export const useGigStore = defineStore('gig', () => {
   const gigs = ref<Gig[]>([])
   const loading = ref(false)
@@ -25,13 +40,13 @@ export const useGigStore = defineStore('gig', () => {
       (g) => g.status === 'played' && new Date(g.date).getFullYear() === currentYear
     )
     if (playedGigs.length === 0) return 0
-    return playedGigs.reduce((sum, g) => sum + (g.fee_amount || 0), 0)
+    return playedGigs.reduce((sum, g) => sum + feeOf(g), 0)
   })
 
   const avgFee = computed(() => {
     const playedGigs = gigs.value.filter((g) => g.status === 'played')
     if (playedGigs.length === 0) return 0
-    const total = playedGigs.reduce((sum, g) => sum + (g.fee_amount || 0), 0)
+    const total = playedGigs.reduce((sum, g) => sum + feeOf(g), 0)
     return Math.round(total / playedGigs.length)
   })
 
@@ -48,7 +63,8 @@ export const useGigStore = defineStore('gig', () => {
       const data = await $fetch<Gig[]>(
         `/api/v1/gigs${queryStr ? `?${queryStr}` : ''}`
       )
-      gigs.value = Array.isArray(data) ? data : (data as any).data || []
+      // An empty list comes back as JSON `null` from the Go API.
+      gigs.value = Array.isArray(data) ? data : (data as any)?.data || []
     } catch (e) {
       console.error('fetchGigs failed:', e)
       gigs.value = []
@@ -59,8 +75,8 @@ export const useGigStore = defineStore('gig', () => {
 
   async function fetchGigDetail(id: string): Promise<Gig | null> {
     try {
-      const result = await $fetch<{ data: Gig }>(`/api/v1/gigs/${id}/detail`)
-      return result.data
+      const result = await $fetch<Gig | { data: Gig }>(`/api/v1/gigs/${id}/detail`)
+      return unwrap(result)
     } catch (e) {
       console.error('fetchGigDetail failed:', e)
       return null
@@ -69,12 +85,12 @@ export const useGigStore = defineStore('gig', () => {
 
   async function createGig(gig: GigCreate): Promise<Gig | null> {
     try {
-      const result = await $fetch<{ data: Gig }>('/api/v1/gigs', {
+      const result = await $fetch<Gig | { data: Gig }>('/api/v1/gigs', {
         method: 'POST',
         body: gig,
       })
-      const created = result.data
-      gigs.value.unshift(created)
+      const created = unwrap(result)
+      if (created) gigs.value.unshift(created)
       return created
     } catch (e) {
       console.error('createGig failed:', e)
@@ -84,13 +100,13 @@ export const useGigStore = defineStore('gig', () => {
 
   async function updateGig(id: string, gig: GigUpdate): Promise<Gig | null> {
     try {
-      const result = await $fetch<{ data: Gig }>(`/api/v1/gigs/${id}`, {
+      const result = await $fetch<Gig | { data: Gig }>(`/api/v1/gigs/${id}`, {
         method: 'PUT',
         body: gig,
       })
-      const updated = result.data
+      const updated = unwrap(result)
       const idx = gigs.value.findIndex((g) => g.id === id)
-      if (idx !== -1) {
+      if (updated && idx !== -1) {
         gigs.value[idx] = updated
       }
       return updated
@@ -145,6 +161,35 @@ export const useGigStore = defineStore('gig', () => {
     }
   }
 
+  async function linkTracklist(
+    gigId: string,
+    tracklistId: string
+  ): Promise<boolean> {
+    try {
+      await $fetch(`/api/v1/gigs/${gigId}/tracklists/${tracklistId}`, {
+        method: 'POST',
+      })
+      return true
+    } catch (e) {
+      console.error('linkTracklist failed:', e)
+      return false
+    }
+  }
+
+  async function unlinkTracklist(
+    gigId: string,
+    tracklistId: string
+  ): Promise<boolean> {
+    try {
+      await $fetch(`/api/v1/gigs/${gigId}/tracklists/${tracklistId}`, {
+        method: 'DELETE',
+      })
+      return true
+    } catch (e) {
+      console.error('unlinkTracklist failed:', e)
+      return false
+    }
+  }
   async function fetchGigsAutocomplete(q: string): Promise<Gig[]> {
     try {
       const data = await $fetch<Gig[]>(
@@ -192,6 +237,8 @@ export const useGigStore = defineStore('gig', () => {
     deleteGig,
     linkVenue,
     linkContact,
+    linkTracklist,
+    unlinkTracklist,
     fetchGigsAutocomplete,
     generateICalUrl,
     setFilter,

@@ -42,6 +42,14 @@ func (m *mockService) GetContent(_ context.Context) (*epk.EPKContent, error) {
 	return m.getContentResult, m.getContentErr
 }
 
+func (m *mockService) PhotoURLs(_ context.Context, paths []string) map[string]string {
+	urls := map[string]string{}
+	for _, p := range paths {
+		urls[p] = "https://signed.example/" + p
+	}
+	return urls
+}
+
 func (m *mockService) UpsertContent(_ context.Context, req epk.UpsertEPKContentRequest) (*epk.EPKContent, error) {
 	m.upsertContentRequest = req
 	return m.upsertContentResult, m.upsertContentErr
@@ -74,7 +82,7 @@ func (m *mockService) DeleteExport(_ context.Context, _ uuid.UUID) error {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func newHandlerRoutes(svc *mockService) http.Handler {
-	h := epk.NewHandler(svc)
+	h := epk.NewHandler(svc, nil) // nil = default RA client, as in main.go
 	return h.Routes()
 }
 
@@ -187,7 +195,7 @@ func TestHandler_PostPhoto_415_BadMIME(t *testing.T) {
 func TestHandler_DeletePhoto_204(t *testing.T) {
 	svc := &mockService{}
 	r := chi.NewRouter()
-	h := epk.NewHandler(svc)
+	h := epk.NewHandler(svc, nil) // nil = default RA client, as in main.go
 	r.Mount("/", h.Routes())
 
 	req := httptest.NewRequest(http.MethodDelete, "/photos/epk%2Fphotos%2Ftest.jpg", nil)
@@ -252,7 +260,7 @@ func TestHandler_DeleteExport_204(t *testing.T) {
 		},
 	}
 	r := chi.NewRouter()
-	h := epk.NewHandler(svc)
+	h := epk.NewHandler(svc, nil) // nil = default RA client, as in main.go
 	r.Mount("/", h.Routes())
 
 	req := httptest.NewRequest(http.MethodDelete, "/exports/"+exportID.String(), nil)

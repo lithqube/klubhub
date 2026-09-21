@@ -126,7 +126,15 @@ func (r *Repository) Get(ctx context.Context, id uuid.UUID) (*Tracklist, []Track
 	return &tl, tracks, nil
 }
 
-// List returns all non-deleted tracklists ordered by created_at DESC
+// Exists checks whether a tracklist exists (not soft-deleted).
+func (r *Repository) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM tracklists WHERE id = $1 AND deleted_at IS NULL)`,
+		id,
+	).Scan(&exists)
+	return exists, err
+}
 func (r *Repository) List(ctx context.Context) ([]Tracklist, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, title, source_format, raw_file_path, preset, visible_fields, 

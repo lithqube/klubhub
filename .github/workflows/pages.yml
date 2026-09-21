@@ -35,8 +35,18 @@ jobs:
     # environment; binding both keeps the secret-access contract
     # consistent and prevents accidental deploys from forks or
     # unrelated branches.
-    environment:
-      name: github-pages
+    #
+    # Pull-request runs are NOT bound to the environment. The environment
+    # only admits the deployment branch, and a PR runs on refs/pull/N/merge,
+    # so binding it made this job fail in ~2s on every PR that touches a
+    # watched path ("Branch refs/pull/N/merge is not allowed to deploy to
+    # github-pages"). PR runs never needed it: they build with the
+    # placeholder key below, cannot read environment secrets, and skip the
+    # artifact upload. Push and dispatch runs, and the deploy job, keep the
+    # binding and its protection rules unchanged.
+    # Note the shape: `cond && 'name' || ''`. The `cond && '' || 'name'` form
+    # is a trap, because '' is falsy and it falls through to 'name'.
+    environment: ${{ github.event_name != 'pull_request' && 'github-pages' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

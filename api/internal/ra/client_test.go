@@ -134,10 +134,10 @@ func TestGetArtist_Success(t *testing.T) {
 			"artist": {
 				"id": "123",
 				"name": "Test Artist",
-				"slug": "test-artist",
-				"url": "https://ra.co/dj/test-artist",
+				"urlSafeName": "test-artist",
+				"contentUrl": "/dj/test-artist",
 				"biography": {"blurb": "A test artist biography"},
-				"aliases": ["TA"],
+				"aliases": "TA, Tee Ay",
 				"facebook": "https://facebook.com/test",
 				"twitter": "https://twitter.com/test",
 				"instagram": "https://instagram.com/test",
@@ -145,11 +145,11 @@ func TestGetArtist_Success(t *testing.T) {
 				"bandcamp": "https://test.bandcamp.com",
 				"discogs": "https://discogs.com/test",
 				"website": "https://test.com",
-				"artistAreas": [{"areaId": "1", "areaName": "London", "countryId": "3", "countryUrl": "uk"}],
-				"artistVenues": [{"venueId": "100", "venueName": "Test Club"}],
+				"area": {"id": "1", "name": "London", "country": {"id": "3", "urlCode": "UK"}},
+				"venuesMostPlayed": [{"id": "100", "name": "Test Club"}],
 				"followerCount": 10000,
-				"headerImage": "https://example.com/header.jpg",
-				"profileImage": "https://example.com/profile.jpg"
+				"coverImage": "https://example.com/header.jpg",
+				"image": "https://example.com/profile.jpg"
 			}
 		}
 	}`
@@ -196,6 +196,41 @@ func TestGetArtist_Success(t *testing.T) {
 	if artist.Followers != 10000 {
 		t.Fatalf("expected 10000 followers, got %d", artist.Followers)
 	}
+
+	// RA's field names differ from the exported model; verify the mapping.
+	if artist.Slug != "test-artist" {
+		t.Fatalf("expected slug from urlSafeName, got '%s'", artist.Slug)
+	}
+	if artist.URL != "https://ra.co/dj/test-artist" {
+		t.Fatalf("expected absolute URL from contentUrl, got '%s'", artist.URL)
+	}
+	if len(artist.Aliases) != 2 || artist.Aliases[0] != "TA" || artist.Aliases[1] != "Tee Ay" {
+		t.Fatalf("expected aliases split from RA's comma-separated string, got %v", artist.Aliases)
+	}
+	if artist.Areas[0].Country != "uk" || artist.Areas[0].CountryID != "3" {
+		t.Fatalf("expected country uk/3, got %s/%s", artist.Areas[0].Country, artist.Areas[0].CountryID)
+	}
+	if artist.HeaderImage != "https://example.com/header.jpg" || artist.ProfileImage != "https://example.com/profile.jpg" {
+		t.Fatalf("expected images mapped from coverImage/image, got %q / %q", artist.HeaderImage, artist.ProfileImage)
+	}
+}
+
+func TestExecuteQuery_IdentifiesItself(t *testing.T) {
+	var gotUA string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		_, _ = w.Write([]byte(`{"data":{"artist":null}}`))
+	}))
+	defer server.Close()
+
+	client := NewRAClient()
+	client.SetBaseURL(server.URL)
+	_, _ = client.GetArtist(context.Background(), "anyone")
+
+	// RA's edge answers Go's default User-Agent with a 403 block page.
+	if !strings.HasPrefix(gotUA, "KlubHubDJ/") {
+		t.Fatalf("expected an identifying KlubHubDJ User-Agent, got %q", gotUA)
+	}
 }
 
 func TestGetArtist_NotFound(t *testing.T) {
@@ -233,36 +268,26 @@ func TestGetArtistEvents_Success(t *testing.T) {
 					{
 						"id": "evt-1",
 						"title": "Test Event 1",
-						"date": "2024-06-15",
-						"startTime": "21:00",
-						"endTime": "03:00",
-						"venueId": "100",
-						"venueName": "Test Venue",
-						"venueUrl": "https://ra.co/clubs/test-venue",
-						"artists": [{"artistId": "123", "name": "Test Artist", "url": "/dj/test-artist", "slug": "test-artist"}],
-						"hosts": [],
+						"date": "2024-06-15T00:00:00.000",
+						"startTime": "2024-06-15T21:00:00.000",
+						"endTime": "2024-06-16T03:00:00.000",
+						"venue": {"id": "100", "name": "Test Venue", "contentUrl": "/clubs/100"},
+						"artists": [{"id": "123", "name": "Test Artist", "contentUrl": "/dj/test-artist", "urlSafeName": "test-artist"}],
 						"attending": 150,
-						"contentUrl": "https://ra.co/events/evt-1/tickets",
-						"isPick": true,
-						"isSoldOut": false,
-						"promo": "A great night of music"
+						"contentUrl": "/events/evt-1",
+						"pick": {"id": "p-1"}
 					},
 					{
 						"id": "evt-2",
 						"title": "Test Event 2",
-						"date": "2024-07-20",
-						"startTime": "22:00",
-						"endTime": "04:00",
-						"venueId": "101",
-						"venueName": "Another Venue",
-						"venueUrl": "https://ra.co/clubs/another-venue",
-						"artists": [{"artistId": "123", "name": "Test Artist", "url": "/dj/test-artist", "slug": "test-artist"}],
-						"hosts": [{"artistId": "456", "name": "Support Act", "url": "/dj/support-act", "slug": "support-act"}],
+						"date": "2024-07-20T00:00:00.000",
+						"startTime": "2024-07-20T22:00:00.000",
+						"endTime": "2024-07-21T04:00:00.000",
+						"venue": null,
+						"artists": [{"id": "123", "name": "Test Artist", "contentUrl": "/dj/test-artist", "urlSafeName": "test-artist"}],
 						"attending": 200,
-						"contentUrl": "https://ra.co/events/evt-2/tickets",
-						"isPick": false,
-						"isSoldOut": false,
-						"promo": ""
+						"contentUrl": "/events/evt-2",
+						"pick": null
 					}
 				]
 			}
@@ -294,8 +319,12 @@ func TestGetArtistEvents_Success(t *testing.T) {
 	if events[0].Title != "Test Event 1" {
 		t.Fatalf("expected title 'Test Event 1', got '%s'", events[0].Title)
 	}
+	// RA sends LocalDateTime; the model promises YYYY-MM-DD and HH:MM.
 	if events[0].Date != "2024-06-15" {
 		t.Fatalf("expected date '2024-06-15', got '%s'", events[0].Date)
+	}
+	if events[0].StartTime != "21:00" || events[0].EndTime != "03:00" {
+		t.Fatalf("expected times 21:00/03:00, got %q/%q", events[0].StartTime, events[0].EndTime)
 	}
 	if events[0].VenueName != "Test Venue" {
 		t.Fatalf("expected venue 'Test Venue', got '%s'", events[0].VenueName)
@@ -313,9 +342,20 @@ func TestGetArtistEvents_Success(t *testing.T) {
 		t.Fatalf("expected artist 'Test Artist', got '%s'", events[0].Artists[0].Name)
 	}
 
-	// Check second event
-	if events[1].Hosts[0].Name != "Support Act" {
-		t.Fatalf("expected host 'Support Act', got '%s'", events[1].Hosts[0].Name)
+	// Nested RA objects are flattened onto the exported model.
+	if events[0].VenueID != "100" || events[0].VenueURL != "https://ra.co/clubs/100" {
+		t.Fatalf("expected venue 100 with absolute URL, got %q / %q", events[0].VenueID, events[0].VenueURL)
+	}
+	if events[0].Artists[0].ArtistID != "123" || events[0].Artists[0].Slug != "test-artist" {
+		t.Fatalf("expected artist ref 123/test-artist, got %+v", events[0].Artists[0])
+	}
+	if events[0].ContentURL != "https://ra.co/events/evt-1" {
+		t.Fatalf("expected absolute content URL, got '%s'", events[0].ContentURL)
+	}
+
+	// Second event: a TBA venue (null) and no pick must not panic.
+	if events[1].VenueName != "" || events[1].IsPick {
+		t.Fatalf("expected empty venue and no pick, got %q / %v", events[1].VenueName, events[1].IsPick)
 	}
 }
 

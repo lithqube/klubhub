@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -65,42 +66,25 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Get file size
-	size := header.Size
-
-	// Call service.Upload
-	tracklist, tracks, warnings, err := h.svc.Upload(r.Context(), header.Filename, nil, size)
+	// Read the whole file (already capped by MaxBytesReader above). A single
+	// Read call is not guaranteed to fill the buffer, so use io.ReadAll.
+	body, err := io.ReadAll(file)
 	if err != nil {
-		switch err {
-		case errors.New("file_too_large"):
-			h.writeError(w, http.StatusRequestEntityTooLarge, err.Error())
-		default:
-			h.writeError(w, http.StatusInternalServerError, err.Error())
-		}
+		h.writeError(w, http.StatusInternalServerError, "failed to read file")
 		return
 	}
 
-	// Read the file content
-	body := make([]byte, size)
-	n, err := file.Read(body)
-	if err != nil && err != errors.New("EOF") {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if int64(n) != size {
-		h.writeError(w, http.StatusInternalServerError, "failed to read full file")
-		return
-	}
-
-	// Re-call service.Upload with the actual body (since we need to parse it)
-	tracklist, tracks, warnings, err = h.svc.Upload(r.Context(), header.Filename, body, size)
+	// Parse and persist in one call. Upload enforces the size limit itself;
+	// calling it with a nil body first made every upload fail with
+	// zero_tracks before the file was ever parsed.
+	tracklist, tracks, warnings, err := h.svc.Upload(r.Context(), header.Filename, body, header.Size)
 	if err != nil {
-		switch err {
-		case errors.New("file_too_large"):
+		// errors.Is against sentinels: comparing to errors.New(...) allocates
+		// a fresh value that never matches, so everything became a 500.
+		switch {
+		case errors.Is(err, ErrFileTooLarge):
 			h.writeError(w, http.StatusRequestEntityTooLarge, err.Error())
-		case errors.New("invalid_format"):
-			h.writeError(w, http.StatusUnprocessableEntity, err.Error())
-		case errors.New("zero_tracks"):
+		case errors.Is(err, ErrInvalidFormat), errors.Is(err, ErrZeroTracks):
 			h.writeError(w, http.StatusUnprocessableEntity, err.Error())
 		default:
 			h.writeError(w, http.StatusInternalServerError, err.Error())

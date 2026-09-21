@@ -3,7 +3,6 @@ package tracklist
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,7 +65,7 @@ func NewService(repo tracklistRepoIface, storage storageIface, artwork artworkSe
 func (s *Service) Upload(ctx context.Context, filename string, body []byte, size int64) (*Tracklist, []Track, []ParseWarning, error) {
 	// Check file size
 	if size > s.config.MaxUploadBytes {
-		return nil, nil, nil, errors.New("file_too_large")
+		return nil, nil, nil, ErrFileTooLarge
 	}
 
 	// Parse the TSV file
@@ -106,6 +105,16 @@ func (s *Service) Upload(ctx context.Context, filename string, body []byte, size
 			return nil, nil, nil, err
 		}
 		tl.RawFilePath = objectName
+	}
+
+	// The parser knows nothing about persistence: give every track its own
+	// ID and point it at this tracklist, otherwise the insert violates
+	// tracks_tracklist_id_fkey with the zero UUID.
+	for i := range tracks {
+		if tracks[i].ID == uuid.Nil {
+			tracks[i].ID = uuid.New()
+		}
+		tracks[i].TracklistID = tlID
 	}
 
 	// Save to database

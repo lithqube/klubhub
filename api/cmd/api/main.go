@@ -24,6 +24,7 @@ import (
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/migrations"
 	"github.com/klubhub/dj/api/internal/platform/storage"
+	"github.com/klubhub/dj/api/internal/ra"
 	"github.com/klubhub/dj/api/internal/settings"
 	"github.com/klubhub/dj/api/internal/social"
 	"github.com/klubhub/dj/api/internal/tracklist"
@@ -268,6 +269,12 @@ func run() error {
 
 	contactSvc := contact.NewService(contactRepo)
 	contactHandler := contact.NewHandler(contactSvc)
+
+	// The RA import routes live on the gig router but need the venue and
+	// contact services. This must happen before gigHandler.Routes() is
+	// called below; without it the routes were mounted on a nil handler and
+	// every /gigs/info/{slug} and /gigs/import-ra request panicked.
+	gigHandler.SetRAImportHandler(gig.NewRAImportHandler(gigSvc, venueSvc, contactSvc, ra.NewRAClient()))
 
 	// 10. Build router (internal http package aliased as apphttp).
 	router := apphttp.NewRouter(cfg, pool, storeClient, logger,

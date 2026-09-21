@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { useGigStore } from '../../stores/gig'
+import { useTracklistStore } from '../../stores/tracklist'
+import { ref, computed, watch } from 'vue'
 import type { Gig, GigCreate, Venue, Contact, GigStatus, PaymentStatus } from '../../types/gig'
+import type { Tracklist as TracklistType } from '../../types/tracklist'
 import VenueAutocomplete from './VenueAutocomplete.vue'
 import ContactAutocomplete from './ContactAutocomplete.vue'
+
+const gigStore = useGigStore()
+const tracklistStore = useTracklistStore()
 
 const props = defineProps<{
   open: boolean
@@ -14,10 +20,80 @@ const emit = defineEmits<{
   saved: []
 }>()
 
-const gigStore = useGigStore()
-
 const isEdit = computed(() => !!props.gig?.id)
-const title = computed(() => (isEdit.value ? 'EDIT GIG' : 'ADD GIG'))
+
+const linkedTracklists = ref<Pick<TracklistType, 'id' | 'title'>[]>([])
+const availableTracklists = ref<TracklistType[]>([])
+const tracklistsLoaded = ref(false)
+const linkingTlId = ref('')
+const unlinkingTl = ref(false)
+
+async function loadTracklists() {
+  if (!props.gig?.id) return
+  tracklistsLoaded.value = false
+  try {
+    const detail = await gigStore.fetchGigDetail(props.gig.id)
+    if (detail?.tracklists && Array.isArray(detail.tracklists)) {
+      linkedTracklists.value = detail.tracklists.map((t) => ({
+        id: t.id,
+        title: t.title,
+      }))
+    }
+    await tracklistStore.loadPastTracklists()
+    availableTracklists.value = tracklistStore.pastTracklists.filter(
+      (tl) => !linkedTracklists.value.some((l) => l.id === tl.id)
+    )
+  } catch (e) {
+    console.error('loadTracklists failed:', e)
+  } finally {
+    tracklistsLoaded.value = true
+  }
+}
+
+async function linkTracklist(tlId: string) {
+  if (!props.gig?.id) return
+  linkingTlId.value = tlId
+  const ok = await gigStore.linkTracklist(props.gig.id, tlId)
+  if (ok) {
+    const tl = await tracklistStore.fetchTracklist(tlId)
+    linkedTracklists.value.push({ id: tlId, title: tl?.title || tlId })
+    availableTracklists.value = availableTracklists.value.filter((t) => t.id !== tlId)
+    tracklistStore.linkedGigs[tlId] = tracklistStore.linkedGigs[tlId] || []
+    tracklistStore.linkedGigs[tlId].push(props.gig.id)
+  }
+  linkingTlId.value = ''
+}
+
+async function unlinkTracklist(tlId: string) {
+  if (!props.gig?.id) return
+  unlinkingTl.value = true
+  const ok = await gigStore.unlinkTracklist(props.gig.id, tlId)
+  if (ok) {
+    linkedTracklists.value = linkedTracklists.value.filter((t) => t.id !== tlId)
+    // Re-add to available tracklists so it can be re-linked
+    const tl = await tracklistStore.fetchTracklist(tlId).catch(() => null)
+    if (tl && !availableTracklists.value.some((t) => t.id === tlId)) {
+      availableTracklists.value.push(tl)
+    }
+    // Remove only this gig's association, preserve other gigs'
+    if (tracklistStore.linkedGigs[tlId]) {
+      tracklistStore.linkedGigs[tlId] = tracklistStore.linkedGigs[tlId].filter(
+        (gigId) => gigId !== props.gig!.id,
+      )
+    }
+  }
+  unlinkingTl.value = false
+}
+
+watch(() => props.gig?.id, () => { if (props.gig?.id) loadTracklists() }, { immediate: true })
+
+// Dialog header title
+const title = computed(() => {
+  if (!props.gig) return ''
+  if (props.gig.event_name) return props.gig.event_name
+  if (props.gig.venue?.name) return props.gig.venue.name
+  return ''
+})
 
 // Form state
 const form = reactive({
@@ -44,6 +120,7 @@ const copyQuery = ref('')
 const copyResults = ref<Gig[]>([])
 const showCancelConfirm = ref(false)
 const isSaving = ref(false)
+const saveError = ref<string | null>(null)
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'DKK', 'SEK', 'NOK']
 const STATUS_OPTIONS: GigStatus[] = ['inquiry', 'confirmed', 'advanced', 'played', 'cancelled']
@@ -134,10 +211,25 @@ async function save() {
 }
 
 async function doSave() {
+  saveError.value = null
+  if (!form.date) {
+    saveError.value = 'Date is required.'
+    showCancelConfirm.value = false
+    return
+  }
+  if (!form.venue?.name && !form.event_name) {
+    saveError.value = 'Add a venue or an event name.'
+    showCancelConfirm.value = false
+    return
+  }
+
   isSaving.value = true
   try {
     const gigData: GigCreate = {
-      date: form.date,
+      // The Go API decodes `date` as time.Time (RFC 3339 only); a bare
+      // YYYY-MM-DD from the date input is rejected as invalid JSON.
+      // Midnight UTC round-trips with the `split('T')[0]` used on read.
+      date: `${form.date}T00:00:00Z`,
       venue: form.venue?.name || form.event_name || '',
       city: form.city,
       country: form.country,
@@ -153,10 +245,17 @@ async function doSave() {
       payment_status: form.payment_status,
     }
 
-    if (isEdit.value && props.gig?.id) {
-      await gigStore.updateGig(props.gig.id, gigData)
-    } else {
-      await gigStore.createGig(gigData)
+    // The gig store swallows request errors and resolves to null, so a
+    // falsy result is the only failure signal — keep the dialog open.
+    // Updates are guarded by optimistic concurrency: the API matches on
+    // the `updated_at` we last saw and answers 409 without it.
+    const result = isEdit.value && props.gig?.id
+      ? await gigStore.updateGig(props.gig.id, { ...gigData, updated_at: props.gig.updated_at })
+      : await gigStore.createGig(gigData)
+
+    if (!result) {
+      saveError.value = 'Could not save the gig. Check the fields and try again.'
+      return
     }
 
     emit('saved')
@@ -373,6 +472,33 @@ function close() {
               />
             </div>
 
+            <!-- Linked tracklists -->
+            <div v-if="isEdit && props.gig?.id">
+              <label class="section-lbl" style="display:block;margin-bottom:6px;">LINKED TRACKLISTS</label>
+              <div v-for="tl in linkedTracklists" :key="tl.id" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(150,248,255,.06);border-radius:6px;margin-bottom:4px;">
+                <span style="flex:1;font-family:var(--font-ui);font-size:13px;color:var(--green);font-weight:600;">{{ tl.title }}</span>
+                <button class="btn-hud btn-hud-xs" style="color:var(--red);" @click="unlinkTracklist(tl.id)" :disabled="unlinkingTl">✕</button>
+              </div>
+              <div v-if="linkedTracklists.length === 0" style="font-size:12px;color:var(--muted);padding:4px 0;">No tracklists linked yet.</div>
+              <div style="margin-top:8px;">
+                <label class="section-lbl" style="display:block;margin-bottom:4px;font-size:11px;color:var(--muted);">SELECT TRACKLIST TO LINK</label>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button
+                    v-for="tl in availableTracklists"
+                    :key="tl.id"
+                    class="btn-hud"
+                    style="font-size:12px;padding:4px 10px;"
+                    :disabled="linkingTlId === tl.id"
+                    @click="linkTracklist(tl.id)"
+                  >
+                    <span v-if="linkingTlId === tl.id">...</span>
+                    <span v-else>{{ tl.title }}</span>
+                  </button>
+                </div>
+              </div>
+              <div v-if="!tracklistsLoaded" style="font-size:12px;color:var(--muted);padding:4px 0;">Loading tracklists...</div>
+            </div>
+
             <!-- Copy from previous gig -->
             <div>
               <label class="section-lbl" style="display:block;margin-bottom:6px;">COPY FROM PREVIOUS GIG</label>
@@ -403,7 +529,15 @@ function close() {
           </div>
 
           <!-- Dialog footer -->
-          <div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 20px;border-top:1px solid rgba(150,248,255,.08);">
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid rgba(150,248,255,.08);">
+            <div
+              v-if="saveError"
+              role="alert"
+              class="section-lbl"
+              style="margin-right:auto;color:var(--color-error);"
+            >
+              {{ saveError }}
+            </div>
             <button class="btn-hud" @click="close">
               CANCEL
             </button>

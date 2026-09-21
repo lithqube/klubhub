@@ -14,6 +14,8 @@ export interface EPKContent {
   gigHighlights: string[]
   pressQuotes: PressQuote[]
   photoPaths: string[]
+  /** Signed display URL per photoPaths entry. */
+  photoUrls?: Record<string, string>
   sectionVisibility: SectionVisibility
   createdAt: string
   updatedAt: string

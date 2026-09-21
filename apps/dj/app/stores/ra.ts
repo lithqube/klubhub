@@ -2,6 +2,15 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { RAArtist, RAEVENT, RAImportResult, RAImportRequest } from '../types/ra'
 
+// Prefer the API's own explanation ({ "error": "..." }) over ofetch's generic
+// `[POST] "/api/...": 502 Bad Gateway`, which tells the user nothing.
+function messageOf(e: unknown, fallback: string): string {
+  const body = (e as { data?: { error?: string; message?: string } } | null)?.data
+  if (body?.error) return body.error
+  if (body?.message) return body.message
+  return e instanceof Error ? e.message : fallback
+}
+
 export const useRaStore = defineStore('ra', () => {
   // State
   const artist = ref<RAArtist | null>(null)
@@ -18,7 +27,7 @@ export const useRaStore = defineStore('ra', () => {
       const result = await $fetch<{ data: RAArtist }>(`/api/v1/gigs/info/${slug}`)
       artist.value = result.data
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch artist'
+      error.value = messageOf(e, 'Failed to fetch artist')
       artist.value = null
     } finally {
       loading.value = false
@@ -34,7 +43,7 @@ export const useRaStore = defineStore('ra', () => {
       // For now, events will be fetched via the import endpoint
       // The backend handles event fetching internally
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch events'
+      error.value = messageOf(e, 'Failed to fetch events')
     } finally {
       loading.value = false
     }
@@ -51,7 +60,7 @@ export const useRaStore = defineStore('ra', () => {
       importResult.value = result
       return result
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Import failed'
+      error.value = messageOf(e, 'Import failed')
       throw e
     } finally {
       loading.value = false
@@ -69,7 +78,7 @@ export const useRaStore = defineStore('ra', () => {
       error.value = null
       return result
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'EPK import failed'
+      error.value = messageOf(e, 'EPK import failed')
       throw e
     } finally {
       loading.value = false

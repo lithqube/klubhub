@@ -17,16 +17,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/shopspring/decimal"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
+		"github.com/jackc/pgx/v5/pgxpool"
+		_ "github.com/jackc/pgx/v5/stdlib"
+		"github.com/shopspring/decimal"
+		"github.com/testcontainers/testcontainers-go"
+		tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+		"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/klubhub/dj/api/internal/gig"
-	"github.com/klubhub/dj/api/internal/platform/migrations"
-)
+		"encoding/json"
+		"net/http"
+		"net/http/httptest"
+		"github.com/google/uuid"
+
+		"github.com/klubhub/dj/api/internal/gig"
+		"github.com/klubhub/dj/api/internal/platform/migrations"
+				"github.com/klubhub/dj/api/internal/tracklist"
+	)
 
 var (
 	testPool     *pgxpool.Pool
@@ -231,10 +237,332 @@ func TestIntegration_MigrationsRunClean(t *testing.T) {
 		tables[name] = true
 	}
 
-	expected := []string{"gigs", "venues", "contacts"}
-	for _, want := range expected {
-		if !tables[want] {
-			t.Errorf("expected table %q to exist after migrations; got: %v", want, tables)
+		expected := []string{"gigs", "venues", "contacts"}
+		for _, want := range expected {
+			if !tables[want] {
+				t.Errorf("expected table %q to exist after migrations; got: %v", want, tables)
+			}
 		}
 	}
-}
+
+	// ─── Tracklist↔Gig linking integration tests ────────────────────────────────
+
+	func TestIntegration_LinkTracklist_Success(t *testing.T) {
+		if testing.Short() {
+			t.Skip("integration test")
+		}
+		if testPool == nil {
+			t.Skip("postgres unavailable")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Create tracklist repository and service (no storage/artwork needed for this test)
+		trackRepo := tracklist.NewRepository(testPool)
+		// tracklist service not needed for this test
+
+		// Create a tracklist
+		tlID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+		tl := &tracklist.Tracklist{
+			ID:              tlID,
+			Title:           "Closing Set",
+			SourceFormat:    "rekordbox",
+			RawFilePath:     "/tmp/set.txt",
+			Preset:          "story",
+			VisibleFields:   `["title","artist"]`,
+			BgMode:          "solid",
+			BgValue:         "#000000",
+			MaxTracks:       20,
+			TrackRangeStart: 1,
+			TrackRangeEnd:   10,
+			CreatedAt:       time.Now().UTC(),
+			UpdatedAt:       time.Now().UTC(),
+		}
+		if err := trackRepo.Create(ctx, tl, []tracklist.Track{}); err != nil {
+			t.Fatalf("Create tracklist: %v", err)
+		}
+
+		// Create gig repository and service
+		gigRepo := gig.NewRepository(testPool)
+		gigSvc := gig.NewService(gigRepo, nil, nil, trackRepo, nil)
+
+		fee, _ := decimal.NewFromString("500.00")
+		gigIn := &gig.GigCreate{
+			Date:        time.Date(2026, 10, 1, 21, 0, 0, 0, time.UTC),
+			Venue:       "Berghain",
+			City:        "Berlin",
+			Country:     "DE",
+			EventName:   "Monday Night",
+			FeeAmount:   fee,
+			FeeCurrency: "EUR",
+		}
+		g, err := gigSvc.CreateGig(ctx, gigIn)
+		if err != nil {
+			t.Fatalf("CreateGig: %v", err)
+		}
+
+		// Verify tracklist is not linked yet
+		detail, err := gigSvc.GetGigDetail(ctx, g.ID)
+		if err != nil {
+			t.Fatalf("GetGigDetail before link: %v", err)
+		}
+		if len(detail.Tracklists) != 0 {
+			t.Fatalf("expected 0 tracklists before link, got %d", len(detail.Tracklists))
+		}
+
+		// Link tracklist to gig
+		if err := gigSvc.LinkTracklist(ctx, g.ID, tlID); err != nil {
+			t.Fatalf("LinkTracklist: %v", err)
+		}
+
+		// Verify linked — tracklist should appear in detail
+		detail, err = gigSvc.GetGigDetail(ctx, g.ID)
+		if err != nil {
+			t.Fatalf("GetGigDetail after link: %v", err)
+		}
+		if len(detail.Tracklists) != 1 {
+			t.Fatalf("expected 1 tracklist after link, got %d; detail: %+v", len(detail.Tracklists), detail)
+		}
+		if detail.Tracklists[0].ID != tlID {
+			t.Fatalf("tracklist ID mismatch: got %s want %s", detail.Tracklists[0].ID, tlID)
+		}
+		if detail.Tracklists[0].Title != "Closing Set" {
+			t.Fatalf("tracklist title mismatch: got %q", detail.Tracklists[0].Title)
+		}
+
+		// Duplicate link — must be idempotent, no error, no duplicate row
+		if err := gigSvc.LinkTracklist(ctx, g.ID, tlID); err != nil {
+			t.Fatalf("LinkTracklist (duplicate): %v", err)
+		}
+		detail, err = gigSvc.GetGigDetail(ctx, g.ID)
+		if err != nil {
+			t.Fatalf("GetGigDetail after duplicate link: %v", err)
+		}
+		if len(detail.Tracklists) != 1 {
+			t.Fatalf("expected still 1 tracklist after duplicate link, got %d", len(detail.Tracklists))
+		}
+
+		// Unlink
+		if err := gigSvc.UnlinkTracklist(ctx, g.ID, tlID); err != nil {
+			t.Fatalf("UnlinkTracklist: %v", err)
+		}
+
+		// Verify unlinked
+		detail, err = gigSvc.GetGigDetail(ctx, g.ID)
+		if err != nil {
+			t.Fatalf("GetGigDetail after unlink: %v", err)
+		}
+		if len(detail.Tracklists) != 0 {
+			t.Fatalf("expected 0 tracklists after unlink, got %d", len(detail.Tracklists))
+		}
+	}
+
+	func TestIntegration_LinkTracklist_NonexistentTracklist(t *testing.T) {
+		if testing.Short() {
+			t.Skip("integration test")
+		}
+		if testPool == nil {
+			t.Skip("postgres unavailable")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		trackRepo := tracklist.NewRepository(testPool)
+		gigRepo := gig.NewRepository(testPool)
+		gigSvc := gig.NewService(gigRepo, nil, nil, trackRepo, nil)
+
+		fee, _ := decimal.NewFromString("200.00")
+		gigIn := &gig.GigCreate{
+			Date: time.Date(2026, 11, 15, 22, 0, 0, 0, time.UTC),
+			Venue: "Tresor", City: "Berlin", Country: "DE",
+			EventName: "Weekend Special", FeeAmount: fee, FeeCurrency: "EUR",
+		}
+		g, err := gigSvc.CreateGig(ctx, gigIn)
+		if err != nil {
+			t.Fatalf("CreateGig: %v", err)
+		}
+
+		// Attempt to link a non-existent tracklist
+		badID := uuid.MustParse("deadbeef-dead-beef-dead-beefdeadbeef")
+		if err := gigSvc.LinkTracklist(ctx, g.ID, badID); err == nil {
+			t.Fatal("LinkTracklist with nonexistent tracklist should fail")
+		}
+	}
+
+	func TestIntegration_UnlinkTracklist_NonexistentLink(t *testing.T) {
+		if testing.Short() {
+			t.Skip("integration test")
+		}
+		if testPool == nil {
+			t.Skip("postgres unavailable")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		trackRepo := tracklist.NewRepository(testPool)
+		gigRepo := gig.NewRepository(testPool)
+		gigSvc := gig.NewService(gigRepo, nil, nil, trackRepo, nil)
+
+		// Create tracklist + gig, link, then unlink twice (second unlink is a no-op)
+		tlID := uuid.MustParse("bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
+		tl := &tracklist.Tracklist{
+			ID: tlID, Title: "Openers", SourceFormat: "export",
+			RawFilePath: "/tmp/open.txt", Preset: "mosaic",
+			VisibleFields: `["artist","bpm"]`, BgMode: "upload",
+			BgValue: "#ffffff", MaxTracks: 15,
+			TrackRangeStart: 1, TrackRangeEnd: 15,
+			CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+		}
+		if err := trackRepo.Create(ctx, tl, []tracklist.Track{}); err != nil {
+			t.Fatalf("Create tracklist: %v", err)
+		}
+
+		fee, _ := decimal.NewFromString("300.00")
+		gigIn := &gig.GigCreate{
+			Date: time.Date(2026, 9, 20, 20, 0, 0, 0, time.UTC),
+			Venue: "Watergate", City: "Berlin", Country: "DE",
+			EventName: "Friday Night", FeeAmount: fee, FeeCurrency: "EUR",
+		}
+		g, err := gigSvc.CreateGig(ctx, gigIn)
+		if err != nil {
+			t.Fatalf("CreateGig: %v", err)
+		}
+
+		if err := gigSvc.LinkTracklist(ctx, g.ID, tlID); err != nil {
+			t.Fatalf("LinkTracklist: %v", err)
+		}
+		if err := gigSvc.UnlinkTracklist(ctx, g.ID, tlID); err != nil {
+			t.Fatalf("first UnlinkTracklist: %v", err)
+		}
+		// Second unlink of the same (now absent) link — must not error.
+		if err := gigSvc.UnlinkTracklist(ctx, g.ID, tlID); err != nil {
+			t.Fatalf("second UnlinkTracklist (nonexistent link) should not fail: %v", err)
+		}
+	}
+
+	func TestIntegration_LinkTracklist_HandlerRoutes(t *testing.T) {
+		if testing.Short() {
+			t.Skip("integration test")
+		}
+		if testPool == nil {
+			t.Skip("postgres unavailable")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		trackRepo := tracklist.NewRepository(testPool)
+		gigRepo := gig.NewRepository(testPool)
+		gigSvc := gig.NewService(gigRepo, nil, nil, trackRepo, nil)
+
+		h := gig.NewHandler(gigSvc, "test-secret")
+	h.SetRAImportHandler(gig.NewRAImportHandler(nil, nil, nil, nil))
+
+	router := h.Routes()
+
+		// Create tracklist + gig via services
+		tlID := uuid.MustParse("cccccccc-cccc-dddd-eeee-ffffffffffff")
+		tl := &tracklist.Tracklist{
+			ID: tlID, Title: "DJ Set", SourceFormat: "rekordbox",
+			RawFilePath: "/tmp/dj.txt", Preset: "story",
+			VisibleFields: `["title","artist","bpm"]`, BgMode: "solid",
+			BgValue: "#1a1a2e", MaxTracks: 25,
+			TrackRangeStart: 1, TrackRangeEnd: 25,
+			CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+		}
+		if err := trackRepo.Create(ctx, tl, []tracklist.Track{}); err != nil {
+			t.Fatalf("Create tracklist: %v", err)
+		}
+
+		fee, _ := decimal.NewFromString("450.00")
+		gigIn := &gig.GigCreate{
+			Date: time.Date(2026, 10, 5, 23, 0, 0, 0, time.UTC),
+			Venue: "Khodok", City: "Berlin", Country: "DE",
+			EventName: "Warm-up Night", FeeAmount: fee, FeeCurrency: "EUR",
+		}
+		g, err := gigSvc.CreateGig(ctx, gigIn)
+		if err != nil {
+			t.Fatalf("CreateGig: %v", err)
+		}
+
+		// POST /{id}/tracklists/{tracklistId}
+		linkURL := "/" + g.ID.String() + "/tracklists/" + tlID.String()
+		req := httptest.NewRequest(http.MethodPost, linkURL, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("POST link: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+
+		// Verify via GET /{id}/detail
+		detailURL := "/" + g.ID.String() + "/detail"
+		req2 := httptest.NewRequest(http.MethodGet, detailURL, nil)
+		rec2 := httptest.NewRecorder()
+		router.ServeHTTP(rec2, req2)
+		if rec2.Code != http.StatusOK {
+			t.Fatalf("GET detail after link: status=%d body=%s", rec2.Code, rec2.Body.String())
+		}
+		var detail gig.GigDetailResponse
+		if err := json.Unmarshal(rec2.Body.Bytes(), &detail); err != nil {
+			t.Fatalf("unmarshal detail: %v", err)
+		}
+		if len(detail.Tracklists) != 1 {
+			t.Fatalf("expected 1 tracklist in detail after link, got %d", len(detail.Tracklists))
+		}
+
+		// DELETE /{id}/tracklists/{tracklistId}
+		req3 := httptest.NewRequest(http.MethodDelete, linkURL, nil)
+		rec3 := httptest.NewRecorder()
+		router.ServeHTTP(rec3, req3)
+		if rec3.Code != http.StatusNoContent {
+			t.Fatalf("DELETE unlink: status=%d body=%s", rec3.Code, rec3.Body.String())
+		}
+
+		// Verify gone
+		req4 := httptest.NewRequest(http.MethodGet, detailURL, nil)
+		rec4 := httptest.NewRecorder()
+		router.ServeHTTP(rec4, req4)
+		if rec4.Code != http.StatusOK {
+			t.Fatalf("GET detail after unlink: status=%d", rec4.Code)
+		}
+		var detail2 gig.GigDetailResponse
+		if err := json.Unmarshal(rec4.Body.Bytes(), &detail2); err != nil {
+			t.Fatalf("unmarshal detail after unlink: %v", err)
+		}
+		if len(detail2.Tracklists) != 0 {
+			t.Fatalf("expected 0 tracklists after unlink, got %d", len(detail2.Tracklists))
+		}
+	}
+
+	func TestIntegration_LinkTracklist_HandlerBadUUID(t *testing.T) {
+		if testing.Short() {
+			t.Skip("integration test")
+		}
+		if testPool == nil {
+			t.Skip("postgres unavailable")
+		}
+
+	h := gig.NewHandler(nil, "test-secret")
+	h.SetRAImportHandler(gig.NewRAImportHandler(nil, nil, nil, nil))
+
+	router := h.Routes()
+
+	// Bad gig UUID
+	req := httptest.NewRequest(http.MethodPost, "/not-a-uuid/tracklists/some-tracklist", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("POST bad gig UUID: status=%d want 400", rec.Code)
+		}
+
+		// Bad tracklist UUID
+		req2 := httptest.NewRequest(http.MethodPost, "/00000000-0000-0000-0000-000000000001/tracklists/not-a-uuid", nil)
+		rec2 := httptest.NewRecorder()
+		router.ServeHTTP(rec2, req2)
+		if rec2.Code != http.StatusBadRequest {
+			t.Fatalf("POST bad tracklist UUID: status=%d want 400", rec2.Code)
+		}
+	}

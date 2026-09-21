@@ -3,10 +3,12 @@ package ra
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,6 +16,13 @@ import (
 const (
 	// RA GraphQL endpoint
 	graphQLURL = "https://ra.co/graphql"
+
+	// RA's edge rejects Go's anonymous default User-Agent with a 403 block
+	// page. Identify the app honestly instead of impersonating a browser.
+	userAgent = "KlubHubDJ/1.0 (self-hosted DJ tool; +https://github.com/lithqube/klubhub-dj)"
+
+	// RA serves site-relative links ("/dj/figuds"); this makes them absolute.
+	siteURL = "https://ra.co"
 
 	// Default timeouts
 	defaultTimeout = 30 * time.Second
@@ -256,6 +265,7 @@ func (c *RAClient) executeQuery(ctx context.Context, query string, variables map
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -264,8 +274,9 @@ func (c *RAClient) executeQuery(ctx context.Context, query string, variables map
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+		// Don't echo the body: on a block it is a full HTML page (which
+		// also carries the caller's IP) and this error reaches API clients.
+		return nil, fmt.Errorf("unexpected status %d from RA", resp.StatusCode)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -288,8 +299,8 @@ func (c *RAClient) GetArtist(ctx context.Context, slug string) (*RAArtist, error
 			artist(slug: $slug) {
 				id
 				name
-				slug
-				url
+				urlSafeName
+				contentUrl
 				biography {
 					blurb
 				}
@@ -301,19 +312,21 @@ func (c *RAClient) GetArtist(ctx context.Context, slug string) (*RAArtist, error
 				bandcamp
 				discogs
 				website
-				artistAreas {
-					areaId
-					areaName
-					countryId
-					countryUrl
+				area {
+					id
+					name
+					country {
+						id
+						urlCode
+					}
 				}
-				artistVenues {
-					venueId
-					venueName
+				venuesMostPlayed {
+					id
+					name
 				}
 				followerCount
-				headerImage
-				profileImage
+				coverImage
+				image
 			}
 		}
 	`
@@ -329,7 +342,7 @@ func (c *RAClient) GetArtist(ctx context.Context, slug string) (*RAArtist, error
 
 	var result struct {
 		Data struct {
-			Artist *RAArtist `json:"artist"`
+			Artist *wireArtist `json:"artist"`
 		} `json:"data"`
 		Errors []struct {
 			Message string `json:"message"`
@@ -345,11 +358,179 @@ func (c *RAClient) GetArtist(ctx context.Context, slug string) (*RAArtist, error
 	}
 
 	if result.Data.Artist == nil {
-		return nil, fmt.Errorf("artist not found: %s", slug)
+		return nil, fmt.Errorf("%w: %s", ErrArtistNotFound, slug)
 	}
 
-	c.cache.SetArtist(result.Data.Artist)
-	return result.Data.Artist, nil
+	artist := result.Data.Artist.toArtist()
+	c.cache.SetArtist(artist)
+	return artist, nil
+}
+
+// ErrArtistNotFound is returned when RA has no artist for the given slug, so
+// callers can tell "no such artist" apart from transport or schema failures.
+var ErrArtistNotFound = errors.New("artist not found")
+
+// The wire* types mirror RA's actual GraphQL schema. They are decoded first
+// and then mapped onto the exported RA* models, whose JSON tags double as this
+// API's response contract and therefore must not follow RA's field names.
+type wireArtist struct {
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	URLSafeName string      `json:"urlSafeName"`
+	ContentURL  string      `json:"contentUrl"`
+	Biography   RABiography `json:"biography"`
+	Aliases     string      `json:"aliases"` // comma-separated string, not a list
+	Facebook    string      `json:"facebook"`
+	Twitter     string      `json:"twitter"`
+	Instagram   string      `json:"instagram"`
+	Soundcloud  string      `json:"soundcloud"`
+	Bandcamp    string      `json:"bandcamp"`
+	Discogs     string      `json:"discogs"`
+	Website     string      `json:"website"`
+	Area        *wireArea   `json:"area"`
+	Venues      []wireVenue `json:"venuesMostPlayed"`
+	Followers   int         `json:"followerCount"`
+	CoverImage  string      `json:"coverImage"`
+	Image       string      `json:"image"`
+}
+
+type wireArea struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Country *struct {
+		ID      string `json:"id"`
+		URLCode string `json:"urlCode"`
+	} `json:"country"`
+}
+
+type wireVenue struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	ContentURL string    `json:"contentUrl"`
+	Area       *wireArea `json:"area"`
+}
+
+type wireEvent struct {
+	ID         string       `json:"id"`
+	Title      string       `json:"title"`
+	Date       string       `json:"date"`
+	StartTime  string       `json:"startTime"`
+	EndTime    string       `json:"endTime"`
+	ContentURL string       `json:"contentUrl"`
+	Attending  int          `json:"attending"`
+	Venue      *wireVenue   `json:"venue"`
+	Artists    []wireArtist `json:"artists"`
+	Promoters  []struct {
+		ID         string `json:"id"`
+		Name       string `json:"name"`
+		ContentURL string `json:"contentUrl"`
+	} `json:"promoters"`
+	Pick *struct {
+		ID string `json:"id"`
+	} `json:"pick"`
+}
+
+// absoluteURL turns RA's site-relative links into absolute ones.
+func absoluteURL(path string) string {
+	if path == "" || strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	return siteURL + path
+}
+
+func (w *wireArtist) toArtist() *RAArtist {
+	a := &RAArtist{
+		ID:           w.ID,
+		Name:         w.Name,
+		Slug:         w.URLSafeName,
+		URL:          absoluteURL(w.ContentURL),
+		Biography:    w.Biography,
+		Aliases:      []string{},
+		Facebook:     w.Facebook,
+		Twitter:      w.Twitter,
+		Instagram:    w.Instagram,
+		Soundcloud:   w.Soundcloud,
+		Bandcamp:     w.Bandcamp,
+		Discogs:      w.Discogs,
+		Website:      w.Website,
+		Areas:        []RAArea{},
+		Venues:       []RAVenue{},
+		Followers:    w.Followers,
+		HeaderImage:  w.CoverImage,
+		ProfileImage: w.Image,
+	}
+	for _, alias := range strings.Split(w.Aliases, ",") {
+		if alias = strings.TrimSpace(alias); alias != "" {
+			a.Aliases = append(a.Aliases, alias)
+		}
+	}
+	if w.Area != nil {
+		area := RAArea{AreaID: w.Area.ID, AreaName: w.Area.Name}
+		if w.Area.Country != nil {
+			area.CountryID = w.Area.Country.ID
+			area.Country = strings.ToLower(w.Area.Country.URLCode)
+		}
+		a.Areas = append(a.Areas, area)
+	}
+	for _, v := range w.Venues {
+		a.Venues = append(a.Venues, RAVenue{VenueID: v.ID, VenueName: v.Name})
+	}
+	return a
+}
+
+// RA sends LocalDateTime values ("2026-10-17T21:00:00.000"), while RAEVENT
+// documents Date as YYYY-MM-DD and consumers parse it that way; without this
+// every imported event was skipped as having an invalid date.
+func datePart(localDateTime string) string {
+	if len(localDateTime) >= 10 {
+		return localDateTime[:10]
+	}
+	return localDateTime
+}
+
+// timePart extracts HH:MM from a LocalDateTime, or returns the input as-is.
+func timePart(localDateTime string) string {
+	if len(localDateTime) >= 16 && localDateTime[10] == 'T' {
+		return localDateTime[11:16]
+	}
+	return localDateTime
+}
+
+func (w *wireEvent) toEvent() RAEVENT {
+	e := RAEVENT{
+		ID:         w.ID,
+		Title:      w.Title,
+		Date:       datePart(w.Date),
+		StartTime:  timePart(w.StartTime),
+		EndTime:    timePart(w.EndTime),
+		Artists:    []RAArtistRef{},
+		Hosts:      []RAArtistRef{},
+		Attending:  w.Attending,
+		ContentURL: absoluteURL(w.ContentURL),
+		IsPick:     w.Pick != nil,
+	}
+	if w.Venue != nil {
+		e.VenueID = w.Venue.ID
+		e.VenueName = w.Venue.Name
+		e.VenueURL = absoluteURL(w.Venue.ContentURL)
+	}
+	for _, a := range w.Artists {
+		e.Artists = append(e.Artists, RAArtistRef{
+			ArtistID: a.ID,
+			Name:     a.Name,
+			URL:      absoluteURL(a.ContentURL),
+			Slug:     a.URLSafeName,
+		})
+	}
+	// RA has no "hosts"; the promoters running the night are what Hosts means.
+	for _, p := range w.Promoters {
+		e.Hosts = append(e.Hosts, RAArtistRef{
+			ArtistID: p.ID,
+			Name:     p.Name,
+			URL:      absoluteURL(p.ContentURL),
+		})
+	}
+	return e
 }
 
 // GetArtistEvents fetches an artist's events
@@ -364,32 +545,33 @@ func (c *RAClient) GetArtistEvents(ctx context.Context, artistID string, limit i
 	query := `
 		query GetArtistEvents($artistId: ID!, $limit: Int) {
 			artist(id: $artistId) {
-				events(first: $limit) {
+				events(limit: $limit, type: LATEST) {
 					id
 					title
 					date
 					startTime
 					endTime
-					venueId
-					venueName
-					venueUrl
-					artists {
-						artistId
-						name
-						url
-						slug
-					}
-					hosts {
-						artistId
-						name
-						url
-						slug
-					}
-					attending
 					contentUrl
-					isPick
-					isSoldOut
-					promo
+					attending
+					venue {
+						id
+						name
+						contentUrl
+					}
+					artists {
+						id
+						name
+						urlSafeName
+						contentUrl
+					}
+					promoters {
+						id
+						name
+						contentUrl
+					}
+					pick {
+						id
+					}
 				}
 			}
 		}
@@ -407,8 +589,8 @@ func (c *RAClient) GetArtistEvents(ctx context.Context, artistID string, limit i
 
 	var result struct {
 		Data struct {
-			Artist struct {
-				Events []RAEVENT `json:"events"`
+			Artist *struct {
+				Events []wireEvent `json:"events"`
 			} `json:"artist"`
 		} `json:"data"`
 		Errors []struct {
@@ -424,9 +606,11 @@ func (c *RAClient) GetArtistEvents(ctx context.Context, artistID string, limit i
 		return nil, fmt.Errorf("graphql error: %s", result.Errors[0].Message)
 	}
 
-	events := result.Data.Artist.Events
-	if events == nil {
-		events = []RAEVENT{}
+	events := []RAEVENT{}
+	if result.Data.Artist != nil {
+		for i := range result.Data.Artist.Events {
+			events = append(events, result.Data.Artist.Events[i].toEvent())
+		}
 	}
 
 	c.cache.SetEvents(artistID, events)

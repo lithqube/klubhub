@@ -2,17 +2,23 @@
 import { ref, watch } from 'vue'
 import { useRaStore } from '~/stores/ra'
 import { useEpkStore } from '~/stores/epk'
+import { useSettingsStore } from '~/stores/settings'
 import Input from '~/components/ui/input/Input.vue'
 import { Search, ExternalLink, Check, AlertCircle, Loader, X } from 'lucide-vue-next'
 
 const raStore = useRaStore()
 const epkStore = useEpkStore()
+const settingsStore = useSettingsStore()
 
 const artistSlug = ref('')
 const clearTrigger = ref(0)
 
 const importedArtist = ref<typeof raStore.artist>(null)
 const importing = ref(false)
+// Apply feedback: the button used to do its work (or fail) in total silence.
+const applyState = ref<'idle' | 'applying' | 'applied' | 'error'>('idle')
+const applyError = ref('')
+const appliedSummary = ref('')
 
 watch(() => raStore.artist, (artist) => {
   if (artist) {
@@ -25,38 +31,65 @@ async function fetchArtist() {
   if (!artistSlug.value.trim()) return
   importing.value = true
   importedArtist.value = null
-  await raStore.fetchArtist(artistSlug.value)
+  applyState.value = 'idle'
+  try {
+    await raStore.fetchArtist(artistSlug.value.trim())
+  } finally {
+    // The watcher only fires when an artist arrives; on a failed fetch the
+    // spinner used to spin forever.
+    importing.value = false
+  }
 }
 
 async function applyToEpk() {
-  if (!importedArtist.value) return
+  const artist = importedArtist.value
+  if (!artist || applyState.value === 'applying') return
 
-  if (importedArtist.value.biography) {
-    epkStore.bioLong = importedArtist.value.biography
-    epkStore.bioShort = importedArtist.value.biography.substring(0, 200)
-  }
-
+  applyState.value = 'applying'
+  applyError.value = ''
   try {
-    await $fetch('/api/v1/settings', {
-      method: 'PUT',
-      body: {
-        social_links: {
-          instagram: importedArtist.value.instagram || '',
-          soundcloud: importedArtist.value.soundcloud || '',
-          spotify: '',
-          mixcloud: '',
-          residentAdvisor: importedArtist.value.url || '',
-          bandcamp: importedArtist.value.bandcamp || '',
-          youtube: '',
-          twitter: importedArtist.value.twitter || '',
-          facebook: importedArtist.value.facebook || '',
-          discogs: importedArtist.value.discogs || '',
-          website: importedArtist.value.website || '',
-        },
-      },
-    })
+    const applied: string[] = []
+
+    // Bio lives in the EPK content. Setting the store refs alone changed
+    // nothing on the server, so the import vanished on reload.
+    if (artist.biography) {
+      await epkStore.updateContent({
+        bioLong: artist.biography,
+        bioShort: artist.biography.substring(0, 200),
+      })
+      applied.push('bio')
+    }
+
+    // Name and links live in settings. Only overwrite links RA actually has,
+    // so a manually entered Spotify/YouTube link is not blanked by an import.
+    const fromRa: Record<string, string> = {
+      instagram: artist.instagram,
+      soundcloud: artist.soundcloud,
+      bandcamp: artist.bandcamp,
+      residentAdvisor: artist.url,
+      twitter: artist.twitter,
+      facebook: artist.facebook,
+      discogs: artist.discogs,
+      website: artist.website,
+    }
+    const links = { ...settingsStore.socialLinks }
+    let linkCount = 0
+    for (const [key, value] of Object.entries(fromRa)) {
+      if (value) {
+        links[key] = value
+        linkCount++
+      }
+    }
+    await settingsStore.save({ dj_name: artist.name, social_links: links })
+    applied.push('name')
+    if (linkCount > 0) applied.push(`${linkCount} link${linkCount === 1 ? '' : 's'}`)
+
+    appliedSummary.value = applied.join(' · ')
+    applyState.value = 'applied'
   } catch (e) {
-    console.error('Failed to save social links:', e)
+    const body = (e as { data?: { message?: string; error?: string } } | null)?.data
+    applyError.value = body?.message || body?.error || 'Could not apply the import. Try again.'
+    applyState.value = 'error'
   }
 }
 
@@ -64,6 +97,7 @@ function clearForm() {
   artistSlug.value = ''
   raStore.clear()
   importedArtist.value = null
+  applyState.value = 'idle'
   clearTrigger.value++
 }
 </script>
@@ -232,15 +266,33 @@ function clearForm() {
       <button
         class="btn-hud btn-hud-violet luminous-threshold"
         style="width:100%;padding:0 20px;height:36px;display:inline-flex;align-items:center;gap:8px;"
+        :disabled="applyState === 'applying'"
         @click="applyToEpk"
       >
-        <Check style="width:13px;height:13px;" aria-hidden="true" />
+        <Loader v-if="applyState === 'applying'" class="animate-spin" style="width:13px;height:13px;" aria-hidden="true" />
+        <Check v-else style="width:13px;height:13px;" aria-hidden="true" />
         <span style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;">
-          APPLY TO EPK
+          {{ applyState === 'applying' ? 'APPLYING...' : applyState === 'applied' ? 'APPLY AGAIN' : 'APPLY TO EPK' }}
         </span>
       </button>
-      <p style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);margin-top:7px;text-align:center;letter-spacing:.04em;text-transform:uppercase;">
-        Bio and social links will be added to your press kit
+      <p
+        v-if="applyState === 'applied'"
+        role="status"
+        data-testid="ra-apply-success"
+        style="font-family:var(--font-terminal);font-size:9px;color:var(--color-primary);margin-top:7px;text-align:center;letter-spacing:.04em;text-transform:uppercase;"
+      >
+        Saved to your EPK: {{ appliedSummary }}
+      </p>
+      <p
+        v-else-if="applyState === 'error'"
+        role="alert"
+        data-testid="ra-apply-error"
+        style="font-family:var(--font-data);font-size:11px;color:var(--color-error);margin-top:7px;text-align:center;line-height:1.4;"
+      >
+        {{ applyError }}
+      </p>
+      <p v-else style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);margin-top:7px;text-align:center;letter-spacing:.04em;text-transform:uppercase;">
+        Replaces your DJ name and bio · adds RA's social links
       </p>
     </div>
 

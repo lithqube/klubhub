@@ -3,6 +3,7 @@ package venue
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -56,12 +57,12 @@ func (r *Repository) List(ctx context.Context, name, city *string) ([]*Venue, er
 	argID := 1
 
 	if name != nil && *name != "" {
-		query += " AND name ILIKE $" + string(rune('0'+argID))
+		query += " AND name ILIKE $" + strconv.Itoa(argID)
 		args = append(args, "%"+*name+"%")
 		argID++
 	}
 	if city != nil && *city != "" {
-		query += " AND city ILIKE $" + string(rune('0'+argID))
+		query += " AND city ILIKE $" + strconv.Itoa(argID)
 		args = append(args, "%"+*city+"%")
 		argID++
 	}
@@ -124,47 +125,47 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *VenueUpdate) (
 	argID := 1
 
 	if u.Name != nil {
-		setClauses = append(setClauses, "name = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "name = $"+strconv.Itoa(argID))
 		args = append(args, *u.Name)
 		argID++
 	}
 	if u.City != nil {
-		setClauses = append(setClauses, "city = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "city = $"+strconv.Itoa(argID))
 		args = append(args, *u.City)
 		argID++
 	}
 	if u.Country != nil {
-		setClauses = append(setClauses, "country = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "country = $"+strconv.Itoa(argID))
 		args = append(args, *u.Country)
 		argID++
 	}
 	if u.Capacity != nil {
-		setClauses = append(setClauses, "capacity = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "capacity = $"+strconv.Itoa(argID))
 		args = append(args, *u.Capacity)
 		argID++
 	}
 	if u.Website != nil {
-		setClauses = append(setClauses, "website = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "website = $"+strconv.Itoa(argID))
 		args = append(args, *u.Website)
 		argID++
 	}
 	if u.TechContactName != nil {
-		setClauses = append(setClauses, "tech_contact_name = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "tech_contact_name = $"+strconv.Itoa(argID))
 		args = append(args, *u.TechContactName)
 		argID++
 	}
 	if u.TechContactEmail != nil {
-		setClauses = append(setClauses, "tech_contact_email = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "tech_contact_email = $"+strconv.Itoa(argID))
 		args = append(args, *u.TechContactEmail)
 		argID++
 	}
 	if u.TechContactPhone != nil {
-		setClauses = append(setClauses, "tech_contact_phone = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "tech_contact_phone = $"+strconv.Itoa(argID))
 		args = append(args, *u.TechContactPhone)
 		argID++
 	}
 	if u.Notes != nil {
-		setClauses = append(setClauses, "notes = $"+string(rune('0'+argID)))
+		setClauses = append(setClauses, "notes = $"+strconv.Itoa(argID))
 		args = append(args, *u.Notes)
 		argID++
 	}
@@ -177,7 +178,7 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *VenueUpdate) (
 	query := `
 		UPDATE venues
 		SET ` + strings.Join(setClauses, ", ") + `
-		WHERE id = $` + string(rune('0'+argID)) + ` AND deleted_at IS NULL`
+		WHERE id = $` + strconv.Itoa(argID) + ` AND deleted_at IS NULL`
 	args = append(args, id)
 
 	tag, err := r.pool.Exec(ctx, query, args...)

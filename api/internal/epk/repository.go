@@ -89,20 +89,27 @@ func (r *Repository) UpsertContent(ctx context.Context, req UpsertEPKContentRequ
 			 gig_highlights, press_quotes, photo_paths, section_visibility)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT ((true)) DO UPDATE
-			SET bio_short          = CASE WHEN $1::text != '' THEN $1 ELSE epk_content.bio_short END,
-			    bio_long           = CASE WHEN $2::text != '' THEN $2 ELSE epk_content.bio_long END,
-			    tech_rider         = CASE WHEN $3::text != '' THEN $3 ELSE epk_content.tech_rider END,
-			    stage_plot_path    = CASE WHEN $4::text != '' THEN $4 ELSE epk_content.stage_plot_path END,
-			    gig_highlights     = EXCLUDED.gig_highlights,
-			    press_quotes       = EXCLUDED.press_quotes,
-			    photo_paths        = EXCLUDED.photo_paths,
-			    section_visibility = EXCLUDED.section_visibility,
+			SET bio_short          = CASE WHEN $9  THEN EXCLUDED.bio_short          ELSE epk_content.bio_short          END,
+			    bio_long           = CASE WHEN $10 THEN EXCLUDED.bio_long           ELSE epk_content.bio_long           END,
+			    tech_rider         = CASE WHEN $11 THEN EXCLUDED.tech_rider         ELSE epk_content.tech_rider         END,
+			    stage_plot_path    = CASE WHEN $12 THEN EXCLUDED.stage_plot_path    ELSE epk_content.stage_plot_path    END,
+			    gig_highlights     = CASE WHEN $13 THEN EXCLUDED.gig_highlights     ELSE epk_content.gig_highlights     END,
+			    press_quotes       = CASE WHEN $14 THEN EXCLUDED.press_quotes       ELSE epk_content.press_quotes       END,
+			    photo_paths        = CASE WHEN $15 THEN EXCLUDED.photo_paths        ELSE epk_content.photo_paths        END,
+			    section_visibility = CASE WHEN $16 THEN EXCLUDED.section_visibility ELSE epk_content.section_visibility END,
 			    updated_at         = now()
 		RETURNING id, bio_short, bio_long, tech_rider, stage_plot_path,
 		          gig_highlights, press_quotes, photo_paths, section_visibility,
 		          created_at, updated_at`,
 		bioShort, bioLong, techRider, stagePlotPath,
 		gigHighlightsJSON, pressQuotesJSON, photoPathsJSON, sectionVisJSON,
+		// $9–$16: whether each field was provided. A nil pointer/slice/map
+		// means "absent from the request" and must leave the column alone;
+		// previously every collection column was overwritten on every save
+		// (a bio edit wiped photos and highlights), while an empty string
+		// could never clear a text field.
+		req.BioShort != nil, req.BioLong != nil, req.TechRider != nil, req.StagePlotPath != nil,
+		req.GigHighlights != nil, req.PressQuotes != nil, req.PhotoPaths != nil, req.SectionVisibility != nil,
 	)
 
 	return scanContent(row)

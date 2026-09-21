@@ -82,6 +82,7 @@ type ParseWarning struct {
 var (
 	ErrInvalidFormat = errors.New("invalid_format")
 	ErrZeroTracks    = errors.New("zero_tracks")
+	ErrFileTooLarge  = errors.New("file_too_large")
 	ErrNotFound      = errors.New("not found")
 	ErrConflict      = errors.New("conflict")
 )

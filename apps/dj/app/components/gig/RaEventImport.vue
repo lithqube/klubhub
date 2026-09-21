@@ -12,41 +12,33 @@ const events = ref<RAEVENT[]>([])
 const selectedEventIds = ref<Set<string>>(new Set())
 const dryRun = ref(true)
 const importing = ref(false)
-const importResult = ref<{ gigsCreated: number; gigsSkipped: number; skippedReasons: string[] } | null>(null)
+const importResult = ref<{ gigsCreated: number; gigsSkipped: number; skippedReasons: string[]; dryRun: boolean } | null>(null)
+// Set after a successful FETCH so "RA has no upcoming events" can be told
+// apart from "nothing fetched yet" — a silent empty result looked broken.
+const fetchedSlug = ref<string | null>(null)
+const fetchSkipped = ref<string[]>([])
 
 const hasSelection = computed(() => selectedEventIds.value.size > 0)
 
 async function fetchEvents() {
-  if (!artistSlug.value.trim()) return
+  const slug = artistSlug.value.trim()
+  if (!slug) return
   importing.value = true
   events.value = []
+  selectedEventIds.value = new Set()
+  importResult.value = null
+  fetchedSlug.value = null
+  fetchSkipped.value = []
   try {
-    const result = await raStore.importEvents({
-      artist_slug: artistSlug.value,
-      dry_run: true,
-    })
-    events.value = result.gigIDs.map((id) => {
-      // Reconstruct event from import result — we need the actual event data
-      // For now, fetch the events via the info endpoint
-      return {
-        id,
-        title: '',
-        date: '',
-        startTime: '',
-        endTime: '',
-        venueId: '',
-        venueName: '',
-        venueUrl: '',
-        artists: [],
-        hosts: [],
-        attending: 0,
-        contentUrl: '',
-        isPick: false,
-        isSoldOut: false,
-        promo: '',
-      }
-    })
+    // A dry run writes nothing and returns the importable events as a preview.
+    const result = await raStore.importEvents({ artist_slug: slug, dry_run: true })
+    events.value = result.events ?? []
+    fetchSkipped.value = result.skipped_reasons ?? []
+    // Everything listed already passed the import filters, so start selected.
+    selectedEventIds.value = new Set(events.value.map((e) => e.id))
+    fetchedSlug.value = slug
   } catch (e) {
+    // raStore.error carries the message shown in the error panel
     console.error('Failed to fetch events:', e)
   } finally {
     importing.value = false
@@ -78,15 +70,15 @@ async function importEvents() {
   importResult.value = null
   try {
     const result = await raStore.importEvents({
-      artist_slug: artistSlug.value,
+      artist_slug: artistSlug.value.trim(),
       dry_run: dryRun.value,
-      venue_override: '',
-      contact_override: '',
+      event_ids: [...selectedEventIds.value],
     })
     importResult.value = {
-      gigsCreated: result.gigsCreated,
-      gigsSkipped: result.gigsSkipped,
-      skippedReasons: result.skippedReasons,
+      gigsCreated: result.gigs_created ?? 0,
+      gigsSkipped: result.gigs_skipped ?? 0,
+      skippedReasons: result.skipped_reasons ?? [],
+      dryRun: result.dry_run,
     }
     if (!dryRun.value) {
       const gigStore = await import('~/stores/gig').then(m => m.useGigStore())
@@ -119,6 +111,8 @@ function clearForm() {
   events.value = []
   selectedEventIds.value = new Set()
   importResult.value = null
+  fetchedSlug.value = null
+  fetchSkipped.value = []
   raStore.clear()
 }
 </script>
@@ -328,7 +322,7 @@ function clearForm() {
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:7px;">
           <span style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-terminal);font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--color-secondary);">
             <Check style="width:10px;height:10px;" aria-hidden="true" />
-            <span style="color:var(--color-primary);font-weight:600;">{{ importResult.gigsCreated }}</span> GIGS CREATED
+            <span style="color:var(--color-primary);font-weight:600;">{{ importResult.gigsCreated }}</span> {{ importResult.dryRun ? 'GIGS WOULD BE CREATED' : 'GIGS CREATED' }}
           </span>
           <span
             v-if="importResult.gigsSkipped > 0"
@@ -355,6 +349,26 @@ function clearForm() {
           </p>
         </div>
       </div>
+    </div>
+
+    <!-- Empty result: fetched fine, RA simply lists nothing importable -->
+    <div
+      v-if="fetchedSlug && events.length === 0 && !importing"
+      role="status"
+      style="margin-bottom:14px;padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid rgba(200,184,255,.1);border-radius:2px;"
+      data-testid="ra-empty"
+    >
+      <div class="section-lbl" style="color:var(--color-secondary);">
+        NO UPCOMING EVENTS TO IMPORT FOR "{{ fetchedSlug }}"
+      </div>
+      <p style="font-family:var(--font-data);font-size:11px;color:var(--color-tertiary);line-height:1.55;margin:5px 0 0;">
+        <template v-if="fetchSkipped.length > 0">
+          {{ fetchSkipped.length }} event{{ fetchSkipped.length === 1 ? '' : 's' }} skipped — {{ fetchSkipped[0] }}
+        </template>
+        <template v-else>
+          The artist was found on Resident Advisor, but has no upcoming events listed.
+        </template>
+      </p>
     </div>
 
     <!-- Loading -->

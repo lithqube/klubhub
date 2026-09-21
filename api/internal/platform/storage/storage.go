@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/klubhub/dj/api/internal/platform/config"
@@ -19,14 +20,37 @@ type Client struct {
 	mc             *minio.Client
 	publicEndpoint string
 	bucket         string
+
+	// Presigned URLs must be signed for the host the browser will use
+	// (SigV4 covers the Host header), so they need a client built on the
+	// public endpoint. It is created lazily because signing offline
+	// requires the bucket region, which may have to be looked up first.
+	// Only a successfully built signer is cached (see presignClient).
+	creds     *credentials.Credentials
+	region    string
+	presignMu sync.Mutex
+	presignMC *minio.Client
 }
 
 // New creates a Garage S3 client from the given configuration.
 // The internal client uses cfg.S3Endpoint for API calls.
 // cfg.S3PublicEndpoint is stored separately for presigned URL base generation.
 func New(cfg *config.Config) (*Client, error) {
-	mc, err := minio.New(cfg.S3Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.S3AccessKey, cfg.S3SecretKey, ""),
+	// strip any path from the endpoint URL — minio-go rejects URLs with
+	// path components ("Endpoint url cannot have fully qualified paths")
+	endpoint := cfg.S3Endpoint
+	if u, err := url.Parse(endpoint); err == nil && u.Host != "" {
+		// minio.New expects bare host:port; strip scheme + path.
+		// A bare "host:port" parses with "host" as the scheme and an empty
+		// Host, so only replace the endpoint when a real host was found.
+		endpoint = u.Host
+	}
+
+	fmt.Printf("[DEBUG] storage.New: S3Endpoint=[%s] -> bare=[%s]\n", cfg.S3Endpoint, endpoint)
+
+	creds := credentials.NewStaticV4(cfg.S3AccessKey, cfg.S3SecretKey, "")
+	mc, err := minio.New(endpoint, &minio.Options{
+		Creds:  creds,
 		Secure: cfg.S3UseSSL,
 	})
 	if err != nil {
@@ -37,7 +61,54 @@ func New(cfg *config.Config) (*Client, error) {
 		mc:             mc,
 		publicEndpoint: cfg.S3PublicEndpoint,
 		bucket:         cfg.S3Bucket,
+		creds:          creds,
+		region:         cfg.S3Region,
 	}, nil
+}
+
+// presignClient returns a client bound to the public endpoint, used only to
+// sign URLs (no requests are sent through it). When no usable public endpoint
+// is configured it falls back to the internal client.
+//
+// Only a successfully built signer is cached. The region lookup uses the
+// caller's request context, so a cancelled or timed-out first request must
+// not leave a stored error that fails every later presign until restart
+// (which is what a sync.Once did); the next call simply retries.
+func (c *Client) presignClient(ctx context.Context) (*minio.Client, error) {
+	c.presignMu.Lock()
+	defer c.presignMu.Unlock()
+
+	if c.presignMC != nil {
+		return c.presignMC, nil
+	}
+
+	u, err := url.Parse(c.publicEndpoint)
+	if err != nil || u.Host == "" {
+		c.presignMC = c.mc
+		return c.presignMC, nil
+	}
+
+	// An explicit region keeps minio-go from issuing a bucket-location
+	// request against the public endpoint, which is typically not
+	// reachable from where the API itself runs.
+	region := c.region
+	if region == "" {
+		region, err = c.mc.GetBucketLocation(ctx, c.bucket)
+		if err != nil {
+			return nil, fmt.Errorf("resolve bucket region for presigning: %w", err)
+		}
+	}
+
+	signer, err := minio.New(u.Host, &minio.Options{
+		Creds:  c.creds,
+		Secure: u.Scheme == "https",
+		Region: region,
+	})
+	if err != nil {
+		return nil, err
+	}
+	c.presignMC = signer
+	return signer, nil
 }
 
 // EnsureBucket creates the configured bucket if it does not already exist.
@@ -104,7 +175,11 @@ func (c *Client) PresignedGetObject(ctx context.Context, bucketName, objectName 
 	for k, v := range reqParams {
 		reqValues.Set(k, v)
 	}
-	presignedURL, err := c.mc.PresignedGetObject(ctx, bucketName, objectName, expiry, reqValues)
+	signer, err := c.presignClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	presignedURL, err := signer.PresignedGetObject(ctx, bucketName, objectName, expiry, reqValues)
 	if err != nil {
 		return "", err
 	}
