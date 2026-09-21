@@ -34,12 +34,12 @@ async function loadTracklists() {
   try {
     const detail = await gigStore.fetchGigDetail(props.gig.id)
     if (detail?.tracklists && Array.isArray(detail.tracklists)) {
-      linkedTracklists.value = detail.tracklists.map((t: any) => ({
+      linkedTracklists.value = detail.tracklists.map((t) => ({
         id: t.id,
         title: t.title,
       }))
     }
-    const all = await tracklistStore.loadPastTracklists()
+    await tracklistStore.loadPastTracklists()
     availableTracklists.value = tracklistStore.pastTracklists.filter(
       (tl) => !linkedTracklists.value.some((l) => l.id === tl.id)
     )
