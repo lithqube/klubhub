@@ -171,8 +171,17 @@ html { background-color: var(--color-surface, #0E0E0F); }
   }
 
   /* ── HUD card — corner bracket decorations ── */
+  /* Bracket colour is derived from the signal tokens, not copied from them:
+     the variant picks the token, the theme picks the strength. These used to
+     be rgba() literals of the token values repeated per corner and per theme,
+     so a token change would have left the brackets behind. */
   .hud-card {
     position: relative;
+    --hud-bracket-color: var(--color-primary);
+    --hud-bracket-alpha: 40%;
+  }
+  .hud-card-v {
+    --hud-bracket-color: var(--color-secondary);
   }
   .hud-card::before,
   .hud-card::after {
@@ -181,24 +190,19 @@ html { background-color: var(--color-surface, #0E0E0F); }
     width: 8px;
     height: 8px;
     pointer-events: none;
+    border: 0 solid color-mix(in srgb, var(--hud-bracket-color) var(--hud-bracket-alpha), transparent);
   }
   .hud-card::before {
     top: 0;
     left: 0;
-    border-top: 1px solid rgba(150,248,255,.4);
-    border-left: 1px solid rgba(150,248,255,.4);
+    border-top-width: 1px;
+    border-left-width: 1px;
   }
   .hud-card::after {
     bottom: 0;
     right: 0;
-    border-bottom: 1px solid rgba(150,248,255,.4);
-    border-right: 1px solid rgba(150,248,255,.4);
-  }
-  .hud-card-v::before {
-    border-color: rgba(200,184,255,.4);
-  }
-  .hud-card-v::after {
-    border-color: rgba(200,184,255,.4);
+    border-bottom-width: 1px;
+    border-right-width: 1px;
   }
 
   /* ── Bracket-box — logo/header decoration (larger, outer corners) ── */
@@ -637,41 +641,58 @@ html { background-color: var(--color-surface, #0E0E0F); }
   }
 
   /* ── EPK preview ── */
+  /* Hero: a flat panel from the surface ramp, so both themes work by
+     construction. It used to be a hard-coded dark gradient with #fff text, a
+     blurred circle and a text glow — dark-only values no [data-theme="light"]
+     override could reach (it went muddy grey in Daytime HUD), a radius, and
+     glow outside its CTA/active-state role. Hierarchy here is type + space:
+     secondary (the EPK accent) appears only as the left bar and the eyebrow. */
   .epk-preview-hero {
-    background: linear-gradient(160deg, rgba(123,104,238,.15) 0%, rgba(26,26,28,.95) 50%, var(--color-surface-container-lowest) 100%);
-    padding: 28px 24px 20px;
     position: relative;
-    overflow: hidden;
+    padding: 20px 20px 16px 21px;
+    background: var(--color-surface-container-low);
+    border-left: 3px solid var(--color-secondary);
+    border-bottom: 1px dashed var(--color-outline-variant);
   }
-  .epk-preview-hero::before {
-    content: '';
-    position: absolute;
-    top: -40px;
-    right: -40px;
-    width: 200px;
-    height: 200px;
-    background: var(--color-secondary);
-    opacity: .08;
-    filter: blur(60px);
-    border-radius: 50%;
+  .epk-eyebrow {
+    font-family: var(--font-terminal);
+    font-size: 8px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--color-secondary);
+    margin-bottom: 6px;
   }
   .epk-dj-name {
     font-family: var(--font-command);
     font-size: clamp(28px, 5vw, 48px);
     font-weight: 700;
-    color: #fff;
-    letter-spacing: -.04em;
+    color: var(--color-on-surface);
+    letter-spacing: var(--tracking-command);
     text-transform: uppercase;
-    line-height: .95;
-    text-shadow: 0 0 40px rgba(200,184,255,.3);
+    line-height: 1;
+    overflow-wrap: anywhere;
   }
-  .epk-tagline {
+  /* Label/value readouts under the name (terminal register). */
+  .epk-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-top: 10px;
+  }
+  .epk-meta-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
     font-family: var(--font-terminal);
     font-size: 9px;
-    letter-spacing: .12em;
+    letter-spacing: .08em;
     text-transform: uppercase;
-    color: var(--color-secondary);
-    margin-top: 6px;
+  }
+  .epk-meta-label {
+    color: var(--color-tertiary);
+  }
+  .epk-meta-value {
+    color: var(--color-on-surface-variant);
   }
   .epk-preview-label {
     font-family: var(--font-terminal);
@@ -1128,10 +1149,9 @@ html { background-color: var(--color-surface, #0E0E0F); }
   background-color: rgba(91, 75, 189, 0.08);
 }
 
-[data-theme="light"] .hud-card::before { border-color: rgba(0,104,117,.3); }
-[data-theme="light"] .hud-card::after  { border-color: rgba(0,104,117,.3); }
-[data-theme="light"] .hud-card-v::before { border-color: rgba(91,75,189,.3); }
-[data-theme="light"] .hud-card-v::after  { border-color: rgba(91,75,189,.3); }
+/* Brackets read heavier on the light surface, so they run at 30% there.
+   The colour itself follows --color-primary / --color-secondary. */
+[data-theme="light"] .hud-card { --hud-bracket-alpha: 30%; }
 
 [data-theme="light"] .photo-slot { background: var(--color-surface-container-high); border-color: rgba(91,75,189,.15); }
 [data-theme="light"] .photo-slot:hover { border-color: rgba(91,75,189,.4); }
