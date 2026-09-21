@@ -25,11 +25,11 @@ type Client struct {
 	// (SigV4 covers the Host header), so they need a client built on the
 	// public endpoint. It is created lazily because signing offline
 	// requires the bucket region, which may have to be looked up first.
-	creds       *credentials.Credentials
-	region      string
-	presignOnce sync.Once
-	presignMC   *minio.Client
-	presignErr  error
+	// Only a successfully built signer is cached (see presignClient).
+	creds     *credentials.Credentials
+	region    string
+	presignMu sync.Mutex
+	presignMC *minio.Client
 }
 
 // New creates a Garage S3 client from the given configuration.
@@ -69,33 +69,46 @@ func New(cfg *config.Config) (*Client, error) {
 // presignClient returns a client bound to the public endpoint, used only to
 // sign URLs (no requests are sent through it). When no usable public endpoint
 // is configured it falls back to the internal client.
+//
+// Only a successfully built signer is cached. The region lookup uses the
+// caller's request context, so a cancelled or timed-out first request must
+// not leave a stored error that fails every later presign until restart
+// (which is what a sync.Once did); the next call simply retries.
 func (c *Client) presignClient(ctx context.Context) (*minio.Client, error) {
-	c.presignOnce.Do(func() {
-		u, err := url.Parse(c.publicEndpoint)
-		if err != nil || u.Host == "" {
-			c.presignMC = c.mc
-			return
-		}
+	c.presignMu.Lock()
+	defer c.presignMu.Unlock()
 
-		// An explicit region keeps minio-go from issuing a bucket-location
-		// request against the public endpoint, which is typically not
-		// reachable from where the API itself runs.
-		region := c.region
-		if region == "" {
-			region, err = c.mc.GetBucketLocation(ctx, c.bucket)
-			if err != nil {
-				c.presignErr = fmt.Errorf("resolve bucket region for presigning: %w", err)
-				return
-			}
-		}
+	if c.presignMC != nil {
+		return c.presignMC, nil
+	}
 
-		c.presignMC, c.presignErr = minio.New(u.Host, &minio.Options{
-			Creds:  c.creds,
-			Secure: u.Scheme == "https",
-			Region: region,
-		})
+	u, err := url.Parse(c.publicEndpoint)
+	if err != nil || u.Host == "" {
+		c.presignMC = c.mc
+		return c.presignMC, nil
+	}
+
+	// An explicit region keeps minio-go from issuing a bucket-location
+	// request against the public endpoint, which is typically not
+	// reachable from where the API itself runs.
+	region := c.region
+	if region == "" {
+		region, err = c.mc.GetBucketLocation(ctx, c.bucket)
+		if err != nil {
+			return nil, fmt.Errorf("resolve bucket region for presigning: %w", err)
+		}
+	}
+
+	signer, err := minio.New(u.Host, &minio.Options{
+		Creds:  c.creds,
+		Secure: u.Scheme == "https",
+		Region: region,
 	})
-	return c.presignMC, c.presignErr
+	if err != nil {
+		return nil, err
+	}
+	c.presignMC = signer
+	return signer, nil
 }
 
 // EnsureBucket creates the configured bucket if it does not already exist.
