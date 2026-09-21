@@ -95,8 +95,11 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/{id}/pdf", h.handleGetBookingPDF)
 	r.Get("/{id}/detail", h.handleGetGigDetail)
 
-	// RA import sub-router
-	r.Mount("/", h.raImportHandler.Routes())
+	// RA import sub-router. Only mount when it was injected: Routes() on a
+	// nil handler mounts fine, then panics on the first request.
+	if h.raImportHandler != nil {
+		r.Mount("/", h.raImportHandler.Routes())
+	}
 
 	return r
 }

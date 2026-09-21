@@ -3,6 +3,7 @@ package gig
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,6 +24,9 @@ type RAImportRequest struct {
 	VenueOverride   string `json:"venue_override"`     // Optional: force a specific venue name
 	ContactOverride string `json:"contact_override"`   // Optional: force a specific contact name
 	DryRun           bool   `json:"dry_run"`           // If true, don't create anything, just return what would be created
+	// Optional: only import these RA event IDs (the user's selection from a
+	// dry-run preview). Empty means every importable event.
+	EventIDs []string `json:"event_ids"`
 }
 
 // RAImportResult represents the result of an RA import
@@ -36,6 +40,9 @@ type RAImportResult struct {
 	GigIDs         []uuid.UUID `json:"gig_ids"`
 	SkippedReasons []string    `json:"skipped_reasons"`
 	DryRun          bool        `json:"dry_run"`
+	// Events that passed the import filters. A dry run returns them so the
+	// UI can show a preview and let the user pick which ones to import.
+	Events []ra.RAEVENT `json:"events"`
 }
 
 // RAImportHandler handles RA event imports
@@ -96,30 +103,48 @@ func (h *RAImportHandler) HandleImportFromRA(w http.ResponseWriter, r *http.Requ
 	}
 
 	ctx := r.Context()
-	success := true
 	gigIDs := []uuid.UUID{}
 	skippedReasons := []string{}
+	importable := []ra.RAEVENT{}
 	gigsCreated := 0
 	gigsSkipped := 0
 
 	// Fetch artist from RA
 	artist, err := h.raClient.GetArtist(ctx, req.ArtistSlug)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to fetch artist from RA: "+err.Error())
+	if errors.Is(err, ra.ErrArtistNotFound) {
+		writeError(w, http.StatusNotFound, "artist not found: "+req.ArtistSlug)
 		return
 	}
-	_ = artist // Artist fetched successfully, use for events retrieval
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "could not reach Resident Advisor: "+err.Error())
+		return
+	}
 
-		// Get artist events from RA — use artist.ID directly (it's already a string)
-		events, err := h.raClient.GetArtistEvents(ctx, artist.ID, 50)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to fetch events from RA: "+err.Error())
-			return
+	events, err := h.raClient.GetArtistEvents(ctx, artist.ID, 50)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "could not fetch events from Resident Advisor: "+err.Error())
+		return
+	}
+
+	selected := map[string]bool{}
+	for _, id := range req.EventIDs {
+		selected[id] = true
+	}
+
+	// Gigs already tracked, keyed by date + event name, so importing the
+	// same RA calendar twice does not duplicate every gig.
+	existing := map[string]bool{}
+	if gigs, err := h.gigSvc.ListGigs(ctx, GigFilter{}); err == nil {
+		for _, g := range gigs {
+			existing[gigKey(g.Date, g.EventName)] = true
+		}
+	}
+
+	for _, raEvent := range events {
+		if len(selected) > 0 && !selected[raEvent.ID] {
+			continue // not part of the user's selection; not a "skip"
 		}
 
-	// Process each event
-	for _, raEvent := range events {
-		// Parse date from RA (ISO format YYYY-MM-DD)
 		eventDate, err := time.Parse("2006-01-02", raEvent.Date)
 		if err != nil {
 			skippedReasons = append(skippedReasons, fmt.Sprintf("skipped event with invalid date '%s': %s", raEvent.Date, raEvent.Title))
@@ -129,194 +154,94 @@ func (h *RAImportHandler) HandleImportFromRA(w http.ResponseWriter, r *http.Requ
 
 		// Skip past events (more than 7 days ago) for import
 		if eventDate.Before(time.Now().AddDate(0, 0, -7)) {
-			skippedReasons = append(skippedReasons, fmt.Sprintf("skipped past event: %s on %s",
-				raEvent.Title, raEvent.Date))
+			skippedReasons = append(skippedReasons, fmt.Sprintf("skipped past event: %s on %s", raEvent.Title, raEvent.Date))
 			gigsSkipped++
 			continue
 		}
 
-		// Skip events without a venue name
 		if raEvent.VenueName == "" {
 			skippedReasons = append(skippedReasons, fmt.Sprintf("skipped event without venue: %s", raEvent.Title))
 			gigsSkipped++
 			continue
 		}
 
-		// Find or create venue
-		var venueID uuid.UUID
-		var venueExists bool
-
-		// Try to find existing venue by name (using override if provided)
-		if req.VenueOverride != "" {
-			venues, _ := h.venueSvc.Autocomplete(ctx, req.VenueOverride, 5)
-			if len(venues) > 0 {
-				// Check for exact match first
-				for _, v := range venues {
-					if strings.EqualFold(v.Name, req.VenueOverride) {
-						venueID = v.ID
-						venueExists = true
-						break
-					}
-				}
-				// If no exact match, use first close match
-				if !venueExists && len(venues) > 0 {
-					venueID = venues[0].ID
-					venueExists = true
-				}
-			}
+		if existing[gigKey(eventDate, raEvent.Title)] {
+			skippedReasons = append(skippedReasons, fmt.Sprintf("already in your gigs: %s on %s", raEvent.Title, raEvent.Date))
+			gigsSkipped++
+			continue
 		}
 
-		if !venueExists {
-			// Search by venue name from RA
-			venues, _ := h.venueSvc.Autocomplete(ctx, raEvent.VenueName, 5)
-			if len(venues) > 0 {
-				// Use first match
-				venueID = venues[0].ID
-				venueExists = true
-			}
-		}
+		importable = append(importable, raEvent)
 
-		if !venueExists {
-			// Create new venue from RA event
-			venueID = uuid.New()
-			newVenue := venue.VenueCreate{
-				Name:      raEvent.VenueName,
-				City:      "", // RA doesn't provide city in event listing
-				Country:   "",
-				Website:   &raEvent.VenueURL,
-				Notes:     "",
-				TechContactName:   "",
-				TechContactEmail:  "",
-				TechContactPhone:  "",
-			}
-			v, err := h.venueSvc.CreateVenue(ctx, &newVenue)
-			if err != nil {
-				skippedReasons = append(skippedReasons, fmt.Sprintf("failed to create venue '%s': %s",
-					raEvent.VenueName, err.Error()))
-				gigsSkipped++
-				continue
-			}
-			venueID = v.ID
-		}
-
-		// Find or create contact (promoter)
-		var contactID uuid.UUID
-		var contactExists bool
-
-		// Try to find existing contact by name (promoter)
-		if req.ContactOverride != "" {
-			contacts, _ := h.contactSvc.Autocomplete(ctx, req.ContactOverride, 5)
-			if len(contacts) > 0 {
-				for _, c := range contacts {
-					if strings.EqualFold(c.Name, req.ContactOverride) {
-						contactID = c.ID
-						contactExists = true
-						break
-					}
-				}
-				if !contactExists && len(contacts) > 0 {
-					contactID = contacts[0].ID
-					contactExists = true
-				}
-			}
-		}
-
-		if !contactExists && raEvent.Hosts != nil && len(raEvent.Hosts) > 0 {
-			// Use first host as promoter
-			hostName := raEvent.Hosts[0].Name
-			contacts, _ := h.contactSvc.Autocomplete(ctx, hostName, 5)
-			if len(contacts) > 0 {
-				contactID = contacts[0].ID
-				contactExists = true
-			}
-		}
-
-		if !contactExists {
-			// Create new contact from event hosts or leave empty
-			contactID = uuid.New()
-			promoterName := ""
-			if raEvent.Hosts != nil && len(raEvent.Hosts) > 0 {
-				promoterName = raEvent.Hosts[0].Name
-			}
-			newContact := contact.ContactCreate{
-				Name:    promoterName,
-				Email:   "",
-				Phone:   "",
-				Type:    contact.ContactTypePromoter,
-				Company: nil,
-				Notes:   "",
-			}
-			c, err := h.contactSvc.CreateContact(ctx, &newContact)
-			if err != nil {
-				skippedReasons = append(skippedReasons, fmt.Sprintf("failed to create contact '%s': %s",
-					promoterName, err.Error()))
-				gigsSkipped++
-				continue
-			}
-			contactID = c.ID
-		}
-
-		// Prepare gig data
-		gigCreate := GigCreate{
-			Date:           eventDate,
-			Venue:           raEvent.VenueName,
-			City:            "",
-			Country:         "",
-			EventName:       raEvent.Title,
-			PromoterName:    "", // RA doesn't provide promoter name in events
-			PromoterEmail:   "",
-			PromoterPhone:   "",
-			// Status defaults to inquiry per model
-			FeeAmount:        decimal.NewFromFloat(0),
-			FeeCurrency:      "",
-			SetLengthMinutes: 0,
-			Notes:            raEvent.Promo, // Use promo as notes
-		}
-
+		// A dry run must not write anything. Venue and contact creation used
+		// to run before this check, so every preview left rows behind.
 		if req.DryRun {
-			// Don't create, just count
 			gigsCreated++
-			gigIDs = append(gigIDs, uuid.New()) // placeholder ID for dry run
-		} else {
-			// Create the gig
-			gig, err := h.gigSvc.CreateGig(ctx, &gigCreate)
-			if err != nil {
-				skippedReasons = append(skippedReasons, fmt.Sprintf("failed to create gig '%s': %s",
-					raEvent.Title, err.Error()))
-				gigsSkipped++
-				continue
-			}
-			gigsCreated++
-			gigIDs = append(gigIDs, gig.ID)
+			continue
+		}
 
-			// Update gig with RA venue/contact IDs
-			gigUpdate := GigUpdate{
-				GigReaderVenueID:   &venueID,
-				GigReaderContactID: &contactID,
-				UpdatedAt:          time.Now(),
-			}
-			_, err = h.gigSvc.UpdateGig(ctx, gig.ID, &gigUpdate)
-			if err != nil {
-				skippedReasons = append(skippedReasons, fmt.Sprintf("failed to update gig with venue/contact: %s", err.Error()))
-			}
+		venueID, err := h.findOrCreateVenue(ctx, &req, &raEvent)
+		if err != nil {
+			skippedReasons = append(skippedReasons, fmt.Sprintf("failed to create venue '%s': %s", raEvent.VenueName, err.Error()))
+			gigsSkipped++
+			continue
+		}
 
-			// Link venue to gig
-			if err := h.gigSvc.LinkVenue(ctx, gig.ID, venueID, true); err != nil {
-				// Non-fatal: log but continue
-				skippedReasons = append(skippedReasons, fmt.Sprintf("failed to link venue to gig: %s", err.Error()))
-			}
+		promoterName := ""
+		if len(raEvent.Hosts) > 0 {
+			promoterName = raEvent.Hosts[0].Name
+		}
 
-			// Link contact to gig
+		gig, err := h.gigSvc.CreateGig(ctx, &GigCreate{
+			Date:         eventDate,
+			Venue:        raEvent.VenueName,
+			EventName:    raEvent.Title,
+			PromoterName: promoterName,
+			// Status defaults to inquiry per model
+			FeeAmount: decimal.NewFromFloat(0),
+			Notes:     raEvent.Promo,
+		})
+		if err != nil {
+			skippedReasons = append(skippedReasons, fmt.Sprintf("failed to create gig '%s': %s", raEvent.Title, err.Error()))
+			gigsSkipped++
+			continue
+		}
+		gigsCreated++
+		gigIDs = append(gigIDs, gig.ID)
+		existing[gigKey(eventDate, raEvent.Title)] = true
+
+		// Only link a contact when RA names a promoter (or one was forced);
+		// otherwise every event produced a blank-named contact.
+		contactID, hasContact, err := h.findOrCreateContact(ctx, &req, promoterName)
+		if err != nil {
+			skippedReasons = append(skippedReasons, fmt.Sprintf("failed to create contact '%s': %s", promoterName, err.Error()))
+		}
+
+		gigUpdate := GigUpdate{
+			GigReaderVenueID: &venueID,
+			// Optimistic concurrency matches on the stored updated_at;
+			// time.Now() never matched, so these IDs were never saved.
+			UpdatedAt: gig.UpdatedAt,
+		}
+		if hasContact {
+			gigUpdate.GigReaderContactID = &contactID
+		}
+		if _, err = h.gigSvc.UpdateGig(ctx, gig.ID, &gigUpdate); err != nil {
+			skippedReasons = append(skippedReasons, fmt.Sprintf("failed to update gig with venue/contact: %s", err.Error()))
+		}
+
+		if err := h.gigSvc.LinkVenue(ctx, gig.ID, venueID, true); err != nil {
+			skippedReasons = append(skippedReasons, fmt.Sprintf("failed to link venue to gig: %s", err.Error()))
+		}
+		if hasContact {
 			if err := h.gigSvc.LinkContact(ctx, gig.ID, contactID, "promoter"); err != nil {
-				// Non-fatal: log but continue
 				skippedReasons = append(skippedReasons, fmt.Sprintf("failed to link contact to gig: %s", err.Error()))
 			}
 		}
 	}
 
-	// Build response
 	result := RAImportResult{
-		Success:        success,
+		Success:        true,
 		ArtistSlug:     req.ArtistSlug,
 		EventsImported: len(events),
 		EventsSkipped:  gigsSkipped,
@@ -325,9 +250,77 @@ func (h *RAImportHandler) HandleImportFromRA(w http.ResponseWriter, r *http.Requ
 		GigIDs:         gigIDs,
 		SkippedReasons: skippedReasons,
 		DryRun:         req.DryRun,
+		Events:         importable,
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// gigKey identifies a gig for duplicate detection during import.
+func gigKey(date time.Time, eventName string) string {
+	return date.Format("2006-01-02") + "|" + strings.ToLower(strings.TrimSpace(eventName))
+}
+
+// findOrCreateVenue resolves the venue for an RA event: the override if one
+// was given, else an existing venue matching the RA name, else a new venue.
+func (h *RAImportHandler) findOrCreateVenue(ctx context.Context, req *RAImportRequest, raEvent *ra.RAEVENT) (uuid.UUID, error) {
+	if req.VenueOverride != "" {
+		venues, _ := h.venueSvc.Autocomplete(ctx, req.VenueOverride, 5)
+		for _, v := range venues {
+			if strings.EqualFold(v.Name, req.VenueOverride) {
+				return v.ID, nil
+			}
+		}
+		if len(venues) > 0 {
+			return venues[0].ID, nil
+		}
+	}
+
+	if venues, _ := h.venueSvc.Autocomplete(ctx, raEvent.VenueName, 5); len(venues) > 0 {
+		return venues[0].ID, nil
+	}
+
+	v, err := h.venueSvc.CreateVenue(ctx, &venue.VenueCreate{
+		Name:    raEvent.VenueName,
+		Website: &raEvent.VenueURL,
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return v.ID, nil
+}
+
+// findOrCreateContact resolves the promoter contact. It reports hasContact
+// false when there is no name to go on, so no blank contact is created.
+func (h *RAImportHandler) findOrCreateContact(ctx context.Context, req *RAImportRequest, promoterName string) (id uuid.UUID, hasContact bool, err error) {
+	if req.ContactOverride != "" {
+		contacts, _ := h.contactSvc.Autocomplete(ctx, req.ContactOverride, 5)
+		for _, c := range contacts {
+			if strings.EqualFold(c.Name, req.ContactOverride) {
+				return c.ID, true, nil
+			}
+		}
+		if len(contacts) > 0 {
+			return contacts[0].ID, true, nil
+		}
+	}
+
+	if promoterName == "" {
+		return uuid.Nil, false, nil
+	}
+
+	if contacts, _ := h.contactSvc.Autocomplete(ctx, promoterName, 5); len(contacts) > 0 {
+		return contacts[0].ID, true, nil
+	}
+
+	c, err := h.contactSvc.CreateContact(ctx, &contact.ContactCreate{
+		Name: promoterName,
+		Type: contact.ContactTypePromoter,
+	})
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	return c.ID, true, nil
 }
 
 // GetArtistInfo returns basic artist info from RA
@@ -340,8 +333,14 @@ func (h *RAImportHandler) GetArtistInfo(w http.ResponseWriter, r *http.Request) 
 
 	ctx := r.Context()
 	artist, err := h.raClient.GetArtist(ctx, artistSlug)
-	if err != nil {
+	if errors.Is(err, ra.ErrArtistNotFound) {
 		writeError(w, http.StatusNotFound, "artist not found: "+artistSlug)
+		return
+	}
+	if err != nil {
+		// Reporting every failure as "not found" hid an RA block and a
+		// stale query behind a message that blamed the user's slug.
+		writeError(w, http.StatusBadGateway, "could not reach Resident Advisor: "+err.Error())
 		return
 	}
 
