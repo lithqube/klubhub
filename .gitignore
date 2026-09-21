@@ -89,3 +89,4 @@ apps/dj/tsconfig.tsbuildinfo
 
 brag-output/
 brag-output-*
+.playwright-mcp/
