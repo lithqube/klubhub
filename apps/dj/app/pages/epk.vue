@@ -13,8 +13,12 @@ const settings = useSettingsStore()
 const gigStore = useGigStore()
 const { scheduleSave, flush } = useEpkAutosave()
 
-// Don't lose an edit made just before navigating away.
-onBeforeUnmount(() => { void flush() })
+// Don't lose an edit made just before navigating away: flush both queues
+// (EPK content and settings-backed fields).
+onBeforeUnmount(() => {
+  void flush()
+  void flushSettings()
+})
 
 const { bioShort, bioLong, techRider, gigHighlights, photoPaths, photoUrls, sectionVisibility, canAddPhoto } = storeToRefs(store)
 const { djName, socialLinks, contactInfo } = storeToRefs(settings)
@@ -33,12 +37,15 @@ onMounted(async () => {
 })
 
 // ── Sections (persisted; the same keys drive the PDF export) ──────────────
+// These must match the keys api/internal/epk/pdf.go passes to sectionEnabled():
+// snake_case for the multi-word ones. A missing key means "enabled" there, so
+// a mismatched key silently leaves a hidden section in the exported PDF.
 const SECTIONS = [
   { key: 'bio', label: 'BIO' },
   { key: 'photos', label: 'PRESS PHOTOS' },
-  { key: 'gigHighlights', label: 'GIG HIGHLIGHTS' },
-  { key: 'socialLinks', label: 'SOCIAL LINKS' },
-  { key: 'techRider', label: 'TECH RIDER' },
+  { key: 'gig_highlights', label: 'GIG HIGHLIGHTS' },
+  { key: 'social_links', label: 'SOCIAL LINKS' },
+  { key: 'tech_rider', label: 'TECH RIDER' },
 ] as const
 type SectionKey = typeof SECTIONS[number]['key']
 
@@ -82,19 +89,26 @@ const SOCIAL_FIELDS = [
 let settingsTimer: ReturnType<typeof setTimeout> | null = null
 let pendingSettings: Parameters<typeof settings.save>[0] = {}
 
+// One send path for both the debounce timer and leaving the page, so an edit
+// made inside the debounce window is not dropped on navigation.
+async function flushSettings() {
+  if (settingsTimer) clearTimeout(settingsTimer)
+  settingsTimer = null
+  const patchToSend = pendingSettings
+  pendingSettings = {}
+  if (Object.keys(patchToSend).length === 0) return
+  try {
+    await settings.save(patchToSend)
+  } catch {
+    // saveStatus is 'error'; the status chip tells the user
+  }
+}
+
 function queueSettings(patch: Parameters<typeof settings.save>[0]) {
   pendingSettings = { ...pendingSettings, ...patch }
   settings.saveStatus = 'saving'
   if (settingsTimer) clearTimeout(settingsTimer)
-  settingsTimer = setTimeout(async () => {
-    const patchToSend = pendingSettings
-    pendingSettings = {}
-    try {
-      await settings.save(patchToSend)
-    } catch {
-      // saveStatus is 'error'; the status chip tells the user
-    }
-  }, 900)
+  settingsTimer = setTimeout(flushSettings, 900)
 }
 
 function onDjName(e: Event) {
@@ -601,7 +615,7 @@ async function handleExportPdf() {
           </div>
 
           <!-- Gig highlights -->
-          <div v-if="isVisible('gigHighlights')" style="padding:16px 20px;border-bottom:1px solid rgba(200,184,255,.06);display:flex;flex-direction:column;gap:10px;">
+          <div v-if="isVisible('gig_highlights')" style="padding:16px 20px;border-bottom:1px solid rgba(200,184,255,.06);display:flex;flex-direction:column;gap:10px;">
             <div class="epk-preview-label">GIG HIGHLIGHTS</div>
             <div v-if="gigHighlights.length > 0" class="glass-violet" style="overflow:hidden;">
               <div v-for="(line, idx) in gigHighlights" :key="`${idx}-${line}`" class="gig-row accent-bar-draft">
@@ -614,7 +628,7 @@ async function handleExportPdf() {
           </div>
 
           <!-- Social links -->
-          <div v-if="isVisible('socialLinks')" style="padding:16px 20px;border-bottom:1px solid rgba(200,184,255,.06);display:flex;flex-direction:column;gap:10px;">
+          <div v-if="isVisible('social_links')" style="padding:16px 20px;border-bottom:1px solid rgba(200,184,255,.06);display:flex;flex-direction:column;gap:10px;">
             <div class="epk-preview-label">SOCIAL &amp; STREAMING</div>
             <div v-if="activeLinks.length > 0" style="display:flex;flex-wrap:wrap;gap:6px;">
               <a
@@ -636,7 +650,7 @@ async function handleExportPdf() {
           </div>
 
           <!-- Tech rider -->
-          <div v-if="isVisible('techRider')" style="padding:16px 20px 24px;display:flex;flex-direction:column;gap:10px;">
+          <div v-if="isVisible('tech_rider')" style="padding:16px 20px 24px;display:flex;flex-direction:column;gap:10px;">
             <div class="epk-preview-label">TECH RIDER</div>
             <div class="glass-violet hud-card hud-card-v" style="padding:14px 16px;">
               <div v-if="techRider" class="epk-preview-text" style="font-size:12px;white-space:pre-line;">{{ techRider }}</div>
