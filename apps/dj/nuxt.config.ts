@@ -54,6 +54,13 @@ export default defineNuxtConfig({
   css: ['~/assets/css/styles.css'],
   vite: {
     plugins: [tailwindcss()],
+    server: {
+      // The dockerized Go API calls back to the host Nuxt dev server for
+      // tracklist screenshots via NUXT_INTERNAL_URL
+      // (http://host.docker.internal:4200). Vite's host check answers 403
+      // to unknown Host headers, so that one name must be allowed.
+      allowedHosts: ['host.docker.internal'],
+    },
   },
 
   // Proxy /api/v1/* to the Go backend in production (and dev when
@@ -70,7 +77,10 @@ export default defineNuxtConfig({
     ? {
         devProxy: {
           '/api/v1': {
-            target: process.env.NUXT_PUBLIC_API_BASE,
+            // devProxy strips the matched '/api/v1' prefix before
+            // forwarding, so the target must carry it or the Go API
+            // receives '/gigs' instead of '/api/v1/gigs' and 404s.
+            target: process.env.NUXT_PUBLIC_API_BASE + '/api/v1',
             changeOrigin: true,
           },
         },
