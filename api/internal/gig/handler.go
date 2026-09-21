@@ -314,6 +314,10 @@ func (h *Handler) handleLinkContact(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.svc.LinkTracklist(r.Context(), gigID, tracklistID); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				h.writeError(w, http.StatusNotFound, "gig not found")
+				return
+			}
 			if errors.Is(err, tracklist.ErrNotFound) {
 				h.writeError(w, http.StatusNotFound, "tracklist not found")
 				return

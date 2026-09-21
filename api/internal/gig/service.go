@@ -247,6 +247,12 @@ func (s *Service) UnlinkContact(ctx context.Context, gigID, contactID uuid.UUID)
 
 // LinkTracklist links a gig to a tracklist record.
 func (s *Service) LinkTracklist(ctx context.Context, gigID, tracklistID uuid.UUID) error {
+	// Validate both ends before inserting. Without the gig check, an unknown
+	// gig ID with a real tracklist reached the insert and came back as a raw
+	// foreign-key violation (a 500) instead of a clear not-found.
+	if _, err := s.repo.GetByID(ctx, gigID); err != nil {
+		return err
+	}
 	if _, _, err := s.tracklistRepo.Get(ctx, tracklistID); err != nil {
 		return err
 	}
