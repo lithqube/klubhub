@@ -128,7 +128,7 @@ onClickOutside(inputRef, () => {
         style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(46,46,49,.2);"
         :style="{
           background: idx === highlightedIndex
-            ? 'rgba(150,248,255,.08)'
+            ? 'color-mix(in srgb, var(--color-primary) 8%, transparent)'
             : 'transparent',
         }"
         @click="selectVenue(venue)"
@@ -140,7 +140,7 @@ onClickOutside(inputRef, () => {
         </div>
       </div>
       <div
-        style="padding:8px 12px;cursor:pointer;text-align:center;border-top:1px dashed rgba(150,248,255,0.15);"
+        style="padding:8px 12px;cursor:pointer;text-align:center;border-top:1px dashed color-mix(in srgb, var(--color-primary) 15%, transparent);"
         @click="isOpen = false"
       >
         <span class="section-lbl" style="font-size:8px;color:var(--color-primary);">CREATE NEW VENUE</span>

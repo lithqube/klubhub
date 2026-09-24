@@ -93,7 +93,7 @@ onMounted(() => {
     <!-- Error state -->
     <div
       v-else-if="pastTracklistsError"
-      style="padding:12px 14px;border:1px dashed rgba(255,113,108,.3);box-shadow:0 0 16px rgba(255,113,108,.15);"
+      style="padding:12px 14px;border:1px dashed color-mix(in srgb, var(--color-error) 30%, transparent);box-shadow:var(--shadow-glow-error);"
     >
       <span class="spost-meta" style="color:var(--color-error);">
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
@@ -105,7 +105,7 @@ onMounted(() => {
     <div
       v-else-if="!pastTracklists || pastTracklists.length === 0"
       class="glass"
-      style="padding:32px 24px;text-align:center;border:1px dashed rgba(150,248,255,.15);"
+      style="padding:32px 24px;text-align:center;border:1px dashed color-mix(in srgb, var(--color-primary) 15%, transparent);"
     >
       <div style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);">
         NO_TRACKLISTS_FOUND
@@ -147,7 +147,7 @@ onMounted(() => {
           </button>
           <button
             class="btn-hud btn-hud-xs"
-            style="border:1px dashed rgba(255,113,108,.4);color:var(--color-error);"
+            style="border:1px dashed color-mix(in srgb, var(--color-error) 40%, transparent);color:var(--color-error);"
             @click="confirmDelete(item.id, item.title || item.filename || 'Untitled')"
           >
             DEL
@@ -163,7 +163,7 @@ onMounted(() => {
         style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);"
         @click.self="cancelDelete"
       >
-        <div class="glass hud-card" style="width:360px;padding:24px 20px;">
+        <div class="glass hud-card" style="width:360px;padding:24px 20px;background:var(--color-surface-container);">
           <div style="font-family:var(--font-command);font-size:13px;font-weight:700;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;margin-bottom:8px;">
             CONFIRM DELETE
           </div>
@@ -176,7 +176,7 @@ onMounted(() => {
             </button>
             <button
               class="btn-hud"
-              style="padding:0 14px;border:1px dashed rgba(255,113,108,.4);color:var(--color-error);box-shadow:0 0 12px rgba(255,113,108,.15);"
+              style="padding:0 14px;border:1px dashed color-mix(in srgb, var(--color-error) 40%, transparent);color:var(--color-error);box-shadow:var(--shadow-glow-error);"
               @click="performDelete"
             >
               DELETE

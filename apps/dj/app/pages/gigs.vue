@@ -117,7 +117,7 @@ function clearFilters() {
         <div style="display:flex;gap:6px;">
           <button
             class="btn-hud btn-hud-ghost btn-hud-sm"
-            :style="viewMode === 'list' ? 'background:rgba(150,248,255,.08);border-color:rgba(150,248,255,.25);color:var(--color-primary);' : ''"
+            :style="viewMode === 'list' ? 'background:color-mix(in srgb, var(--color-primary) 8%, transparent);border-color:color-mix(in srgb, var(--color-primary) 25%, transparent);color:var(--color-primary);' : ''"
             @click="viewMode = 'list'"
           >
             <List style="width:10px;height:10px;display:inline;margin-right:4px;" />
@@ -125,7 +125,7 @@ function clearFilters() {
           </button>
           <button
             class="btn-hud btn-hud-ghost btn-hud-sm"
-            :style="viewMode === 'calendar' ? 'background:rgba(150,248,255,.08);border-color:rgba(150,248,255,.25);color:var(--color-primary);' : ''"
+            :style="viewMode === 'calendar' ? 'background:color-mix(in srgb, var(--color-primary) 8%, transparent);border-color:color-mix(in srgb, var(--color-primary) 25%, transparent);color:var(--color-primary);' : ''"
             @click="viewMode = 'calendar'"
           >
             <Calendar style="width:10px;height:10px;display:inline;margin-right:4px;" />
@@ -179,7 +179,7 @@ function clearFilters() {
         <div
           v-else-if="gigs.length === 0"
           class="glass"
-          style="padding:32px 24px;text-align:center;border:1px dashed rgba(150,248,255,.15);"
+          style="padding:32px 24px;text-align:center;border:1px dashed color-mix(in srgb, var(--color-primary) 15%, transparent);"
         >
           <div
             style="font-family:var(--font-command);font-size:12px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;margin-bottom:6px;"

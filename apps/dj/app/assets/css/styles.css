@@ -36,6 +36,10 @@
 :root                  { color-scheme: dark; }
 [data-theme="light"]   { color-scheme: light; }
 
+/* Height of the fixed status bar. The bar sets it; the sidebar footer and the
+   main column pad by it, so nothing scrolls or sits underneath the bar. */
+:root { --status-bar-h: 3.1rem; }
+
 /* ── Ensure html background always tracks the surface token ── */
 html { background-color: var(--color-surface, #0E0E0F); }
 
@@ -60,10 +64,11 @@ html { background-color: var(--color-surface, #0E0E0F); }
   --color-secondary-container: #7B68EE;
 
   /* Tertiary / Error / On-colors */
-  --color-tertiary:           #7A8899;
+  --color-tertiary:           #8897A9;   /* ~4.8:1 on surface-container-highest, so it clears AA on every surface step; #7A8899 was 4.34:1 on the 8px status-bar labels */
   --color-error:              #FF716C;
   --color-error-container:    #5C2B29;
   --color-on-primary:         #0E0E0F;
+  --color-on-error:           #0E0E0F;   /* dark ink on the light-red fill: 7.2:1; white was 2.7:1 */
   --color-on-surface:         #E0E0E2;
   --color-on-surface-variant: #C4C4C7;
   --color-outline:            #3A3A3D;
@@ -234,7 +239,7 @@ html { background-color: var(--color-surface, #0E0E0F); }
   .pulse-dot {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: 0;
     background: #4ade80;
     box-shadow: 0 0 8px rgba(74,222,128,.6);
     animation: pulse-dot 2s infinite;
@@ -251,7 +256,7 @@ html { background-color: var(--color-surface, #0E0E0F); }
     gap: 2px;
     background: var(--color-surface-container-lowest);
     padding: 3px;
-    border: 1px solid rgba(150,248,255,.08);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);
   }
   .theme-opt {
     flex: 1;
@@ -494,10 +499,10 @@ html { background-color: var(--color-surface, #0E0E0F); }
     cursor: pointer;
     transition: all .15s;
   }
-  .cal-day:hover { border-color: rgba(150,248,255,.2); }
+  .cal-day:hover { border-color: color-mix(in srgb, var(--color-primary) 20%, transparent); }
   .cal-day.today {
-    border-color: rgba(150,248,255,.3);
-    background: rgba(150,248,255,.03);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 3%, transparent);
   }
   .cal-day-label {
     font-family: var(--font-terminal);
@@ -592,7 +597,7 @@ html { background-color: var(--color-surface, #0E0E0F); }
     cursor: pointer;
     transition: background .15s;
   }
-  .gig-list-row:hover { background: rgba(150,248,255,.02); }
+  .gig-list-row:hover { background: color-mix(in srgb, var(--color-primary) 2%, transparent); }
   .gig-date-block {
     width: 44px;
     flex-shrink: 0;
@@ -868,7 +873,7 @@ html { background-color: var(--color-surface, #0E0E0F); }
   }
   .btn-hud-error {
     background: var(--color-error);
-    color: #fff;
+    color: var(--color-on-error);
     box-shadow: var(--shadow-glow-error);
   }
   .btn-hud-error:hover {
@@ -914,30 +919,66 @@ html { background-color: var(--color-surface, #0E0E0F); }
   }
   .badge-failed {
     background: var(--color-error);
-    color: #fff;
+    color: var(--color-on-error);
   }
   .badge-archived {
-    border: 1px dashed rgba(245,197,24,.3);
-    color: #F5C518;
+    border: 1px dashed color-mix(in srgb, var(--color-status-archived) 30%, transparent);
+    color: var(--color-status-archived);
   }
   .badge-published {
     background: var(--color-surface-container-high);
     color: var(--color-tertiary);
   }
 
+  /* ── Sidebar footer row (the collapse toggle): terminal register, full width ── */
+  .side-nav-action {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    font-family: var(--font-terminal);
+    font-size: 9px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--color-tertiary);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: color .15s;
+  }
+  .side-nav-action:hover { color: var(--color-primary); }
+  .side-nav-action:focus-visible { outline: 1px dashed var(--color-primary); outline-offset: -3px; }
+
+  /* ── Status bar: quick-preview readout (a link: label over value) ── */
+  .status-item {
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 96px;
+    text-decoration: none;
+  }
+  .status-item + .status-item {
+    border-left: 1px dashed var(--color-outline);
+    padding-left: 1.5rem;
+  }
+  .status-value { color: var(--color-on-surface); transition: color .15s; }
+  /* Tone colours are inline, so a red or lit value stays that colour on hover. */
+  .status-item:hover .status-value { color: var(--color-primary); }
+  .status-item:focus-visible { outline: 1px dashed var(--color-primary); outline-offset: 3px; }
+
   /* ── Toggle switch ── */
   .hud-toggle {
     width: 32px;
     height: 18px;
     background: var(--color-surface-container-high);
-    border: 1px solid rgba(150,248,255,.2);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
     position: relative;
     cursor: pointer;
     transition: background .2s;
     flex-shrink: 0;
   }
   .hud-toggle.on {
-    background: rgba(150,248,255,.2);
+    background: color-mix(in srgb, var(--color-primary) 20%, transparent);
     border-color: var(--color-primary);
     box-shadow: 0 0 10px rgba(150,248,255,.2);
   }
@@ -1028,6 +1069,7 @@ html { background-color: var(--color-surface, #0E0E0F); }
   --color-error:              #C0302C; /* dark red — WCAG AA on white (5.9:1) */
   --color-error-container:    #FDECEC; /* light red bg */
   --color-on-primary:         #FFFFFF; /* white text on deep teal */
+  --color-on-error:           #FFFFFF; /* white text on deep red */
   --color-on-surface:         #0E0E0F; /* obsidian ink — the callback */
   --color-on-surface-variant: #3A3A3E;
   --color-outline:            #C4C4C7;
@@ -1037,7 +1079,7 @@ html { background-color: var(--color-surface, #0E0E0F); }
   --color-status-ready:    #006875;
   --color-status-draft:    #5B4BBD;
   --color-status-pending:  #5B4BBD;
-  --color-status-archived: #B45309; /* deep amber */
+  --color-status-archived: #A64B08; /* deep amber; #B45309 was 4.05:1 at 8px */
   --color-status-failed:   #C0302C;
 
   /* ── Glow shadows: ambient depth (replaces neon halos) ── */
@@ -1156,6 +1198,26 @@ html { background-color: var(--color-surface, #0E0E0F); }
 [data-theme="light"] .photo-slot { background: var(--color-surface-container-high); border-color: rgba(91,75,189,.15); }
 [data-theme="light"] .photo-slot:hover { border-color: rgba(91,75,189,.4); }
 [data-theme="light"] .social-chip { border-color: rgba(91,75,189,.2); color: #5B4BBD; }
+/* Primary-accent chip for handles in app chrome (the RA import panels). The
+   violet default above stays for the EPK preview, where violet is the EPK
+   accent. Unlayered and placed after the light override so it wins in both
+   themes: same specificity as that override, so source order decides. */
+.social-chip.social-chip-cyan {
+  border-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
+  color: var(--color-primary);
+}
+.social-chip.social-chip-cyan:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 60%, transparent);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+/* Dimmed ink. Dimming text with opacity is theme-blind: 70% of the Daytime teal or
+   violet falls under AA at 8px, so Daytime runs at 90–95%. Links lift to full on hover
+   (this replaces inline opacity plus mouseenter/mouseleave handlers). */
+.quiet { opacity: .7; transition: opacity .15s; }
+a.quiet:hover { opacity: 1; }
+[data-theme="light"] .quiet { opacity: .95; }
+[data-theme="light"] .epk-preview-label { opacity: .9; }
+[data-theme="light"] a.quiet:hover { opacity: 1; }
 [data-theme="light"] .badge-ready  { border-color: rgba(0,104,117,.4); color: #006875; }
 [data-theme="light"] .badge-draft  { border-color: rgba(91,75,189,.3); color: #5B4BBD; }
 [data-theme="light"] .btn-hud-ghost { border-color: rgba(196,196,199,.8); color: var(--color-on-surface-variant); }

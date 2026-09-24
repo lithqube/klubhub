@@ -27,10 +27,10 @@ function formatCurrency(value: number): string {
         {{ upcomingGigs.length }}
       </div>
     </div>
-    <div class="glass accent-bar-draft" style="padding:12px 14px;">
+    <div class="glass" style="padding:12px 14px;">
       <div class="section-lbl" style="margin-bottom:4px;">AVG FEE</div>
       <div
-        style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-secondary);letter-spacing:-.02em;"
+        style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;"
       >
         {{ formatCurrency(avgFee) }}
       </div>

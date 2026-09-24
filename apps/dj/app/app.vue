@@ -50,10 +50,10 @@ function handleError(error: Error) {
     <TheNav />
 
     <!-- Main column: full-width on mobile, fills remainder on desktop -->
-    <div class="flex-1 flex flex-col min-h-dvh overflow-hidden pb-16 lg:pb-10" style="position:relative;z-index:1;">
+    <div class="flex-1 flex flex-col min-h-dvh overflow-hidden pb-16 lg:pb-[var(--status-bar-h)]" style="position:relative;z-index:1;">
       <!--
         pb-16 (64px)  → clears TheBottomNav on mobile   (Fitts's Law: content not under tap targets)
-        lg:pb-10      → clears TheStatusBar on desktop
+        lg:pb-[var(--status-bar-h)] → clears TheStatusBar on desktop (was 40px under a 49px bar)
       -->
 
       <!-- Mobile brand bar: logo + status + theme toggle (lg:hidden) -->

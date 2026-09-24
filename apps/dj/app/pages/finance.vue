@@ -78,11 +78,11 @@ const invoices = [
 
       <!-- Dev/Staging: labelled mock preview -->
       <div v-else>
-        <div class="glass accent-bar-ready" style="margin:0 20px 14px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px dashed rgba(150,248,255,.4);">
+        <div class="glass accent-bar-ready" style="margin:0 20px 14px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px dashed color-mix(in srgb, var(--color-primary) 40%, transparent);">
           <span class="font-terminal tracking-terminal text-primary" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
             ⚠ DEMO DATA — FINANCE NOT YET WIRED
           </span>
-          <span class="font-terminal tracking-terminal text-primary" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;opacity:.7;">
+          <span class="font-terminal tracking-terminal text-primary quiet" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
             This preview will not appear in production
           </span>
         </div>

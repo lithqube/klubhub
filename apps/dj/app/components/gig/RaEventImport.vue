@@ -122,11 +122,11 @@ function clearForm() {
     <!-- Header -->
     <div class="flex items-center justify-between" style="margin-bottom:14px;">
       <div class="flex items-center gap-2">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-secondary);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-primary);">
           <rect x="3" y="4" width="18" height="18" rx="2"/>
           <path d="M3 10h18M8 4v16"/>
         </svg>
-        <span class="section-lbl" style="color:var(--color-secondary);letter-spacing:.08em;">
+        <span class="section-lbl" style="color:var(--color-primary);letter-spacing:.08em;">
           IMPORT FROM RA
         </span>
       </div>
@@ -152,7 +152,7 @@ function clearForm() {
           style="height:34px;font-size:12px;"
         />
         <button
-          class="btn-hud btn-hud-violet btn-hud-sm"
+          class="btn-hud btn-hud-cta btn-hud-sm"
           :disabled="!artistSlug.trim() || importing"
           style="height:34px;min-height:34px;"
           @click="fetchEvents"
@@ -168,14 +168,14 @@ function clearForm() {
         </button>
       </div>
       <p style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);margin-top:6px;letter-spacing:.05em;text-transform:uppercase;">
-        Enter slug from <span style="color:var(--color-secondary);">ra.co/dj/</span><span style="color:var(--color-secondary);text-transform:lowercase;">&lt;artist&gt;</span>
+        Enter slug from <span style="color:var(--color-primary);">ra.co/dj/</span><span style="color:var(--color-primary);text-transform:lowercase;">&lt;artist&gt;</span>
       </p>
     </div>
 
     <!-- Events list -->
     <div v-if="events.length > 0" style="margin-bottom:14px;">
       <!-- Selection bar -->
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--color-surface-container-lowest);border:1px solid rgba(200,184,255,.08);margin-bottom:10px;border-radius:2px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);margin-bottom:10px;">
         <span style="font-family:var(--font-terminal);font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--color-tertiary);">
           <span style="color:var(--color-primary);font-weight:600;">{{ selectedEventIds.size }}</span> OF {{ events.length }} SELECTED
         </span>
@@ -201,15 +201,15 @@ function clearForm() {
           v-for="event in events"
           :key="event.id"
           class="hud-card"
-          style="padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid rgba(200,184,255,.08);cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:7px;border-radius:2px;"
-          :style="selectedEventIds.has(event.id) ? 'border-color:rgba(150,248,255,.18);background:rgba(150,248,255,.03);box-shadow:0 0 24px rgba(150,248,255,.06);' : ''"
+          style="padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:7px;"
+          :style="selectedEventIds.has(event.id) ? 'border-color:color-mix(in srgb, var(--color-primary) 24%, transparent);background:color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-container-lowest));box-shadow:0 0 24px rgba(150,248,255,.06);' : ''"
           @click="toggleEvent(event.id)"
           :data-testid="`ra-event-${event.id}`"
         >
           <!-- Row 1: checkbox + title + status badge -->
           <div style="display:flex;align-items:flex-start;gap:8px;">
             <div
-              style="width:16px;height:16px;border-radius:2px;border:1.5px solid flex-shrink:0;margin-top:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;background:transparent;"
+              style="width:16px;height:16px;border:1.5px solid flex-shrink:0;margin-top:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;background:transparent;"
               :style="selectedEventIds.has(event.id) ? 'border-color:var(--color-primary);background:var(--color-primary);box-shadow:0 0 12px rgba(150,248,255,.3);' : 'border-color:var(--color-outline);'"
               :data-testid="`ra-event-checkbox-${event.id}`"
             >
@@ -229,7 +229,7 @@ function clearForm() {
                 <span
                   v-if="!isUpcoming(event.date)"
                   class="badge-hud"
-                  style="background:rgba(255,113,108,.08);border:1px dashed rgba(255,113,108,.25);color:var(--color-error);padding:2px 7px;font-size:8px;"
+                  style="border:1px dashed color-mix(in srgb, var(--color-error) 25%, transparent);color:var(--color-error);padding:2px 7px;font-size:8px;"
                 >
                   PAST EVENT
                 </span>
@@ -271,9 +271,9 @@ function clearForm() {
             :href="event.contentUrl"
             target="_blank"
             rel="noopener noreferrer"
-            style="align-self:flex-end;font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);text-decoration:none;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;background:rgba(200,184,255,.04);border:1px solid rgba(200,184,255,.1);transition:all .15s;border-radius:1px;"
-            @mouseenter="($event.target as HTMLElement).style.color = 'var(--color-secondary)';($event.target as HTMLElement).style.borderColor = 'rgba(200,184,255,.3)';($event.target as HTMLElement).style.background = 'rgba(200,184,255,.06)'"
-            @mouseleave="($event.target as HTMLElement).style.color = 'var(--color-tertiary)';($event.target as HTMLElement).style.borderColor = 'rgba(200,184,255,.1)';($event.target as HTMLElement).style.background = 'rgba(200,184,255,.04)'"
+            style="align-self:flex-end;font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);text-decoration:none;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;background:color-mix(in srgb, var(--color-primary) 4%, transparent);border:1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);transition:all .15s;"
+            @mouseenter="($event.target as HTMLElement).style.color = 'var(--color-primary)';($event.target as HTMLElement).style.borderColor = 'color-mix(in srgb, var(--color-primary) 30%, transparent)';($event.target as HTMLElement).style.background = 'color-mix(in srgb, var(--color-primary) 6%, transparent)'"
+            @mouseleave="($event.target as HTMLElement).style.color = 'var(--color-tertiary)';($event.target as HTMLElement).style.borderColor = 'color-mix(in srgb, var(--color-primary) 10%, transparent)';($event.target as HTMLElement).style.background = 'color-mix(in srgb, var(--color-primary) 4%, transparent)'"
           >
             <ExternalLink style="width:9px;height:9px;" aria-hidden="true" />
             VIEW TICKETS
@@ -283,7 +283,7 @@ function clearForm() {
     </div>
 
     <!-- Options row -->
-    <div v-if="events.length > 0" style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid rgba(200,184,255,.06);margin-bottom:14px;">
+    <div v-if="events.length > 0" style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid color-mix(in srgb, var(--color-primary) 6%, transparent);margin-bottom:14px;">
       <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
         <input
           type="checkbox"
@@ -292,7 +292,7 @@ function clearForm() {
         />
         <span class="section-lbl" style="color:var(--color-tertiary);">DRY RUN</span>
       </label>
-      <span style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);letter-spacing:.04em;text-transform:uppercase;opacity:.7;">
+      <span style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);letter-spacing:.04em;text-transform:uppercase;">
         PREVIEW WITHOUT CREATING GIGS
       </span>
     </div>
@@ -300,7 +300,7 @@ function clearForm() {
     <!-- Import button -->
     <div v-if="events.length > 0" style="margin-bottom:14px;">
       <button
-        class="btn-hud btn-hud-violet luminous-threshold"
+        class="btn-hud btn-hud-cta luminous-threshold"
         :disabled="!hasSelection || importing"
         style="width:100%;padding:0 20px;height:36px;"
         @click="importEvents"
@@ -318,9 +318,9 @@ function clearForm() {
 
     <!-- Import result -->
     <div v-if="importResult" style="margin-bottom:14px;">
-      <div style="padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid rgba(150,248,255,.08);border-radius:2px;">
+      <div style="padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:7px;">
-          <span style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-terminal);font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--color-secondary);">
+          <span style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-terminal);font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--color-primary);">
             <Check style="width:10px;height:10px;" aria-hidden="true" />
             <span style="color:var(--color-primary);font-weight:600;">{{ importResult.gigsCreated }}</span> {{ importResult.dryRun ? 'GIGS WOULD BE CREATED' : 'GIGS CREATED' }}
           </span>
@@ -338,7 +338,7 @@ function clearForm() {
             :key="idx"
             style="font-family:var(--font-data);font-size:10px;color:var(--color-on-surface-variant);margin:0;display:flex;align-items:flex-start;gap:5px;"
           >
-            <span style="color:var(--color-outline);font-size:8px;margin-top:2px;flex-shrink:0;">•</span>
+            <span style="color:var(--color-tertiary);font-size:8px;margin-top:2px;flex-shrink:0;">•</span>
             {{ reason }}
           </p>
           <p
@@ -355,10 +355,10 @@ function clearForm() {
     <div
       v-if="fetchedSlug && events.length === 0 && !importing"
       role="status"
-      style="margin-bottom:14px;padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid rgba(200,184,255,.1);border-radius:2px;"
+      style="margin-bottom:14px;padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);"
       data-testid="ra-empty"
     >
-      <div class="section-lbl" style="color:var(--color-secondary);">
+      <div class="section-lbl" style="color:var(--color-primary);">
         NO UPCOMING EVENTS TO IMPORT FOR "{{ fetchedSlug }}"
       </div>
       <p style="font-family:var(--font-data);font-size:11px;color:var(--color-tertiary);line-height:1.55;margin:5px 0 0;">
@@ -374,10 +374,10 @@ function clearForm() {
     <!-- Loading -->
     <div
       v-if="importing && events.length === 0"
-      style="padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--color-surface-container-lowest);border:1px solid rgba(200,184,255,.1);border-radius:2px;"
+      style="padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);"
     >
-      <Loader class="animate-spin" style="width:16px;height:16px;color:var(--color-secondary);" aria-hidden="true" />
-      <span class="section-lbl" style="color:var(--color-secondary);letter-spacing:.08em;font-size:9px;">
+      <Loader class="animate-spin" style="width:16px;height:16px;color:var(--color-primary);" aria-hidden="true" />
+      <span class="section-lbl" style="color:var(--color-primary);letter-spacing:.08em;font-size:9px;">
         FETCHING EVENTS FROM RA...
       </span>
     </div>
@@ -385,14 +385,14 @@ function clearForm() {
     <!-- Error -->
     <div
       v-if="raStore.error && !importing"
-      style="display:flex;align-items:center;gap:7px;padding:9px 11px;background:rgba(255,113,108,.05);border:1px solid rgba(255,113,108,.12);border-radius:2px;"
+      style="display:flex;align-items:center;gap:7px;padding:9px 11px;background:color-mix(in srgb, var(--color-error) 4%, transparent);border:1px solid color-mix(in srgb, var(--color-error) 15%, transparent);"
     >
       <AlertCircle style="width:13px;height:13px;color:var(--color-error);flex-shrink:0;" aria-hidden="true" />
       <span style="font-family:var(--font-data);font-size:11px;color:var(--color-error);">{{ raStore.error }}</span>
     </div>
 
     <!-- Footer -->
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(200,184,255,.05);">
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid color-mix(in srgb, var(--color-primary) 5%, transparent);">
       <p style="font-family:var(--font-data);font-size:11px;color:var(--color-tertiary);line-height:1.55;margin:0;">
         Import upcoming events from Resident Advisor as gig records.
         Past events (7+ days old) are automatically skipped.

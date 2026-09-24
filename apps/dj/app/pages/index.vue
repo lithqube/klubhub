@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Send, Layers, TrendingUp, Zap } from 'lucide-vue-next'
+import { Send, Layers, TrendingUp, Zap, CalendarPlus, Plus } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useGigStore } from '~/stores/gig'
 import { useSocialStore } from '~/stores/social'
@@ -130,7 +130,7 @@ const finance = computed(() => {
         <div style="flex:1;padding:16px 18px;min-width:0;">
           <!-- Badges -->
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-            <span class="badge-hud badge-ready" style="border-color:rgba(150,248,255,.5);box-shadow:0 0 12px rgba(150,248,255,.1);">
+            <span class="badge-hud badge-ready" style="border-color:color-mix(in srgb, var(--color-primary) 50%, transparent);box-shadow:0 0 12px rgba(150,248,255,.1);">
               <Zap style="width:8px;height:8px;" aria-hidden="true" />
               UPCOMING
             </span>
@@ -167,7 +167,7 @@ const finance = computed(() => {
 
         <!-- Action buttons -->
         <div
-          style="display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-left:1px solid rgba(150,248,255,.08);justify-content:center;flex-shrink:0;"
+          style="display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-left:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);justify-content:center;flex-shrink:0;"
           class="hero-actions"
         >
           <NuxtLink
@@ -190,11 +190,23 @@ const finance = computed(() => {
       </div>
 
       <!-- Empty state: no upcoming gigs -->
-      <div v-else class="glass hud-card accent-bar-draft" style="padding:24px;text-align:center;">
-        <Zap style="width:48px;height:48px;color:var(--color-tertiary);margin:0 auto 12px;" aria-hidden="true" />
-        <div style="font-family:var(--font-command);font-size:16px;font-weight:600;color:var(--color-on-surface);margin-bottom:4px;">NO UPCOMING GIGS</div>
-        <div style="font-family:var(--font-data);font-size:12px;color:var(--color-on-surface-variant);">Create your first gig to see it here.</div>
-        <NuxtLink to="/gigs" class="btn-hud btn-hud-cta" style="margin-top:16px;display:inline-block;">+ NEW GIG</NuxtLink>
+      <div
+        v-else
+        class="glass hud-card"
+        style="padding:32px 24px 28px;text-align:center;border:1px dashed color-mix(in srgb, var(--color-primary) 20%, transparent);"
+      >
+        <!-- Icon well: quiet on purpose, so the button is the one thing to find -->
+        <div
+          style="width:56px;height:56px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;border:1px dashed color-mix(in srgb, var(--color-primary) 30%, transparent);background:color-mix(in srgb, var(--color-primary) 5%, transparent);color:var(--color-tertiary);"
+        >
+          <CalendarPlus style="width:24px;height:24px;" aria-hidden="true" />
+        </div>
+        <div style="font-family:var(--font-command);font-size:20px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase;color:var(--color-on-surface);">NO UPCOMING GIGS</div>
+        <div style="font-family:var(--font-data);font-size:12px;line-height:1.55;color:var(--color-on-surface-variant);max-width:320px;margin:6px auto 0;">Create your first gig to see it here.</div>
+        <NuxtLink to="/gigs" class="btn-hud btn-hud-cta luminous-threshold" style="margin-top:20px;padding:0 22px;">
+          <Plus style="width:12px;height:12px;flex-shrink:0;" aria-hidden="true" />
+          NEW GIG
+        </NuxtLink>
       </div>
 
       <!-- ── Widget grid: 3 columns on desktop ── -->
@@ -203,7 +215,7 @@ const finance = computed(() => {
         <section aria-label="Social queue" style="display:flex;flex-direction:column;gap:7px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
             <div class="section-lbl">SOCIAL QUEUE</div>
-            <NuxtLink to="/social" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);opacity:.7;cursor:pointer;text-decoration:none;" @mouseenter="($event.target as HTMLElement).style.opacity='1'" @mouseleave="($event.target as HTMLElement).style.opacity='.7'">VIEW ALL →</NuxtLink>
+            <NuxtLink to="/social" class="quiet" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);cursor:pointer;text-decoration:none;">VIEW ALL →</NuxtLink>
           </div>
 
           <NuxtLink
@@ -241,7 +253,7 @@ const finance = computed(() => {
         <section aria-label="Recent tracklists" style="display:flex;flex-direction:column;gap:7px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
             <div class="section-lbl">TRACKLISTS</div>
-            <NuxtLink to="/tracklist" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);opacity:.7;cursor:pointer;text-decoration:none;" @mouseenter="($event.target as HTMLElement).style.opacity='1'" @mouseleave="($event.target as HTMLElement).style.opacity='.7'">VIEW ALL →</NuxtLink>
+            <NuxtLink to="/tracklist" class="quiet" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);cursor:pointer;text-decoration:none;">VIEW ALL →</NuxtLink>
           </div>
 
           <NuxtLink
@@ -282,7 +294,7 @@ const finance = computed(() => {
         <section aria-label="Financial overview" style="display:flex;flex-direction:column;gap:7px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
             <div class="section-lbl">FINANCE</div>
-            <NuxtLink to="/finance" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);opacity:.7;cursor:pointer;text-decoration:none;" @mouseenter="($event.target as HTMLElement).style.opacity='1'" @mouseleave="($event.target as HTMLElement).style.opacity='.7'">VIEW ALL →</NuxtLink>
+            <NuxtLink to="/finance" class="quiet" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);cursor:pointer;text-decoration:none;">VIEW ALL →</NuxtLink>
           </div>
 
           <div class="glass accent-bar-ready" style="padding:12px 14px;">
@@ -321,7 +333,7 @@ const finance = computed(() => {
   .hero-actions {
     flex-direction: row !important;
     border-left: 0 !important;
-    border-top: 1px solid rgba(150,248,255,.08) !important;
+    border-top: 1px solid color-mix(in srgb, var(--color-primary) 8%, transparent) !important;
   }
 }
 </style>

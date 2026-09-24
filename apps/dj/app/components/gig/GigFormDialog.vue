@@ -288,10 +288,10 @@ function close() {
       >
         <div
           class="glass"
-          style="width:90%;max-width:520px;max-height:90vh;overflow-y:auto;"
+          style="width:90%;max-width:520px;max-height:90vh;overflow-y:auto;background:var(--color-surface-container);"
         >
           <!-- Dialog header -->
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid rgba(150,248,255,.08);">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);">
             <div style="font-family:var(--font-command);font-size:13px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase;">{{ title }}</div>
             <button class="btn-hud btn-hud-xs" @click="close">✕</button>
           </div>
@@ -475,7 +475,7 @@ function close() {
             <!-- Linked tracklists -->
             <div v-if="isEdit && props.gig?.id">
               <label class="section-lbl" style="display:block;margin-bottom:6px;">LINKED TRACKLISTS</label>
-              <div v-for="tl in linkedTracklists" :key="tl.id" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(150,248,255,.06);border-radius:6px;margin-bottom:4px;">
+              <div v-for="tl in linkedTracklists" :key="tl.id" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:color-mix(in srgb, var(--color-primary) 6%, transparent);margin-bottom:4px;">
                 <span style="flex:1;font-family:var(--font-ui);font-size:13px;color:var(--green);font-weight:600;">{{ tl.title }}</span>
                 <button class="btn-hud btn-hud-xs" style="color:var(--red);" @click="unlinkTracklist(tl.id)" :disabled="unlinkingTl">✕</button>
               </div>
@@ -529,7 +529,7 @@ function close() {
           </div>
 
           <!-- Dialog footer -->
-          <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid rgba(150,248,255,.08);">
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);">
             <div
               v-if="saveError"
               role="alert"
@@ -565,7 +565,7 @@ function close() {
           v-if="showCancelConfirm"
           style="position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);"
         >
-          <div class="glass" style="padding:24px;max-width:360px;text-align:center;">
+          <div class="glass" style="padding:24px;max-width:360px;text-align:center;background:var(--color-surface-container);">
             <div
               style="font-family:var(--font-command);font-size:12px;font-weight:700;margin-bottom:12px;letter-spacing:-.02em;text-transform:uppercase;"
             >
