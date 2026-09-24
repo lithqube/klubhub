@@ -50,7 +50,7 @@ const saveSettings = async () => {
   saveError.value = null;
   try {
     await $fetch('/api/v1/settings', {
-      method: 'PUT',
+      method: 'put',
       body: {
         tracklist_preferences: {
           preset: preset.value,
@@ -118,7 +118,7 @@ const onLogoUpload = async (e: Event) => {
   formData.append('file', file);
   try {
     const result = await $fetch<{ path: string }>('/api/v1/settings/logo', {
-      method: 'POST',
+      method: 'post',
       body: formData,
     });
     logoPath.value = result.path;

@@ -90,8 +90,11 @@ bash scripts/setup.sh dev
 pnpm nx run-many -t test
 pnpm nx e2e dj-e2e
 
-# Typecheck target currently only echoes a disabled notice; not a real check
+# Real Nuxt typecheck (baseline failures tracked in .hermes/plans/phase-5-progress.md)
 pnpm nx typecheck @dev/dj
+
+# Go unit + disposable-Postgres integration tests, race detector, no Nx cache
+pnpm nx run api:test
 
 # Linting
 pnpm nx lint @dev/dj

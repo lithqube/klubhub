@@ -136,6 +136,10 @@ func Load() (*Config, error) {
 	}
 	if cfg.DatabaseURL == "_pending_synthesis_" {
 		cfg.DatabaseURL = ""
+		// Note: we cannot Unsetenv here — the second envconfig.Process
+		// pass below still needs the placeholder to be non-empty so the
+		// required-key check passes. That pass is responsible for
+		// clearing the placeholder via its own deferred Unsetenv.
 	}
 	if cfg.DatabaseURL == "" {
 		dsn, err := synthesizeDSN(cfg)
@@ -164,6 +168,17 @@ func Load() (*Config, error) {
 		_ = os.Setenv("DATABASE_URL", cfg.DatabaseURL)
 		defer func() {
 			if got == "_pending_synthesis_" {
+				os.Unsetenv("DATABASE_URL")
+			}
+		}()
+	} else if got := os.Getenv("DATABASE_URL"); got == "_pending_synthesis_" && cfg.DatabaseURL == "" {
+		// No POSTGRES_* parts to synthesize from and no DATABASE_URL set
+		// by the caller — leave the placeholder so the required-key
+		// check fires with a clear message instead of silently failing
+		// elsewhere. The placeholder is cleaned up by Load's exit path
+		// below; sibling tests see a clean environment.
+		defer func() {
+			if os.Getenv("DATABASE_URL") == "_pending_synthesis_" {
 				os.Unsetenv("DATABASE_URL")
 			}
 		}()

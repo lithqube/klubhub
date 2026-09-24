@@ -16,20 +16,6 @@ interface TracklistDetailResponse {
   message?: string;
 }
 
-interface TrackResponse {
-  track: Track;
-  error?: string;
-  message?: string;
-}
-
-interface ArtworkResponse {
-  artwork_url: string;
-  artwork_source: 'manual';
-  artwork_status: 'manual';
-  error?: string;
-  message?: string;
-}
-
 // Upload a tracklist file (TXT format)
 export function uploadTracklist(file: File): Promise<{
   tracklist: Tracklist;
@@ -40,7 +26,7 @@ export function uploadTracklist(file: File): Promise<{
   formData.append('file', file);
 
   return $fetch(`/api/v1/tracklists/upload`, {
-    method: 'POST',
+    method: 'post',
     body: formData,
   }).then((res) => {
     const response = res as UploadTracklistResponse;
@@ -86,7 +72,7 @@ export function updateTrack(
   >,
 ): Promise<Track> {
   return $fetch(`/api/v1/tracklists/${tracklistId}/tracks/${trackId}`, {
-    method: 'PUT',
+    method: 'put',
     body: fields,
   }).then((res) => {
     // Check if the response is an error object
@@ -105,14 +91,14 @@ export function uploadTrackArtwork(
   file: File,
 ): Promise<{
   artworkUrl: string;
-  artworkStatus: 'manual';
-  artworkSource: 'manual';
+  artworkStatus: Track['artworkStatus'];
+  artworkSource: Track['artworkSource'];
 }> {
   const formData = new FormData();
   formData.append('file', file);
 
   return $fetch(`/api/v1/tracklists/${tracklistId}/tracks/${trackId}/artwork`, {
-    method: 'PUT',
+    method: 'put',
     body: formData,
   }).then((res) => {
     // Check if the response is an error object
@@ -132,7 +118,7 @@ export function uploadTrackArtwork(
 // Delete a tracklist
 export function deleteTracklist(id: string): Promise<void> {
   return $fetch(`/api/v1/tracklists/${id}`, {
-    method: 'DELETE',
+    method: 'delete',
   }).then((res) => {
     if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
       throw new Error((res as any).message ?? (res as any).error);
@@ -179,7 +165,7 @@ export function generateImage(
   return $fetch(
     `/api/v1/tracklists/${tracklistId}/generate-image?format=${format}`,
     {
-      method: 'POST',
+      method: 'post',
     }
   ).then((res) => {
     if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {

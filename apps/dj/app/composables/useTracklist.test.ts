@@ -31,7 +31,7 @@ describe('useTracklist — uploadFile', () => {
     expect(mockFetch).toHaveBeenCalledOnce();
     const call = mockFetch.mock.calls[0];
     expect(call[0]).toBe('/api/v1/tracklists/upload');
-    expect(call[1].method).toBe('POST');
+    expect(call[1].method).toBe('post');
     expect(call[1].body).toBeInstanceOf(FormData);
     expect(call[1].body.get('file')).toBe(fakeFile);
 
@@ -100,7 +100,7 @@ describe('useTracklist — updateTrack', () => {
     expect(mockFetch).toHaveBeenCalledOnce();
     const call = mockFetch.mock.calls[0];
     expect(call[0]).toBe('/api/v1/tracklists/1/tracks/t1');
-    expect(call[1].method).toBe('PUT');
+    expect(call[1].method).toBe('put');
     expect(call[1].body).toEqual({ title: 'Updated Title' });
 
     expect(result).toEqual(updatedTrack);
@@ -123,7 +123,7 @@ describe('useTracklist — uploadTrackArtwork', () => {
     expect(mockFetch).toHaveBeenCalledOnce();
     const call = mockFetch.mock.calls[0];
     expect(call[0]).toBe('/api/v1/tracklists/1/tracks/t1/artwork');
-    expect(call[1].method).toBe('PUT');
+    expect(call[1].method).toBe('put');
     expect(call[1].body).toBeInstanceOf(FormData);
     expect(call[1].body.get('file')).toBe(fakeFile);
 

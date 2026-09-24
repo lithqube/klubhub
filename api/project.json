@@ -1,0 +1,16 @@
+{
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "name": "api",
+  "projectType": "application",
+  "sourceRoot": "api",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "go test ./... -race -count=1 -p 1",
+        "cwd": "api"
+      }
+    }
+  }
+}

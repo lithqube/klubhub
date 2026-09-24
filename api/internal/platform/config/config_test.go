@@ -146,6 +146,7 @@ func TestConfigLoadSynthesizesDSNFromPostgresParts(t *testing.T) {
 		t.Fatalf("write pw file: %v", err)
 	}
 	os.Unsetenv("DATABASE_URL")
+	os.Unsetenv("POSTGRES_PASSWORD")
 	os.Setenv("POSTGRES_USER", "klubhub")
 	os.Setenv("POSTGRES_PASSWORD_FILE", pwFile)
 	os.Setenv("POSTGRES_HOST", "db")
