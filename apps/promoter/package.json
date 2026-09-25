@@ -1,0 +1,16 @@
+{
+  "name": "@dev/promoter",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@dev/ui": "workspace:*",
+    "@pinia/nuxt": "^0.11.3",
+    "lucide-vue-next": "^0.577.0",
+    "nuxt-nats": "0.1.0-beta.3",
+    "nuxt-security": "^2.6.0",
+    "pinia": "^3.0.4"
+  },
+  "devDependencies": {
+    "vue-tsc": "^2.2.12"
+  }
+}

@@ -1,0 +1,6 @@
+/*
+ * KlubHub Promoter — product-specific styles.
+ * The shared Kinetic HUD system (tokens, fonts, HUD components, light theme)
+ * comes from the @dev/ui layer. Add promoter-only surfaces below.
+ */
+@import "#kui/assets/css/kinetic.css";

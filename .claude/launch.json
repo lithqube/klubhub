@@ -4,7 +4,11 @@
     {
       "name": "Nuxt Frontend (dj)",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["nx", "serve", "dj"],
+      "runtimeArgs": [
+        "nx",
+        "serve",
+        "dj"
+      ],
       "port": 4200
     },
     {
@@ -15,6 +19,16 @@
         "NUXT_PUBLIC_API_BASE=http://127.0.0.1:8080 pnpm nx serve @dev/dj --host 0.0.0.0 --port 4200"
       ],
       "port": 4200
+    },
+    {
+      "name": "Nuxt Frontend (promoter)",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "nx",
+        "serve",
+        "@dev/promoter"
+      ],
+      "port": 4400
     },
     {
       "name": "KlubHub Site (static)",
