@@ -561,3 +561,113 @@ The public surface is built as a **separate "public edge" module** (`api/interna
 - [ ] `klubhub-promoter-api` image builds in CI; setup script brings up a promoter dev stack
 - [ ] Docs updated (self-hosting private instance, OSS vs SaaS surface, shared layer)
 - [ ] Patterns mirrored, not reinvented
+
+## 13. Security architecture (from D5–D8)
+
+**References and IP rule:**
+- **Copy freely** (the user's own IP): OpenSchild (`~/dev/OpenSchild`), mttl (`~/Mettal/mttl`, excluding `docs/reference/cto-ip/`) and nuxt-nats (`~/dev/nuxt-nats`).
+- **Patterns only, never code** (client IP): bridge-latam (`~/Consulting/bridgeltm/bridge-latam-workspace`) and anything copied from it, including mttl's `docs/reference/cto-ip/`.
+- None of the references has Go code, so the Go pieces below are written fresh.
+
+### 13.1 Identity (D6)
+- **`platform/auth.IdentityProvider`** has two implementations. Both produce the same `Principal{Sub, OrgID, Roles[], AMR[], AuthTime}`.
+  - **`local` (self-host):** a single org, users created by an owner invite, argon2id passwords, **TOTP required for `owner|admin|finance`**, WebAuthn later. Sessions are server-side (a hashed session ID in an HttpOnly `__Host-` cookie, SameSite=Lax, CSRF via Origin check plus a double-submit token).
+  - **`zitadel` (SaaS):**
+    - The Nuxt server is the OIDC client and holds the tokens: nuxt-auth-utils, OIDC code + PKCE, tokens kept in a sealed cookie and **never exposed to the browser**.
+    - The access token (JWT) is sent to the Go API as a Bearer token. Go validates it against JWKS (cached, with cooldown) and checks `iss`, `aud` (a map per route prefix, **failing closed when the audience is missing**), `exp` and `nbf`.
+    - Roles come from `urn:zitadel:iam:org:project:roles`. **One Zitadel org = one collective = the `tenant_id`**, used as the Postgres RLS key and the NATS subject token.
+    - Step-up: `prompt=login` plus `amr` including MFA and `auth_time` ≤ 15 min for destructive or finance actions.
+    - Logout goes through `end_session` with `id_token_hint`. Redirects are sanitised.
+    - Idempotent bootstrap script modelled on mttl `infrastructure/scripts/zitadel-bootstrap.sh`. The Zitadel adapter code lives in the OSS repo (MIT) but is only wired in by SaaS config.
+    - Gotcha: fetch JWKS internally with the correct Host header (mttl `zitadelFetch.ts`).
+- **Door devices:** a manager-provisioned device key plus a per-event PIN gives a **short-lived, event-scoped `door` session**. It can't export and can't reach other events.
+
+### 13.2 Authorisation: OPA embedded in Go
+- Policies live in `api/internal/platform/authz/policies/*.rego` (`package klubhub.promoter.authz`, `rego.v1`), are embedded with `go:embed`, and are compiled at boot through `github.com/open-policy-agent/opa/v1/rego`. There is **no sidecar, so there is no "OPA unreachable" failure mode.** Signed bundles are optional later.
+- Input: `{principal:{sub, org_id, roles, amr, auth_time}, action, resource:{type, id, org_id, event_id, owner_sub, class}, context:{route, method, now, device_id}}`.
+- Output: `{allow, deny_reason}`. **`default allow := false`, with no fallback for unlisted routes** (fixing the bridge bug).
+- Every chi route declares its `action` and `resource` through a small registry. A test fails if any mounted route is missing from the registry or has no policy.
+- `opa test` and a Go table test of the matrix run in CI. Denials are audit-logged with `deny_reason`.
+- Examples: artist fees are hidden from the `marketing`/`door` roles; `door` sessions are limited to their own `event_id`; finance approval above a threshold needs `owner`.
+
+### 13.3 Tenant isolation: Postgres RLS that fails closed
+- Every tenant table has `tenant_id uuid not null`, `ENABLE` **and `FORCE`** ROW LEVEL SECURITY, and one policy `USING/WITH CHECK (tenant_id = current_setting('app.tenant_id', false)::uuid)`. With the `false` flag, a missing setting raises an error.
+- Roles: the app connects as `klubhub_app` (not the owner, no BYPASSRLS). Migrations run as `klubhub_owner`. **There is no pool-level default tenant** (fixing the bridge pitfall).
+- `db.WithTenant(ctx, pool, tenantID, func(pgx.Tx) error)` runs `BEGIN; SELECT set_config('app.tenant_id',$1,true)` and is the **only** way repositories get a transaction.
+- A CI guard parses migrations and fails if any table with a `tenant_id` column lacks FORCE plus a policy. An integration test proves cross-tenant reads return nothing and a missing setting errors.
+- Self-host runs the same code path with exactly one tenant.
+
+### 13.4 Data classes and encryption (D5 tiered)
+| Class | Examples | Protection | Who can read |
+|---|---|---|---|
+| `public` | Event title, lineup, venue city, published times | Plaintext | Anyone (export pack / SaaS pages) |
+| `internal` | Budgets, timetables, templates, settings | Plaintext + RLS | Org members per OPA |
+| `personal` | Guest names/emails/phones, audience contacts, submitter details, check-in rows | **Field-level envelope encryption** with a per-org DEK. HMAC-SHA256 **blind index** for exact lookup (email, normalised name tokens) | Server only while processing; org members per OPA |
+| `financial` | Bills, invoices, payouts, cash counts, bank refs, withholding certificates | Envelope encryption (as above); issued PDFs encrypted in Garage with the DEK | As above |
+| `sealed` (E2EE) | **Ban list, private notes on guests/artists, document vault (contracts, IDs, riders with personal data), deal memos/artist fees in negotiation, third-party API credentials** | Encrypted **in the browser** with the org's sealed key. The server stores ciphertext only and has no decryption path | Only members (and provisioned door devices) that hold the key |
+
+- **Server-side envelope encryption:**
+  - AES-256-GCM (Go `crypto/cipher`). AAD = `tenant_id‖table‖column‖row_id`.
+  - One DEK per org, wrapped by the **deployment KEK**. The KEK comes from Infisical, a file or env and is **never stored in the DB**. Wrapped DEKs live in an RLS-forced `tenant_keys` table.
+  - Key IDs are versioned for rotation. Deleting an org destroys its DEK, so its data is **crypto-shredded** (this meets GDPR Art. 17 even in backups).
+  - A CI guard requires every column in a `personal`/`financial` table to be annotated with its class, and fails on unannotated ones.
+  - Honest limit (as in bridge ADR-0009): root on a *running* host can read data while it is processed. This is documented in SECURITY.md and the UI.
+- **Sealed tier (E2EE):**
+  - Each member has an X25519 identity keypair generated in the browser. The private key is protected by an Argon2id key derived from a passphrase (passkey PRF later). The **org sealed key** is wrapped to each member's public key.
+  - A **recovery kit is mandatory** when the org is created. Removing a member triggers rotation and re-wrap. Door devices get the sealed key wrapped to the device key when a manager provisions them, so the ban-list check works offline.
+  - Crypto: WebCrypto (AES-GCM, X25519 where available), `@noble/curves` and `@noble/hashes` as fallback (OpenSchild `STACK.md` choice). The client-decrypt pattern follows mttl `card-decrypt.ts` (user IP).
+  - PQC (hybrid X25519 + ML-KEM) goes in the algorithm-agility slot later.
+- **Other at-rest protection:**
+  - Backups: pg_dump + WAL, **age-encrypted to an offline recipient** (mttl `setup-backup-cron.sh`).
+  - Garage objects: `personal`/`financial` files are encrypted by the app, `sealed` files by the browser.
+  - LUKS is recommended in the SaaS runbook.
+- **Operator view (SaaS):** we can see public data, internal metadata (counts, timestamps, sizes) and ciphertext. We see personal/financial plaintext only inside running jobs, and sealed data never. Pseudonymised audit/analytics use HMAC IDs and truncated IPs.
+
+### 13.5 Secrets (D7)
+- Infisical is used for dev (compose on its own port), CI (`Infisical/secrets-action`, GitHub-OIDC machine identity) and prod (agent rendering an env file with a Universal-Auth machine identity).
+  - Wrappers `scripts/with-secrets.sh` and `secrets-seed.sh` are copied from OpenSchild/mttl and fall back to `.env`.
+- The app itself only reads env or `*_FILE` values, never an SDK.
+- **Offline custody (not in Infisical):** the deployment KEK backup, the Zitadel master key (SaaS), the NATS operator seed and the age backup identity.
+- Boot asserts: the session secret is ≥ 32 bytes and the KEK is present and the right length. Otherwise the process refuses to start (OpenSchild `assert-session-password.ts`).
+
+### 13.6 Messaging (D8)
+- **Go (`nats.go`), transactional outbox:** an `outbox` table written in the same transaction as the domain change; a relay using LISTEN/NOTIFY plus `FOR UPDATE SKIP LOCKED` publishes with `Nats-Msg-Id` = row ID. **Payloads carry IDs only, no PII.**
+- **Nuxt server (`nuxt-nats`):**
+  - `useEphemeralConsumer()` powers **SSE endpoints** for live UI: door occupancy and check-ins across devices, guest-list submissions arriving, campaign send progress, render-job completion.
+    - The subject filter is always built from the **session's tenant** (`tenant.{session.tenantId}.…`), never from client input.
+  - Its `/api/_nats/health` endpoint is included in the app health check.
+  - Graceful drain on SIGTERM works inside the existing `runtime.mjs` supervisor.
+  - Typed subjects come through `NatsEvents` augmentation generated from a shared event-schema package, so Go and TS share one catalogue (JSON Schema → Go structs + TS types).
+  - `useKV()` is available for short-lived UI state (e.g. door device heartbeat/presence).
+  - The Nuxt server **does not publish domain events**; writes go through the Go API, which owns the outbox.
+- **Subjects:** `tenant.{tenant_id}.{aggregate}.{verb}` (e.g. `tenant.X.event.published`, `tenant.X.guest.checked_in`, `tenant.X.campaign.send.requested`), plus `audit.{class}.{name}`, `system.*` and `dlq.*`.
+- **Streams:** `PROMOTER_EVENTS`, `PROMOTER_JOBS` (work queue) and `AUDIT` (drained into an append-only `audit_log`). Dead letters use nuxt-nats `defineDeadLetterConsumer()` on the Nuxt side and advisories on the Go side.
+- **Credentials:** nsc JWT/NKey per service with least-privilege permissions:
+  - `promoter-api`: publish `tenant.*.>` and `audit.>`
+  - `promoter-worker`: pull from JOBS
+  - `outbox-relay`
+  - `promoter-bff` (nuxt-nats): subscribe-only on the ephemeral-consumer API for `tenant.*.>` UI subjects; no publish on domain subjects
+  - A rotation script. In SaaS, per-tenant subject ACLs come via auth callout later.
+- **Consumers:** idempotent pull consumers named `{stream}_{svc}_{purpose}`. They drive campaign sends, reminders, retention purges, render jobs and door-sync fan-out.
+
+### 13.7 Hardening
+- **Nuxt:** `nuxt-security` CSP with a per-request nonce, HSTS, frame-deny, nosniff, strict referrer policy, Permissions-Policy.
+- **Rate limits** on auth, PIN and export routes, as in OpenSchild's config (avoiding the nitropack `'POST /path'` key gotcha).
+- **Go:** security headers, request size limits (already present), and PIN attempt lockout backed by Redis or Postgres.
+- **Audit log:** append-only, capturing actor type, tenant, action, resource, decision and `deny_reason`. IPs are HMAC'd or truncated.
+- **Supply chain:** gitleaks in CI and lefthook, Trivy image scan, SBOM (syft), cosign signing of `klubhub-promoter-api`, pinned image digests (no `:latest`), Dependabot.
+- **Self-host guide:** the instance stays private (D2). Door access goes over LAN, VPN or Tailscale.
+
+### 13.8 P0 task list (supersedes §8 tasks 5–8)
+1. `libs/ui` Nuxt layer (unchanged).
+2. `apps/promoter` + e2e scaffold, with `nuxt-security`, `nuxt-auth-utils` and `nuxt-nats` installed.
+3. `platform/db`: `WithTenant`, app and owner roles, the RLS migration template, and the RLS CI guard with integration tests.
+4. `platform/crypto`: KEK loader, DEK wrap/unwrap, field encryption with AAD, blind index, crypto-shred, and class annotations with a CI guard. Test-first.
+5. `platform/authz`: embedded OPA, route registry, policies plus `opa test`, and a coverage test.
+6. `platform/auth`: the `IdentityProvider` interface; the `local` provider (argon2id, TOTP, sessions, CSRF, invites); the `zitadel` provider (JWKS/audience/claims, not wired in OSS); door device and PIN sessions.
+7. `platform/events`: outbox table, relay, `nats.go` client with nsc credentials, stream bootstrap, and a shared event-schema catalogue (Go + TS for nuxt-nats typed subjects).
+8. Promoter binary wiring: health, auth routes, org bootstrap.
+9. Infra: compose with db, garage, nats (JetStream, nsc creds script), the app and optional Infisical; a SaaS overlay with Zitadel and Login V2; setup script; secrets wrappers.
+10. CI: gitleaks, `opa test`, RLS and crypto guards, Trivy, SBOM, cosign.
+11. Docs: SECURITY.md (threat model and operator-visibility statement) plus ADRs under `docs/adr/` for D5–D8.
+12. Sealed-tier (E2EE) browser key management lands with the first sealed feature (P2 ban list), with the ADR written in P0.
