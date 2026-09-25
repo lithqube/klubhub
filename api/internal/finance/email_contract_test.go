@@ -28,6 +28,12 @@ func (f *fakeSMTPSender) Send(msg *EmailMessage) error {
 	return nil
 }
 
+// Reset clears the failNext flag (call before tests that expect success).
+func (f *fakeSMTPSender) Reset(failNext bool, err error) {
+	f.failNext = failNext
+	f.err = err
+}
+
 // fakeEmailRepo is an in-memory EmailRepository.
 type fakeEmailRepo struct {
 	messages map[uuid.UUID]*EmailMessage
