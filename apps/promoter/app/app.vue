@@ -23,13 +23,19 @@ useHead({ titleTemplate: (t?: string) => (t ? `${t} — KlubHub Promoter` : 'Klu
 
 onMounted(() => initTheme())
 
+// Sign-in and setup pages render without the app shell.
+const route = useRoute()
+const isBare = computed(() => route.meta.public === true)
+
 function handleError(error: Error) {
   console.error('[KlubHub Promoter] Unhandled error:', error)
 }
 </script>
 
 <template>
-  <div class="hud-bg min-h-dvh font-data text-on-surface flex" style="position:relative;">
+  <NuxtPage v-if="isBare" />
+
+  <div v-else class="hud-bg min-h-dvh font-data text-on-surface flex" style="position:relative;">
     <TheNav />
 
     <div class="flex-1 flex flex-col min-h-dvh overflow-hidden pb-16 lg:pb-0" style="position:relative;z-index:1;">

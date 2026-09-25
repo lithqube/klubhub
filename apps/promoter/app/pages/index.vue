@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { useOrgStore } from '~/stores/org'
+import { useSessionStore } from '~/stores/session'
 
 useHead({ title: 'Dashboard' })
 
 const orgStore = useOrgStore()
 const { org, loading, error } = storeToRefs(orgStore)
 await callOnce('promoter-org', () => orgStore.fetchOrg())
+
+const { needsMfa } = storeToRefs(useSessionStore())
 
 const roadmap = [
   { phase: 'P1', title: 'Events & lineup', detail: 'Events, venues, stages, timetable, export pack for your own site.' },
@@ -29,6 +32,14 @@ const roadmap = [
     </div>
 
     <div class="page-body space-y-4">
+      <NuxtLink
+        v-if="needsMfa"
+        to="/account/security"
+        class="glass accent-bar-pending"
+        style="display:block;padding:12px 16px;font-family:var(--font-data);font-size:13px;color:var(--color-on-surface);text-decoration:none;border-left:3px solid var(--color-secondary);"
+      >
+        <strong>Add an authenticator app.</strong> Your role needs a second factor to manage members, security and money. Set it up now →
+      </NuxtLink>
       <p v-if="error" role="alert" class="glass" style="padding:12px 16px;color:var(--color-error);font-family:var(--font-data);font-size:13px;">
         {{ error }}
       </p>

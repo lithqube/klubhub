@@ -15,7 +15,7 @@ describe('useOrgStore', () => {
     fetchMock.mockResolvedValue({ id: 'o1', name: 'Nachtwerk', slug: 'nachtwerk', timezone: 'Europe/Berlin', currency: 'EUR' })
     const store = useOrgStore()
     await store.fetchOrg()
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/org')
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/org', {})
     expect(store.org?.name).toBe('Nachtwerk')
     expect(store.error).toBeNull()
     expect(store.loading).toBe(false)
