@@ -445,7 +445,7 @@ func TestInvoiceHandler_SummariesEndpoint(t *testing.T) {
 		t.Fatalf("status: %d body=%s", rec.Code, rec.Body.String())
 	}
 	var env struct {
-		Data []CurrencySummary
+		Data map[string]CurrencySummary
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v", err)

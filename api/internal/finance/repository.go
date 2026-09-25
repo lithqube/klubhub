@@ -35,6 +35,7 @@ func (r *Repository) Get(ctx context.Context) (*BillingProfile, error) {
 		       address_line1, address_line2, address_city, address_region,
 		       address_postal, address_country,
 		       jurisdiction, payment_instructions, default_currency,
+		       vat_exempt_small_business, default_vat_rate_bps,
 		       updated_at, created_at
 		FROM billing_profiles
 		ORDER BY created_at ASC
@@ -44,6 +45,7 @@ func (r *Repository) Get(ctx context.Context) (*BillingProfile, error) {
 		&p.AddressLine1, &p.AddressLine2, &p.AddressCity, &p.AddressRegion,
 		&p.AddressPostal, &p.AddressCountry,
 		&p.Jurisdiction, &p.PaymentInstructions, &p.DefaultCurrency,
+		&p.VATExemptSmallBusiness, &p.DefaultVATRateBps,
 		&p.UpdatedAt, &p.CreatedAt,
 	)
 	if err == nil {
@@ -83,6 +85,8 @@ func (r *Repository) Update(ctx context.Context, req *UpdateBillingProfileReques
 			jurisdiction         = $15,
 			payment_instructions = $16,
 			default_currency     = $17,
+			vat_exempt_small_business = $18,
+			default_vat_rate_bps = $19,
 			updated_at           = now()
 		WHERE updated_at = $1`,
 		req.UpdatedAt,
@@ -91,6 +95,7 @@ func (r *Repository) Update(ctx context.Context, req *UpdateBillingProfileReques
 		req.AddressLine1, req.AddressLine2, req.AddressCity, req.AddressRegion,
 		req.AddressPostal, req.AddressCountry,
 		req.Jurisdiction, req.PaymentInstructions, req.DefaultCurrency,
+		req.VATExemptSmallBusiness, req.DefaultVATRateBps,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("update billing profile: %w", err)

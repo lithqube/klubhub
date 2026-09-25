@@ -65,6 +65,8 @@ segment:
 /api/v1/finance/invoices                 → InvoiceHandler
 /api/v1/finance/invoices/{id}            → InvoiceHandler (detail)
 /api/v1/finance/invoices/summaries       → InvoiceHandler (summaries)
+/api/v1/finance/invoices/tax-suggestion  → InvoiceHandler (VAT treatment suggestion)
+/api/v1/finance/invoices/{id}/{action}   → InvoiceHandler (issue-check, issue, pay, cancel, credit-note, correct)
 /api/v1/finance/invoices/{id}/payments   → PaymentHandler (sub-path rewriting)
 /api/v1/finance/payments                 → PaymentHandler
 /api/v1/finance/documents                → DocumentHandler
@@ -156,7 +158,9 @@ python3 -m unittest discover -s scripts -p 'test_stack_setup.py'
 The finance-package contract tests cover:
 
 - Billing profile CRUD (invalid IDs, mismatched currency, missing required fields)
-- Invoice drafts / issuance / numbering / cancellation / correction
+- Invoice drafts / issue-check / issuance / numbering / cancellation /
+  credit notes / correction (contract: docs/INVOICING.md). Pure VAT rules
+  (suggestion, notes, totals, issue validation) live in `finance/tax`.
 - Payment create / update / listing / sum-by-invoice (deposits, partials)
 - Document versioning (S3-backed via `fakeObjectStore`)
 - Agreement template CRUD + instance sign / decline / expire
@@ -170,3 +174,9 @@ The finance-package contract tests cover:
 in numerical order at API boot via `goose`. Each migration is
 self-contained; rollback isn't supported (Phase 5 adds money and
 contracts — irreversibility is a feature, not an oversight).
+
+`020`–`022` (contact party fields, billing-profile VAT settings,
+invoice compliance columns) back-fill existing rows and have tested
+`Down` steps (`TestIntegration_InvoicingMigrationBackfillAndRollback`);
+the invoice rollback is lossy by design (credit notes become plain
+invoices, `credited` → `corrected`).

@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// InvoiceHandler implements http.Handler for /api/v1/finance/invoices/*
+// InvoiceHandler implements http.Handler for /api/v1/finance/invoices/*.
 type InvoiceHandler struct {
 	svc *InvoiceService
 }
@@ -19,25 +20,31 @@ func NewInvoiceHandler(svc *InvoiceService) *InvoiceHandler {
 	return &InvoiceHandler{svc: svc}
 }
 
-// ServeHTTP routes:
-// GET    /api/v1/finance/invoices              -> list (with query filters)
-// POST   /api/v1/finance/invoices              -> create draft
-// GET    /api/v1/finance/invoices/{id}         -> get by id
-// PUT    /api/v1/finance/invoices/{id}         -> update draft
-// POST   /api/v1/finance/invoices/{id}/issue   -> issue (draft -> issued)
-// POST   /api/v1/finance/invoices/{id}/pay     -> pay (issued -> paid)
-// POST   /api/v1/finance/invoices/{id}/cancel  -> cancel (draft/issued -> cancelled)
-// POST   /api/v1/finance/invoices/{id}/correct -> correct (issued/paid -> corrected + new draft)
+// ServeHTTP routes (docs/INVOICING.md §4):
+//
+//	GET    /invoices                     list (?status=&gig_id=&kind=&currency=)
+//	POST   /invoices                     create draft
+//	GET    /invoices/tax-suggestion      suggest VAT treatment for a customer
+//	GET    /invoices/summaries           per-currency dashboard
+//	GET    /invoices/{id}                invoice + lines
+//	PUT    /invoices/{id}                update draft (totals recomputed)
+//	GET    /invoices/{id}/issue-check    issue readiness
+//	POST   /invoices/{id}/issue          draft → issued (number allocated)
+//	POST   /invoices/{id}/pay            issued → paid
+//	POST   /invoices/{id}/cancel         draft → cancelled
+//	POST   /invoices/{id}/credit-note    issued|paid → credited + credit note
+//	POST   /invoices/{id}/correct        issued|paid → corrected + credit note + new draft
 func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Parse path: /api/v1/finance/invoices[/{id}[/action]] or /api/v1/finance/invoices/summaries
-	path := r.URL.Path
 	const base = "/api/v1/finance/invoices"
-	if path == base || path == base+"/summaries" {
-		// /api/v1/finance/invoices/summaries → per-currency dashboard
-		if path == base+"/summaries" && r.Method == http.MethodGet {
-			h.handleSummaries(w, r)
-			return
-		}
+	path := r.URL.Path
+	if len(path) < len(base) || path[:len(base)] != base || (len(path) > len(base) && path[len(base)] != '/') {
+		writeError(w, http.StatusNotFound, "not_found", "invalid invoice path")
+		return
+	}
+	parts := splitPath(path[len(base):])
+
+	switch {
+	case len(parts) == 0:
 		switch r.Method {
 		case http.MethodGet:
 			h.handleList(w, r)
@@ -47,22 +54,28 @@ func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST supported on collection")
 		}
 		return
-	}
-
-	// Has an ID and maybe an action
-	if len(path) <= len(base)+1 || path[len(base)] != '/' {
+	case len(parts) == 1 && (parts[0] == "summaries" || parts[0] == "tax-suggestion"):
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET supported on "+parts[0])
+			return
+		}
+		if parts[0] == "summaries" {
+			h.handleSummaries(w, r)
+		} else {
+			h.handleTaxSuggestion(w, r)
+		}
+		return
+	case len(parts) > 2:
 		writeError(w, http.StatusNotFound, "not_found", "invalid invoice path")
 		return
 	}
-	rest := path[len(base)+1:] // after /invoices/
-	parts := splitPath(rest)
+
+	id, err := uuid.Parse(parts[0])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid invoice id")
+		return
+	}
 	if len(parts) == 1 {
-		// /invoices/{id}
-		id, err := uuid.Parse(parts[0])
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "bad_request", "invalid invoice id")
-			return
-		}
 		switch r.Method {
 		case http.MethodGet:
 			h.handleGet(w, r, id)
@@ -73,41 +86,33 @@ func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if len(parts) == 2 {
-		// /invoices/{id}/{action}
-		id, err := uuid.Parse(parts[0])
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "bad_request", "invalid invoice id")
+
+	action := parts[1]
+	if action == "issue-check" {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET supported on issue-check")
 			return
 		}
-		action := parts[1]
-		switch action {
-		case "issue":
-			if r.Method == http.MethodPost {
-				h.handleIssue(w, r, id)
-				return
-			}
-		case "pay":
-			if r.Method == http.MethodPost {
-				h.handlePay(w, r, id)
-				return
-			}
-		case "cancel":
-			if r.Method == http.MethodPost {
-				h.handleCancel(w, r, id)
-				return
-			}
-		case "correct":
-			if r.Method == http.MethodPost {
-				h.handleCorrect(w, r, id)
-				return
-			}
-		}
+		h.handleIssueCheck(w, r, id)
+		return
+	}
+	handlers := map[string]func(http.ResponseWriter, *http.Request, uuid.UUID){
+		"issue":       h.handleIssue,
+		"pay":         h.handlePay,
+		"cancel":      h.handleCancel,
+		"credit-note": h.handleCreditNote,
+		"correct":     h.handleCorrect,
+	}
+	fn, ok := handlers[action]
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "unknown invoice action: "+action)
+		return
+	}
+	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST supported on "+action)
 		return
 	}
-
-	writeError(w, http.StatusNotFound, "not_found", "invalid invoice path")
+	fn(w, r, id)
 }
 
 func splitPath(s string) []string {
@@ -133,21 +138,73 @@ func splitBytes(s string, sep byte) []string {
 	return out
 }
 
+// decodeBody reads a JSON body (1 MiB cap). It writes the 400 and returns
+// false on failure.
+func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return false
+	}
+	return true
+}
+
+// requireToken writes a 400 when the optimistic-concurrency token is missing.
+func requireToken(w http.ResponseWriter, t time.Time) bool {
+	if t.IsZero() {
+		writeError(w, http.StatusBadRequest, "bad_request", "updated_at is required")
+		return false
+	}
+	return true
+}
+
+// writeInvoiceError maps service errors to the documented status codes.
+func writeInvoiceError(w http.ResponseWriter, r *http.Request, err error) {
+	var notIssuable *NotIssuableError
+	switch {
+	case errors.As(err, &notIssuable):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error": "not_issuable", "message": "invoice is not ready to be issued", "problems": notIssuable.Problems,
+		})
+	case errors.Is(err, ErrInvoiceNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "invoice not found")
+	case errors.Is(err, ErrInvoiceValidation):
+		writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
+	case errors.Is(err, ErrInvoiceConflict):
+		writeError(w, http.StatusConflict, "conflict", "invoice was updated by another writer; refresh and retry")
+	case errors.Is(err, ErrInvoiceBadState):
+		writeError(w, http.StatusConflict, "bad_state", "action not allowed in the invoice's current status")
+	default:
+		writeInternalError(w, r, err)
+	}
+}
+
 func (h *InvoiceHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	filter := InvoiceFilter{}
-
 	if gigID := q.Get("gig_id"); gigID != "" {
-		if id, err := uuid.Parse(gigID); err == nil {
-			filter.GigID = &id
+		id, err := uuid.Parse(gigID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "validation_failed", "gig_id must be a UUID")
+			return
 		}
+		filter.GigID = &id
 	}
 	if status := q.Get("status"); status != "" {
 		filter.Status = InvoiceStatus(status)
+		if !filter.Status.IsValid() {
+			writeError(w, http.StatusBadRequest, "validation_failed", "unknown status "+status)
+			return
+		}
 	}
-	if currency := q.Get("currency"); currency != "" {
-		filter.Currency = currency
+	if kind := q.Get("kind"); kind != "" {
+		filter.Kind = InvoiceKind(kind)
+		if !filter.Kind.IsValid() {
+			writeError(w, http.StatusBadRequest, "validation_failed", "kind must be invoice or credit_note")
+			return
+		}
 	}
+	filter.Currency = q.Get("currency")
 	if from := q.Get("from"); from != "" {
 		if t, err := time.Parse(time.RFC3339, from); err == nil {
 			filter.From = t
@@ -158,7 +215,6 @@ func (h *InvoiceHandler) handleList(w http.ResponseWriter, r *http.Request) {
 			filter.To = t
 		}
 	}
-
 	invs, err := h.svc.List(r.Context(), filter)
 	if err != nil {
 		writeInternalError(w, r, err)
@@ -168,203 +224,149 @@ func (h *InvoiceHandler) handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *InvoiceHandler) handleCreateDraft(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req CreateInvoiceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	if !decodeBody(w, r, &req) {
 		return
 	}
 	if req.GigID == uuid.Nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "gig_id is required")
+		writeError(w, http.StatusBadRequest, "validation_failed", "gig_id is required")
 		return
 	}
-	if len(req.Currency) != 3 {
-		writeError(w, http.StatusBadRequest, "bad_request", "currency must be a 3-letter ISO 4217 code")
-		return
-	}
-
 	inv, err := h.svc.CreateDraft(r.Context(), req.GigID, req)
 	if err != nil {
 		if errors.Is(err, ErrInvoiceNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "gig not found")
 			return
 		}
-		if errors.Is(err, ErrInvoiceValidation) {
-			writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
-			return
-		}
-		if errors.Is(err, ErrInvoiceConflict) {
-			writeError(w, http.StatusConflict, "conflict", "invoice number was taken concurrently; retry")
-			return
-		}
-		writeInternalError(w, r, err)
+		writeInvoiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"data": inv})
 }
 
-func (h *InvoiceHandler) handleGet(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	inv, lines, err := h.svc.GetByID(r.Context(), id)
+func (h *InvoiceHandler) handleTaxSuggestion(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	isBusiness, _ := strconv.ParseBool(q.Get("customer_is_business"))
+	sugg, err := h.svc.TaxSuggestion(r.Context(), Party{
+		Country:    q.Get("customer_country"),
+		VATID:      q.Get("customer_vat_id"),
+		IsBusiness: isBusiness,
+	})
 	if err != nil {
-		if errors.Is(err, ErrInvoiceNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
-			return
-		}
 		writeInternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"invoice": inv, "lines": lines}})
+	writeJSON(w, http.StatusOK, map[string]any{"data": sugg})
+}
+
+func (h *InvoiceHandler) handleGet(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	inv, lines, err := h.svc.GetByID(r.Context(), id)
+	if err != nil {
+		writeInvoiceError(w, r, err)
+		return
+	}
+	if lines == nil {
+		lines = []*InvoiceLine{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": inv, "lines": lines})
 }
 
 func (h *InvoiceHandler) handleUpdateDraft(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req UpdateInvoiceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
-		return
-	}
-	if req.UpdatedAt.IsZero() {
-		writeError(w, http.StatusBadRequest, "bad_request", "updated_at is required")
+	if !decodeBody(w, r, &req) || !requireToken(w, req.UpdatedAt) {
 		return
 	}
 	inv, err := h.svc.UpdateDraft(r.Context(), id, req)
 	if err != nil {
-		if errors.Is(err, ErrInvoiceConflict) {
-			writeError(w, http.StatusConflict, "conflict", "invoice updated by another writer or not a draft")
-			return
-		}
-		if errors.Is(err, ErrInvoiceNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
-			return
-		}
-		writeInternalError(w, r, err)
+		writeInvoiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
 }
 
-func (h *InvoiceHandler) handleIssue(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	var req IssueInvoiceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+func (h *InvoiceHandler) handleIssueCheck(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	check, err := h.svc.IssueCheck(r.Context(), id)
+	if err != nil {
+		writeInvoiceError(w, r, err)
 		return
 	}
-	if req.UpdatedAt.IsZero() {
-		writeError(w, http.StatusBadRequest, "bad_request", "updated_at is required")
+	writeJSON(w, http.StatusOK, map[string]any{"data": check})
+}
+
+func (h *InvoiceHandler) handleIssue(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	var req IssueInvoiceRequest
+	if !decodeBody(w, r, &req) || !requireToken(w, req.UpdatedAt) {
 		return
 	}
 	inv, err := h.svc.Issue(r.Context(), id, req)
 	if err != nil {
-		if errors.Is(err, ErrInvoiceConflict) {
-			writeError(w, http.StatusConflict, "conflict", "invoice updated by another writer or not a draft")
-			return
-		}
-		if errors.Is(err, ErrInvoiceNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
-			return
-		}
-		writeInternalError(w, r, err)
+		writeInvoiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
 }
 
 func (h *InvoiceHandler) handlePay(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req PayInvoiceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	if !decodeBody(w, r, &req) || !requireToken(w, req.UpdatedAt) {
 		return
 	}
-	if req.UpdatedAt.IsZero() {
-		writeError(w, http.StatusBadRequest, "bad_request", "updated_at is required")
-		return
+	if req.PaidAt.IsZero() {
+		req.PaidAt = time.Now().UTC()
 	}
 	inv, err := h.svc.Pay(r.Context(), id, req)
 	if err != nil {
-		if errors.Is(err, ErrInvoiceConflict) {
-			writeError(w, http.StatusConflict, "conflict", "invoice updated by another writer or not issued")
-			return
-		}
-		if errors.Is(err, ErrInvoiceNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
-			return
-		}
-		writeInternalError(w, r, err)
+		writeInvoiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
 }
 
 func (h *InvoiceHandler) handleCancel(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req CancelInvoiceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
-		return
-	}
-	if req.UpdatedAt.IsZero() {
-		writeError(w, http.StatusBadRequest, "bad_request", "updated_at is required")
+	if !decodeBody(w, r, &req) || !requireToken(w, req.UpdatedAt) {
 		return
 	}
 	inv, err := h.svc.Cancel(r.Context(), id, req)
 	if err != nil {
-		if errors.Is(err, ErrInvoiceConflict) {
-			writeError(w, http.StatusConflict, "conflict", "invoice updated by another writer or wrong state")
-			return
-		}
-		if errors.Is(err, ErrInvoiceNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
-			return
-		}
-		writeInternalError(w, r, err)
+		writeInvoiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
+}
+
+func (h *InvoiceHandler) handleCreditNote(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	var req CreditNoteRequest
+	if !decodeBody(w, r, &req) || !requireToken(w, req.UpdatedAt) {
+		return
+	}
+	res, err := h.svc.CreditNote(r.Context(), id, req)
+	if err != nil {
+		writeInvoiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"data": res})
 }
 
 func (h *InvoiceHandler) handleCorrect(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req CorrectInvoiceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	if !decodeBody(w, r, &req) || !requireToken(w, req.UpdatedAt) {
 		return
 	}
-	if req.UpdatedAt.IsZero() {
-		writeError(w, http.StatusBadRequest, "bad_request", "updated_at is required")
-		return
-	}
-	inv, err := h.svc.Correct(r.Context(), id, req)
+	res, err := h.svc.Correct(r.Context(), id, req)
 	if err != nil {
-		if errors.Is(err, ErrInvoiceConflict) {
-			writeError(w, http.StatusConflict, "conflict", "invoice updated by another writer or not issued/paid")
-			return
-		}
-		if errors.Is(err, ErrInvoiceNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
-			return
-		}
-		if errors.Is(err, ErrInvoiceBadState) {
-			writeError(w, http.StatusBadRequest, "bad_state", "only issued or paid invoices can be corrected")
-			return
-		}
-		writeInternalError(w, r, err)
+		writeInvoiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
+	writeJSON(w, http.StatusCreated, map[string]any{"data": res})
 }
 
-// handleSummaries returns per-currency dashboard aggregates.
+// handleSummaries returns per-currency dashboard aggregates keyed by currency.
 func (h *InvoiceHandler) handleSummaries(w http.ResponseWriter, r *http.Request) {
 	summaries, err := h.svc.Summaries(r.Context())
 	if err != nil {
 		writeInternalError(w, r, err)
 		return
 	}
-	out := make([]CurrencySummary, 0, len(summaries))
-	for _, s := range summaries {
-		out = append(out, s)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": out})
+	writeJSON(w, http.StatusOK, map[string]any{"data": summaries})
 }

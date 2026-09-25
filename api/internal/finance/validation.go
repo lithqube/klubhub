@@ -93,6 +93,10 @@ func Validate(r *UpdateBillingProfileRequest) ValidationErrors {
 		}
 	}
 
+	if r.DefaultVATRateBps < 0 || r.DefaultVATRateBps > 10000 {
+		errs = append(errs, FieldError{"default_vat_rate_bps", "must be between 0 and 10000 basis points"})
+	}
+
 	if utf8.RuneCountInString(r.TradingName) > 200 {
 		errs = append(errs, FieldError{"trading_name", "exceeds 200 characters"})
 	}

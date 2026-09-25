@@ -29,11 +29,12 @@ func (r *PaymentRepository) Pool() *pgxpool.Pool { return r.pool }
 func (r *PaymentRepository) Create(ctx context.Context, invoiceID uuid.UUID, req CreatePaymentRequest) (*Payment, error) {
 	var p Payment
 	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		status, currency, err := lockInvoiceForPayment(ctx, tx, invoiceID)
+		status, kind, currency, err := lockInvoiceForPayment(ctx, tx, invoiceID)
 		if err != nil {
 			return err
 		}
-		if status != InvoiceStatusIssued && status != InvoiceStatusPaid {
+		// Credit notes are never payable; only issued/paid invoices take money.
+		if kind != InvoiceKindInvoice || (status != InvoiceStatusIssued && status != InvoiceStatusPaid) {
 			return ErrPaymentInvoiceState
 		}
 		if currency != req.Currency {
@@ -47,7 +48,10 @@ func (r *PaymentRepository) Create(ctx context.Context, invoiceID uuid.UUID, req
 		if err != nil {
 			return fmt.Errorf("create payment: %w", err)
 		}
-		return checkPaymentBalance(ctx, tx, invoiceID)
+		if err := checkPaymentBalance(ctx, tx, invoiceID); err != nil {
+			return err
+		}
+		return syncGigPaymentStatus(ctx, tx, invoiceID)
 	})
 	if err != nil {
 		return nil, err
@@ -64,39 +68,42 @@ func (p *Payment) scanTargets() []any {
 }
 
 // lockInvoiceForPayment takes a row lock on the invoice and returns its
-// status and currency. Every payment write goes through this lock, which
-// serialises balance checks per invoice.
-func lockInvoiceForPayment(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) (InvoiceStatus, string, error) {
+// status, kind and currency. Every payment write goes through this lock,
+// which serialises balance checks per invoice.
+func lockInvoiceForPayment(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) (InvoiceStatus, InvoiceKind, string, error) {
 	var status InvoiceStatus
+	var kind InvoiceKind
 	var currency string
-	err := tx.QueryRow(ctx, `SELECT status, currency FROM invoices WHERE id = $1 FOR UPDATE`, invoiceID).
-		Scan(&status, &currency)
+	err := tx.QueryRow(ctx, `SELECT status, kind, currency FROM invoices WHERE id = $1 FOR UPDATE`, invoiceID).
+		Scan(&status, &kind, &currency)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", "", ErrPaymentInvoiceNotFound
+		return "", "", "", ErrPaymentInvoiceNotFound
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("lock invoice: %w", err)
+		return "", "", "", fmt.Errorf("lock invoice: %w", err)
 	}
-	return status, currency, nil
+	return status, kind, currency, nil
 }
 
 // checkPaymentBalance enforces the invariants from 014_payments.sql after a
-// write, inside the same transaction:
+// write, inside the same transaction, against the invoice's NET PAYABLE
+// (total − withholding; the withheld part is paid to the tax office, not
+// to the DJ):
 //   - pending + completed money in (deposits, payments) minus completed
-//     refunds never exceeds the invoice total, so an invoice can't be
+//     refunds never exceeds net payable, so an invoice can't be
 //     over-collected even while payments are still pending;
 //   - completed refunds never exceed completed money in.
 func checkPaymentBalance(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) error {
 	var total, committedIn, completedIn, refunded int64
 	err := tx.QueryRow(ctx, `
-		SELECT i.total_minor,
+		SELECT i.net_payable_minor,
 		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind <> 'refund' AND p.status IN ('pending','completed')), 0),
 		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind <> 'refund' AND p.status = 'completed'), 0),
 		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind = 'refund' AND p.status = 'completed'), 0)
 		FROM invoices i
 		LEFT JOIN payments p ON p.invoice_id = i.id
 		WHERE i.id = $1
-		GROUP BY i.total_minor`, invoiceID).Scan(&total, &committedIn, &completedIn, &refunded)
+		GROUP BY i.net_payable_minor`, invoiceID).Scan(&total, &committedIn, &completedIn, &refunded)
 	if err != nil {
 		return fmt.Errorf("check payment balance: %w", err)
 	}
@@ -105,6 +112,38 @@ func checkPaymentBalance(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) er
 	}
 	if committedIn-refunded > total {
 		return ErrPaymentExceedsBalance
+	}
+	return nil
+}
+
+// syncGigPaymentStatus derives gigs.payment_status from the invoice balance
+// in the caller's transaction: 'paid' when received ≥ net payable,
+// 'deposit_paid' when received > 0, else 'unpaid' (received = completed
+// deposits + payments − completed refunds). The gig's updated_at (its
+// concurrency token) only moves when the status actually changes.
+func syncGigPaymentStatus(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `
+		WITH bal AS (
+			SELECT i.gig_id,
+			       i.net_payable_minor AS net,
+			       COALESCE(SUM(CASE WHEN p.kind = 'refund' THEN -p.amount_minor ELSE p.amount_minor END)
+			                FILTER (WHERE p.status = 'completed'), 0) AS received
+			FROM invoices i
+			LEFT JOIN payments p ON p.invoice_id = i.id
+			WHERE i.id = $1
+			GROUP BY i.gig_id, i.net_payable_minor
+		), target AS (
+			SELECT gig_id,
+			       (CASE WHEN received >= net THEN 'paid'
+			             WHEN received > 0    THEN 'deposit_paid'
+			             ELSE 'unpaid' END)::payment_status AS status
+			FROM bal
+		)
+		UPDATE gigs g SET payment_status = target.status, updated_at = now()
+		FROM target
+		WHERE g.id = target.gig_id AND g.payment_status IS DISTINCT FROM target.status`, invoiceID)
+	if err != nil {
+		return fmt.Errorf("sync gig payment status: %w", err)
 	}
 	return nil
 }
@@ -162,7 +201,7 @@ func (r *PaymentRepository) Update(ctx context.Context, id uuid.UUID, req Update
 		if err != nil {
 			return fmt.Errorf("get payment invoice: %w", err)
 		}
-		if _, _, err := lockInvoiceForPayment(ctx, tx, invoiceID); err != nil {
+		if _, _, _, err := lockInvoiceForPayment(ctx, tx, invoiceID); err != nil {
 			return err
 		}
 		err = tx.QueryRow(ctx, `
@@ -181,7 +220,10 @@ func (r *PaymentRepository) Update(ctx context.Context, id uuid.UUID, req Update
 		if err != nil {
 			return fmt.Errorf("update payment: %w", err)
 		}
-		return checkPaymentBalance(ctx, tx, invoiceID)
+		if err := checkPaymentBalance(ctx, tx, invoiceID); err != nil {
+			return err
+		}
+		return syncGigPaymentStatus(ctx, tx, invoiceID)
 	})
 	if err != nil {
 		return nil, err

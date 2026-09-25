@@ -2,16 +2,18 @@ package finance
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/shopspring/decimal"
+
+	"github.com/klubhub/dj/api/internal/finance/tax"
 )
 
 // InvoiceRepository persists Invoice and InvoiceLine rows.
@@ -27,86 +29,128 @@ func NewInvoiceRepository(pool *pgxpool.Pool) *InvoiceRepository {
 // Pool exposes the underlying pool for tests.
 func (r *InvoiceRepository) Pool() *pgxpool.Pool { return r.pool }
 
-// CreateDraft inserts a draft invoice with lines derived from the gig's
-// fee. Returns the created invoice with its assigned number (sequence
-// advanced atomically). The caller must hold no DB locks; this function
-// runs its own transaction.
-func (r *InvoiceRepository) CreateDraft(ctx context.Context, gig *GigFeeInfo, req CreateInvoiceRequest, profile *BillingProfile) (*Invoice, error) {
-	// Validate currency is 3 uppercase letters.
-	if len(req.Currency) != 3 {
-		return nil, fmt.Errorf("%w: currency must be 3 letters", ErrInvoiceValidation)
-	}
-	for _, ch := range req.Currency {
-		if ch < 'A' || ch > 'Z' {
-			return nil, fmt.Errorf("%w: currency must be uppercase A-Z", ErrInvoiceValidation)
-		}
-	}
+// dbtx is satisfied by both *pgxpool.Pool and pgx.Tx.
+type dbtx interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
 
-	prefix := req.NumberPrefix
-	if prefix == "" {
-		prefix = DefaultNumberingConfig().Prefix
+// paymentTotalsLateral aggregates an invoice's payments in the same query
+// as the invoice row (no N+1): received = completed money in − completed
+// refunds; pending = pending money in.
+const paymentTotalsLateral = `
+	LEFT JOIN LATERAL (
+		SELECT (SUM(CASE WHEN p.kind = 'refund' THEN -p.amount_minor ELSE p.amount_minor END)
+		           FILTER (WHERE p.status = 'completed'))::BIGINT AS received,
+		       (SUM(p.amount_minor) FILTER (WHERE p.kind <> 'refund' AND p.status = 'pending'))::BIGINT AS pending
+		FROM payments p WHERE p.invoice_id = i.id
+	) pay ON true`
+
+// invoiceSelect is the SELECT matching Invoice.scanTargets.
+const invoiceSelect = `
+	SELECT i.id, i.kind, i.gig_id, i.credits_invoice_id, i.replaced_by_invoice_id,
+	       i.invoice_number, i.number_prefix, i.number_seq, i.currency, i.status,
+	       to_char(i.supply_date, 'YYYY-MM-DD'), i.issued_at, i.due_at, i.paid_at,
+	       i.payment_ref, i.internal_notes, i.customer, i.billing_profile,
+	       i.vat_treatment, i.tax_rate_bps, i.tax_note,
+	       i.subtotal_minor, i.tax_minor, i.total_minor,
+	       i.withholding_rate_bps, i.withholding_minor, i.net_payable_minor, i.tax_breakdown,
+	       COALESCE(pay.received, 0), COALESCE(pay.pending, 0),
+	       i.updated_at, i.created_at
+	FROM invoices i` + paymentTotalsLateral
+
+func (inv *Invoice) scanTargets() []any {
+	return []any{
+		&inv.ID, &inv.Kind, &inv.GigID, &inv.CreditsInvoiceID, &inv.ReplacedByInvoiceID,
+		&inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq, &inv.Currency, &inv.Status,
+		&inv.SupplyDate, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt,
+		&inv.PaymentRef, &inv.InternalNotes, &inv.Customer, &inv.BillingProfile,
+		&inv.VATTreatment, &inv.TaxRateBps, &inv.TaxNote,
+		&inv.SubtotalMinor, &inv.TaxMinor, &inv.TotalMinor,
+		&inv.WithholdingRateBps, &inv.WithholdingMinor, &inv.NetPayableMinor, &inv.TaxBreakdown,
+		&inv.ReceivedMinor, &inv.PendingMinor,
+		&inv.UpdatedAt, &inv.CreatedAt,
 	}
+}
 
-	prefix = strings.ToUpper(prefix)
+// fetchInvoice loads one invoice with its payment balances.
+func fetchInvoice(ctx context.Context, q dbtx, id uuid.UUID) (*Invoice, error) {
+	var inv Invoice
+	err := q.QueryRow(ctx, invoiceSelect+` WHERE i.id = $1`, id).Scan(inv.scanTargets()...)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvoiceNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get invoice: %w", err)
+	}
+	inv.finalizeBalances()
+	return &inv, nil
+}
 
-	// Build the invoice row. We allocate the sequence number inside a
-	// transaction so we can also write the lines atomically.
-	inv := &Invoice{}
+func jsonb(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return []byte("{}")
+	}
+	return b
+}
+
+// profileJSON marshals a BillingProfile to JSONB for the supplier snapshot.
+func profileJSON(p *BillingProfile) []byte {
+	if p == nil {
+		return []byte("{}")
+	}
+	return jsonb(p)
+}
+
+// CreateDraft inserts an unnumbered draft and its lines.
+func (r *InvoiceRepository) CreateDraft(ctx context.Context, in DraftInput) (*Invoice, error) {
+	var inv *Invoice
 	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		number, seq, err := allocateInvoiceNumber(ctx, tx, prefix, req.Currency)
-		if err != nil {
-			return err
-		}
-		err = tx.QueryRow(ctx, `
-			INSERT INTO invoices (gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-			                      currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-			                      status, due_at, updated_at, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft', $11, now(), now())
-			RETURNING `+invoiceColumns,
-			gig.ID, profileJSON(profile), number, prefix, seq, req.Currency,
-			gig.FeeMinor, gig.TaxRateBps, gig.TaxMinor, gig.TotalMinor, req.DueAt).Scan(inv.scanTargets()...)
+		var id uuid.UUID
+		t := in.Totals
+		err := tx.QueryRow(ctx, `
+			INSERT INTO invoices (kind, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
+			                      currency, status, supply_date, due_at,
+			                      customer, customer_contact_id, vat_treatment, tax_rate_bps, tax_note,
+			                      subtotal_minor, tax_minor, total_minor,
+			                      withholding_rate_bps, withholding_minor, net_payable_minor, tax_breakdown)
+			VALUES ('invoice', $1, '{}', NULL, $2, NULL, $3, 'draft', NULLIF($4::text, '')::date, $5,
+			        $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			RETURNING id`,
+			in.GigID, in.NumberPrefix, in.Currency, in.SupplyDate, in.DueAt,
+			jsonb(in.Customer), in.Customer.ContactID, string(in.VATTreatment), in.TaxRateBps, in.TaxNote,
+			t.SubtotalMinor, t.TaxMinor, t.TotalMinor,
+			in.WithholdingRateBps, t.WithholdingMinor, t.NetPayableMinor, jsonb(t.Breakdown)).Scan(&id)
 		if err != nil {
 			return fmt.Errorf("insert invoice: %w", err)
 		}
-
-		// Insert line(s). For now: one line for the gig fee.
-		_, err = tx.Exec(ctx, `
-			INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, tax_bps)
-			VALUES ($1, 0, $2, 1, $3, $4)`, inv.ID, gig.LineDescription, gig.FeeMinor, gig.TaxRateBps)
-		if err != nil {
-			return fmt.Errorf("insert invoice line: %w", err)
+		for i, l := range in.Lines {
+			rate := in.TaxRateBps
+			if i < len(t.LineTaxBps) {
+				rate = t.LineTaxBps[i]
+			}
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, tax_bps)
+				VALUES ($1, $2, $3, $4, $5, $6)`, id, i, l.Description, l.Quantity, l.UnitMinor, rate); err != nil {
+				return fmt.Errorf("insert invoice line: %w", err)
+			}
 		}
-		return nil
+		inv, err = fetchInvoice(ctx, tx, id)
+		return err
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
-			return nil, ErrInvoiceConflict
-		}
 		return nil, err
 	}
 	return inv, nil
 }
 
-// invoiceColumns is the RETURNING/SELECT list matching Invoice.scanTargets.
-const invoiceColumns = `id, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-	currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-	status, issued_at, due_at, paid_at, payment_ref, internal_notes,
-	updated_at, created_at`
-
-// scanTargets returns pointers to inv's fields in invoiceColumns order.
-func (inv *Invoice) scanTargets() []any {
-	return []any{
-		&inv.ID, &inv.GigID, &inv.BillingProfile, &inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq,
-		&inv.Currency, &inv.SubtotalMinor, &inv.TaxRateBps, &inv.TaxMinor, &inv.TotalMinor,
-		&inv.Status, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt, &inv.PaymentRef, &inv.InternalNotes,
-		&inv.UpdatedAt, &inv.CreatedAt,
-	}
-}
-
 // allocateInvoiceNumber reserves the next sequence for (prefix, currency).
 // A transaction-scoped advisory lock serialises concurrent allocations for
 // the same series, so MAX()+1 can't hand the same number to two callers
-// under READ COMMITTED. The lock is released when tx commits or rolls back.
+// under READ COMMITTED. It must run inside the transaction that marks the
+// document issued, so a rolled-back issue consumes no number (gap-free).
 func allocateInvoiceNumber(ctx context.Context, tx pgx.Tx, prefix, currency string) (string, int64, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
 		"invoice_number:"+prefix+":"+currency); err != nil {
@@ -121,67 +165,43 @@ func allocateInvoiceNumber(ctx context.Context, tx pgx.Tx, prefix, currency stri
 	return FormatInvoiceNumber(prefix, currency, seq), seq, nil
 }
 
-// profileJSON marshals a BillingProfile to JSONB for the invoice snapshot.
-func profileJSON(p *BillingProfile) []byte {
-	if p == nil {
-		return []byte("{}")
-	}
-	b, _ := json.Marshal(p)
-	return b
-}
-
-// GigFeeInfo is the subset of gig data needed to create an invoice.
-// Passed from the service layer.
+// GigFeeInfo is the gig data needed to create an invoice draft.
 type GigFeeInfo struct {
 	ID              uuid.UUID
 	Currency        string // gig fee currency; empty means "unknown, trust the request"
 	FeeMinor        int64
-	TaxRateBps      int64
-	TaxMinor        int64
-	TotalMinor      int64
 	LineDescription string
+	Date            string // YYYY-MM-DD; default supply date
+	// Customer is the pre-filled customer (gig contact → promoter contact →
+	// promoter name/email); nil when nothing is known.
+	Customer *Party
 }
 
 // GetByID returns an invoice by ID with its lines.
 func (r *InvoiceRepository) GetByID(ctx context.Context, id uuid.UUID) (*Invoice, []*InvoiceLine, error) {
-	var inv Invoice
-	err := r.pool.QueryRow(ctx, `
-		SELECT id, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-		       currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-		       status, issued_at, due_at, paid_at, payment_ref, internal_notes,
-		       updated_at, created_at
-		FROM invoices WHERE id = $1`, id).Scan(
-		&inv.ID, &inv.GigID, &inv.BillingProfile, &inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq,
-		&inv.Currency, &inv.SubtotalMinor, &inv.TaxRateBps, &inv.TaxMinor, &inv.TotalMinor,
-		&inv.Status, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt, &inv.PaymentRef, &inv.InternalNotes,
-		&inv.UpdatedAt, &inv.CreatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, ErrInvoiceNotFound
-		}
-		return nil, nil, fmt.Errorf("get invoice: %w", err)
-	}
-
-	lines, err := r.getLines(ctx, id)
+	inv, err := fetchInvoice(ctx, r.pool, id)
 	if err != nil {
 		return nil, nil, err
 	}
-	return &inv, lines, nil
+	lines, err := getLines(ctx, r.pool, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	return inv, lines, nil
 }
 
 // getLines loads lines for an invoice ordered by sort_order.
-func (r *InvoiceRepository) getLines(ctx context.Context, invoiceID uuid.UUID) ([]*InvoiceLine, error) {
-	rows, err := r.pool.Query(ctx, `
+func getLines(ctx context.Context, q dbtx, invoiceID uuid.UUID) ([]*InvoiceLine, error) {
+	rows, err := q.Query(ctx, `
 		SELECT id, invoice_id, sort_order, description, quantity, unit_minor,
 		       tax_bps, line_total_minor, created_at
-		FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort_order`, invoiceID)
+		FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort_order, id`, invoiceID)
 	if err != nil {
 		return nil, fmt.Errorf("query lines: %w", err)
 	}
 	defer rows.Close()
 
-	var lines []*InvoiceLine
+	lines := []*InvoiceLine{}
 	for rows.Next() {
 		var l InvoiceLine
 		if err := rows.Scan(&l.ID, &l.InvoiceID, &l.SortOrder, &l.Description, &l.Quantity,
@@ -193,245 +213,199 @@ func (r *InvoiceRepository) getLines(ctx context.Context, invoiceID uuid.UUID) (
 	return lines, rows.Err()
 }
 
-// List returns invoices matching the filter, newest first.
+// List returns invoices matching the filter, newest first (max 100), with
+// payment balances computed in the same query.
 func (r *InvoiceRepository) List(ctx context.Context, filter InvoiceFilter) ([]*Invoice, error) {
 	where := []string{"1=1"}
 	args := []any{}
-	argN := 1
-
+	add := func(cond string, v any) {
+		args = append(args, v)
+		where = append(where, fmt.Sprintf(cond, len(args)))
+	}
 	if filter.GigID != nil {
-		where = append(where, fmt.Sprintf("gig_id = $%d", argN))
-		args = append(args, *filter.GigID)
-		argN++
+		add("i.gig_id = $%d", *filter.GigID)
 	}
 	if filter.Status != "" {
-		where = append(where, fmt.Sprintf("status = $%d", argN))
-		args = append(args, string(filter.Status))
-		argN++
+		add("i.status = $%d", string(filter.Status))
+	}
+	if filter.Kind != "" {
+		add("i.kind = $%d", string(filter.Kind))
 	}
 	if filter.Currency != "" {
-		where = append(where, fmt.Sprintf("currency = $%d", argN))
-		args = append(args, filter.Currency)
-		argN++
+		add("i.currency = $%d", filter.Currency)
 	}
 	if !filter.From.IsZero() {
-		where = append(where, fmt.Sprintf("created_at >= $%d", argN))
-		args = append(args, filter.From)
-		argN++
+		add("i.created_at >= $%d", filter.From)
 	}
 	if !filter.To.IsZero() {
-		where = append(where, fmt.Sprintf("created_at <= $%d", argN))
-		args = append(args, filter.To)
-		argN++
+		add("i.created_at <= $%d", filter.To)
 	}
 
-	query := fmt.Sprintf(`
-		SELECT id, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-		       currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-		       status, issued_at, due_at, paid_at, payment_ref, internal_notes,
-		       updated_at, created_at
-		FROM invoices
-		WHERE %s
-		ORDER BY created_at DESC
-		LIMIT 100`, strings.Join(where, " AND "))
-
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := r.pool.Query(ctx, invoiceSelect+`
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY i.created_at DESC, i.id
+		LIMIT 100`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list invoices: %w", err)
 	}
 	defer rows.Close()
 
-	var invs []*Invoice
+	invs := []*Invoice{}
 	for rows.Next() {
 		var inv Invoice
-		if err := rows.Scan(&inv.ID, &inv.GigID, &inv.BillingProfile, &inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq,
-			&inv.Currency, &inv.SubtotalMinor, &inv.TaxRateBps, &inv.TaxMinor, &inv.TotalMinor,
-			&inv.Status, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt, &inv.PaymentRef, &inv.InternalNotes,
-			&inv.UpdatedAt, &inv.CreatedAt); err != nil {
+		if err := rows.Scan(inv.scanTargets()...); err != nil {
 			return nil, fmt.Errorf("scan invoice: %w", err)
 		}
+		inv.finalizeBalances()
 		invs = append(invs, &inv)
 	}
 	return invs, rows.Err()
 }
 
-// UpdateDraft updates a draft invoice. Only draft status is allowed.
+// lockedInvoice is the state read under FOR UPDATE before a transition.
+type lockedInvoice struct {
+	status    InvoiceStatus
+	kind      InvoiceKind
+	updatedAt time.Time
+}
+
+// lockForTransition row-locks the invoice and classifies failures the same
+// way the agreement Sign path does: missing row → ErrInvoiceNotFound, stale
+// token → ErrInvoiceConflict. The caller then checks status/kind and
+// returns ErrInvoiceBadState, so 409 conflict and 409 bad_state are
+// distinguishable and race-free.
+func lockForTransition(ctx context.Context, tx pgx.Tx, id uuid.UUID, token time.Time) (lockedInvoice, error) {
+	var li lockedInvoice
+	err := tx.QueryRow(ctx, `SELECT status, kind, updated_at FROM invoices WHERE id = $1 FOR UPDATE`, id).
+		Scan(&li.status, &li.kind, &li.updatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return li, ErrInvoiceNotFound
+	}
+	if err != nil {
+		return li, fmt.Errorf("lock invoice: %w", err)
+	}
+	if !li.updatedAt.Equal(token) {
+		return li, ErrInvoiceConflict
+	}
+	return li, nil
+}
+
+// isDraftInvoice reports whether a locked row is an editable draft invoice.
+func (li lockedInvoice) isDraftInvoice() bool {
+	return li.kind == InvoiceKindInvoice && li.status == InvoiceStatusDraft
+}
+
+// UpdateDraft replaces the editable fields of a draft, recomputes totals
+// from its lines and rewrites every line's tax_bps.
 func (r *InvoiceRepository) UpdateDraft(ctx context.Context, id uuid.UUID, req UpdateInvoiceRequest) (*Invoice, error) {
-	var inv Invoice
-	err := r.pool.QueryRow(ctx, `
-		UPDATE invoices SET
-			number_prefix  = $2,
-			due_at         = $3,
-			internal_notes = $4,
-			updated_at     = now()
-		WHERE id = $1 AND status = 'draft' AND updated_at = $5
-		RETURNING id, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-		          currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-		          status, issued_at, due_at, paid_at, payment_ref, internal_notes,
-		          updated_at, created_at`,
-		id, req.NumberPrefix, req.DueAt, req.InternalNotes, req.UpdatedAt).Scan(
-		&inv.ID, &inv.GigID, &inv.BillingProfile, &inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq,
-		&inv.Currency, &inv.SubtotalMinor, &inv.TaxRateBps, &inv.TaxMinor, &inv.TotalMinor,
-		&inv.Status, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt, &inv.PaymentRef, &inv.InternalNotes,
-		&inv.UpdatedAt, &inv.CreatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrInvoiceConflict // could be not found, wrong status, or stale token
-		}
-		return nil, fmt.Errorf("update draft: %w", err)
-	}
-	return &inv, nil
-}
-
-// Issue transitions draft → issued. Sets issued_at = now(), stores the
-// billing profile snapshot. Returns the issued invoice.
-func (r *InvoiceRepository) Issue(ctx context.Context, id uuid.UUID, req IssueInvoiceRequest, profile *BillingProfile) (*Invoice, error) {
-	var inv Invoice
-	err := r.pool.QueryRow(ctx, `
-		UPDATE invoices SET
-			billing_profile = $2,
-			status          = 'issued',
-			issued_at       = now(),
-			updated_at      = now()
-		WHERE id = $1 AND status = 'draft' AND updated_at = $3
-		RETURNING id, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-		          currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-		          status, issued_at, due_at, paid_at, payment_ref, internal_notes,
-		          updated_at, created_at`,
-		id, profileJSON(profile), req.UpdatedAt).Scan(
-		&inv.ID, &inv.GigID, &inv.BillingProfile, &inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq,
-		&inv.Currency, &inv.SubtotalMinor, &inv.TaxRateBps, &inv.TaxMinor, &inv.TotalMinor,
-		&inv.Status, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt, &inv.PaymentRef, &inv.InternalNotes,
-		&inv.UpdatedAt, &inv.CreatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrInvoiceConflict
-		}
-		return nil, fmt.Errorf("issue invoice: %w", err)
-	}
-	return &inv, nil
-}
-
-// Pay transitions issued → paid. Sets paid_at and payment_ref.
-func (r *InvoiceRepository) Pay(ctx context.Context, id uuid.UUID, req PayInvoiceRequest) (*Invoice, error) {
-	var inv Invoice
-	err := r.pool.QueryRow(ctx, `
-		UPDATE invoices SET
-			status      = 'paid',
-			paid_at     = $2,
-			payment_ref = $3,
-			updated_at  = now()
-		WHERE id = $1 AND status = 'issued' AND updated_at = $4
-		RETURNING id, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-		          currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-		          status, issued_at, due_at, paid_at, payment_ref, internal_notes,
-		          updated_at, created_at`,
-		id, req.PaidAt, req.PaymentRef, req.UpdatedAt).Scan(
-		&inv.ID, &inv.GigID, &inv.BillingProfile, &inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq,
-		&inv.Currency, &inv.SubtotalMinor, &inv.TaxRateBps, &inv.TaxMinor, &inv.TotalMinor,
-		&inv.Status, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt, &inv.PaymentRef, &inv.InternalNotes,
-		&inv.UpdatedAt, &inv.CreatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrInvoiceConflict
-		}
-		return nil, fmt.Errorf("pay invoice: %w", err)
-	}
-	return &inv, nil
-}
-
-// Cancel transitions issued/draft → cancelled.
-func (r *InvoiceRepository) Cancel(ctx context.Context, id uuid.UUID, req CancelInvoiceRequest) (*Invoice, error) {
-	var inv Invoice
-	err := r.pool.QueryRow(ctx, `
-		UPDATE invoices SET
-			status     = 'cancelled',
-			updated_at = now()
-		WHERE id = $1 AND status IN ('draft', 'issued') AND updated_at = $2
-		RETURNING id, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-		          currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-		          status, issued_at, due_at, paid_at, payment_ref, internal_notes,
-		          updated_at, created_at`,
-		id, req.UpdatedAt).Scan(
-		&inv.ID, &inv.GigID, &inv.BillingProfile, &inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq,
-		&inv.Currency, &inv.SubtotalMinor, &inv.TaxRateBps, &inv.TaxMinor, &inv.TotalMinor,
-		&inv.Status, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt, &inv.PaymentRef, &inv.InternalNotes,
-		&inv.UpdatedAt, &inv.CreatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrInvoiceConflict
-		}
-		return nil, fmt.Errorf("cancel invoice: %w", err)
-	}
-	return &inv, nil
-}
-
-// Correct creates a new draft invoice copying the original (with updated
-// amounts if provided) and transitions the original to 'corrected'.
-// For Wave 2 we just create a new draft with same gig/currency and
-// mark original corrected; amount edits come in Wave 3.
-func (r *InvoiceRepository) Correct(ctx context.Context, id uuid.UUID, req CorrectInvoiceRequest, profile *BillingProfile) (*Invoice, error) {
-	newInv := &Invoice{}
+	var inv *Invoice
 	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		// Lock the original so its status/token check and the transition
-		// to 'corrected' can't interleave with a concurrent pay/cancel.
-		var original Invoice
-		err := tx.QueryRow(ctx, `
-			SELECT id, gig_id, currency, number_prefix, subtotal_minor, tax_rate_bps,
-			       tax_minor, total_minor, status, updated_at
-			FROM invoices WHERE id = $1 FOR UPDATE`, id).Scan(
-			&original.ID, &original.GigID, &original.Currency, &original.NumberPrefix,
-			&original.SubtotalMinor, &original.TaxRateBps, &original.TaxMinor, &original.TotalMinor,
-			&original.Status, &original.UpdatedAt,
-		)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrInvoiceNotFound
-			}
-			return fmt.Errorf("get original for correction: %w", err)
-		}
-		if original.Status != InvoiceStatusIssued && original.Status != InvoiceStatusPaid {
-			return ErrInvoiceBadState // only issued/paid can be corrected
-		}
-		if !req.UpdatedAt.Equal(original.UpdatedAt) {
-			return ErrInvoiceConflict
-		}
-
-		if _, err := tx.Exec(ctx, `
-			UPDATE invoices SET status = 'corrected', updated_at = now()
-			WHERE id = $1`, id); err != nil {
-			return fmt.Errorf("mark original corrected: %w", err)
-		}
-
-		// Create new draft with same prefix/currency/gig, next sequence.
-		number, seq, err := allocateInvoiceNumber(ctx, tx, original.NumberPrefix, original.Currency)
+		li, err := lockForTransition(ctx, tx, id, req.UpdatedAt)
 		if err != nil {
 			return err
 		}
-		err = tx.QueryRow(ctx, `
-			INSERT INTO invoices (gig_id, billing_profile, invoice_number, number_prefix, number_seq,
-			                      currency, subtotal_minor, tax_rate_bps, tax_minor, total_minor,
-			                      status, due_at, updated_at, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft', NULL, now(), now())
-			RETURNING `+invoiceColumns,
-			original.GigID, profileJSON(profile), number, original.NumberPrefix, seq, original.Currency,
-			original.SubtotalMinor, original.TaxRateBps, original.TaxMinor, original.TotalMinor).Scan(newInv.scanTargets()...)
+		if !li.isDraftInvoice() {
+			return ErrInvoiceBadState
+		}
+		lines, err := getLines(ctx, tx, id)
 		if err != nil {
-			return fmt.Errorf("insert correction draft: %w", err)
+			return err
 		}
-
-		// Copy lines from original.
+		taxLines := make([]tax.Line, len(lines))
+		for i, l := range lines {
+			taxLines[i] = tax.Line{NetMinor: l.LineTotalMinor, TaxBps: l.TaxBps}
+		}
+		t := tax.ComputeTotals(taxLines, req.TaxRateBps, req.WithholdingRateBps)
+		for i, l := range lines {
+			if _, err := tx.Exec(ctx, `UPDATE invoice_lines SET tax_bps = $2 WHERE id = $1`, l.ID, t.LineTaxBps[i]); err != nil {
+				return fmt.Errorf("update line tax: %w", err)
+			}
+		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, tax_bps)
-			SELECT $1, sort_order, description, quantity, unit_minor, tax_bps
-			FROM invoice_lines WHERE invoice_id = $2`, newInv.ID, original.ID); err != nil {
-			return fmt.Errorf("copy lines: %w", err)
+			UPDATE invoices SET
+				customer             = $2,
+				customer_contact_id  = $3,
+				vat_treatment        = $4,
+				tax_rate_bps         = $5,
+				tax_note             = $6,
+				withholding_rate_bps = $7,
+				supply_date          = NULLIF($8::text, '')::date,
+				due_at               = $9,
+				number_prefix        = $10,
+				internal_notes       = $11,
+				subtotal_minor       = $12,
+				tax_minor            = $13,
+				total_minor          = $14,
+				withholding_minor    = $15,
+				net_payable_minor    = $16,
+				tax_breakdown        = $17,
+				updated_at           = now()
+			WHERE id = $1`,
+			id, jsonb(req.Customer), req.Customer.ContactID, string(req.VATTreatment), req.TaxRateBps, req.TaxNote,
+			req.WithholdingRateBps, req.SupplyDate, req.DueAt.ptr(), req.NumberPrefix, req.InternalNotes,
+			t.SubtotalMinor, t.TaxMinor, t.TotalMinor, t.WithholdingMinor, t.NetPayableMinor, jsonb(t.Breakdown)); err != nil {
+			return fmt.Errorf("update draft: %w", err)
 		}
-		return nil
+		inv, err = fetchInvoice(ctx, tx, id)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return inv, nil
+}
+
+// IssueCheckFunc validates a locked draft right before it is numbered.
+// gigCurrency is the gig's fee currency read in the same transaction (""
+// when the gig is gone). It must not do I/O: the transaction holds a
+// connection, and concurrent issues would otherwise exhaust the pool.
+type IssueCheckFunc func(inv *Invoice, gigCurrency string) []tax.Problem
+
+// Issue transitions draft → issued in one transaction: lock the row, run
+// the issue check, allocate the next number of the draft's series, snapshot
+// the billing profile. A failed check or rollback consumes no number.
+func (r *InvoiceRepository) Issue(ctx context.Context, id uuid.UUID, req IssueInvoiceRequest, profile *BillingProfile, check IssueCheckFunc) (*Invoice, error) {
+	var inv *Invoice
+	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+		li, err := lockForTransition(ctx, tx, id, req.UpdatedAt)
+		if err != nil {
+			return err
+		}
+		if !li.isDraftInvoice() {
+			return ErrInvoiceBadState
+		}
+		draft, err := fetchInvoice(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if check != nil {
+			var gigCurrency string
+			err := tx.QueryRow(ctx, `SELECT upper(fee_currency) FROM gigs WHERE id = $1 AND deleted_at IS NULL`,
+				draft.GigID).Scan(&gigCurrency)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("read gig currency: %w", err)
+			}
+			if problems := check(draft, gigCurrency); len(problems) > 0 {
+				return &NotIssuableError{Problems: problems}
+			}
+		}
+		number, seq, err := allocateInvoiceNumber(ctx, tx, draft.NumberPrefix, draft.Currency)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE invoices SET
+				invoice_number  = $2,
+				number_seq      = $3,
+				billing_profile = $4,
+				status          = 'issued',
+				issued_at       = now(),
+				updated_at      = now()
+			WHERE id = $1`, id, number, seq, profileJSON(profile)); err != nil {
+			return fmt.Errorf("issue invoice: %w", err)
+		}
+		inv, err = fetchInvoice(ctx, tx, id)
+		return err
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -439,11 +413,164 @@ func (r *InvoiceRepository) Correct(ctx context.Context, id uuid.UUID, req Corre
 		}
 		return nil, err
 	}
-	return newInv, nil
+	return inv, nil
+}
+
+// Pay transitions issued → paid. Sets paid_at and payment_ref.
+func (r *InvoiceRepository) Pay(ctx context.Context, id uuid.UUID, req PayInvoiceRequest) (*Invoice, error) {
+	return r.transition(ctx, id, req.UpdatedAt,
+		func(li lockedInvoice) bool { return li.kind == InvoiceKindInvoice && li.status == InvoiceStatusIssued },
+		`UPDATE invoices SET status = 'paid', paid_at = $2, payment_ref = $3, updated_at = now() WHERE id = $1`,
+		req.PaidAt, req.PaymentRef)
+}
+
+// Cancel transitions draft → cancelled. Drafts are unnumbered, so nothing is
+// consumed from the series. Issued invoices are reversed by credit note.
+func (r *InvoiceRepository) Cancel(ctx context.Context, id uuid.UUID, req CancelInvoiceRequest) (*Invoice, error) {
+	return r.transition(ctx, id, req.UpdatedAt, lockedInvoice.isDraftInvoice,
+		`UPDATE invoices SET status = 'cancelled', updated_at = now() WHERE id = $1`)
+}
+
+// transition runs a single-statement state change under the row lock.
+func (r *InvoiceRepository) transition(ctx context.Context, id uuid.UUID, token time.Time,
+	allowed func(lockedInvoice) bool, sql string, args ...any) (*Invoice, error) {
+	var inv *Invoice
+	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+		li, err := lockForTransition(ctx, tx, id, token)
+		if err != nil {
+			return err
+		}
+		if !allowed(li) {
+			return ErrInvoiceBadState
+		}
+		if _, err := tx.Exec(ctx, sql, append([]any{id}, args...)...); err != nil {
+			return fmt.Errorf("invoice transition: %w", err)
+		}
+		inv, err = fetchInvoice(ctx, tx, id)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return inv, nil
+}
+
+// copyLines duplicates an invoice's lines onto another invoice.
+func copyLines(ctx context.Context, tx pgx.Tx, from, to uuid.UUID) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, tax_bps)
+		SELECT $1, sort_order, description, quantity, unit_minor, tax_bps
+		FROM invoice_lines WHERE invoice_id = $2`, to, from)
+	if err != nil {
+		return fmt.Errorf("copy lines: %w", err)
+	}
+	return nil
+}
+
+// CreditNote reverses an issued or paid invoice in full. The credit note
+// is issued immediately in the CN series of the invoice's currency, copies
+// the original's customer, tax treatment, amounts and lines, and snapshots
+// the current billing profile (or the original's snapshot if none). The
+// original becomes 'credited' — or, when correct is true, 'corrected' with
+// a new unnumbered draft copy linked via replaced_by_invoice_id.
+func (r *InvoiceRepository) CreditNote(ctx context.Context, id uuid.UUID, req CreditNoteRequest, profile *BillingProfile, correct bool) (*CreditNoteResult, error) {
+	var res CreditNoteResult
+	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+		li, err := lockForTransition(ctx, tx, id, req.UpdatedAt)
+		if err != nil {
+			return err
+		}
+		if li.kind != InvoiceKindInvoice || (li.status != InvoiceStatusIssued && li.status != InvoiceStatusPaid) {
+			return ErrInvoiceBadState
+		}
+		var currency string
+		if err := tx.QueryRow(ctx, `SELECT currency FROM invoices WHERE id = $1`, id).Scan(&currency); err != nil {
+			return fmt.Errorf("read original: %w", err)
+		}
+		number, seq, err := allocateInvoiceNumber(ctx, tx, CreditNotePrefix, currency)
+		if err != nil {
+			return err
+		}
+		var snapshot []byte
+		if profile != nil {
+			snapshot = profileJSON(profile)
+		}
+		var cnID uuid.UUID
+		err = tx.QueryRow(ctx, `
+			INSERT INTO invoices (kind, gig_id, credits_invoice_id, billing_profile,
+			                      invoice_number, number_prefix, number_seq, currency, status, issued_at,
+			                      supply_date, customer, customer_contact_id, vat_treatment, tax_rate_bps, tax_note,
+			                      subtotal_minor, tax_minor, total_minor,
+			                      withholding_rate_bps, withholding_minor, net_payable_minor, tax_breakdown,
+			                      internal_notes)
+			SELECT 'credit_note', gig_id, id, COALESCE($2::jsonb, billing_profile),
+			       $3, $4, $5, currency, 'issued', now(),
+			       supply_date, customer, customer_contact_id, vat_treatment, tax_rate_bps, tax_note,
+			       subtotal_minor, tax_minor, total_minor,
+			       withholding_rate_bps, withholding_minor, net_payable_minor, tax_breakdown,
+			       $6
+			FROM invoices WHERE id = $1
+			RETURNING id`, id, snapshot, number, CreditNotePrefix, seq, req.Reason).Scan(&cnID)
+		if err != nil {
+			return fmt.Errorf("insert credit note: %w", err)
+		}
+		if err := copyLines(ctx, tx, id, cnID); err != nil {
+			return err
+		}
+
+		if correct {
+			var replID uuid.UUID
+			err = tx.QueryRow(ctx, `
+				INSERT INTO invoices (kind, gig_id, billing_profile, invoice_number, number_prefix, number_seq,
+				                      currency, status, supply_date, due_at,
+				                      customer, customer_contact_id, vat_treatment, tax_rate_bps, tax_note,
+				                      subtotal_minor, tax_minor, total_minor,
+				                      withholding_rate_bps, withholding_minor, net_payable_minor, tax_breakdown,
+				                      internal_notes)
+				SELECT 'invoice', gig_id, '{}', NULL, number_prefix, NULL,
+				       currency, 'draft', supply_date, NULL,
+				       customer, customer_contact_id, vat_treatment, tax_rate_bps, tax_note,
+				       subtotal_minor, tax_minor, total_minor,
+				       withholding_rate_bps, withholding_minor, net_payable_minor, tax_breakdown,
+				       'Replaces ' || invoice_number
+				FROM invoices WHERE id = $1
+				RETURNING id`, id).Scan(&replID)
+			if err != nil {
+				return fmt.Errorf("insert replacement draft: %w", err)
+			}
+			if err := copyLines(ctx, tx, id, replID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `
+				UPDATE invoices SET status = 'corrected', replaced_by_invoice_id = $2, updated_at = now()
+				WHERE id = $1`, id, replID); err != nil {
+				return fmt.Errorf("mark original corrected: %w", err)
+			}
+			if res.Replacement, err = fetchInvoice(ctx, tx, replID); err != nil {
+				return err
+			}
+		} else if _, err := tx.Exec(ctx, `
+			UPDATE invoices SET status = 'credited', updated_at = now() WHERE id = $1`, id); err != nil {
+			return fmt.Errorf("mark original credited: %w", err)
+		}
+
+		if res.CreditNote, err = fetchInvoice(ctx, tx, cnID); err != nil {
+			return err
+		}
+		res.Original, err = fetchInvoice(ctx, tx, id)
+		return err
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, ErrInvoiceConflict
+		}
+		return nil, err
+	}
+	return &res, nil
 }
 
 // NextNumber previews the next invoice number for a given prefix/currency
-// without allocating it. Used by the UI "New Invoice" screen.
+// without allocating it.
 func (r *InvoiceRepository) NextNumber(ctx context.Context, prefix, currency string) (string, int64, error) {
 	var seq int64
 	err := r.pool.QueryRow(ctx, `
@@ -456,16 +583,22 @@ func (r *InvoiceRepository) NextNumber(ctx context.Context, prefix, currency str
 	return FormatInvoiceNumber(prefix, currency, seq), seq, nil
 }
 
-// Summaries returns per-currency totals for the dashboard.
+// Summaries returns per-currency dashboard totals in minor units, computed
+// in one query (see CurrencySummary for the definitions).
 func (r *InvoiceRepository) Summaries(ctx context.Context) (map[string]CurrencySummary, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT currency,
-		       SUM(CASE WHEN status = 'issued' THEN total_minor ELSE 0 END) AS issued_total,
-		       SUM(CASE WHEN status = 'paid'     THEN total_minor ELSE 0 END) AS paid_total,
-		       SUM(CASE WHEN status = 'issued'   THEN 1 ELSE 0 END) AS issued_count,
-		       SUM(CASE WHEN status = 'paid'     THEN 1 ELSE 0 END) AS paid_count
-		FROM invoices
-		GROUP BY currency`)
+		SELECT i.currency,
+		       COUNT(*) FILTER (WHERE i.status = 'draft'),
+		       COUNT(*) FILTER (WHERE i.status = 'issued'),
+		       COUNT(*) FILTER (WHERE i.status = 'paid'),
+		       COALESCE(SUM(GREATEST(i.net_payable_minor - COALESCE(pay.received, 0) - COALESCE(pay.pending, 0), 0))
+		                FILTER (WHERE i.status = 'issued'), 0)::BIGINT,
+		       COALESCE(SUM(CASE WHEN i.status = 'paid' THEN i.net_payable_minor
+		                         ELSE LEAST(GREATEST(COALESCE(pay.received, 0), 0), i.net_payable_minor) END)
+		                FILTER (WHERE i.status IN ('issued', 'paid')), 0)::BIGINT
+		FROM invoices i`+paymentTotalsLateral+`
+		WHERE i.kind = 'invoice'
+		GROUP BY i.currency`)
 	if err != nil {
 		return nil, fmt.Errorf("summaries: %w", err)
 	}
@@ -473,22 +606,11 @@ func (r *InvoiceRepository) Summaries(ctx context.Context) (map[string]CurrencyS
 
 	sums := make(map[string]CurrencySummary)
 	for rows.Next() {
-		var curr string
-		var issuedTotal, paidTotal int64
-		var issuedCount, paidCount int64
-		if err := rows.Scan(&curr, &issuedTotal, &paidTotal, &issuedCount, &paidCount); err != nil {
+		var s CurrencySummary
+		if err := rows.Scan(&s.Currency, &s.DraftCount, &s.IssuedCount, &s.PaidCount, &s.OutstandingMinor, &s.PaidMinor); err != nil {
 			return nil, fmt.Errorf("scan summary: %w", err)
 		}
-		sums[curr] = CurrencySummary{
-			Currency:    curr,
-			IssuedTotal: decimal.NewFromInt(issuedTotal).Div(decimal.NewFromInt(100)),
-			PaidTotal:   decimal.NewFromInt(paidTotal).Div(decimal.NewFromInt(100)),
-			IssuedCount: issuedCount,
-			PaidCount:   paidCount,
-		}
+		sums[s.Currency] = s
 	}
 	return sums, rows.Err()
 }
-
-var _ = sql.ErrNoRows
-var _ = uuid.Nil

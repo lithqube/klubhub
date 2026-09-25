@@ -95,8 +95,13 @@ type BillingProfile struct {
 	Jurisdiction        string     `json:"jurisdiction"         db:"jurisdiction"`
 	PaymentInstructions string     `json:"payment_instructions" db:"payment_instructions"`
 	DefaultCurrency     string     `json:"default_currency"     db:"default_currency"`
-	UpdatedAt           time.Time  `json:"updated_at"           db:"updated_at"`
-	CreatedAt           time.Time  `json:"created_at"           db:"created_at"`
+	// VATExemptSmallBusiness: the DJ uses a small-business VAT exemption
+	// (drives the "exempt" treatment suggestion).
+	VATExemptSmallBusiness bool `json:"vat_exempt_small_business" db:"vat_exempt_small_business"`
+	// DefaultVATRateBps is the domestic VAT rate in basis points (1900 = 19%).
+	DefaultVATRateBps int64     `json:"default_vat_rate_bps" db:"default_vat_rate_bps"`
+	UpdatedAt         time.Time `json:"updated_at"           db:"updated_at"`
+	CreatedAt         time.Time `json:"created_at"           db:"created_at"`
 }
 
 // UpdateBillingProfileRequest is the body of PUT /api/v1/finance/billing-profile.
@@ -104,23 +109,25 @@ type BillingProfile struct {
 // settings.UpdateSettingsRequest. Missing UpdatedAt yields ErrConflict
 // from the service layer.
 type UpdateBillingProfileRequest struct {
-	LegalName           string     `json:"legal_name"`
-	TradingName         string     `json:"trading_name"`
-	EntityKind          EntityKind `json:"entity_kind"`
-	TaxID               string     `json:"tax_id"`
-	TaxIDKind           TaxIDKind  `json:"tax_id_kind"`
-	ContactEmail        string     `json:"contact_email"`
-	ContactPhone        string     `json:"contact_phone"`
-	AddressLine1        string     `json:"address_line1"`
-	AddressLine2        string     `json:"address_line2"`
-	AddressCity         string     `json:"address_city"`
-	AddressRegion       string     `json:"address_region"`
-	AddressPostal       string     `json:"address_postal"`
-	AddressCountry      string     `json:"address_country"`
-	Jurisdiction        string     `json:"jurisdiction"`
-	PaymentInstructions string     `json:"payment_instructions"`
-	DefaultCurrency     string     `json:"default_currency"`
-	UpdatedAt           time.Time  `json:"updated_at"`
+	LegalName              string     `json:"legal_name"`
+	TradingName            string     `json:"trading_name"`
+	EntityKind             EntityKind `json:"entity_kind"`
+	TaxID                  string     `json:"tax_id"`
+	TaxIDKind              TaxIDKind  `json:"tax_id_kind"`
+	ContactEmail           string     `json:"contact_email"`
+	ContactPhone           string     `json:"contact_phone"`
+	AddressLine1           string     `json:"address_line1"`
+	AddressLine2           string     `json:"address_line2"`
+	AddressCity            string     `json:"address_city"`
+	AddressRegion          string     `json:"address_region"`
+	AddressPostal          string     `json:"address_postal"`
+	AddressCountry         string     `json:"address_country"`
+	Jurisdiction           string     `json:"jurisdiction"`
+	PaymentInstructions    string     `json:"payment_instructions"`
+	DefaultCurrency        string     `json:"default_currency"`
+	VATExemptSmallBusiness bool       `json:"vat_exempt_small_business"`
+	DefaultVATRateBps      int64      `json:"default_vat_rate_bps"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 // Sentinel errors for service / handler layer.
