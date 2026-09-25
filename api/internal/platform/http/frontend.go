@@ -62,3 +62,7 @@ func frontendHandler(target string) http.HandlerFunc {
 		proxy.ServeHTTP(w, r)
 	}
 }
+
+// FrontendHandler reverse-proxies non-API paths to the internal Nuxt server
+// (production single-image mode). Exported for the Promoter binary.
+func FrontendHandler(target string) http.HandlerFunc { return frontendHandler(target) }

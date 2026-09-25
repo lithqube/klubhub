@@ -117,3 +117,6 @@ func (d *DB) InstanceTenant(ctx context.Context) (uuid.UUID, error) {
 	}
 	return *id, nil
 }
+
+// Ping checks database connectivity (health endpoint).
+func (d *DB) Ping(ctx context.Context) error { return d.pool.Ping(ctx) }

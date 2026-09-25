@@ -11,7 +11,7 @@ import rego.v1
 # Every action a route may declare. Unknown actions are denied.
 known_actions := {
 	"org.read", "org.update", "org.delete",
-	"member.read", "member.manage", "security.manage",
+	"account.self", "member.read", "member.manage", "security.manage",
 	"event.read", "event.write",
 	"guestlist.read", "guestlist.write",
 	"door.read", "door.checkin", "door.device.manage",
@@ -26,16 +26,17 @@ role_grants := {
 	"owner": known_actions,
 	"admin": known_actions - {"org.delete", "security.manage"},
 	"booker": {
-		"org.read", "member.read", "event.read", "event.write",
+		"account.self", "org.read", "member.read", "event.read", "event.write",
 		"guestlist.read", "guestlist.write", "door.read",
 		"booking.read", "booking.write", "artist_fee.read",
+		"door.device.manage",
 	},
 	"finance": {
-		"org.read", "member.read", "event.read", "booking.read",
+		"account.self", "org.read", "member.read", "event.read", "booking.read",
 		"artist_fee.read", "finance.read", "finance.write", "finance.approve",
 	},
 	"marketing": {
-		"org.read", "event.read", "guestlist.read",
+		"account.self", "org.read", "event.read", "guestlist.read",
 		"audience.read", "audience.write", "campaign.read",
 		"campaign.write", "campaign.send",
 	},

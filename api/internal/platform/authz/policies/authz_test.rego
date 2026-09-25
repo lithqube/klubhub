@@ -79,3 +79,11 @@ test_no_roles_is_denied if {
 	not d.allow
 	d.deny_reason == "no_role_grant"
 }
+
+test_every_staff_role_manages_its_own_account if {
+	every role in ["owner", "admin", "booker", "finance", "marketing"] {
+		authz.decision.allow with input as base([role], "account.self")
+	}
+	d := authz.decision with input as json.patch(base(["door"], "account.self"), [{"op": "add", "path": "/principal/event_scope", "value": "e1"}, {"op": "add", "path": "/resource/event_id", "value": "e1"}])
+	d.deny_reason == "no_role_grant"
+}
