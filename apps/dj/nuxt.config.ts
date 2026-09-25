@@ -1,4 +1,4 @@
-import tailwindcss from '@tailwindcss/vite';
+import { fileURLToPath } from 'node:url';
 import { defineNuxtConfig } from 'nuxt/config';
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
@@ -29,12 +29,15 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 export default defineNuxtConfig({
+  // Kinetic HUD design system: tokens, fonts, shadcn-vue primitives,
+  // useTheme/useSidebar and the Tailwind v4 Vite plugin (#kui alias).
+  //
+  // Absolute file path, not the directory: @nx/nuxt loads this config with
+  // `configFile: 'apps/dj/nuxt.config.ts'`, and c12 reuses that name inside
+  // a directory layer (looking for libs/ui/apps/dj/nuxt.config.ts).
+  extends: [fileURLToPath(new URL('../../libs/ui/nuxt.config.ts', import.meta.url))],
   workspaceDir: '../../',
-  modules: ['@pinia/nuxt', 'shadcn-nuxt'],
-  shadcn: {
-    prefix: '',
-    componentDir: './app/components/ui',
-  },
+  modules: ['@pinia/nuxt'],
   devtools: { enabled: true },
   devServer: {
     host: 'localhost',
@@ -57,7 +60,6 @@ export default defineNuxtConfig({
   },
   css: ['~/assets/css/styles.css'],
   vite: {
-    plugins: [tailwindcss()],
     server: {
       // The dockerized Go API calls back to the host Nuxt dev server for
       // tracklist screenshots via NUXT_INTERNAL_URL

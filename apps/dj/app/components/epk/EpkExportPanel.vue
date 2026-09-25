@@ -3,9 +3,9 @@ import { ref, watch } from 'vue'
 import { useEpkStore } from '~/stores/epk'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
 import type { SectionVisibility } from '~/types/epk'
-import Switch from '~/components/ui/switch/Switch.vue'
-import Button from '~/components/ui/button/Button.vue'
-import Progress from '~/components/ui/progress/Progress.vue'
+import Switch from '#kui/components/ui/switch/Switch.vue'
+import Button from '#kui/components/ui/button/Button.vue'
+import Progress from '#kui/components/ui/progress/Progress.vue'
 
 const SECTIONS = [
   { key: 'bio',           label: 'BIO' },

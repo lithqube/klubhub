@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRaStore } from '~/stores/ra'
-import Input from '~/components/ui/input/Input.vue'
+import Input from '#kui/components/ui/input/Input.vue'
 import { Search, ExternalLink, Check, AlertCircle, Loader, X, Plus, Calendar, MapPin, Users } from 'lucide-vue-next'
 import type { RAEVENT } from '~/types/ra'
 

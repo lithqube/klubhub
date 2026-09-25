@@ -2,8 +2,8 @@
 import { ref, watch } from 'vue'
 import { useEpkStore } from '~/stores/epk'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
-import Input from '~/components/ui/input/Input.vue'
-import Button from '~/components/ui/button/Button.vue'
+import Input from '#kui/components/ui/input/Input.vue'
+import Button from '#kui/components/ui/button/Button.vue'
 
 const store = useEpkStore()
 const { scheduleSave } = useEpkAutosave()

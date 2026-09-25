@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { useRaStore } from '~/stores/ra'
 import { useEpkStore } from '~/stores/epk'
 import { useSettingsStore } from '~/stores/settings'
-import Input from '~/components/ui/input/Input.vue'
+import Input from '#kui/components/ui/input/Input.vue'
 import { Search, ExternalLink, Check, AlertCircle, Loader, X } from 'lucide-vue-next'
 
 const raStore = useRaStore()

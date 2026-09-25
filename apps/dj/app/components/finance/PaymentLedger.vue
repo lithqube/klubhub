@@ -7,7 +7,7 @@ import { useInvoiceStore, toFinanceError } from '../../stores/invoice'
 import { formatMinor } from '../../utils/money'
 import { shortDate } from '../../utils/invoiceDisplay'
 import { inlineErrorMessage } from '../../utils/invoiceFields'
-import { useToast } from '../ui/toast/use-toast'
+import { useToast } from '#kui/components/ui/toast/use-toast'
 import PaymentForm from './PaymentForm.vue'
 
 const props = withDefaults(defineProps<{ invoice: Invoice; payments: Payment[]; locked?: boolean }>(), { locked: false })

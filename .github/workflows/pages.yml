@@ -10,14 +10,14 @@ on:
     branches: [main]
     paths:
       - 'apps/site/**'
-      - 'apps/dj/app/assets/css/styles.css'
-      - 'apps/dj/public/fonts/**'
+      - 'libs/ui/app/assets/css/kinetic.css'
+      - 'libs/ui/public/fonts/**'
       - '.github/workflows/pages.yml'
   pull_request:
     paths:
       - 'apps/site/**'
-      - 'apps/dj/app/assets/css/styles.css'
-      - 'apps/dj/public/fonts/**'
+      - 'libs/ui/app/assets/css/kinetic.css'
+      - 'libs/ui/public/fonts/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 permissions:

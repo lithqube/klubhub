@@ -13,7 +13,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-vue-next'
-import type { ThemeMode } from '~/composables/useTheme'
+import type { ThemeMode } from '#kui/composables/useTheme'
 
 const route = useRoute()
 const { mode, setTheme } = useTheme()

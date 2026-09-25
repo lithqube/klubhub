@@ -182,7 +182,7 @@ The DJ and the promoter are usually **different people on different instances**,
 
 ### P0 — Foundations (shared platform) · Size L
 1. **Extract `libs/ui` Nuxt layer.** DJ app visual parity is proven by existing Vitest suites, the Playwright screenshot spec, and a before/after check in the built-in browser.
-2. **Scaffold `apps/promoter`** (package `@dev/promoter`, dev port **4300**) and `apps/promoter-e2e`. Add the promoter shell nav (Dashboard · Events · Guests · Door · Audience · Campaigns · Bookings · Settings), mock-handler mode under `apps/promoter/server/api/v1/`, and the `NUXT_PUBLIC_API_BASE` proxy guard copied from the DJ config.
+2. **Scaffold `apps/promoter`** (package `@dev/promoter`, dev port **4400** (4300 is the site preview)) and `apps/promoter-e2e`. Add the promoter shell nav (Dashboard · Events · Guests · Door · Audience · Campaigns · Bookings · Settings), mock-handler mode under `apps/promoter/server/api/v1/`, and the `NUXT_PUBLIC_API_BASE` proxy guard copied from the DJ config.
 3. **Promoter binary.** Add `api/cmd/promoter`, wire the shared `platform/*`, and give it its own DB, migrations and bucket. Add `api:test` coverage.
 4. **`platform/auth`** (first auth in the repo):
    - users with argon2id passwords and optional magic link
@@ -474,7 +474,7 @@ Resale marketplace; SMS; public "anyone can earn" affiliate payouts; Meta Conver
    - Validate: `pnpm nx build site`
 3. **Scaffold `apps/promoter`** with a shell, empty pages and the mock mode.
    - Mirror: `apps/dj` config and mocks.
-   - Validate: `pnpm nx serve @dev/promoter` (port 4300), then `pnpm nx lint @dev/promoter && pnpm nx typecheck @dev/promoter`.
+   - Validate: `pnpm nx serve @dev/promoter` (port 4400), then `pnpm nx lint @dev/promoter && pnpm nx typecheck @dev/promoter`.
 4. **Add `apps/promoter-e2e`** with a smoke spec.
    - Validate: `pnpm nx e2e promoter-e2e`
 5. **Build `platform/auth`.** Write tests first: password hashing, sessions, CSRF, role middleware, share-token hashing and expiry, PIN rate limiting.
