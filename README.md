@@ -53,7 +53,7 @@ You get:
 | 3 | **EPK / Press Kit Builder** | ✅ Complete | Bio, press photos, tech rider, PDF export (go-pdf/fpdf) |
 | 4 | **Gig Tracker** | ✅ Complete | CRUD, status / payment workflows, venue & contact database, iCal feed, booking confirmation PDF |
 | 4.5 | **Rider Templates** | 🔜 Planned | Named tech/hospitality templates attachable to gigs with per-gig overrides |
-| 5 | **Finance Tracker** | ✅ Shipped (Phase 5) | Invoices (draft → issued → paid), deposits + partial payments, event agreements with signing workflow, PDF invoice rendering ([gofpdf](https://github.com/jung-kurt/gofpdf)), transactional email via [Plunk](https://github.com/useplunk/plunk) (hosted or self-hosted). See [`docs/release-notes/v1.1.0-phase5.md`](./docs/release-notes/v1.1.0-phase5.md). |
+| 5 | **Finance Tracker** | ✅ Shipped (Phase 5) | Invoices (draft → issued → paid), deposits + partial payments, event agreements with signing workflow, EU/US-ready invoicing (customer details, VAT treatment incl. reverse charge, credit notes, artist withholding), PDF invoice rendering ([go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf)), transactional email via [Plunk](https://github.com/useplunk/plunk) (hosted or self-hosted). See [`docs/INVOICING.md`](./docs/INVOICING.md) and [`docs/release-notes/v1.1.0-phase5.md`](./docs/release-notes/v1.1.0-phase5.md). |
 | 6 | **Release Planner** | 🔜 Planned | Release status workflow, promo checklist, deadline tracking |
 | 7 | **Tour Manager** | 🔜 Planned | Tour groups, per-stop logistics, budget aggregation |
 | 8 | **Unified Dashboard** | 🔜 Planned | Cross-module overview, career analytics |

@@ -20,7 +20,7 @@ Shared / cross-cutting files in this package:
 
 - `mux.go` — `Mux` composes all sub-resource handlers under `/api/v1/finance/*` and rewrites paths so each child handler sees its own sub-prefix.
 - `mux_test.go` — 9 dispatch tests.
-- `pdf_renderer.go` — pure-Go PDF invoice renderer ([`gofpdf`](https://github.com/jung-kurt/gofpdf) v1.16.2).
+- `pdf_renderer.go` — pure-Go PDF invoice renderer ([`go-pdf/fpdf`](https://codeberg.org/go-pdf/fpdf), embedded DejaVu font).
 - `plunk_sender.go` — [`Plunk`](https://github.com/useplunk/plunk) transactional-email sender; the prod wiring.
 
 ## Layer contract
