@@ -20,6 +20,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/authz"
 	platformhttp "github.com/klubhub/dj/api/internal/platform/http"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 )
 
@@ -35,6 +36,7 @@ type Deps struct {
 	Authz         *authz.Engine
 	Authn         auth.Authenticator
 	Identity      *identity.Handler // nil when the provider is not local
+	Events        *event.Handler
 	Origins       []string
 	ServeFrontend bool
 	NuxtURL       string
@@ -77,6 +79,9 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 	d.Authz.Handle(r, reg, authz.Route{Method: http.MethodGet, Pattern: "/api/v1/health", Public: true}, health(d.DB), onDeny)
 	if d.Identity != nil {
 		d.Identity.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Events != nil {
+		d.Events.Mount(r, d.Authz, reg, onDeny)
 	}
 
 	notFound := func(w http.ResponseWriter, req *http.Request) {

@@ -87,3 +87,12 @@ test_every_staff_role_manages_its_own_account if {
 	d := authz.decision with input as json.patch(base(["door"], "account.self"), [{"op": "add", "path": "/principal/event_scope", "value": "e1"}, {"op": "add", "path": "/resource/event_id", "value": "e1"}])
 	d.deny_reason == "no_role_grant"
 }
+
+test_venue_reveal_is_for_planners_with_a_second_factor if {
+	with_otp := json.patch(base(["booker"], "venue.reveal"), [{"op": "replace", "path": "/principal/amr", "value": ["pwd", "otp"]}])
+	authz.decision.allow with input as with_otp
+	d := authz.decision with input as base(["booker"], "venue.reveal")
+	d.deny_reason == "mfa_required"
+	m := authz.decision with input as json.patch(base(["marketing"], "venue.reveal"), [{"op": "replace", "path": "/principal/amr", "value": ["otp"]}])
+	m.deny_reason == "no_role_grant"
+}

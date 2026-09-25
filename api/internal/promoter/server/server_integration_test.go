@@ -24,6 +24,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/envelope"
 	"github.com/klubhub/dj/api/internal/platform/pgtest"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
@@ -98,6 +99,7 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 	mux, reg := server.New(server.Deps{
 		Log: zerolog.Nop(), DB: db, Authz: engine, Authn: svc,
 		Identity: identity.NewHandler(svc), Origins: []string{origin},
+		Events: event.NewHandler(event.NewService(db, envelope.NewKeyring(kek), nil)),
 	})
 	return mux, svc, func() []error { return authz.VerifyCoverage(context.Background(), mux, reg) }
 }
@@ -248,5 +250,77 @@ func TestHealth(t *testing.T) {
 	rec := c.do(http.MethodGet, "/api/v1/health", nil, false)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"database":"ok"`) {
 		t.Fatalf("health: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestEventsAPI(t *testing.T) {
+	h, svc, _ := stack(t)
+	ctx := context.Background()
+	setup, _ := svc.Bootstrap(ctx, identity.BootstrapInput{OrgName: "Nachtwerk", Slug: "nachtwerk", OwnerEmail: "o@n.example", OwnerName: "O"})
+	_ = svc.CompleteSetup(ctx, setup, "the owner passphrase")
+	c := &client{t: t, h: h}
+	c.do(http.MethodPost, "/api/v1/auth/login", map[string]string{"email": "o@n.example", "password": "the owner passphrase"}, true)
+
+	rec := c.do(http.MethodPost, "/api/v1/venues", map[string]any{"name": "Tresor.West", "city": "Berlin", "timezone": "Europe/Berlin",
+		"rooms": []map[string]any{{"name": "Main Room"}}, "protected": map[string]string{"address": "Unterstraße 3"}}, true)
+	var venue struct {
+		ID        string          `json:"id"`
+		Protected map[string]bool `json:"protected"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &venue)
+	if rec.Code != http.StatusCreated || !venue.Protected["address"] || strings.Contains(rec.Body.String(), "Unterstraße") {
+		t.Fatalf("create venue must mask protected fields: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodPost, "/api/v1/venues/"+venue.ID+"/reveal", nil, true); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "mfa_required") {
+		t.Fatalf("reveal without a second factor must be refused: %d %s", rec.Code, rec.Body)
+	}
+
+	start := time.Unix(time.Now().Add(72*time.Hour).Unix()/3600*3600, 0).UTC()
+	rec = c.do(http.MethodPost, "/api/v1/events", map[string]any{"title": "Klubnacht", "starts_at": start, "ends_at": start.Add(8 * time.Hour),
+		"timezone": "Europe/Berlin", "venue_id": venue.ID}, true)
+	var ev struct {
+		ID      string `json:"id"`
+		Version int    `json:"version"`
+		Stages  []struct {
+			ID string `json:"id"`
+		} `json:"stages"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &ev)
+	if rec.Code != http.StatusCreated || len(ev.Stages) != 1 {
+		t.Fatalf("create event: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodPost, "/api/v1/events", map[string]any{"title": ""}, true); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid event must be 422, got %d", rec.Code)
+	}
+
+	lineup := []map[string]any{
+		{"display_name": "A", "stage_id": ev.Stages[0].ID, "set_start": start, "set_end": start.Add(3 * time.Hour)},
+		{"display_name": "B", "stage_id": ev.Stages[0].ID, "set_start": start.Add(2 * time.Hour), "set_end": start.Add(5 * time.Hour)},
+	}
+	rec = c.do(http.MethodPut, "/api/v1/events/"+ev.ID+"/lineup", map[string]any{"version": ev.Version, "lineup": lineup}, true)
+	_ = json.Unmarshal(rec.Body.Bytes(), &ev)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"code":"overlap"`) {
+		t.Fatalf("conflicted lineup saves with issues: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, "/api/v1/events/"+ev.ID+"/status", map[string]any{"version": ev.Version, "status": "published"}, true)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "timetable_errors") {
+		t.Fatalf("publish must be blocked: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodGet, "/api/v1/events/"+ev.ID+"/export/ics", nil, false); rec.Code != http.StatusConflict {
+		t.Fatalf("export must be blocked while conflicted: %d", rec.Code)
+	}
+	lineup[1]["set_start"] = start.Add(3 * time.Hour)
+	rec = c.do(http.MethodPut, "/api/v1/events/"+ev.ID+"/lineup", map[string]any{"version": ev.Version, "lineup": lineup}, true)
+	_ = json.Unmarshal(rec.Body.Bytes(), &ev)
+	rec = c.do(http.MethodGet, "/api/v1/events/"+ev.ID+"/export/ics", nil, false)
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/calendar; charset=utf-8" || !strings.Contains(rec.Body.String(), "BEGIN:VEVENT") {
+		t.Fatalf("ics: %d %s", rec.Code, rec.Header())
+	}
+	rec = c.do(http.MethodGet, "/api/v1/events/"+ev.ID+"/export/jsonld", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"@type":"MusicEvent"`) {
+		t.Fatalf("jsonld: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodGet, "/api/v1/events?view=drafts", nil, false); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"act_count":2`) {
+		t.Fatalf("list drafts: %d %s", rec.Code, rec.Body)
 	}
 }

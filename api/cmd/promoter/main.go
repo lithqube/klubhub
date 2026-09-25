@@ -33,6 +33,7 @@ import (
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/config"
+	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/migrations"
 	"github.com/klubhub/dj/api/internal/promoter/server"
@@ -124,6 +125,7 @@ func serve() error {
 
 	deps := server.Deps{
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),
+		Events:        event.NewHandler(event.NewService(rt.db, rt.keys, nil)),
 		ServeFrontend: rt.cfg.ServeFrontend, NuxtURL: rt.cfg.NuxtInternalURL,
 	}
 	switch rt.cfg.AuthProvider {

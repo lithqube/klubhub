@@ -12,7 +12,7 @@ import rego.v1
 known_actions := {
 	"org.read", "org.update", "org.delete",
 	"account.self", "member.read", "member.manage", "security.manage",
-	"event.read", "event.write",
+	"event.read", "event.write", "venue.reveal",
 	"guestlist.read", "guestlist.write",
 	"door.read", "door.checkin", "door.device.manage",
 	"audience.read", "audience.write", "audience.export",
@@ -29,7 +29,7 @@ role_grants := {
 		"account.self", "org.read", "member.read", "event.read", "event.write",
 		"guestlist.read", "guestlist.write", "door.read",
 		"booking.read", "booking.write", "artist_fee.read",
-		"door.device.manage",
+		"door.device.manage", "venue.reveal",
 	},
 	"finance": {
 		"account.self", "org.read", "member.read", "event.read", "booking.read",
@@ -48,6 +48,7 @@ role_grants := {
 mfa_actions := {
 	"org.delete", "member.manage", "security.manage", "audience.export",
 	"finance.read", "finance.write", "finance.approve", "artist_fee.read",
+	"venue.reveal",
 }
 
 # Actions that need a recent authentication (step-up), in seconds.
