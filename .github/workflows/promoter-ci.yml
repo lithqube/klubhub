@@ -32,15 +32,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      # Scans the commits this change introduces. Legacy history has known
-      # findings tracked separately (docs/SECURITY.md) and must not mask new ones.
-      - name: gitleaks (new commits)
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+      # Full history. Known historical findings are allowlisted narrowly
+      # (commit + path) in .gitleaks.toml, so anything new fails.
+      - name: gitleaks (full history)
         run: |
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz | tar -xz gitleaks
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then RANGE="-1"; else RANGE="$BASE..$GITHUB_SHA"; fi
-          ./gitleaks git --no-banner --redact -c .gitleaks.toml --log-opts="$RANGE"
+          ./gitleaks git --no-banner --redact -c .gitleaks.toml
 
   go:
     runs-on: ubuntu-24.04
