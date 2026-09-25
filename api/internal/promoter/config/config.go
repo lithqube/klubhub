@@ -47,6 +47,8 @@ type Config struct {
 	// NATS (plan D8). Empty servers disables the outbox relay (dev only).
 	NATSServers   string `envconfig:"NATS_SERVERS"`
 	NATSCredsFile string `envconfig:"NATS_CREDS_FILE"`
+	// Outbox relay connection as klubhub_relay (required with NATS).
+	RelayDatabaseURL string `envconfig:"RELAY_DATABASE_URL"`
 
 	ServeFrontend   bool   `envconfig:"SERVE_FRONTEND" default:"false"`
 	NuxtInternalURL string `envconfig:"NUXT_INTERNAL_URL" default:"http://127.0.0.1:3001"`
@@ -71,6 +73,9 @@ func (c *Config) Validate() error {
 	}
 	if len(c.Origins()) == 0 {
 		return errors.New("config: PROMOTER_PUBLIC_ORIGIN must list at least one http(s) origin")
+	}
+	if c.NATSServers != "" && c.RelayDatabaseURL == "" {
+		return errors.New("config: PROMOTER_NATS_SERVERS requires PROMOTER_RELAY_DATABASE_URL (klubhub_relay)")
 	}
 	switch c.AuthProvider {
 	case "local":

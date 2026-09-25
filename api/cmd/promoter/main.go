@@ -22,11 +22,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/rs/zerolog"
 
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
 	"github.com/klubhub/dj/api/internal/platform/envelope"
+	"github.com/klubhub/dj/api/internal/platform/events"
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/config"
@@ -139,6 +141,16 @@ func serve() error {
 	}
 	mux, _ := server.New(deps)
 
+	if rt.cfg.NATSServers != "" {
+		stopRelay, err := startRelay(ctx, rt)
+		if err != nil {
+			return err
+		}
+		defer stopRelay()
+	} else {
+		rt.log.Warn().Msg("PROMOTER_NATS_SERVERS not set: events stay in the outbox (development only)")
+	}
+
 	srv := &http.Server{
 		Addr:              net.JoinHostPort(rt.cfg.BindAddress, rt.cfg.Port),
 		Handler:           mux,
@@ -162,6 +174,42 @@ func serve() error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdown)
+}
+
+// startRelay connects to NATS with the relay's nsc credentials, provisions
+// the streams and moves committed outbox rows to JetStream.
+func startRelay(ctx context.Context, rt *runtime) (func(), error) {
+	pool, err := pgxpool.New(ctx, rt.cfg.RelayDatabaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("relay database: %w", err)
+	}
+	nc, err := events.Connect(rt.cfg.NATSServers, rt.cfg.NATSCredsFile, "promoter-outbox-relay")
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("nats: %w", err)
+	}
+	js, err := jetstream.New(nc)
+	if err == nil {
+		err = events.EnsureStreams(ctx, js)
+	}
+	if err != nil {
+		nc.Close()
+		pool.Close()
+		return nil, fmt.Errorf("jetstream: %w", err)
+	}
+	relay := &events.Relay{Pool: pool, Publisher: events.JetStreamPublisher{JS: js}, Log: rt.log}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := relay.Run(ctx); err != nil {
+			rt.log.Error().Err(err).Msg("outbox relay stopped")
+		}
+	}()
+	return func() {
+		<-done
+		_ = nc.Drain()
+		pool.Close()
+	}, nil
 }
 
 func migrate() error {

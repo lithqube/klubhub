@@ -164,7 +164,7 @@ func (s *Service) DoorLogin(ctx context.Context, deviceToken string, event uuid.
 			return err
 		}
 		res = LoginResult{Cookie: tok.Cookie, Expires: expires}
-		return nil
+		return s.emit(ctx, tx, tenant, "door", "session_started", map[string]uuid.UUID{"device_id": deviceID, "event_id": event})
 	})
 	if err != nil {
 		return LoginResult{}, err

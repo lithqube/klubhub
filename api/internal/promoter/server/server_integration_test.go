@@ -205,6 +205,23 @@ func TestEndToEndSelfHostedFlow(t *testing.T) {
 		t.Fatalf("door me: %d %s", rec.Code, rec.Body)
 	}
 
+	// Side effects: the refusal is audited, and domain changes reached the outbox.
+	var denials int
+	if err := testDB.Owner.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE decision = 'deny' AND reason = 'mfa_required' AND action = 'member.manage'`).Scan(&denials); err != nil || denials != 1 {
+		t.Fatalf("the MFA refusal must be in the audit log once, got %d (%v)", denials, err)
+	}
+	var subjects []string
+	rows, _ := testDB.Owner.Query(ctx, `SELECT subject FROM outbox ORDER BY created_at`)
+	for rows.Next() {
+		var s string
+		_ = rows.Scan(&s)
+		subjects = append(subjects, s[strings.LastIndex(s[:strings.LastIndex(s, ".")], ".")+1:])
+	}
+	rows.Close()
+	if strings.Join(subjects, ",") != "member.invited,door.session_started" {
+		t.Fatalf("outbox events: %v", subjects)
+	}
+
 	if rec := owner.do(http.MethodPost, "/api/v1/auth/logout", nil, true); rec.Code != http.StatusNoContent {
 		t.Fatalf("logout: %d", rec.Code)
 	}

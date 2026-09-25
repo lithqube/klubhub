@@ -27,6 +27,8 @@ import (
 type DB struct {
 	Owner *pgxpool.Pool
 	App   *pgxpool.Pool
+	// Relay is klubhub_relay: BYPASSRLS, but granted only the outbox.
+	Relay *pgxpool.Pool
 	stop  func()
 }
 
@@ -79,8 +81,13 @@ func StartPromoter() (*DB, error) {
 		return fail(fmt.Errorf("migrations: %w", err))
 	}
 	// What the setup script does from a secret: let the runtime role log in.
-	if _, err := db.ExecContext(ctx, "ALTER ROLE klubhub_app LOGIN PASSWORD '"+appPassword+"'"); err != nil {
-		return fail(err)
+	for _, stmt := range []string{
+		"ALTER ROLE klubhub_app LOGIN PASSWORD '" + appPassword + "'",
+		"ALTER ROLE klubhub_relay LOGIN PASSWORD '" + appPassword + "'",
+	} {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fail(err)
+		}
 	}
 	owner, err := pgxpool.New(ctx, ownerDSN)
 	if err != nil {
@@ -91,7 +98,14 @@ func StartPromoter() (*DB, error) {
 		owner.Close()
 		return fail(err)
 	}
-	return &DB{Owner: owner, App: app, stop: func() {
+	relay, err := pgxpool.New(ctx, strings.Replace(ownerDSN, "klubhub:test@", "klubhub_relay:"+appPassword+"@", 1))
+	if err != nil {
+		app.Close()
+		owner.Close()
+		return fail(err)
+	}
+	return &DB{Owner: owner, App: app, Relay: relay, stop: func() {
+		relay.Close()
 		app.Close()
 		owner.Close()
 		_ = container.Terminate(context.Background())

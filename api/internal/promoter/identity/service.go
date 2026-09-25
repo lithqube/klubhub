@@ -23,6 +23,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
 	"github.com/klubhub/dj/api/internal/platform/envelope"
+	"github.com/klubhub/dj/api/internal/platform/events"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 )
 
@@ -166,8 +167,12 @@ func (s *Service) Invite(ctx context.Context, by authz.Principal, email, role st
 	var token string
 	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
 		var e error
-		token, e = s.insertLink(ctx, tx, tenant, nil, email, role, "invite", creator, inviteTTL)
-		return e
+		var linkID uuid.UUID
+		token, linkID, e = s.insertLinkWithID(ctx, tx, tenant, nil, email, role, "invite", creator, inviteTTL)
+		if e != nil {
+			return e
+		}
+		return s.emit(ctx, tx, tenant, "member", "invited", map[string]uuid.UUID{"link_id": linkID})
 	})
 	return token, err
 }
@@ -555,27 +560,41 @@ type link struct {
 }
 
 func (s *Service) insertLink(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, userID *uuid.UUID, email, role, purpose string, by *uuid.UUID, ttl time.Duration) (string, error) {
+	tok, _, err := s.insertLinkWithID(ctx, tx, tenant, userID, email, role, purpose, by, ttl)
+	return tok, err
+}
+
+func (s *Service) insertLinkWithID(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, userID *uuid.UUID, email, role, purpose string, by *uuid.UUID, ttl time.Duration) (string, uuid.UUID, error) {
 	tok, err := auth.NewSessionToken(tenant) // same opaque format: v1.<tenant>.<random>
 	if err != nil {
-		return "", err
+		return "", uuid.Nil, err
 	}
 	id := uuid.Must(uuid.NewV7())
 	dek, err := s.keys.Current(ctx, tx, tenant)
 	if err != nil {
-		return "", err
+		return "", uuid.Nil, err
 	}
 	norm := envelope.NormalizeEmail(email)
 	emailEnc, err := dek.Seal(tenant, envelope.Field{Table: "setup_links", Column: "email_enc", RowID: id}, []byte(norm))
 	if err != nil {
-		return "", err
+		return "", uuid.Nil, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO setup_links (id, tenant_id, token_hash, user_id, email_enc, email_bidx, role, purpose, created_by, expires_at)
 	  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		id, tenant, tok.Hash, userID, emailEnc, dek.BlindIndex("setup_links", "email", norm), role, purpose, by, s.now().Add(ttl))
 	if err != nil {
-		return "", err
+		return "", uuid.Nil, err
 	}
-	return tok.Cookie, nil
+	return tok.Cookie, id, nil
+}
+
+// emit appends an identifiers-only event to the outbox in tx.
+func (s *Service) emit(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, aggregate, verb string, refs map[string]uuid.UUID) error {
+	subject, ev, err := events.New(tenant, aggregate, verb, refs, s.now())
+	if err != nil {
+		return err
+	}
+	return events.Enqueue(ctx, tx, subject, ev)
 }
 
 // useLink validates a one-time link, runs fn, and marks the link used in the

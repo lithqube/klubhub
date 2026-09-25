@@ -11,11 +11,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
 
+	"github.com/klubhub/dj/api/internal/platform/audit"
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
 	platformhttp "github.com/klubhub/dj/api/internal/platform/http"
+	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 )
 
@@ -27,7 +31,7 @@ type Pinger interface {
 // Deps are the collaborators the router needs.
 type Deps struct {
 	Log           zerolog.Logger
-	DB            Pinger
+	DB            *tenantdb.DB
 	Authz         *authz.Engine
 	Authn         auth.Authenticator
 	Identity      *identity.Handler // nil when the provider is not local
@@ -53,10 +57,21 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 
 	reg := authz.NewRegistry()
 	onDeny := func(req *http.Request, p authz.Principal, action string, dec authz.Decision) {
-		// Audit trail for refusals; the NATS audit stream replaces this sink.
+		route := chi.RouteContext(req.Context()).RoutePattern()
 		d.Log.Warn().Str("event", "authz.denied").Str("action", action).
-			Str("reason", dec.Reason).Str("route", chi.RouteContext(req.Context()).RoutePattern()).
-			Str("org", p.OrgID).Str("sub", p.Sub).Msg("request denied")
+			Str("reason", dec.Reason).Str("route", route).Str("org", p.OrgID).Msg("request denied")
+		tenant, err := uuid.Parse(p.OrgID)
+		if err != nil {
+			return
+		}
+		// Append-only audit trail, in the caller's tenant.
+		if err := d.DB.WithTenant(req.Context(), tenant, func(tx pgx.Tx) error {
+			return audit.Record(req.Context(), tx, tenant, audit.Entry{
+				ActorID: p.Sub, Action: action, Resource: route, Reason: dec.Reason,
+			})
+		}); err != nil {
+			d.Log.Error().Err(err).Msg("audit write failed")
+		}
 	}
 
 	d.Authz.Handle(r, reg, authz.Route{Method: http.MethodGet, Pattern: "/api/v1/health", Public: true}, health(d.DB), onDeny)
@@ -98,7 +113,7 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func health(db Pinger) http.HandlerFunc {
+func health(db *tenantdb.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()

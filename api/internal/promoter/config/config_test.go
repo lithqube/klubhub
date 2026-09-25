@@ -28,12 +28,13 @@ func TestValidConfig(t *testing.T) {
 
 func TestRejectsInsecureSettings(t *testing.T) {
 	cases := map[string]func(*Config){
-		"short KEK":         func(c *Config) { c.KEK = base64.StdEncoding.EncodeToString([]byte("short")) },
-		"KEK not base64":    func(c *Config) { c.KEK = "***" },
-		"no origin":         func(c *Config) { c.PublicOrigin = "not a url" },
-		"unknown provider":  func(c *Config) { c.AuthProvider = "none" },
-		"zitadel no aud":    func(c *Config) { c.AuthProvider = "zitadel"; c.ZitadelIssuer = "https://auth" },
-		"bad previous KEKs": func(c *Config) { c.PreviousKEKs = "missing-colon" },
+		"short KEK":          func(c *Config) { c.KEK = base64.StdEncoding.EncodeToString([]byte("short")) },
+		"KEK not base64":     func(c *Config) { c.KEK = "***" },
+		"no origin":          func(c *Config) { c.PublicOrigin = "not a url" },
+		"unknown provider":   func(c *Config) { c.AuthProvider = "none" },
+		"zitadel no aud":     func(c *Config) { c.AuthProvider = "zitadel"; c.ZitadelIssuer = "https://auth" },
+		"bad previous KEKs":  func(c *Config) { c.PreviousKEKs = "missing-colon" },
+		"nats without relay": func(c *Config) { c.NATSServers = "nats://nats:4222" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
