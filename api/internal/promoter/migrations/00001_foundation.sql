@@ -48,5 +48,8 @@ CREATE POLICY tenant_isolation ON organizations
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON organizations TO klubhub_app;
 
+COMMENT ON TABLE organizations IS 'data_class: internal';
+COMMENT ON COLUMN organizations.name IS 'data_class: public — the collective''s public name, shown on its pages';
+
 -- +goose Down
 DROP TABLE IF EXISTS organizations;

@@ -2,86 +2,36 @@ package tenantdb_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"flag"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/klubhub/dj/api/internal/platform/pgtest"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
-	"github.com/klubhub/dj/api/internal/promoter/migrations"
 )
 
 var (
-	ownerPool *pgxpool.Pool // schema owner / superuser: migrations and fixtures only
+	ownerPool *pgxpool.Pool // schema owner / superuser: fixtures only
 	appPool   *pgxpool.Pool // klubhub_app: what the promoter binary uses at runtime
 )
 
-const appPassword = "app-test-password"
-
 func TestMain(m *testing.M) {
 	flag.Parse()
-	if os.Getenv("SKIP_INTEGRATION") == "1" || testing.Short() {
-		os.Exit(m.Run())
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	container, err := tcpostgres.Run(ctx, "postgres:16-alpine",
-		tcpostgres.WithDatabase("promoter_test"),
-		tcpostgres.WithUsername("klubhub"),
-		tcpostgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(60*time.Second),
-		),
-	)
-	if err != nil {
-		println("testcontainers: cannot start postgres, skipping integration:", err.Error())
-		os.Exit(m.Run())
-	}
-	ownerDSN, err := container.ConnectionString(ctx, "sslmode=disable")
+	db, err := pgtest.StartPromoter()
 	if err != nil {
 		panic(err)
 	}
-	db, err := sql.Open("pgx", ownerDSN)
-	if err != nil {
-		panic(err)
+	if db != nil {
+		ownerPool, appPool = db.Owner, db.App
 	}
-	if err := migrations.Up(ctx, db); err != nil {
-		panic(fmt.Sprintf("migrations: %v", err))
-	}
-	// What the setup script does from a secret: allow the runtime role to log in.
-	if _, err := db.ExecContext(ctx, fmt.Sprintf("ALTER ROLE klubhub_app LOGIN PASSWORD '%s'", appPassword)); err != nil {
-		panic(err)
-	}
-	_ = db.Close()
-
-	ownerPool, err = pgxpool.New(ctx, ownerDSN)
-	if err != nil {
-		panic(err)
-	}
-	appDSN := strings.Replace(ownerDSN, "klubhub:test@", "klubhub_app:"+appPassword+"@", 1)
-	appPool, err = pgxpool.New(ctx, appDSN)
-	if err != nil {
-		panic(err)
-	}
-
 	code := m.Run()
-	appPool.Close()
-	ownerPool.Close()
-	_ = container.Terminate(context.Background())
+	db.Close()
 	os.Exit(code)
 }
 
@@ -118,8 +68,8 @@ func TestAppRoleIsRestricted(t *testing.T) {
 func TestTenantSeesOnlyItsOwnRows(t *testing.T) {
 	needDB(t)
 	a, b := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
-	createOrg(t, a, "tenant-a-"+a.String()[:8])
-	createOrg(t, b, "tenant-b-"+b.String()[:8])
+	createOrg(t, a, "tenant-a-"+a.String()[24:])
+	createOrg(t, b, "tenant-b-"+b.String()[24:])
 
 	var ids []uuid.UUID
 	err := tenantdb.WithTenant(context.Background(), appPool, a, func(tx pgx.Tx) error {
@@ -141,10 +91,10 @@ func TestTenantSeesOnlyItsOwnRows(t *testing.T) {
 func TestWriteIntoAnotherTenantIsRejected(t *testing.T) {
 	needDB(t)
 	a, other := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
-	createOrg(t, a, "writer-"+a.String()[:8])
+	createOrg(t, a, "writer-"+a.String()[24:])
 	err := tenantdb.WithTenant(context.Background(), appPool, a, func(tx pgx.Tx) error {
 		_, err := tx.Exec(context.Background(),
-			`INSERT INTO organizations (id, name, slug) VALUES ($1, 'x', $2)`, other, "intruder-"+other.String()[:8])
+			`INSERT INTO organizations (id, name, slug) VALUES ($1, 'x', $2)`, other, "intruder-"+other.String()[24:])
 		return err
 	})
 	if err == nil || !strings.Contains(err.Error(), "row-level security") {
@@ -162,7 +112,7 @@ func TestQueryWithoutTenantFailsClosed(t *testing.T) {
 	}
 	// And after a WithTenant transaction, the pooled connection must not keep the tenant.
 	a := uuid.Must(uuid.NewV7())
-	createOrg(t, a, "leak-"+a.String()[:8])
+	createOrg(t, a, "leak-"+a.String()[24:])
 	for i := 0; i < 5; i++ {
 		if err := appPool.QueryRow(context.Background(), `SELECT count(*) FROM organizations`).Scan(&n); err == nil {
 			t.Fatalf("tenant setting leaked to a pooled connection (count=%d)", n)
@@ -188,7 +138,7 @@ func TestErrorRollsBack(t *testing.T) {
 	boom := errors.New("boom")
 	err := tenantdb.WithTenant(context.Background(), appPool, a, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(context.Background(),
-			`INSERT INTO organizations (id, name, slug) VALUES ($1, 'x', $2)`, a, "rollback-"+a.String()[:8]); err != nil {
+			`INSERT INTO organizations (id, name, slug) VALUES ($1, 'x', $2)`, a, "rollback-"+a.String()[24:]); err != nil {
 			return err
 		}
 		return boom
@@ -208,7 +158,7 @@ func TestErrorRollsBack(t *testing.T) {
 func TestTenantFromContext(t *testing.T) {
 	needDB(t)
 	a := uuid.Must(uuid.NewV7())
-	createOrg(t, a, "ctx-"+a.String()[:8])
+	createOrg(t, a, "ctx-"+a.String()[24:])
 	ctx := tenantdb.ContextWithTenant(context.Background(), a)
 	var got uuid.UUID
 	if err := tenantdb.Run(ctx, appPool, func(tx pgx.Tx) error {
