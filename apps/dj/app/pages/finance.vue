@@ -1,5 +1,10 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { TrendingUp, Download } from 'lucide-vue-next'
+import { useInvoiceStore } from '../stores/invoice'
+import InvoiceList from '../components/finance/InvoiceList.vue'
+import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
 
 useHead({ title: 'Finance — KlubHub DJ' })
 
@@ -23,21 +28,20 @@ const barData = [
 ]
 
 const transactions = [
-  { id: 1, title: 'Cyber Void Berlin — Mainstage',   date: 'MAR 29', amount: '€1,200', type: 'income',  accentClass: 'accent-bar-ready' },
-  { id: 2, title: 'Tresor — Resident Night',          date: 'MAR 8',  amount: '€800',  type: 'income',  accentClass: 'accent-bar-ready' },
-  { id: 3, title: 'Ostgut Ton — Royalties Q1',        date: 'MAR 15', amount: '€340',  type: 'income',  accentClass: 'accent-bar-ready' },
+  { id: 1, title: 'Club Alpha — Mainstage',           date: 'MAR 29', amount: '€1,200', type: 'income',  accentClass: 'accent-bar-ready' },
+  { id: 2, title: 'Club Beta — Resident Night',       date: 'MAR 8',  amount: '€800',  type: 'income',  accentClass: 'accent-bar-ready' },
+  { id: 3, title: 'Sample Records — Royalties Q1',    date: 'MAR 15', amount: '€340',  type: 'income',  accentClass: 'accent-bar-ready' },
   { id: 4, title: 'Studio Session — Mixing Services', date: 'MAR 2',  amount: '€620',  type: 'income',  accentClass: 'accent-bar-ready' },
   { id: 5, title: 'Travel & Accommodation',           date: 'MAR 27', amount: '-€180', type: 'expense', accentClass: 'accent-bar-published' },
-  { id: 6, title: 'Gear: Pioneer CDJ USB Drives',    date: 'MAR 10', amount: '-€95',  type: 'expense', accentClass: 'accent-bar-published' },
+  { id: 6, title: 'Gear: USB Drives',                 date: 'MAR 10', amount: '-€95',  type: 'expense', accentClass: 'accent-bar-published' },
 ]
 
-const invoices = [
-  { num: 'INV-2026-012', client: 'CYBER VOID BERLIN', amount: '€1,200', status: 'paid',    badgeClass: 'badge-ready',    badgeLabel: 'PAID' },
-  { num: 'INV-2026-011', client: 'TRESOR BERLIN',     amount: '€800',   status: 'paid',    badgeClass: 'badge-ready',    badgeLabel: 'PAID' },
-  { num: 'INV-2026-010', client: 'FABRIC LONDON',     amount: '€1,500', status: 'pending', badgeClass: 'badge-draft',    badgeLabel: 'PENDING' },
-  { num: 'INV-2026-009', client: 'BERGHAIN',          amount: '€2,000', status: 'pending', badgeClass: 'badge-draft',    badgeLabel: 'PENDING' },
-  { num: 'INV-2026-008', client: 'DEKMANTEL FESTIVAL',amount: '€1,800', status: 'overdue', badgeClass: 'badge-failed',   badgeLabel: 'OVERDUE' },
-]
+const invoiceStore = useInvoiceStore()
+const { disabled: invoiceDisabled } = storeToRefs(invoiceStore)
+
+onMounted(() => {
+  void invoiceStore.fetchInvoices()
+})
 </script>
 
 <template>
@@ -61,15 +65,32 @@ const invoices = [
 
     <!-- Scrollable body -->
     <div class="page-body">
+      <!-- Invoices: real data in every mode (Go API, or the in-memory mocks in dev) -->
+      <section aria-labelledby="finance-invoices-title">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+          <h2 id="finance-invoices-title" class="section-lbl" style="margin:0;font-weight:600;">INVOICES</h2>
+          <button
+            type="button"
+            class="btn-hud btn-hud-cta btn-hud-xs new-invoice-btn"
+            style="padding:0 10px;"
+            :disabled="invoiceDisabled"
+            @click="invoiceStore.openCreate()"
+          >
+            + NEW INVOICE
+          </button>
+        </div>
+        <InvoiceList />
+      </section>
+
       <!-- Production: honest empty state -->
       <div v-if="!isDevOrStaging" class="glass hud-card" style="padding:32px 24px;text-align:center;">
         <TrendingUp style="width:48px;height:48px;color:var(--color-tertiary);margin:0 auto 16px;" aria-hidden="true" />
         <div style="font-family:var(--font-command);font-size:18px;font-weight:600;color:var(--color-on-surface);margin-bottom:8px;">
-          PHASE 5 — NOT YET WIRED
+          EARNINGS — NOT YET WIRED
         </div>
         <div style="font-family:var(--font-data);font-size:13px;color:var(--color-on-surface-variant);max-width:400px;margin:0 auto 24px;">
-          The finance module (invoicing, payments, transaction tracking, CSV export) is scheduled for Phase 5. 
-          No data is available until the backend is implemented.
+          Invoices and payments are live above. Earnings charts, transaction tracking and CSV export
+          are not wired yet, so no data is shown here.
         </div>
         <div style="font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);">
           This page will be replaced when the finance module ships.
@@ -80,7 +101,7 @@ const invoices = [
       <div v-else>
         <div class="glass accent-bar-ready" style="margin:0 20px 14px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px dashed color-mix(in srgb, var(--color-primary) 40%, transparent);">
           <span class="font-terminal tracking-terminal text-primary" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
-            ⚠ DEMO DATA — FINANCE NOT YET WIRED
+            ⚠ DEMO DATA — EARNINGS &amp; TRANSACTIONS NOT YET WIRED
           </span>
           <span class="font-terminal tracking-terminal text-primary quiet" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
             This preview will not appear in production
@@ -164,43 +185,16 @@ const invoices = [
           </div>
         </div>
 
-        <!-- Invoices -->
-        <div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <div class="section-lbl">INVOICES <span class="font-terminal tracking-terminal text-primary" style="font-size:7px;letter-spacing:.04em;text-transform:uppercase;">(MOCK)</span></div>
-            <button 
-              class="btn-hud btn-hud-cta btn-hud-xs" 
-              style="padding:0 10px;"
-              :disabled="true"
-              title="Coming soon - Phase 5"
-            >+ NEW INVOICE</button>
-          </div>
-          <div class="glass" style="overflow:hidden;">
-            <div
-              v-for="inv in invoices"
-              :key="inv.num"
-              class="tx-row"
-            >
-              <div style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);width:80px;flex-shrink:0;">
-                {{ inv.num }}
-              </div>
-              <div style="flex:1;font-family:var(--font-command);font-size:11px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">
-                {{ inv.client }}
-              </div>
-              <div style="font-family:var(--font-command);font-size:13px;font-weight:700;letter-spacing:-.02em;flex-shrink:0;color:var(--color-on-surface);">
-                {{ inv.amount }}
-              </div>
-              <span class="badge-hud" :class="inv.badgeClass">{{ inv.badgeLabel }}</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
+    <InvoiceWorkspace />
   </div>
 </template>
 
 <style scoped>
+.new-invoice-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 @media (max-width: 768px) {
+  .new-invoice-btn { min-height: 44px; height: 44px; }
   .stats-grid  { grid-template-columns: 1fr !important; }
   .finance-grid { grid-template-columns: 1fr !important; }
 }

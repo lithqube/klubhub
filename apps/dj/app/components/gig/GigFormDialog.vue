@@ -6,6 +6,9 @@ import type { Gig, GigCreate, Venue, Contact, GigStatus, PaymentStatus } from '.
 import type { Tracklist as TracklistType } from '../../types/tracklist'
 import VenueAutocomplete from './VenueAutocomplete.vue'
 import ContactAutocomplete from './ContactAutocomplete.vue'
+import { useInvoiceStore, toFinanceError } from '../../stores/invoice'
+import { isActiveInvoice, invoiceNumberLabel, statusLabel } from '../../utils/invoiceDisplay'
+import { formatMinor } from '../../utils/money'
 
 const gigStore = useGigStore()
 const tracklistStore = useTracklistStore()
@@ -91,9 +94,58 @@ watch(() => props.gig?.id, () => { if (props.gig?.id) loadTracklists() }, { imme
 const title = computed(() => {
   if (!props.gig) return ''
   if (props.gig.event_name) return props.gig.event_name
-  if (props.gig.venue?.name) return props.gig.venue.name
+  if (props.gig.venue) return props.gig.venue
   return ''
 })
+
+// ── Invoice strip (edit mode): the gig's active invoice, or a way to bill it ──
+const invoiceStore = useInvoiceStore()
+const invoiceStrip = ref<'idle' | 'loading' | 'error' | 'disabled'>('idle')
+
+const gigInvoice = computed(() => {
+  const id = props.gig?.id
+  if (!id) return null
+  return (invoiceStore.gigInvoices[id] ?? []).find(isActiveInvoice) ?? null
+})
+
+const gigInvoiceSummary = computed(() => {
+  const inv = gigInvoice.value
+  if (!inv) return ''
+  const num = invoiceNumberLabel(inv)
+  const status = statusLabel(inv)
+  const due = inv.status === 'issued' ? inv.outstanding_minor : inv.status === 'draft' ? inv.net_payable_minor : 0
+  return [num, status !== num ? status : '', `${formatMinor(due, inv.currency)} due`].filter(Boolean).join(' · ')
+})
+
+async function loadGigInvoice() {
+  const id = props.gig?.id
+  if (!id) return
+  invoiceStrip.value = 'loading'
+  try {
+    await invoiceStore.fetchInvoicesForGig(id)
+    invoiceStrip.value = 'idle'
+  } catch (e) {
+    invoiceStrip.value = toFinanceError(e).code === 'unavailable' ? 'disabled' : 'error'
+  }
+}
+
+watch(() => [props.open, props.gig?.id] as const, ([isOpen, id]) => {
+  if (isOpen && id) void loadGigInvoice()
+}, { immediate: true })
+
+function createGigInvoice() {
+  const id = props.gig?.id
+  if (!id) return
+  close()
+  invoiceStore.openCreate(id)
+}
+
+function viewGigInvoice() {
+  const inv = gigInvoice.value
+  if (!inv) return
+  close()
+  void invoiceStore.openDetail(inv.id)
+}
 
 // Form state
 const form = reactive({
@@ -128,7 +180,7 @@ const PAYMENT_OPTIONS: PaymentStatus[] = ['unpaid', 'deposit_paid', 'paid', 'ove
 
 function initForm() {
   if (props.gig) {
-    form.date = props.gig.date ? props.gig.date.split('T')[0] : ''
+    form.date = props.gig.date ? (props.gig.date.split('T')[0] ?? '') : ''
     form.event_name = props.gig.event_name || ''
     form.room_details = ''
     form.city = props.gig.city || ''
@@ -298,6 +350,38 @@ function close() {
 
           <!-- Form body -->
           <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+            <!-- Invoice strip -->
+            <div v-if="isEdit" class="gig-invoice-strip" aria-live="polite">
+              <span class="section-lbl">INVOICE</span>
+              <template v-if="invoiceStrip === 'loading' && !gigInvoice">
+                <span class="gig-invoice-text">Checking…</span>
+              </template>
+              <template v-else-if="invoiceStrip === 'disabled'">
+                <span class="gig-invoice-text">Invoicing isn't enabled on this server.</span>
+              </template>
+              <template v-else-if="invoiceStrip === 'error'">
+                <span class="gig-invoice-text">Could not load the invoice.</span>
+                <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs gig-invoice-btn" @click="loadGigInvoice">RETRY</button>
+              </template>
+              <template v-else-if="gigInvoice">
+                <span class="gig-invoice-text">{{ gigInvoiceSummary }}</span>
+                <button
+                  type="button"
+                  class="btn-hud btn-hud-ghost btn-hud-xs gig-invoice-btn"
+                  :aria-label="`View invoice ${gigInvoiceSummary}`"
+                  @click="viewGigInvoice"
+                >
+                  VIEW
+                </button>
+              </template>
+              <template v-else>
+                <span class="gig-invoice-text">Not invoiced yet.</span>
+                <button type="button" class="btn-hud btn-hud-cta btn-hud-xs gig-invoice-btn" @click="createGigInvoice">
+                  + CREATE INVOICE
+                </button>
+              </template>
+            </div>
+
             <!-- Date -->
             <div>
               <label class="section-lbl" style="display:block;margin-bottom:6px;">DATE</label>
@@ -591,3 +675,25 @@ function close() {
     </Teleport>
   </Teleport>
 </template>
+
+<style scoped>
+.gig-invoice-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  background: var(--color-surface-container-low);
+  border-left: 3px solid var(--color-primary);
+}
+.gig-invoice-text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--color-on-surface);
+}
+@media (max-width: 768px) {
+  .gig-invoice-btn { min-height: 44px; height: 44px; }
+}
+</style>

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { useGigStore } from '../../stores/gig'
+import { useInvoiceStore, toFinanceError } from '../../stores/invoice'
+import { isActiveInvoice } from '../../utils/invoiceDisplay'
 import type { Gig } from '../../types/gig'
 
 const props = defineProps<{
@@ -23,6 +25,31 @@ async function copyICalUrl() {
     toastMessage.value = 'Failed to copy URL'
     showToast.value = true
     setTimeout(() => (showToast.value = false), 2000)
+  }
+}
+
+// ── Invoice: open the gig's active invoice, or start one preset to this gig ──
+const invoiceStore = useInvoiceStore()
+const invoiceBusy = ref(false)
+const canInvoice = computed(() => ['confirmed', 'advanced', 'played'].includes(props.gig.status))
+
+function flash(message: string) {
+  toastMessage.value = message
+  showToast.value = true
+  setTimeout(() => (showToast.value = false), 2000)
+}
+
+async function openInvoice() {
+  invoiceBusy.value = true
+  try {
+    const list = await invoiceStore.fetchInvoicesForGig(props.gig.id)
+    const active = list.find(isActiveInvoice)
+    if (active) void invoiceStore.openDetail(active.id)
+    else invoiceStore.openCreate(props.gig.id)
+  } catch (e) {
+    flash(toFinanceError(e).message)
+  } finally {
+    invoiceBusy.value = false
   }
 }
 
@@ -53,6 +80,17 @@ async function downloadPdf() {
       ICAL
     </button>
     <button
+      v-if="canInvoice"
+      type="button"
+      class="btn-hud btn-hud-xs gig-action-btn"
+      title="Open or create the invoice for this gig"
+      :aria-label="`Invoice for ${gig.event_name || gig.venue || 'this gig'}`"
+      :disabled="invoiceBusy"
+      @click.stop="openInvoice"
+    >
+      {{ invoiceBusy ? '…' : 'INVOICE' }}
+    </button>
+    <button
       v-if="gig.status === 'confirmed'"
       class="btn-hud btn-hud-xs"
       title="Download booking confirmation PDF"
@@ -80,3 +118,9 @@ async function downloadPdf() {
     </Transition>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .gig-action-btn { min-height: 44px; height: 44px; }
+}
+</style>

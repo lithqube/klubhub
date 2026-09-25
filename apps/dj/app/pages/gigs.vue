@@ -8,6 +8,7 @@ import GigListRow from '../components/gig/GigListRow.vue'
 import GigCalendarView from '../components/gig/GigCalendarView.vue'
 import GigFormDialog from '../components/gig/GigFormDialog.vue'
 import RaEventImport from '../components/gig/RaEventImport.vue'
+import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
 
 
 useHead({ title: 'Gigs — KlubHub DJ' })
@@ -20,9 +21,22 @@ const formOpen = ref(false)
 const selectedGig = ref<Gig | null>(null)
 
 // Fetch gigs on mount
-onMounted(() => {
-  gigStore.fetchGigs()
+onMounted(async () => {
+  await gigStore.fetchGigs()
+  openGigFromQuery()
 })
+
+// Deep link from the invoice sheet: /gigs?gig=<id> opens that gig's form.
+const route = useRoute()
+function openGigFromQuery() {
+  const id = typeof route.query.gig === 'string' ? route.query.gig : ''
+  if (!id) return
+  const gig = gigs.value.find((g) => g.id === id)
+  if (gig) openEditGig(gig)
+  // Drop the query so following the same link again reopens the form.
+  void navigateTo({ path: '/gigs' }, { replace: true })
+}
+watch(() => route.query.gig, () => openGigFromQuery())
 
 function openAddGig() {
   selectedGig.value = null
@@ -222,5 +236,8 @@ function clearFilters() {
       :gig="selectedGig"
       @saved="onGigSaved"
     />
+
+    <!-- Invoice create dialog + detail sheet (opened from the gig form strip) -->
+    <InvoiceWorkspace />
   </div>
 </template>
