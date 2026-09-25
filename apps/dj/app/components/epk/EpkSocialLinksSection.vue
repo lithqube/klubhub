@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import Input from '~/components/ui/input/Input.vue'
+import { useFeatures } from '~/composables/useFeatures'
 
 type SocialLinks = Record<string, string>
 
@@ -13,6 +14,14 @@ const PLATFORMS = [
   { key: 'bandcamp', label: 'BANDCAMP' },
   { key: 'youtube', label: 'YOUTUBE' },
 ] as const
+
+// The RA link field belongs to the licensed RA integration
+// (docs/EDITIONS.md). When the feature is off the field is hidden, but a
+// previously saved value is still loaded and sent back unchanged on save.
+const raImportEnabled = useFeatures().isEnabled('raImport')
+const visiblePlatforms = computed(() =>
+  PLATFORMS.filter((p) => raImportEnabled || p.key !== 'residentAdvisor'),
+)
 
 const links = ref<SocialLinks>({
   instagram: '',
@@ -73,7 +82,7 @@ function onLinkChange(key: string, value: string | number) {
 
     <div class="space-y-3">
       <div
-        v-for="platform in PLATFORMS"
+        v-for="platform in visiblePlatforms"
         :key="platform.key"
         class="space-y-1"
       >

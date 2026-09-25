@@ -13,17 +13,25 @@ import (
 	"github.com/klubhub/dj/api/internal/ra"
 )
 
+// RAArtistLoader is the subset of the Resident Advisor client the EPK
+// handler needs. *ra.RAClient satisfies it; tests inject fakes.
+type RAArtistLoader interface {
+	GetArtist(ctx context.Context, slug string) (*ra.RAArtist, error)
+}
+
 // Handler handles HTTP requests for the EPK package.
 type Handler struct {
 	svc      serviceIface
-	raClient *ra.RAClient
+	raClient RAArtistLoader
 }
 
-// NewHandler creates a Handler backed by the given service and RA client.
-func NewHandler(svc serviceIface, raClient *ra.RAClient) *Handler {
-	if raClient == nil {
-		raClient = ra.NewRAClient()
-	}
+// NewHandler creates a Handler backed by the given service.
+//
+// raClient is optional: RA import is a licensed edition feature
+// (FEATURE_RA_IMPORT). Pass nil when the feature is disabled — the
+// /import-ra route is then not mounted (404) and the handler never
+// contacts Resident Advisor. No default client is created.
+func NewHandler(svc serviceIface, raClient RAArtistLoader) *Handler {
 	return &Handler{
 		svc:      svc,
 		raClient: raClient,
@@ -42,7 +50,11 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/export", h.handlePostExport)
 	r.Get("/exports", h.handleGetExports)
 	r.Delete("/exports/{id}", h.handleDeleteExport)
-	r.Post("/import-ra", h.HandleImportFromRA)
+
+	// Licensed feature: only mounted when an RA client was injected.
+	if h.raClient != nil {
+		r.Post("/import-ra", h.HandleImportFromRA)
+	}
 
 	return r
 }
@@ -63,12 +75,17 @@ func (h *Handler) HandleImportFromRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		// Use the injected RA client (not a new instance, to preserve cache)
-		artist, err := h.raClient.GetArtist(r.Context(), body.ArtistSlug)
-		if err != nil {
-			h.writeError(w, http.StatusBadRequest, "failed to fetch artist from RA: "+err.Error())
-			return
-		}
+	if h.raClient == nil {
+		h.writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	// Use the injected RA client (not a new instance, to preserve cache)
+	artist, err := h.raClient.GetArtist(r.Context(), body.ArtistSlug)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "failed to fetch artist from RA: "+err.Error())
+		return
+	}
 
 	// Build result
 	result := RAImportResult{

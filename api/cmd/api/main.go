@@ -249,7 +249,6 @@ func run() error {
 	epkStorage := epk.NewStorageAdapter(storeClient)
 	epkSettingsSvc := epk.NewSettingsServiceAdapter(settingsSvc)
 	epkSvc := epk.NewService(epkRepo, epkStorage, epkSettingsSvc)
-	epkHandler := epk.NewHandler(epkSvc, nil) // nil = create default RA client internally
 
 	// 9. Wire gig, venue, and contact modules.
 	gigRepo := gig.NewRepository(pool)
@@ -273,13 +272,15 @@ func run() error {
 	contactSvc := contact.NewService(contactRepo)
 	contactHandler := contact.NewHandler(contactSvc)
 
-	// The RA import routes live on the gig router but need the venue and
-	// contact services. This must happen before gigHandler.Routes() is
-	// called below; without it the routes were mounted on a nil handler and
-	// every /gigs/info/{slug} and /gigs/import-ra request panicked.
-	gigHandler.SetRAImportHandler(gig.NewRAImportHandler(gigSvc, venueSvc, contactSvc, ra.NewRAClient()))
+	// 9a. Licensed edition feature: Resident Advisor import. Only when
+	// FEATURE_RA_IMPORT=true is an RA client constructed and the RA routes
+	// mounted (/epk/import-ra, /gigs/import-ra, /gigs/info/{slug}). This
+	// must happen before gigHandler.Routes() is called below.
+	epkRAClient := wireRAImport(cfg.Features, defaultRAClient, gigHandler, gigSvc, venueSvc, contactSvc)
+	epkHandler := epk.NewHandler(epkSvc, epkRAClient)
+	logger.Info().Interface("features", cfg.Features.Enabled()).Msg("edition features")
 
-	// 9a. Wire finance module (billing profile, invoices, payments,
+	// 9b. Wire finance module (billing profile, invoices, payments,
 	// agreements, email). Documents have no HTTP surface yet (nil → 503);
 	// the document service is still used by agreements to store PDFs.
 	financeHandler := buildFinanceHandler(cfg, pool, storeClient, logger)
@@ -432,4 +433,36 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 		finance.NewAgreementInstanceHandler(instSvc),
 		emailHandler,
 	)
+}
+
+// raClient is everything the RA-backed handlers need from the Resident
+// Advisor client. *ra.RAClient satisfies it; tests inject fakes.
+type raClient interface {
+	epk.RAArtistLoader
+	gig.RAArtistLoader
+}
+
+// defaultRAClient constructs the real Resident Advisor client.
+func defaultRAClient() raClient { return ra.NewRAClient() }
+
+// wireRAImport gates the Resident Advisor integration behind the licensed
+// edition flag. When the feature is disabled it returns nil without calling
+// newClient, leaves the gig handler without RA routes, and the EPK handler
+// (given the nil loader) does not mount /import-ra — so every RA endpoint
+// answers 404 and no outbound request to RA is ever possible. When enabled
+// it builds one shared client (one cache) for both modules.
+func wireRAImport(
+	features config.Features,
+	newClient func() raClient,
+	gigHandler *gig.Handler,
+	gigSvc gig.ServiceIface,
+	venueSvc venue.ServiceIface,
+	contactSvc contact.ServiceIface,
+) epk.RAArtistLoader {
+	if !features.RAImport {
+		return nil
+	}
+	client := newClient()
+	gigHandler.SetRAImportHandler(gig.NewRAImportHandler(gigSvc, venueSvc, contactSvc, client))
+	return client
 }

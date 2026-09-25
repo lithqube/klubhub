@@ -69,6 +69,24 @@ Compose secrets are mounted files, not an encrypted secret-management service. P
 | `DISCOGS_API_KEY` | Empty | Optional cover-art integration. |
 | `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET` | Empty | Optional Instagram OAuth integration. |
 
+## Edition features (licensed)
+
+These switch on features that belong to the licensed and SaaS editions.
+All are **off by default**: the self-hosted open-source build and the
+public demo never show them. See [`EDITIONS.md`](./EDITIONS.md) for the
+editions and how the flags work.
+
+| Variable | Read by | Default | Purpose |
+|---|---|---|---|
+| `FEATURE_RA_IMPORT` | API | `false` | Mounts the Resident Advisor routes (`/api/v1/epk/import-ra`, `/api/v1/gigs/import-ra`, `/api/v1/gigs/info/{slug}`) and creates the RA client. When `false` those routes answer 404 and the API makes no requests to RA. |
+| `NUXT_PUBLIC_FEATURES_RA_IMPORT` | UI (Nuxt) | `false` | Shows the RA import panels on the EPK and Gigs pages and the RA link field in the EPK. |
+
+Set both to `true` to use RA import. With the production Compose file,
+`FEATURE_RA_IMPORT=true` in `.env` sets both. In development, Nuxt runs on
+the host, so export `NUXT_PUBLIC_FEATURES_RA_IMPORT=true` in the shell that
+runs `pnpm nx serve @dev/dj` as well. `GET /api/v1/health` lists the API's
+flags under `features`.
+
 ## Phase 5 — Plunk and document storage
 
 All variables in this section are **optional**: missing values do not

@@ -8,12 +8,15 @@ import GigListRow from '../components/gig/GigListRow.vue'
 import GigCalendarView from '../components/gig/GigCalendarView.vue'
 import GigFormDialog from '../components/gig/GigFormDialog.vue'
 import RaEventImport from '../components/gig/RaEventImport.vue'
+import { useFeatures } from '../composables/useFeatures'
 import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
 
 
 useHead({ title: 'Gigs — KlubHub DJ' })
 
 const gigStore = useGigStore()
+// Licensed edition feature (docs/EDITIONS.md): hidden unless enabled.
+const raImportEnabled = useFeatures().isEnabled('raImport')
 const { gigs, loading, filters } = storeToRefs(gigStore)
 
 const viewMode = ref<'list' | 'calendar'>('list')
@@ -121,8 +124,8 @@ function clearFilters() {
       <!-- Stats row -->
       <GigStatsCards />
 
-      <!-- RA Event Import Panel -->
-      <div style="margin-bottom:12px;">
+      <!-- RA Event Import Panel (licensed edition feature) -->
+      <div v-if="raImportEnabled" style="margin-bottom:12px;">
         <RaEventImport />
       </div>
 

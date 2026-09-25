@@ -97,6 +97,14 @@ export default defineNuxtConfig({
       // now exclusively server-side via process.env.ICAL_SECRET read by
       // the Nitro handlers under apps/dj/server/api/v1/gigs/.
       // Plan B.9: no other secret-bearing fields are allowed here.
+
+      // Edition features (licensed / SaaS). All off by default so the
+      // self-hosted open-source build and the public demo never show them.
+      // Override per key at runtime, e.g. NUXT_PUBLIC_FEATURES_RA_IMPORT=true.
+      // Registry: app/utils/features.ts · docs/EDITIONS.md
+      features: {
+        raImport: false,
+      },
     },
   },
 }) as any;

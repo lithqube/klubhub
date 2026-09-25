@@ -122,6 +122,33 @@ type Config struct {
 	PlunkAPIKey    string `envconfig:"PLUNK_API_KEY" default:""`
 	PlunkFromEmail string `envconfig:"PLUNK_FROM_EMAIL" default:""`
 	PlunkFromName  string `envconfig:"PLUNK_FROM_NAME" default:""`
+
+	// Edition features: capabilities reserved for the licensed / SaaS
+	// editions. Every flag is OFF by default so the self-hosted open-source
+	// build (and the public demo) never exposes them. See docs/EDITIONS.md.
+	Features Features `envconfig:"FEATURE"`
+}
+
+// Features lists the edition-gated capabilities. Each field maps to a
+// FEATURE_<NAME> env var (the struct is nested under the FEATURE prefix).
+// Add new paid features here with `default:"false"`, register them in
+// Enabled() below, and document them in docs/EDITIONS.md.
+type Features struct {
+	// RAImport enables the Resident Advisor integration: EPK artist
+	// import (/api/v1/epk/import-ra) and gig import
+	// (/api/v1/gigs/import-ra, /api/v1/gigs/info/{slug}). When false the
+	// routes are not mounted (404) and no RA client is constructed, so the
+	// API never makes outbound requests to RA. Env: FEATURE_RA_IMPORT.
+	RAImport bool `envconfig:"RA_IMPORT" default:"false"`
+}
+
+// Enabled reports every edition feature and whether it is switched on,
+// keyed by the stable snake_case feature name used in docs and the
+// health response.
+func (f Features) Enabled() map[string]bool {
+	return map[string]bool{
+		"ra_import": f.RAImport,
+	}
 }
 
 // Load reads configuration from environment variables. For each env var

@@ -6,6 +6,28 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Resident Advisor (RA) import is now a licensed feature and is off by
+  default.** This affects existing self-hosters: after upgrading, the RA
+  import panels on the EPK and Gigs pages and the RA link field in the EPK
+  editor are hidden. The API no longer mounts `/api/v1/epk/import-ra`,
+  `/api/v1/gigs/import-ra` or `/api/v1/gigs/info/{slug}` (they return
+  404), and it makes no requests to RA. Gigs and EPK data you already
+  imported, and any RA link you saved, are kept. To turn RA import back
+  on, set `FEATURE_RA_IMPORT=true` for the API and
+  `NUXT_PUBLIC_FEATURES_RA_IMPORT=true` for the UI. With the production
+  Compose file, `FEATURE_RA_IMPORT=true` in `.env` sets both. See
+  [`docs/EDITIONS.md`](docs/EDITIONS.md).
+
+### Added
+
+- A general edition feature-flag mechanism: `Features` in the API config
+  (`FEATURE_*` env vars), `runtimeConfig.public.features` with the
+  `useFeatures()` composable in the UI, and one registry of licensed
+  features in `apps/dj/app/utils/features.ts`. `GET /api/v1/health` now
+  also returns a `features` map.
+
 ## [1.1.0] - 2026-09-25
 
 ### Phase 5 — Finance: invoicing, payments, agreements, email

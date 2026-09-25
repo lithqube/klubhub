@@ -100,6 +100,10 @@ services:
       DISCOGS_API_KEY: ${DISCOGS_API_KEY:-}
       INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
       INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
+      # Licensed edition features (docs/EDITIONS.md): off unless set in .env.
+      # One switch drives both the API routes and the embedded Nuxt UI.
+      FEATURE_RA_IMPORT: ${FEATURE_RA_IMPORT:-false}
+      NUXT_PUBLIC_FEATURES_RA_IMPORT: ${FEATURE_RA_IMPORT:-false}
     secrets:
       - postgres_password
       - token_encryption_key

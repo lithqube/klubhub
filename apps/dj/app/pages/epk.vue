@@ -4,6 +4,7 @@ import { useEpkStore } from '~/stores/epk'
 import { useSettingsStore } from '~/stores/settings'
 import { useGigStore } from '~/stores/gig'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
+import { useFeatures } from '~/composables/useFeatures'
 import { Download, ExternalLink, Image, Loader, Plus, Trash2, X, Check, AlertCircle } from 'lucide-vue-next'
 
 useHead({ title: 'EPK — KlubHub DJ' })
@@ -12,6 +13,8 @@ const store = useEpkStore()
 const settings = useSettingsStore()
 const gigStore = useGigStore()
 const { scheduleSave, flush } = useEpkAutosave()
+// Licensed edition feature: RA import panel and RA link field (docs/EDITIONS.md).
+const raImportEnabled = useFeatures().isEnabled('raImport')
 
 // Don't lose an edit made just before navigating away: flush both queues
 // (EPK content and settings-backed fields).
@@ -85,6 +88,13 @@ const SOCIAL_FIELDS = [
   { key: 'residentAdvisor', label: 'RESIDENT ADVISOR', placeholder: 'https://ra.co/dj/you' },
   { key: 'website', label: 'WEBSITE', placeholder: 'https://you.com' },
 ] as const
+// The RA link field belongs to the licensed RA integration. When it is off
+// the field is hidden, but a previously saved value is kept untouched in
+// settings (onSocial always sends the full socialLinks map).
+const RA_LINK_KEY = 'residentAdvisor'
+const socialFields = computed(() =>
+  SOCIAL_FIELDS.filter((f) => raImportEnabled || f.key !== RA_LINK_KEY),
+)
 
 let settingsTimer: ReturnType<typeof setTimeout> | null = null
 let pendingSettings: Parameters<typeof settings.save>[0] = {}
@@ -222,13 +232,13 @@ const previewBio = computed(() => bioLong.value || bioShort.value)
 const heroMeta = computed(() => {
   const items: { label: string; value: string }[] = []
   if (contactInfo.value) items.push({ label: 'BOOKING', value: contactInfo.value })
-  const ra = socialLinks.value.residentAdvisor
+  const ra = raImportEnabled ? socialLinks.value[RA_LINK_KEY] : ''
   if (ra) items.push({ label: 'RA', value: ra.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') })
   return items
 })
 const activeLinks = computed(() =>
   Object.entries(socialLinks.value)
-    .filter(([, url]) => !!url)
+    .filter(([key, url]) => !!url && (raImportEnabled || key !== RA_LINK_KEY))
     .map(([key, url]) => ({
       key,
       url,
@@ -345,9 +355,11 @@ async function handleExportPdf() {
         style="border-right:1px solid color-mix(in srgb, var(--color-secondary) 8%, transparent);padding:14px;display:flex;flex-direction:column;gap:14px;background:color-mix(in srgb, var(--color-surface-container-low) 40%, transparent);"
       >
         <!-- Quick start -->
-        <EpkRaImportPanel />
+        <template v-if="raImportEnabled">
+          <EpkRaImportPanel />
 
-        <div class="section-divider" />
+          <div class="section-divider" />
+        </template>
 
         <!-- Profile -->
         <div>
@@ -404,7 +416,7 @@ async function handleExportPdf() {
           >
 
           <div class="input-label" style="color:var(--color-secondary);">SOCIAL LINKS</div>
-          <div v-for="field in SOCIAL_FIELDS" :key="field.key" style="margin-top:6px;">
+          <div v-for="field in socialFields" :key="field.key" style="margin-top:6px;">
             <label class="input-label" :for="`epk-social-${field.key}`">{{ field.label }}</label>
             <input
               :id="`epk-social-${field.key}`"
@@ -589,7 +601,7 @@ async function handleExportPdf() {
               <div class="epk-preview-label">BIO</div>
               <div v-if="previewBio" class="epk-preview-text" style="white-space:pre-line;">{{ previewBio }}</div>
               <div v-else class="epk-preview-text" style="color:var(--color-tertiary);">
-                No bio yet. Write one on the left, or import it from Resident Advisor.
+                No bio yet. Write one on the left{{ raImportEnabled ? ', or import it from Resident Advisor' : '' }}.
               </div>
             </div>
           </div>
