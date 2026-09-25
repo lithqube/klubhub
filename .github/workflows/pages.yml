@@ -46,6 +46,14 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # apps/dj/tsconfig.json extends the generated .nuxt/tsconfig.json, so
+      # vitest can't load any test until Nuxt has generated it. `nuxt
+      # prepare` runs in production mode, which requires an API base; the
+      # value is a placeholder (nothing is built or contacted).
+      - name: Generate Nuxt types
+        run: pnpm --filter @dev/dj exec nuxt prepare
+        env:
+          NUXT_PUBLIC_API_BASE: http://api:8080
       - name: Test demo backend
         run: pnpm --filter @dev/dj exec vitest run tests/demo-backend.test.ts tests/demo-fetch.test.ts tests/finance-mocks.test.ts
       - name: Build demo
