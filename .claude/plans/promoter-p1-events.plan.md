@@ -55,3 +55,18 @@ Nav gains VENUES. Pages: `/events` (upcoming / drafts / past), `/events/new`, `/
 | Secret locations leaking via exports | Export pack honours location mode and reveal time; JSON-LD uses city only until reveal |
 | Timetable edge cases (b2b, overnight sets) | Server-side validation with table tests; UI shows server errors |
 | Export pack in OSS drifts from SaaS hosted pages | Same JSON-LD/ICS endpoints feed both |
+
+## Status (2026-09-26)
+
+| Slice | State | Commits |
+|---|---|---|
+| P1.1 Venues | Done — list, editor, rooms, sealed address/geo/contacts, MFA-gated audited reveal, archive blocked while in use, tech-notes contact hint | 7879d5d |
+| P1.2 Events | Done — list (upcoming/drafts/past), create/edit, status lifecycle, embargo, location modes | c9766b0 |
+| P1.3 Lineup & timetable | Done — grid + list, drag and keyboard, conflicts saved but block publish/export, device drafts | c9766b0 |
+| P1.4 Export pack | Done — withheld panel, OG image, RA/Facebook/DICE/generic fields, static page (sandboxed preview), embed, JSON-LD, ICS, store-only ZIP with `-embargoed` suffix | 17e4059 |
+| P1.5 Collective profile | Done — migration 00007, `PUT /api/v1/org/profile` (audited), accent + links in exports | 48e5d2b |
+| Dashboard / `/now` | Done — attention queue (conflict > untimed > go-live/reveal > drafts > security), next-event preflight, nav counter; list API returns issue counts | 7879d5d |
+| P1.6 RA import | Later | — |
+| P1.7 Flyers (Garage) | Later | — |
+
+Verification: Go `-race` (unit + testcontainers Postgres) for promoter and platform; 46 unit tests, 16 Playwright e2e (desktop + mobile), typecheck and lint clean; every screen checked in the browser at desktop and 375 px.
