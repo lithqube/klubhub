@@ -3,6 +3,7 @@ package finance
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -169,11 +170,43 @@ func (f *fakeInstanceRepo) Update(ctx context.Context, id uuid.UUID, req UpdateA
 	return inst, nil
 }
 
+// Sign mirrors AgreementInstanceRepository.Sign's guard rules so tests that
+// exercise the service layer against the fake behave like the real
+// Postgres-backed repository: not-found, stale-token conflicts, and bad-state
+// rejections (terminal status, re-signing the same role, expired, or role not
+// required) are all distinguished the same way.
 func (f *fakeInstanceRepo) Sign(ctx context.Context, id uuid.UUID, req SignAgreementRequest) (*AgreementInstance, error) {
 	inst, ok := f.instances[id]
-	if !ok || !req.UpdatedAt.Equal(inst.UpdatedAt) {
+	if !ok {
+		return nil, ErrAgreementInstanceNotFound
+	}
+	if !req.UpdatedAt.Equal(inst.UpdatedAt) {
 		return nil, ErrAgreementConflict
 	}
+	switch inst.Status {
+	case AgreementStatusCancelled, AgreementStatusExpired, AgreementStatusCompleted:
+		return nil, ErrAgreementBadState
+	}
+	if inst.ExpiresAt != nil && !inst.ExpiresAt.After(time.Now().UTC()) {
+		return nil, ErrAgreementBadState
+	}
+	signerRequired := false
+	for _, s := range inst.RequiredSigners {
+		if s == req.SignerRole {
+			signerRequired = true
+			break
+		}
+	}
+	if !signerRequired {
+		return nil, ErrAgreementBadState
+	}
+	if req.SignerRole == "dj" && inst.DJSignedAt != nil {
+		return nil, ErrAgreementBadState
+	}
+	if req.SignerRole == "client" && inst.ClientSignedAt != nil {
+		return nil, ErrAgreementBadState
+	}
+
 	now := time.Now().UTC()
 	if req.SignerRole == "dj" {
 		inst.DJSignedAt = &now
@@ -328,6 +361,98 @@ func TestAgreementInstanceService_CreateAndSignLifecycle(t *testing.T) {
 	}
 	if clientSigned.Status != AgreementStatusCompleted {
 		t.Errorf("after both sign, status: %s", clientSigned.Status)
+	}
+}
+
+func TestAgreementInstanceService_Sign_RejectsCancelled(t *testing.T) {
+	instRepo := newFakeInstanceRepo()
+	instSvc := NewAgreementInstanceService(instRepo, nil, nil)
+
+	inst, _ := instRepo.Create(context.Background(), CreateAgreementInstanceRequest{
+		TemplateID:      uuid.New(),
+		GigID:           uuid.New(),
+		RequiredSigners: []string{"dj", "client"},
+	}, "content", 1)
+	inst.Status = AgreementStatusCancelled
+
+	_, err := instSvc.Sign(context.Background(), inst.ID, SignAgreementRequest{
+		SignerRole: "dj",
+		SignedBy:   "user-123",
+		UpdatedAt:  inst.UpdatedAt,
+	})
+	if !errors.Is(err, ErrAgreementBadState) {
+		t.Fatalf("expected ErrAgreementBadState, got: %v", err)
+	}
+}
+
+func TestAgreementInstanceService_Sign_RejectsExpired(t *testing.T) {
+	instRepo := newFakeInstanceRepo()
+	instSvc := NewAgreementInstanceService(instRepo, nil, nil)
+
+	past := time.Now().UTC().Add(-time.Hour)
+	inst, _ := instRepo.Create(context.Background(), CreateAgreementInstanceRequest{
+		TemplateID:      uuid.New(),
+		GigID:           uuid.New(),
+		RequiredSigners: []string{"dj", "client"},
+		ExpiresAt:       &past,
+	}, "content", 1)
+
+	_, err := instSvc.Sign(context.Background(), inst.ID, SignAgreementRequest{
+		SignerRole: "dj",
+		SignedBy:   "user-123",
+		UpdatedAt:  inst.UpdatedAt,
+	})
+	if !errors.Is(err, ErrAgreementBadState) {
+		t.Fatalf("expected ErrAgreementBadState, got: %v", err)
+	}
+}
+
+func TestAgreementInstanceService_Sign_RejectsDoubleSignSameRole(t *testing.T) {
+	instRepo := newFakeInstanceRepo()
+	instSvc := NewAgreementInstanceService(instRepo, nil, nil)
+
+	inst, _ := instRepo.Create(context.Background(), CreateAgreementInstanceRequest{
+		TemplateID:      uuid.New(),
+		GigID:           uuid.New(),
+		RequiredSigners: []string{"dj", "client"},
+	}, "content", 1)
+
+	first, err := instSvc.Sign(context.Background(), inst.ID, SignAgreementRequest{
+		SignerRole: "dj",
+		SignedBy:   "user-123",
+		UpdatedAt:  inst.UpdatedAt,
+	})
+	if err != nil {
+		t.Fatalf("first sign: %v", err)
+	}
+
+	_, err = instSvc.Sign(context.Background(), inst.ID, SignAgreementRequest{
+		SignerRole: "dj",
+		SignedBy:   "user-123-again",
+		UpdatedAt:  first.UpdatedAt,
+	})
+	if !errors.Is(err, ErrAgreementBadState) {
+		t.Fatalf("expected ErrAgreementBadState on re-sign, got: %v", err)
+	}
+}
+
+func TestAgreementInstanceService_Sign_RejectsRoleNotRequired(t *testing.T) {
+	instRepo := newFakeInstanceRepo()
+	instSvc := NewAgreementInstanceService(instRepo, nil, nil)
+
+	inst, _ := instRepo.Create(context.Background(), CreateAgreementInstanceRequest{
+		TemplateID:      uuid.New(),
+		GigID:           uuid.New(),
+		RequiredSigners: []string{"dj"}, // client not required
+	}, "content", 1)
+
+	_, err := instSvc.Sign(context.Background(), inst.ID, SignAgreementRequest{
+		SignerRole: "client",
+		SignedBy:   "client-456",
+		UpdatedAt:  inst.UpdatedAt,
+	})
+	if !errors.Is(err, ErrAgreementBadState) {
+		t.Fatalf("expected ErrAgreementBadState, got: %v", err)
 	}
 }
 

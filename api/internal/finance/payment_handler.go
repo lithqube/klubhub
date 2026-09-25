@@ -94,11 +94,14 @@ func (h *PaymentHandler) handleCreate(w http.ResponseWriter, r *http.Request, in
 			writeError(w, http.StatusBadRequest, "validation_failed", vErrs.Error())
 			return
 		}
-		if errors.Is(err, ErrPaymentNotFound) {
+		if errors.Is(err, ErrPaymentInvoiceNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		if writePaymentRuleError(w, err) {
+			return
+		}
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"data": p})
@@ -107,7 +110,7 @@ func (h *PaymentHandler) handleCreate(w http.ResponseWriter, r *http.Request, in
 func (h *PaymentHandler) handleList(w http.ResponseWriter, r *http.Request, invoiceID uuid.UUID) {
 	payments, err := h.svc.ListByInvoice(r.Context(), invoiceID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": payments})
@@ -120,7 +123,7 @@ func (h *PaymentHandler) handleGet(w http.ResponseWriter, r *http.Request, id uu
 			writeError(w, http.StatusNotFound, "not_found", "payment not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": p})
@@ -147,10 +150,32 @@ func (h *PaymentHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id
 			writeError(w, http.StatusNotFound, "not_found", "payment not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		var vErrs PaymentValidationErrors
+		if errors.As(err, &vErrs) {
+			writeError(w, http.StatusBadRequest, "validation_failed", vErrs.Error())
+			return
+		}
+		if writePaymentRuleError(w, err) {
+			return
+		}
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": p})
+}
+
+// writePaymentRuleError maps business-rule rejections to 422. Returns
+// false when err is not one of them.
+func writePaymentRuleError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, ErrPaymentInvoiceState):
+		writeError(w, http.StatusUnprocessableEntity, "invoice_not_payable", err.Error())
+	case errors.Is(err, ErrPaymentExceedsBalance):
+		writeError(w, http.StatusUnprocessableEntity, "exceeds_balance", err.Error())
+	default:
+		return false
+	}
+	return true
 }
 
 var _ = json.Marshal

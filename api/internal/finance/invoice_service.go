@@ -3,6 +3,7 @@ package finance
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -52,6 +53,12 @@ func (s *InvoiceService) CreateDraft(ctx context.Context, gigID uuid.UUID, req C
 	gig, err := s.gigProvider.GetGigFeeInfo(ctx, gigID)
 	if err != nil {
 		return nil, err
+	}
+	// The line amounts are denominated in the gig's currency; invoicing
+	// them under another code would silently mix currencies.
+	if gig.Currency != "" && req.Currency != gig.Currency {
+		return nil, fmt.Errorf("%w: currency %s does not match gig fee currency %s",
+			ErrInvoiceValidation, req.Currency, gig.Currency)
 	}
 	var profile *BillingProfile
 	if s.billingSvc != nil {

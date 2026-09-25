@@ -3,14 +3,21 @@ package finance
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"codeberg.org/go-pdf/fpdf"
 	"github.com/google/uuid"
-	"github.com/jung-kurt/gofpdf"
 )
+
+//go:embed fonts/DejaVuSansCondensed.ttf
+var dejaVuSansRegularTTF []byte
+
+//go:embed fonts/DejaVuSansCondensed-Bold.ttf
+var dejaVuSansBoldTTF []byte
 
 // InvoicePDFData contains all data needed to render an invoice PDF.
 type InvoicePDFData struct {
@@ -23,20 +30,20 @@ type InvoicePDFData struct {
 
 // BillingProfileSnapshot is the billing profile data snapshotted at invoice issuance.
 type BillingProfileSnapshot struct {
-	LegalName           string    `json:"legal_name"`
-	TradingName         string    `json:"trading_name"`
+	LegalName           string     `json:"legal_name"`
+	TradingName         string     `json:"trading_name"`
 	EntityKind          EntityKind `json:"entity_kind"`
-	TaxID               string    `json:"tax_id"`
+	TaxID               string     `json:"tax_id"`
 	TaxIDKind           TaxIDKind  `json:"tax_id_kind"`
-	ContactEmail        string    `json:"contact_email"`
-	ContactPhone        string    `json:"contact_phone"`
-	AddressLine1        string    `json:"address_line1"`
-	AddressLine2        string    `json:"address_line2"`
-	AddressCity         string    `json:"address_city"`
-	AddressRegion       string    `json:"address_region"`
-	AddressPostal       string    `json:"address_postal"`
-	AddressCountry      string    `json:"address_country"`
-	PaymentInstructions string    `json:"payment_instructions"`
+	ContactEmail        string     `json:"contact_email"`
+	ContactPhone        string     `json:"contact_phone"`
+	AddressLine1        string     `json:"address_line1"`
+	AddressLine2        string     `json:"address_line2"`
+	AddressCity         string     `json:"address_city"`
+	AddressRegion       string     `json:"address_region"`
+	AddressPostal       string     `json:"address_postal"`
+	AddressCountry      string     `json:"address_country"`
+	PaymentInstructions string     `json:"payment_instructions"`
 }
 
 // FromJSON parses the JSON snapshot into the struct.
@@ -55,15 +62,17 @@ func NewPDFRenderer() *PDFRenderer {
 // RenderInvoice generates a professional invoice PDF.
 // Returns the PDF bytes, filename, and content type.
 func (r *PDFRenderer) RenderInvoice(ctx context.Context, data *InvoicePDFData) ([]byte, string, string, error) {
-	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(20, 20, 20)
 	pdf.AddPage()
 
-	// Font setup
-	pdf.AddUTF8Font("DejaVu", "", "DejaVuSans.ttf")
-	pdf.AddUTF8Font("DejaVu", "B", "DejaVuSans-Bold.ttf")
-	pdf.AddUTF8Font("DejaVu", "I", "DejaVuSans-Oblique.ttf")
-	pdf.AddUTF8Font("DejaVu", "BI", "DejaVuSans-BoldOblique.ttf")
+	// Font setup: embed DejaVu Sans so non-Latin1 characters (accented
+	// letters, currency symbols, etc.) render correctly. No italic/oblique
+	// variants are embedded, so those styles fall back to the upright faces.
+	pdf.AddUTF8FontFromBytes("DejaVu", "", dejaVuSansRegularTTF)
+	pdf.AddUTF8FontFromBytes("DejaVu", "B", dejaVuSansBoldTTF)
+	pdf.AddUTF8FontFromBytes("DejaVu", "I", dejaVuSansRegularTTF)
+	pdf.AddUTF8FontFromBytes("DejaVu", "BI", dejaVuSansBoldTTF)
 
 	// Colors
 	darkBlue := []int{0x1E, 0x3A, 0x5F}
@@ -459,12 +468,18 @@ func formatMoney(currency string, minor int64) string {
 	}
 }
 
-// truncate truncates a string to maxLen characters.
+// truncate truncates a string to maxLen runes, appending "..." if it was cut.
+// It operates on runes (not bytes) so multi-byte UTF-8 characters are never
+// split mid-sequence.
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
 
 func max(a, b float64) float64 {

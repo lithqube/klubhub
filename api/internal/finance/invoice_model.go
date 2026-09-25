@@ -44,38 +44,38 @@ func (s InvoiceStatus) IsValid() bool {
 // The JSON tags use the exact wire names the frontend expects
 // (snake_case for DB, camelCase for JSON).
 type Invoice struct {
-	ID              uuid.UUID       `json:"id"                   db:"id"`
-	GigID           uuid.UUID       `json:"gig_id"               db:"gig_id"`
-	BillingProfile  json.RawMessage `json:"billing_profile"      db:"billing_profile"`
-	InvoiceNumber   string          `json:"invoice_number"       db:"invoice_number"`
-	NumberPrefix    string          `json:"number_prefix"        db:"number_prefix"`
-	NumberSeq       int64           `json:"number_seq"           db:"number_seq"`
-	Currency        string          `json:"currency"             db:"currency"`
-	SubtotalMinor   int64           `json:"subtotal_minor"       db:"subtotal_minor"`
-	TaxRateBps      int64           `json:"tax_rate_bps"         db:"tax_rate_bps"`
-	TaxMinor        int64           `json:"tax_minor"            db:"tax_minor"`
-	TotalMinor      int64           `json:"total_minor"          db:"total_minor"`
-	Status          InvoiceStatus   `json:"status"               db:"status"`
-	IssuedAt        *time.Time      `json:"issued_at"            db:"issued_at"`
-	DueAt           *time.Time      `json:"due_at"               db:"due_at"`
-	PaidAt          *time.Time      `json:"paid_at"              db:"paid_at"`
-	PaymentRef      string          `json:"payment_ref"          db:"payment_ref"`
-	InternalNotes   string          `json:"internal_notes"       db:"internal_notes"`
-	UpdatedAt       time.Time       `json:"updated_at"           db:"updated_at"`
-	CreatedAt       time.Time       `json:"created_at"           db:"created_at"`
+	ID             uuid.UUID       `json:"id"                   db:"id"`
+	GigID          uuid.UUID       `json:"gig_id"               db:"gig_id"`
+	BillingProfile json.RawMessage `json:"billing_profile"      db:"billing_profile"`
+	InvoiceNumber  string          `json:"invoice_number"       db:"invoice_number"`
+	NumberPrefix   string          `json:"number_prefix"        db:"number_prefix"`
+	NumberSeq      int64           `json:"number_seq"           db:"number_seq"`
+	Currency       string          `json:"currency"             db:"currency"`
+	SubtotalMinor  int64           `json:"subtotal_minor"       db:"subtotal_minor"`
+	TaxRateBps     int64           `json:"tax_rate_bps"         db:"tax_rate_bps"`
+	TaxMinor       int64           `json:"tax_minor"            db:"tax_minor"`
+	TotalMinor     int64           `json:"total_minor"          db:"total_minor"`
+	Status         InvoiceStatus   `json:"status"               db:"status"`
+	IssuedAt       *time.Time      `json:"issued_at"            db:"issued_at"`
+	DueAt          *time.Time      `json:"due_at"               db:"due_at"`
+	PaidAt         *time.Time      `json:"paid_at"              db:"paid_at"`
+	PaymentRef     string          `json:"payment_ref"          db:"payment_ref"`
+	InternalNotes  string          `json:"internal_notes"       db:"internal_notes"`
+	UpdatedAt      time.Time       `json:"updated_at"           db:"updated_at"`
+	CreatedAt      time.Time       `json:"created_at"           db:"created_at"`
 }
 
 // InvoiceLine is a single line on an invoice.
 type InvoiceLine struct {
-	ID               uuid.UUID `json:"id"                   db:"id"`
-	InvoiceID        uuid.UUID `json:"invoice_id"           db:"invoice_id"`
-	SortOrder        int       `json:"sort_order"           db:"sort_order"`
-	Description      string    `json:"description"          db:"description"`
-	Quantity         int       `json:"quantity"             db:"quantity"`
-	UnitMinor        int64     `json:"unit_minor"           db:"unit_minor"`
-	TaxBps           int64     `json:"tax_bps"              db:"tax_bps"`
-	LineTotalMinor   int64     `json:"line_total_minor"     db:"line_total_minor"`
-	CreatedAt        time.Time `json:"created_at"           db:"created_at"`
+	ID             uuid.UUID `json:"id"                   db:"id"`
+	InvoiceID      uuid.UUID `json:"invoice_id"           db:"invoice_id"`
+	SortOrder      int       `json:"sort_order"           db:"sort_order"`
+	Description    string    `json:"description"          db:"description"`
+	Quantity       int       `json:"quantity"             db:"quantity"`
+	UnitMinor      int64     `json:"unit_minor"           db:"unit_minor"`
+	TaxBps         int64     `json:"tax_bps"              db:"tax_bps"`
+	LineTotalMinor int64     `json:"line_total_minor"     db:"line_total_minor"`
+	CreatedAt      time.Time `json:"created_at"           db:"created_at"`
 }
 
 // Subtotal returns the sum of line totals as a decimal.Decimal for display.
@@ -126,10 +126,10 @@ func (es InvoiceValidationErrors) Unwrap() error        { return ErrInvoiceValid
 // creation time; the frontend only supplies the currency + optional due date
 // + optional prefix override.
 type CreateInvoiceRequest struct {
-	GigID       uuid.UUID `json:"gig_id"`
-	Currency    string    `json:"currency"`
-	NumberPrefix string   `json:"number_prefix,omitempty"`
-	DueAt       *time.Time `json:"due_at,omitempty"`
+	GigID        uuid.UUID  `json:"gig_id"`
+	Currency     string     `json:"currency"`
+	NumberPrefix string     `json:"number_prefix,omitempty"`
+	DueAt        *time.Time `json:"due_at,omitempty"`
 }
 
 // UpdateInvoiceRequest is the body of PUT /api/v1/finance/invoices/{id}.
@@ -255,18 +255,18 @@ func (i *Invoice) TotalMajor() float64 {
 
 // CurrencySummary holds per-currency dashboard aggregates.
 type CurrencySummary struct {
-	Currency     string          `json:"currency"`
-	IssuedTotal  decimal.Decimal `json:"issued_total"`
-	PaidTotal    decimal.Decimal `json:"paid_total"`
-	IssuedCount  int64           `json:"issued_count"`
-	PaidCount    int64           `json:"paid_count"`
+	Currency    string          `json:"currency"`
+	IssuedTotal decimal.Decimal `json:"issued_total"`
+	PaidTotal   decimal.Decimal `json:"paid_total"`
+	IssuedCount int64           `json:"issued_count"`
+	PaidCount   int64           `json:"paid_count"`
 }
 
 // InvoiceFilter is the query filter for listing invoices.
 type InvoiceFilter struct {
-	GigID     *uuid.UUID
-	Status    InvoiceStatus
-	Currency  string
-	From      time.Time
-	To        time.Time
+	GigID    *uuid.UUID
+	Status   InvoiceStatus
+	Currency string
+	From     time.Time
+	To       time.Time
 }

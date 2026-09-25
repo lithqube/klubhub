@@ -78,7 +78,12 @@ func (f *fakePaymentRepo) Update(ctx context.Context, id uuid.UUID, req UpdatePa
 func (f *fakePaymentRepo) SumByInvoice(ctx context.Context, invoiceID uuid.UUID) (int64, error) {
 	var sum int64
 	for _, p := range f.payments {
-		if p.InvoiceID == invoiceID && p.Status == PaymentStatusCompleted {
+		if p.InvoiceID != invoiceID || p.Status != PaymentStatusCompleted {
+			continue
+		}
+		if p.Kind == PaymentKindRefund {
+			sum -= p.AmountMinor
+		} else {
 			sum += p.AmountMinor
 		}
 	}
@@ -97,11 +102,11 @@ func validCreatePaymentRequest() CreatePaymentRequest {
 
 func validUpdatePaymentRequest(token time.Time) UpdatePaymentRequest {
 	return UpdatePaymentRequest{
-		Status:      PaymentStatusCompleted,
-		Method:      "bank_transfer",
-		Reference:   "ref-001",
-		ReceivedAt:  &token,
-		UpdatedAt:   token,
+		Status:     PaymentStatusCompleted,
+		Method:     "bank_transfer",
+		Reference:  "ref-001",
+		ReceivedAt: &token,
+		UpdatedAt:  token,
 	}
 }
 

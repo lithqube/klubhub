@@ -13,10 +13,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/klubhub/dj/api/internal/artwork"
 	"github.com/klubhub/dj/api/internal/contact"
 	"github.com/klubhub/dj/api/internal/epk"
+	"github.com/klubhub/dj/api/internal/finance"
 	"github.com/klubhub/dj/api/internal/gig"
 	"github.com/klubhub/dj/api/internal/platform/config"
 	"github.com/klubhub/dj/api/internal/platform/db"
@@ -42,7 +44,8 @@ const healthcheckTimeout = 5 * time.Second
 // the released version in a single line.
 //
 // Build via:
-//   -ldflags="-X main.productName=KlubHub-DJ -X main.version=1.2.3"
+//
+//	-ldflags="-X main.productName=KlubHub-DJ -X main.version=1.2.3"
 //
 // for release builds. The defaults below apply when no ldflags are passed.
 var productName = "KlubHub-DJ"
@@ -276,6 +279,11 @@ func run() error {
 	// every /gigs/info/{slug} and /gigs/import-ra request panicked.
 	gigHandler.SetRAImportHandler(gig.NewRAImportHandler(gigSvc, venueSvc, contactSvc, ra.NewRAClient()))
 
+	// 9a. Wire finance module (billing profile, invoices, payments,
+	// agreements, email). Documents have no HTTP surface yet (nil → 503);
+	// the document service is still used by agreements to store PDFs.
+	financeHandler := buildFinanceHandler(cfg, pool, storeClient, logger)
+
 	// 10. Build router (internal http package aliased as apphttp).
 	router := apphttp.NewRouter(cfg, pool, storeClient, logger,
 		settingsHandler,
@@ -285,6 +293,7 @@ func run() error {
 		gigHandler.Routes(),
 		venueHandler.Routes(),
 		contactHandler.Routes(),
+		financeHandler,
 	)
 
 	// 11. Start HTTP server. Run ListenAndServe in a goroutine so main can
@@ -385,4 +394,42 @@ func runHealthcheck() int {
 		return 1
 	}
 	return 0
+}
+
+// buildFinanceHandler composes the finance routes. Email is only mounted
+// when Plunk is fully configured; otherwise /finance/emails answers 503
+// instead of queuing mail that can never be delivered.
+func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, logger zerolog.Logger) *finance.Mux {
+	billingSvc := finance.NewService(finance.NewRepository(pool))
+	invoiceSvc := finance.NewInvoiceService(finance.NewInvoiceRepository(pool), billingSvc, finance.NewPGGigFeeProvider(pool))
+	paymentSvc := finance.NewPaymentService(finance.NewPaymentRepository(pool))
+	docSvc := finance.NewDocumentService(finance.NewDocumentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)
+	tplRepo := finance.NewAgreementTemplateRepository(pool)
+	tplSvc := finance.NewAgreementTemplateService(tplRepo)
+	instSvc := finance.NewAgreementInstanceService(finance.NewAgreementInstanceRepository(pool), tplRepo, docSvc)
+
+	var emailHandler nethttp.Handler
+	if cfg.PlunkBaseURL != "" && cfg.PlunkProjectID != "" && cfg.PlunkAPIKey != "" {
+		sender := finance.NewPlunkSender(finance.PlunkConfig{
+			BaseURL:   cfg.PlunkBaseURL,
+			ProjectID: cfg.PlunkProjectID,
+			APIKey:    cfg.PlunkAPIKey,
+			FromEmail: cfg.PlunkFromEmail,
+			FromName:  cfg.PlunkFromName,
+		})
+		emailHandler = finance.NewEmailHandler(finance.NewEmailService(finance.NewEmailRepository(pool), sender))
+		logger.Info().Str("plunk_base_url", cfg.PlunkBaseURL).Msg("finance email enabled (plunk)")
+	} else {
+		logger.Info().Msg("finance email disabled: PLUNK_BASE_URL, PLUNK_PROJECT_ID and PLUNK_API_KEY(_FILE) are not all set")
+	}
+
+	return finance.NewMux(
+		finance.NewHandler(billingSvc),
+		finance.NewInvoiceHandler(invoiceSvc),
+		finance.NewPaymentHandler(paymentSvc),
+		nil, // documents: no HTTP handler yet
+		finance.NewAgreementTemplateHandler(tplSvc),
+		finance.NewAgreementInstanceHandler(instSvc),
+		emailHandler,
+	)
 }

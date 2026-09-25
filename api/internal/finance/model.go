@@ -44,12 +44,12 @@ var ValidEntityKinds = map[EntityKind]struct{}{
 type TaxIDKind string
 
 const (
-	TaxIDKindEmpty  TaxIDKind = ""
-	TaxIDKindVAT    TaxIDKind = "vat"
-	TaxIDKindEIN    TaxIDKind = "ein"
-	TaxIDKindGST    TaxIDKind = "gst"
-	TaxIDKindABN    TaxIDKind = "abn"
-	TaxIDKindOther  TaxIDKind = "other"
+	TaxIDKindEmpty TaxIDKind = ""
+	TaxIDKindVAT   TaxIDKind = "vat"
+	TaxIDKindEIN   TaxIDKind = "ein"
+	TaxIDKindGST   TaxIDKind = "gst"
+	TaxIDKindABN   TaxIDKind = "abn"
+	TaxIDKindOther TaxIDKind = "other"
 )
 
 // ValidTaxIDKinds is the closed set; reject anything else in Validate.
@@ -125,10 +125,10 @@ type UpdateBillingProfileRequest struct {
 
 // Sentinel errors for service / handler layer.
 var (
-	ErrNotFound       = errors.New("billing profile not found")
-	ErrConflict       = errors.New("billing profile updated by another writer")
-	ErrValidation     = errors.New("invalid billing profile")
-	ErrUnissuedDoc    = errors.New("documents cannot be issued until the profile is complete")
+	ErrNotFound    = errors.New("billing profile not found")
+	ErrConflict    = errors.New("billing profile updated by another writer")
+	ErrValidation  = errors.New("invalid billing profile")
+	ErrUnissuedDoc = errors.New("documents cannot be issued until the profile is complete")
 )
 
 // FieldError reports a single field violation. Multiple FieldErrors may be

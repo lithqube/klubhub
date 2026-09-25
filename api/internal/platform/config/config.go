@@ -117,8 +117,11 @@ type Config struct {
 	PlunkBaseURL    string `envconfig:"PLUNK_BASE_URL" default:""`
 	PlunkProjectID  string `envconfig:"PLUNK_PROJECT_ID" default:""`
 	PlunkAPIKeyFile string `envconfig:"PLUNK_API_KEY_FILE" default:""`
-	PlunkFromEmail  string `envconfig:"PLUNK_FROM_EMAIL" default:""`
-	PlunkFromName   string `envconfig:"PLUNK_FROM_NAME" default:""`
+	// PlunkAPIKey is populated from PLUNK_API_KEY_FILE by loadFileSecrets
+	// (or set directly). The _FILE field above only holds the path.
+	PlunkAPIKey    string `envconfig:"PLUNK_API_KEY" default:""`
+	PlunkFromEmail string `envconfig:"PLUNK_FROM_EMAIL" default:""`
+	PlunkFromName  string `envconfig:"PLUNK_FROM_NAME" default:""`
 }
 
 // Load reads configuration from environment variables. For each env var

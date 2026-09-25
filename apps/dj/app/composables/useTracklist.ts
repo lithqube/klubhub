@@ -26,7 +26,7 @@ export function uploadTracklist(file: File): Promise<{
   formData.append('file', file);
 
   return $fetch(`/api/v1/tracklists/upload`, {
-    method: 'post',
+    method: 'POST',
     body: formData,
   }).then((res) => {
     const response = res as UploadTracklistResponse;
@@ -72,7 +72,7 @@ export function updateTrack(
   >,
 ): Promise<Track> {
   return $fetch(`/api/v1/tracklists/${tracklistId}/tracks/${trackId}`, {
-    method: 'put',
+    method: 'PUT',
     body: fields,
   }).then((res) => {
     // Check if the response is an error object
@@ -98,7 +98,7 @@ export function uploadTrackArtwork(
   formData.append('file', file);
 
   return $fetch(`/api/v1/tracklists/${tracklistId}/tracks/${trackId}/artwork`, {
-    method: 'put',
+    method: 'PUT',
     body: formData,
   }).then((res) => {
     // Check if the response is an error object
@@ -118,7 +118,7 @@ export function uploadTrackArtwork(
 // Delete a tracklist
 export function deleteTracklist(id: string): Promise<void> {
   return $fetch(`/api/v1/tracklists/${id}`, {
-    method: 'delete',
+    method: 'DELETE',
   }).then((res) => {
     if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {
       throw new Error((res as any).message ?? (res as any).error);
@@ -165,7 +165,7 @@ export function generateImage(
   return $fetch(
     `/api/v1/tracklists/${tracklistId}/generate-image?format=${format}`,
     {
-      method: 'post',
+      method: 'POST',
     }
   ).then((res) => {
     if (res && typeof res === 'object' && !(Array.isArray(res)) && (res as any).error) {

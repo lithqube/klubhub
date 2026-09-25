@@ -43,7 +43,7 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "billing profile not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": p})
@@ -77,7 +77,7 @@ func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "billing profile not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": p})

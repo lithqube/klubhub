@@ -114,6 +114,9 @@ class SetupTests(unittest.TestCase):
                 "PLUNK_AUTH_SECRET=test-only-not-real\n"
                 "POSTGRES_PASSWORD=test-only-not-real\n"
             )
+            api_key_file = Path(tmp) / "plunk_api_key"
+            api_key_file.write_text("test-only-not-real")
+            api_key_file.chmod(0o600)
             base_env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT")}
             base_env.update(
                 SECRET_DIR=tmp,
@@ -125,6 +128,7 @@ class SetupTests(unittest.TestCase):
                 POSTGRES_PORT="5432",
                 POSTGRES_DB="klubhub",
                 PLUNK_AUTH_SECRET="test-only-not-real",
+                PLUNK_API_KEY_SECRET_FILE=str(api_key_file),
             )
             command = [
                 "docker", "compose", "--env-file", "/dev/null",
@@ -150,6 +154,17 @@ class SetupTests(unittest.TestCase):
             self.assertIn("PLUNK_BASE_URL", api_env)
             self.assertEqual(api_env["PLUNK_BASE_URL"], "http://plunk:3000")
             self.assertEqual(api_env["PLUNK_FROM_EMAIL"], "noreply@klubhub.local")
+            # PLUNK_API_KEY_FILE must point at a secret actually mounted on
+            # the app service — a Compose secret mounts as a single file at
+            # /run/secrets/<name>, never a directory (the previous default,
+            # /run/secrets/email/plunk_api_key, mounted nothing).
+            self.assertEqual(api_env["PLUNK_API_KEY_FILE"], "/run/secrets/plunk_api_key")
+            app_secrets = {s["source"]: s["target"] for s in services["app"].get("secrets", [])}
+            self.assertIn("plunk_api_key", app_secrets)
+            self.assertEqual(app_secrets["plunk_api_key"], "/run/secrets/plunk_api_key")
+            # Existing app secrets (postgres_password etc.) from the base
+            # compose file must still be present after the overlay merges.
+            self.assertIn("postgres_password", app_secrets)
 
 
 if __name__ == "__main__":

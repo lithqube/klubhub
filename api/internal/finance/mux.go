@@ -2,7 +2,6 @@ package finance
 
 import (
 	"net/http"
-	"strings"
 )
 
 // Mux dispatches /api/v1/finance/* across all finance handlers in one place.
@@ -44,9 +43,9 @@ func NewMux(
 	}
 }
 
-// ServeHTTP dispatches by path. Path may or may not start with /api/v1/finance
-// depending on how the parent mounted this — handle both: when the prefix
-// is present, drop those leading segments before matching.
+// ServeHTTP dispatches by path. Children parse the full
+// /api/v1/finance/<resource>/... path themselves, so the request is passed
+// through unchanged (chi's Mount keeps r.URL.Path intact as well).
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := splitFinanceSegments(r.URL.Path)
 
@@ -62,50 +61,42 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Make sure rewritten paths match what the children expect.
-	original := r.URL.Path
-	defer func() { r.URL.Path = original }()
-
 	switch parts[0] {
 	case "billing-profile":
-		m.dispatchChild(w, r, m.billing, parts[1:])
+		m.dispatch(w, r, m.billing)
 	case "invoices":
-		m.dispatchChild(w, r, m.invoices, parts[1:])
+		// /invoices/{id}/payments belongs to the payments handler.
+		if len(parts) == 3 && parts[2] == "payments" {
+			m.dispatch(w, r, m.payments)
+			return
+		}
+		m.dispatch(w, r, m.invoices)
 	case "payments":
-		m.dispatchChild(w, r, m.payments, parts[1:])
+		m.dispatch(w, r, m.payments)
 	case "documents":
-		m.dispatchChild(w, r, m.documents, parts[1:])
+		m.dispatch(w, r, m.documents)
 	case "agreements":
 		if len(parts) >= 2 && parts[1] == "templates" {
-			m.dispatchChild(w, r, m.agreementsTpl, parts[2:])
+			m.dispatch(w, r, m.agreementsTpl)
 		} else if len(parts) >= 2 && parts[1] == "instances" {
-			m.dispatchChild(w, r, m.agreementsInstance, parts[2:])
+			m.dispatch(w, r, m.agreementsInstance)
 		} else {
 			writeError(w, http.StatusNotFound, "not_found", "unknown agreements resource")
 		}
 	case "emails":
-		m.dispatchChild(w, r, m.emails, parts[1:])
+		m.dispatch(w, r, m.emails)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "unknown finance resource: "+parts[0])
 	}
 }
 
-// dispatchChild invokes h with the rewritten path. Restores r.URL.Path
-// after delegation so callers can't observe the change after ServeHTTP
-// returns. Each child handler expects paths under /api/v1/<sub>/...
-func (m *Mux) dispatchChild(w http.ResponseWriter, r *http.Request, h http.Handler, rest []string) {
+// dispatch invokes h, or answers 503 when that subdomain isn't configured.
+func (m *Mux) dispatch(w http.ResponseWriter, r *http.Request, h http.Handler) {
 	if h == nil {
 		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "finance handler not configured")
 		return
 	}
-	if len(rest) == 0 {
-		// No tail; just hand off — child handles its bare root.
-		h.ServeHTTP(w, r)
-		return
-	}
-	clone := r.Clone(r.Context())
-	clone.URL.Path = "/api/v1/" + strings.Join(rest, "/")
-	h.ServeHTTP(w, clone)
+	h.ServeHTTP(w, r)
 }
 
 // splitPath returns the non-empty segments of a URL path, split on '/'.

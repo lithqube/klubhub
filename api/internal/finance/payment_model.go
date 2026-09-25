@@ -16,9 +16,9 @@ import (
 type PaymentKind string
 
 const (
-	PaymentKindDeposit  PaymentKind = "deposit"
-	PaymentKindPayment  PaymentKind = "payment"
-	PaymentKindRefund   PaymentKind = "refund"
+	PaymentKindDeposit PaymentKind = "deposit"
+	PaymentKindPayment PaymentKind = "payment"
+	PaymentKindRefund  PaymentKind = "refund"
 )
 
 var validPaymentKinds = map[PaymentKind]struct{}{
@@ -56,23 +56,30 @@ func (s PaymentStatus) IsValid() bool {
 
 // Payment is a recorded money movement against an invoice.
 type Payment struct {
-	ID           uuid.UUID     `json:"id"               db:"id"`
-	InvoiceID    uuid.UUID     `json:"invoice_id"       db:"invoice_id"`
-	Currency     string        `json:"currency"         db:"currency"`
-	AmountMinor  int64         `json:"amount_minor"     db:"amount_minor"`
-	Kind         PaymentKind   `json:"kind"             db:"kind"`
-	Status       PaymentStatus `json:"status"           db:"status"`
-	Method       string        `json:"method"           db:"method"`
-	Reference    string        `json:"reference"        db:"reference"`
-	ReceivedAt   *time.Time    `json:"received_at"      db:"received_at"`
-	CreatedAt    time.Time     `json:"created_at"       db:"created_at"`
-	UpdatedAt    time.Time     `json:"updated_at"       db:"updated_at"`
+	ID          uuid.UUID     `json:"id"               db:"id"`
+	InvoiceID   uuid.UUID     `json:"invoice_id"       db:"invoice_id"`
+	Currency    string        `json:"currency"         db:"currency"`
+	AmountMinor int64         `json:"amount_minor"     db:"amount_minor"`
+	Kind        PaymentKind   `json:"kind"             db:"kind"`
+	Status      PaymentStatus `json:"status"           db:"status"`
+	Method      string        `json:"method"           db:"method"`
+	Reference   string        `json:"reference"        db:"reference"`
+	ReceivedAt  *time.Time    `json:"received_at"      db:"received_at"`
+	CreatedAt   time.Time     `json:"created_at"       db:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at"       db:"updated_at"`
 }
 
 var (
-	ErrPaymentNotFound = errors.New("payment not found")
-	ErrPaymentConflict = errors.New("payment updated by another writer")
+	ErrPaymentNotFound   = errors.New("payment not found")
+	ErrPaymentConflict   = errors.New("payment updated by another writer")
 	ErrPaymentValidation = errors.New("invalid payment")
+	// ErrPaymentInvoiceNotFound: the parent invoice does not exist.
+	ErrPaymentInvoiceNotFound = errors.New("invoice not found")
+	// ErrPaymentInvoiceState: payments are only accepted on issued/paid invoices.
+	ErrPaymentInvoiceState = errors.New("invoice does not accept payments in its current status")
+	// ErrPaymentExceedsBalance: the write would over-collect the invoice or
+	// refund more than was received.
+	ErrPaymentExceedsBalance = errors.New("payment exceeds invoice balance")
 )
 
 type PaymentFieldError struct {
@@ -110,11 +117,11 @@ type CreatePaymentRequest struct {
 
 // UpdatePaymentRequest is the body of PUT /api/v1/finance/payments/{id}.
 type UpdatePaymentRequest struct {
-	Status       PaymentStatus `json:"status"`
-	Method       string        `json:"method"`
-	Reference    string        `json:"reference"`
-	ReceivedAt   *time.Time    `json:"received_at"`
-	UpdatedAt    time.Time     `json:"updated_at"`
+	Status     PaymentStatus `json:"status"`
+	Method     string        `json:"method"`
+	Reference  string        `json:"reference"`
+	ReceivedAt *time.Time    `json:"received_at"`
+	UpdatedAt  time.Time     `json:"updated_at"`
 }
 
 // PaymentRepositoryIface is the subset the service uses.
@@ -156,6 +163,9 @@ func (s *PaymentService) ListByInvoice(ctx context.Context, invoiceID uuid.UUID)
 
 // Update updates a payment's status/method/reference/received_at.
 func (s *PaymentService) Update(ctx context.Context, id uuid.UUID, req UpdatePaymentRequest) (*Payment, error) {
+	if !req.Status.IsValid() {
+		return nil, PaymentValidationErrors{{"status", "must be one of pending, completed, failed, refunded"}}
+	}
 	return s.repo.Update(ctx, id, req)
 }
 

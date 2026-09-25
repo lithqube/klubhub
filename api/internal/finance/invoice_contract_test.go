@@ -351,12 +351,12 @@ func TestInvoiceHandler_CreateDraftEnvelope(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 
@@ -392,12 +392,12 @@ func TestInvoiceHandler_GetEnvelope(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 
@@ -417,7 +417,12 @@ func TestInvoiceHandler_GetEnvelope(t *testing.T) {
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("status: %d", getRec.Code)
 	}
-	var env struct{ Data struct{ Invoice Invoice; Lines []*InvoiceLine } }
+	var env struct {
+		Data struct {
+			Invoice Invoice
+			Lines   []*InvoiceLine
+		}
+	}
 	json.Unmarshal(getRec.Body.Bytes(), &env)
 	if env.Data.Invoice.ID != created.Data.ID {
 		t.Errorf("id mismatch")
@@ -429,12 +434,12 @@ func TestInvoiceHandler_UpdateDraftEnvelope(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 
@@ -469,12 +474,12 @@ func TestInvoiceHandler_IssueEnvelope(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 
@@ -512,12 +517,12 @@ func TestInvoiceHandler_PayEnvelope(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 
@@ -574,12 +579,12 @@ func TestInvoiceHandler_CancelEnvelope(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 
@@ -611,12 +616,12 @@ func TestInvoiceHandler_CorrectEnvelope(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 
@@ -658,7 +663,12 @@ func TestInvoiceHandler_CorrectEnvelope(t *testing.T) {
 	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/finance/invoices/"+issued.Data.ID.String(), nil)
 	getRec := httptest.NewRecorder()
 	h.ServeHTTP(getRec, getReq)
-	var origEnv struct{ Data struct{ Invoice Invoice; Lines []*InvoiceLine } }
+	var origEnv struct {
+		Data struct {
+			Invoice Invoice
+			Lines   []*InvoiceLine
+		}
+	}
 	json.Unmarshal(getRec.Body.Bytes(), &origEnv)
 	if origEnv.Data.Invoice.Status != InvoiceStatusCorrected {
 		t.Errorf("original status: %v", origEnv.Data.Invoice.Status)
@@ -670,12 +680,12 @@ func TestInvoiceHandler_ConcurrencyConflict(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 
@@ -707,12 +717,12 @@ func TestInvoiceHandler_BadStateTransitions(t *testing.T) {
 	gigProv := newFakeGigFeeProvider()
 	gigID := uuid.New()
 	gigProv.SetFee(gigID, &GigFeeInfo{
-		ID:               gigID,
-		FeeMinor:         25000,
-		TaxRateBps:       1900,
-		TaxMinor:         4750,
-		TotalMinor:       29750,
-		LineDescription:  "Performance",
+		ID:              gigID,
+		FeeMinor:        25000,
+		TaxRateBps:      1900,
+		TaxMinor:        4750,
+		TotalMinor:      29750,
+		LineDescription: "Performance",
 	})
 	h := NewInvoiceHandler(NewInvoiceService(repo, newFakeBillingService(), gigProv))
 

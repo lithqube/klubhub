@@ -40,6 +40,11 @@ PHASE5_PATTERNS=(
   'api/internal/mailer/'
 )
 
+# pnpm's pre-run dependency check tries to reinstall node_modules and
+# aborts without a TTY (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY); that
+# is an install concern, not a typecheck one.
+pnpm() { command pnpm --config.verify-deps-before-run=false "$@"; }
+
 # 1) Run the real Nuxt vue-tsc so we get a complete error list.
 if ! command -v pnpm >/dev/null 2>&1; then
   echo "pnpm not found in PATH" >&2
@@ -53,12 +58,19 @@ NUXT_PUBLIC_API_BASE="${NUXT_PUBLIC_API_BASE:-http://api:8080}" \
 
 OUT_FILE="$(mktemp -t phase5-tsc.XXXXXX)"
 cd "$ROOT/apps/dj"
+TSC_STATUS=0
 NUXT_PUBLIC_API_BASE="${NUXT_PUBLIC_API_BASE:-http://api:8080}" \
-  pnpm exec vue-tsc --noEmit -p .nuxt/tsconfig.json >"$OUT_FILE" 2>&1 || true
+  pnpm exec vue-tsc --noEmit -p .nuxt/tsconfig.json >"$OUT_FILE" 2>&1 || TSC_STATUS=$?
 cd "$ROOT"
 
-if [ ! -s "$OUT_FILE" ]; then
-  echo "Phase 5 typecheck produced no output (vue-tsc missing?)" >&2
+# vue-tsc exits 0 with no output when clean, and non-zero with "error TS"
+# lines when it found errors. A non-zero exit WITHOUT any "error TS" line
+# means vue-tsc never ran (pnpm aborted, binary missing, bad tsconfig) —
+# fail loudly instead of reporting a green gate over an empty check.
+if [ "$TSC_STATUS" -ne 0 ] && ! grep -q 'error TS' "$OUT_FILE"; then
+  echo "Phase 5 typecheck: vue-tsc did not run (exit $TSC_STATUS):" >&2
+  cat "$OUT_FILE" >&2
+  rm -f "$OUT_FILE"
   exit 2
 fi
 

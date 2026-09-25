@@ -27,8 +27,10 @@
 #      project + admin user.
 #   2. In the Plunk admin UI, set the SMTP credentials (AWS SES by default,
 #      or any SMTP relay).
-#   3. Copy the project ID + a project API key into secrets/email.env
-#      (gitignored; plunk-bootstrap.sh provisions it once).
+#   3. Copy the project ID into secrets/email.env and the project API key
+#      into secrets/plunk_api_key (both gitignored; plunk-bootstrap.sh
+#      provisions both files once — see PLUNK_API_KEY_SECRET_FILE below
+#      to relocate the key file).
 #   4. Restart the api service so it picks up the new env vars:
 #        docker compose restart api
 #
@@ -43,7 +45,6 @@
 services:
   plunk:
     image: ghcr.io/useplunk/plunk:latest
-    container_name: klubhub-plunk
     restart: unless-stopped
     profiles: ["email"]
     ports:
@@ -85,8 +86,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    networks:
-      - klubhub-net
+    # Same project network as app and db: app reaches http://plunk:3000
+    # and Plunk reaches db:5432 by service name.
+    networks: [ internal ]
 
   # The api service learns about Plunk via PLUNK_* env vars. We override
   # only those here; everything else from docker-compose.yml stays the
@@ -99,9 +101,14 @@ services:
       # outbox queues mail without dropping it.
       PLUNK_BASE_URL: ${PLUNK_BASE_URL:-http://plunk:3000}
       PLUNK_PROJECT_ID: ${PLUNK_PROJECT_ID:-}
-      PLUNK_API_KEY_FILE: ${PLUNK_API_KEY_FILE:-/run/secrets/email/plunk_api_key}
+      # A Compose secret mounts as a single file at /run/secrets/<name>
+      # (never a directory), so this must point at the plunk_api_key
+      # secret declared below, not a subpath under /run/secrets/email/.
+      PLUNK_API_KEY_FILE: ${PLUNK_API_KEY_FILE:-/run/secrets/plunk_api_key}
       PLUNK_FROM_EMAIL: ${PLUNK_FROM_EMAIL:-noreply@klubhub.local}
       PLUNK_FROM_NAME: ${PLUNK_FROM_NAME:-KlubHub}
+    secrets:
+      - plunk_api_key
 
 volumes:
   plunk_uploads:
@@ -110,8 +117,10 @@ volumes:
 secrets:
   email:
     file: ${EMAIL_SECRETS_FILE:-./secrets/email.env}
-
-networks:
-  klubhub-net:
-    name: klubhub-net
-    external: true
+  # Dedicated single-value secret file for the Plunk project API key,
+  # following the same per-secret-file convention as postgres_password /
+  # s3_access_key in docker-compose.yml. plunk-bootstrap.sh writes this
+  # file (chmod 600) alongside secrets/email.env; override the location
+  # with PLUNK_API_KEY_SECRET_FILE if you manage secrets elsewhere.
+  plunk_api_key:
+    file: ${PLUNK_API_KEY_SECRET_FILE:-./secrets/plunk_api_key}

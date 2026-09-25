@@ -52,6 +52,20 @@ func newFakeDocumentRepo() *fakeDocumentRepo {
 }
 
 func (f *fakeDocumentRepo) CreateWithDetails(ctx context.Context, req CreateDocumentRequest, details CreateDocumentDetails) (*Document, error) {
+	// Mirror the real repository: compute the next version atomically
+	// (from the fake's point of view) rather than trusting a caller-supplied
+	// value, and mark any previous current document as no longer current.
+	nextVersion := 1
+	for _, d := range f.documents {
+		if d.OwnerType == req.OwnerType && d.OwnerID == req.OwnerID {
+			if d.Version >= nextVersion {
+				nextVersion = d.Version + 1
+			}
+			if d.IsCurrent {
+				d.IsCurrent = false
+			}
+		}
+	}
 	d := &Document{
 		ID:             uuid.New(),
 		OwnerType:      req.OwnerType,
@@ -61,8 +75,9 @@ func (f *fakeDocumentRepo) CreateWithDetails(ctx context.Context, req CreateDocu
 		MimeType:       req.MimeType,
 		SizeBytes:      details.SizeBytes,
 		ChecksumSHA256: details.ChecksumSHA256,
-		Version:        details.Version,
+		Version:        nextVersion,
 		UploadedBy:     req.UploadedBy,
+		IsCurrent:      true,
 		CreatedAt:      time.Now().UTC(),
 	}
 	f.documents[d.ID] = d

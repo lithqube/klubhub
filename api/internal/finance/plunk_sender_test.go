@@ -16,9 +16,10 @@ import (
 
 // TestPlunkSender_SendsCorrectRequest verifies the JSON payload Plunk receives
 // matches Plunk's REST API contract:
-//   POST {base}/api/v1/{project}/emails
-//   Authorization: Bearer ...
-//   Content-Type: application/json
+//
+//	POST {base}/api/v1/{project}/emails
+//	Authorization: Bearer ...
+//	Content-Type: application/json
 func TestPlunkSender_SendsCorrectRequest(t *testing.T) {
 	var captured struct {
 		Method  string
@@ -119,10 +120,10 @@ func TestPlunkSender_UsesConfigFromWhenMessageEmpty(t *testing.T) {
 	})
 
 	msg := &EmailMessage{
-		ID:        uuid.New(),
-		ToEmail:   "x@y.com",
-		Subject:   "x",
-		Body:      "y",
+		ID:      uuid.New(),
+		ToEmail: "x@y.com",
+		Subject: "x",
+		Body:    "y",
 		// FromEmail / FromName intentionally blank
 	}
 	if err := sender.Send(msg); err != nil {

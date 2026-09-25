@@ -72,7 +72,7 @@ func (h *AgreementTemplateHandler) handleCreate(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"data": tpl})
@@ -85,7 +85,7 @@ func (h *AgreementTemplateHandler) handleGet(w http.ResponseWriter, r *http.Requ
 			writeError(w, http.StatusNotFound, "not_found", "template not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": tpl})
@@ -94,7 +94,7 @@ func (h *AgreementTemplateHandler) handleGet(w http.ResponseWriter, r *http.Requ
 func (h *AgreementTemplateHandler) handleList(w http.ResponseWriter, r *http.Request, activeOnly bool) {
 	tpls, err := h.svc.List(r.Context(), activeOnly)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": tpls})
@@ -121,7 +121,7 @@ func (h *AgreementTemplateHandler) handleUpdate(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": tpl})
@@ -207,7 +207,7 @@ func (h *AgreementInstanceHandler) handleCreate(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusNotFound, "not_found", "template not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"data": inst})
@@ -220,7 +220,7 @@ func (h *AgreementInstanceHandler) handleGet(w http.ResponseWriter, r *http.Requ
 			writeError(w, http.StatusNotFound, "not_found", "instance not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inst})
@@ -240,7 +240,7 @@ func (h *AgreementInstanceHandler) handleList(w http.ResponseWriter, r *http.Req
 		insts, err = h.svc.List(r.Context(), status)
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": insts})
@@ -271,7 +271,7 @@ func (h *AgreementInstanceHandler) handleUpdate(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusNotFound, "not_found", "instance not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inst})
@@ -298,7 +298,11 @@ func (h *AgreementInstanceHandler) handleSign(w http.ResponseWriter, r *http.Req
 			writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		if errors.Is(err, ErrAgreementBadState) {
+			writeError(w, http.StatusBadRequest, "bad_state", "agreement cannot be signed in its current state")
+			return
+		}
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inst})
@@ -315,7 +319,7 @@ func (h *AgreementInstanceHandler) handleGeneratePDF(w http.ResponseWriter, r *h
 			writeError(w, http.StatusNotFound, "not_found", "instance not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"data": doc})
@@ -370,7 +374,7 @@ func (h *EmailHandler) handleSend(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	// Status code depends on delivery outcome
@@ -388,7 +392,7 @@ func (h *EmailHandler) handleGet(w http.ResponseWriter, r *http.Request, id uuid
 			writeError(w, http.StatusNotFound, "not_found", "email not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": msg})

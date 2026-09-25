@@ -161,7 +161,7 @@ func (h *InvoiceHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	invs, err := h.svc.List(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": invs})
@@ -189,7 +189,15 @@ func (h *InvoiceHandler) handleCreateDraft(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusNotFound, "not_found", "gig not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		if errors.Is(err, ErrInvoiceValidation) {
+			writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvoiceConflict) {
+			writeError(w, http.StatusConflict, "conflict", "invoice number was taken concurrently; retry")
+			return
+		}
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"data": inv})
@@ -202,7 +210,7 @@ func (h *InvoiceHandler) handleGet(w http.ResponseWriter, r *http.Request, id uu
 			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"invoice": inv, "lines": lines}})
@@ -229,7 +237,7 @@ func (h *InvoiceHandler) handleUpdateDraft(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
@@ -256,7 +264,7 @@ func (h *InvoiceHandler) handleIssue(w http.ResponseWriter, r *http.Request, id 
 			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
@@ -283,7 +291,7 @@ func (h *InvoiceHandler) handlePay(w http.ResponseWriter, r *http.Request, id uu
 			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
@@ -310,7 +318,7 @@ func (h *InvoiceHandler) handleCancel(w http.ResponseWriter, r *http.Request, id
 			writeError(w, http.StatusNotFound, "not_found", "invoice not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
@@ -341,7 +349,7 @@ func (h *InvoiceHandler) handleCorrect(w http.ResponseWriter, r *http.Request, i
 			writeError(w, http.StatusBadRequest, "bad_state", "only issued or paid invoices can be corrected")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
@@ -351,7 +359,7 @@ func (h *InvoiceHandler) handleCorrect(w http.ResponseWriter, r *http.Request, i
 func (h *InvoiceHandler) handleSummaries(w http.ResponseWriter, r *http.Request) {
 	summaries, err := h.svc.Summaries(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	out := make([]CurrencySummary, 0, len(summaries))

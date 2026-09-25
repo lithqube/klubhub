@@ -58,7 +58,7 @@ func TestFrontendHealthDisabledAndUnreachable(t *testing.T) {
 func TestFrontendHealthSelfTargetDoesNotLoop(t *testing.T) {
 	cfg := frontendConfig(t, "true", "http://127.0.0.1:1")
 	api := http.NotFoundHandler()
-	router := apphttp.NewRouter(cfg, nil, nil, zerolog.Nop(), api, api, api, api, api, api, api)
+	router := apphttp.NewRouter(cfg, nil, nil, zerolog.Nop(), api, api, api, api, api, api, api, api)
 	server := httptest.NewServer(router)
 	defer server.Close()
 	cfg.NuxtInternalURL = server.URL

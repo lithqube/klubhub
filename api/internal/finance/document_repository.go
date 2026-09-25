@@ -24,26 +24,42 @@ var _ DocumentRepositoryIface = (*DocumentRepository)(nil)
 
 // CreateWithDetails inserts a new document row and marks it as current.
 // The previous current document for the same owner is marked as not current.
+//
+// The version number is computed inside this statement (COALESCE(MAX(version),0)+1
+// scoped to the owner) rather than being read-then-written by the caller, closing
+// a race where two concurrent uploads for the same owner could both observe the
+// same "next version" and attempt to insert it. A UNIQUE (owner_type, owner_id,
+// version) index (see migration 019) turns any surviving race into a Postgres
+// unique violation, which callers should map via isUniqueViolation.
 func (r *DocumentRepository) CreateWithDetails(ctx context.Context, req CreateDocumentRequest, details CreateDocumentDetails) (*Document, error) {
 	const sql = `
 		WITH prev AS (
 			UPDATE documents
 			SET is_current = false
 			WHERE owner_type = $1 AND owner_id = $2 AND is_current = true
+		),
+		next_version AS (
+			SELECT COALESCE(MAX(version), 0) + 1 AS v
+			FROM documents
+			WHERE owner_type = $1 AND owner_id = $2
 		)
 		INSERT INTO documents (owner_type, owner_id, storage_key, filename, mime_type,
 			size_bytes, checksum_sha256, version, uploaded_by, is_current)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
+		SELECT $1, $2, $3, $4, $5, $6, $7, next_version.v, $8, true
+		FROM next_version
 		RETURNING id, owner_type, owner_id, storage_key, filename, mime_type,
 			size_bytes, checksum_sha256, version, uploaded_by, created_at
 	`
 	var d Document
 	err := r.db.QueryRow(ctx, sql,
 		req.OwnerType, req.OwnerID, details.StorageKey, req.Filename, req.MimeType,
-		details.SizeBytes, details.ChecksumSHA256, details.Version, req.UploadedBy,
+		details.SizeBytes, details.ChecksumSHA256, req.UploadedBy,
 	).Scan(&d.ID, &d.OwnerType, &d.OwnerID, &d.StorageKey, &d.Filename, &d.MimeType,
 		&d.SizeBytes, &d.ChecksumSHA256, &d.Version, &d.UploadedBy, &d.CreatedAt)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, ErrDocumentConflict
+		}
 		return nil, fmt.Errorf("insert document: %w", err)
 	}
 	return &d, nil

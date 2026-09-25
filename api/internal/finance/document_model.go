@@ -1,6 +1,7 @@
 package finance
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -38,23 +39,23 @@ func (t DocumentOwnerType) IsValid() bool {
 
 // Document represents a stored file (PDF, image, etc.) in Garage S3.
 type Document struct {
-	ID             uuid.UUID          `json:"id"                db:"id"`
-	OwnerType      DocumentOwnerType  `json:"owner_type"        db:"owner_type"`
-	OwnerID        uuid.UUID          `json:"owner_id"          db:"owner_id"`
-	StorageKey     string             `json:"storage_key"       db:"storage_key"`
-	Filename       string             `json:"filename"          db:"filename"`
-	MimeType       string             `json:"mime_type"         db:"mime_type"`
-	SizeBytes      int64              `json:"size_bytes"        db:"size_bytes"`
-	ChecksumSHA256 string             `json:"checksum_sha256"   db:"checksum_sha256"`
-	Version        int                `json:"version"           db:"version"`
-	UploadedBy     string             `json:"uploaded_by"       db:"uploaded_by"`
-	IsCurrent      bool               `json:"is_current"        db:"is_current"`
-	CreatedAt      time.Time          `json:"created_at"        db:"created_at"`
+	ID             uuid.UUID         `json:"id"                db:"id"`
+	OwnerType      DocumentOwnerType `json:"owner_type"        db:"owner_type"`
+	OwnerID        uuid.UUID         `json:"owner_id"          db:"owner_id"`
+	StorageKey     string            `json:"storage_key"       db:"storage_key"`
+	Filename       string            `json:"filename"          db:"filename"`
+	MimeType       string            `json:"mime_type"         db:"mime_type"`
+	SizeBytes      int64             `json:"size_bytes"        db:"size_bytes"`
+	ChecksumSHA256 string            `json:"checksum_sha256"   db:"checksum_sha256"`
+	Version        int               `json:"version"           db:"version"`
+	UploadedBy     string            `json:"uploaded_by"       db:"uploaded_by"`
+	IsCurrent      bool              `json:"is_current"        db:"is_current"`
+	CreatedAt      time.Time         `json:"created_at"        db:"created_at"`
 }
 
 var (
-	ErrDocumentNotFound = errors.New("document not found")
-	ErrDocumentConflict = errors.New("document updated by another writer")
+	ErrDocumentNotFound   = errors.New("document not found")
+	ErrDocumentConflict   = errors.New("document updated by another writer")
 	ErrDocumentValidation = errors.New("invalid document")
 )
 
@@ -68,11 +69,13 @@ type CreateDocumentRequest struct {
 }
 
 // CreateDocumentDetails carries computed fields from the service to the repo.
+// Version is intentionally absent: the repository computes it atomically
+// inside the insert statement to avoid a read-then-write race between
+// concurrent uploads for the same owner (see DocumentRepository.CreateWithDetails).
 type CreateDocumentDetails struct {
 	StorageKey     string
 	SizeBytes      int64
 	ChecksumSHA256 string
-	Version        int
 }
 
 // DocumentRepositoryIface is the subset the service uses.
@@ -109,33 +112,51 @@ func (s *DocumentService) Create(ctx context.Context, req CreateDocumentRequest,
 		return nil, err
 	}
 
-	// Compute checksum and size from content
+	// Compute checksum and size from content. If the reader also supports
+	// seeking we can hash it in place and rewind for upload; otherwise we
+	// buffer it (capped) so a single non-seekable io.Reader can still be
+	// hashed and then uploaded.
+	const maxBufferedSize = 100 << 20 // 100MB cap for buffered (non-seekable) uploads
+
+	seeker, isSeeker := content.(io.Seeker)
+
 	hasher := sha256.New()
-	size, err := io.Copy(hasher, content)
-	if err != nil {
-		return nil, fmt.Errorf("compute checksum: %w", err)
+	var uploadContent io.Reader = content
+	var size int64
+	var err error
+
+	if isSeeker {
+		size, err = io.Copy(hasher, content)
+		if err != nil {
+			return nil, fmt.Errorf("compute checksum: %w", err)
+		}
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("seek content: %w", err)
+		}
+		uploadContent = content
+	} else {
+		var buf bytes.Buffer
+		limited := io.LimitReader(content, maxBufferedSize+1)
+		n, err := io.Copy(io.MultiWriter(&buf, hasher), limited)
+		if err != nil {
+			return nil, fmt.Errorf("buffer content: %w", err)
+		}
+		if n > maxBufferedSize {
+			return nil, fmt.Errorf("%w: content exceeds maximum buffered upload size", ErrDocumentValidation)
+		}
+		size = n
+		uploadContent = &buf
 	}
 	checksum := hex.EncodeToString(hasher.Sum(nil))
-	_ = checksum // used in repo.Create
 
-	// Rewind content for upload
-	_, err = content.(io.Seeker).Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, fmt.Errorf("seek content: %w", err)
-	}
-
-	// Determine next version
-	existing, _ := s.repo.GetCurrent(ctx, req.OwnerType, req.OwnerID)
-	version := 1
-	if existing != nil {
-		version = existing.Version + 1
-	}
-
-	// Storage key: owner_type/owner_id/version-uuid.ext
-	key := fmt.Sprintf("%s/%s/v%d-%s", req.OwnerType, req.OwnerID, version, uuid.New().String())
+	// Storage key: owner_type/owner_id/uuid. The key intentionally omits the
+	// user-supplied filename and the version number (which the repository
+	// now computes atomically) to avoid encoding untrusted or racy data into
+	// the object key.
+	key := fmt.Sprintf("%s/%s/%s", req.OwnerType, req.OwnerID, uuid.New().String())
 
 	// Upload to Garage S3
-	if err := s.store.PutObject(ctx, s.bucket, key, content, size, req.MimeType); err != nil {
+	if err := s.store.PutObject(ctx, s.bucket, key, uploadContent, size, req.MimeType); err != nil {
 		return nil, fmt.Errorf("put object: %w", err)
 	}
 
@@ -144,9 +165,17 @@ func (s *DocumentService) Create(ctx context.Context, req CreateDocumentRequest,
 		StorageKey:     key,
 		SizeBytes:      size,
 		ChecksumSHA256: checksum,
-		Version:        version,
 	}
-	return s.repo.CreateWithDetails(ctx, req, details)
+	doc, err := s.repo.CreateWithDetails(ctx, req, details)
+	if err != nil {
+		// Best-effort cleanup: the object was already uploaded but the DB
+		// record failed, so remove the orphaned object rather than leaking
+		// storage. Failure to delete is logged-and-ignored by the caller's
+		// discretion; we intentionally don't mask the original error.
+		_ = s.store.DeleteObject(ctx, s.bucket, key)
+		return nil, err
+	}
+	return doc, nil
 }
 
 // GetCurrent returns the latest version of a document for an owner.

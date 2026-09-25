@@ -55,6 +55,37 @@ func TestMux_RewritesPath(t *testing.T) {
 	}
 }
 
+// TestMux_DispatchesToOwningHandler checks each path reaches the right
+// child with its full, unmodified path (children parse /api/v1/finance/...).
+func TestMux_DispatchesToOwningHandler(t *testing.T) {
+	cases := []struct{ path, wantLabel string }{
+		{"/api/v1/finance/invoices/11111111-1111-1111-1111-111111111111", "invoices"},
+		{"/api/v1/finance/invoices/11111111-1111-1111-1111-111111111111/issue", "invoices"},
+		{"/api/v1/finance/invoices/11111111-1111-1111-1111-111111111111/payments", "payments"},
+		{"/api/v1/finance/payments/22222222-2222-2222-2222-222222222222", "payments"},
+		{"/api/v1/finance/agreements/instances/abc/sign", "agreement-instance"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.path, func(t *testing.T) {
+			var seen string
+			mux := NewMux(
+				echoHandler(&seen, "billing"),
+				echoHandler(&seen, "invoices"),
+				echoHandler(&seen, "payments"),
+				echoHandler(&seen, "documents"),
+				echoHandler(&seen, "agreement-template"),
+				echoHandler(&seen, "agreement-instance"),
+				echoHandler(&seen, "email"),
+			)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if want := tc.wantLabel + ":" + tc.path; seen != want {
+				t.Fatalf("seen %q, want %q", seen, want)
+			}
+		})
+	}
+}
+
 // TestMux_NilHandlerReturns503 documents the partial-rollout behavior.
 func TestMux_NilHandlerReturns503(t *testing.T) {
 	mux := NewMux(nil, nil, nil, nil, nil, nil, nil)
@@ -85,8 +116,7 @@ func TestMux_UnknownResourceReturns404(t *testing.T) {
 }
 
 // echoHandler returns a handler that records the request path it sees
-// (after Mux has rewritten it). Used to verify the dispatch rewrites
-// /api/v1/finance/{sub}/... → /api/v1/{sub}/...
+// after Mux dispatch.
 func echoHandler(seen *string, label string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		*seen = label + ":" + r.URL.Path

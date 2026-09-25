@@ -75,22 +75,22 @@ func (s AgreementStatus) Value() (driver.Value, error) {
 
 // AgreementInstance is a per-gig agreement instance.
 type AgreementInstance struct {
-	ID                 uuid.UUID       `json:"id"                    db:"id"`
-	TemplateID         uuid.UUID       `json:"template_id"           db:"template_id"`
-	TemplateVersion    int             `json:"template_version"      db:"template_version"`
-	GigID              uuid.UUID       `json:"gig_id"                db:"gig_id"`
-	ContentMD          string          `json:"content_md"            db:"content_md"`
-	DocumentID         *uuid.UUID      `json:"document_id,omitempty" db:"document_id"`
-	Status             AgreementStatus `json:"status"                db:"status"`
-	RequiredSigners    []string        `json:"required_signers"      db:"required_signers"`
-	DJSignedAt         *time.Time      `json:"dj_signed_at,omitempty" db:"dj_signed_at"`
-	DJSignedBy         string          `json:"dj_signed_by,omitempty" db:"dj_signed_by"`
-	ClientSignedAt     *time.Time      `json:"client_signed_at,omitempty" db:"client_signed_at"`
-	ClientSignedBy     string          `json:"client_signed_by,omitempty" db:"client_signed_by"`
-	ExpiresAt          *time.Time      `json:"expires_at,omitempty"  db:"expires_at"`
-	InternalNotes      string          `json:"internal_notes"        db:"internal_notes"`
-	UpdatedAt          time.Time       `json:"updated_at"            db:"updated_at"`
-	CreatedAt          time.Time       `json:"created_at"            db:"created_at"`
+	ID              uuid.UUID       `json:"id"                    db:"id"`
+	TemplateID      uuid.UUID       `json:"template_id"           db:"template_id"`
+	TemplateVersion int             `json:"template_version"      db:"template_version"`
+	GigID           uuid.UUID       `json:"gig_id"                db:"gig_id"`
+	ContentMD       string          `json:"content_md"            db:"content_md"`
+	DocumentID      *uuid.UUID      `json:"document_id,omitempty" db:"document_id"`
+	Status          AgreementStatus `json:"status"                db:"status"`
+	RequiredSigners []string        `json:"required_signers"      db:"required_signers"`
+	DJSignedAt      *time.Time      `json:"dj_signed_at,omitempty" db:"dj_signed_at"`
+	DJSignedBy      string          `json:"dj_signed_by,omitempty" db:"dj_signed_by"`
+	ClientSignedAt  *time.Time      `json:"client_signed_at,omitempty" db:"client_signed_at"`
+	ClientSignedBy  string          `json:"client_signed_by,omitempty" db:"client_signed_by"`
+	ExpiresAt       *time.Time      `json:"expires_at,omitempty"  db:"expires_at"`
+	InternalNotes   string          `json:"internal_notes"        db:"internal_notes"`
+	UpdatedAt       time.Time       `json:"updated_at"            db:"updated_at"`
+	CreatedAt       time.Time       `json:"created_at"            db:"created_at"`
 }
 
 var (
@@ -111,20 +111,20 @@ type CreateAgreementTemplateRequest struct {
 
 // UpdateAgreementTemplateRequest is the body of PUT /api/v1/finance/agreements/templates/{id}.
 type UpdateAgreementTemplateRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	ContentMD   string `json:"content_md"`
-	IsActive    bool   `json:"is_active"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	ContentMD   string    `json:"content_md"`
+	IsActive    bool      `json:"is_active"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // CreateAgreementInstanceRequest is the body of POST /api/v1/finance/agreements/instances.
 type CreateAgreementInstanceRequest struct {
-	TemplateID      uuid.UUID `json:"template_id"`
-	GigID           uuid.UUID `json:"gig_id"`
-	RequiredSigners []string  `json:"required_signers,omitempty"`
+	TemplateID      uuid.UUID  `json:"template_id"`
+	GigID           uuid.UUID  `json:"gig_id"`
+	RequiredSigners []string   `json:"required_signers,omitempty"`
 	ExpiresAt       *time.Time `json:"expires_at,omitempty"`
-	InternalNotes   string    `json:"internal_notes,omitempty"`
+	InternalNotes   string     `json:"internal_notes,omitempty"`
 }
 
 // UpdateAgreementInstanceRequest is the body of PUT /api/v1/finance/agreements/instances/{id}.
@@ -138,8 +138,8 @@ type UpdateAgreementInstanceRequest struct {
 
 // SignAgreementRequest is the body of POST /api/v1/finance/agreements/instances/{id}/sign.
 type SignAgreementRequest struct {
-	SignerRole string `json:"signer_role"` // "dj" or "client"
-	SignedBy   string `json:"signed_by"`
+	SignerRole string    `json:"signer_role"` // "dj" or "client"
+	SignedBy   string    `json:"signed_by"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
@@ -421,6 +421,15 @@ func (r *AgreementInstanceRepository) Update(ctx context.Context, id uuid.UUID, 
 	return &inst, nil
 }
 
+// signGuardClause is appended to the Sign UPDATE's WHERE clause so a signer
+// can never overwrite an already-completed workflow, re-sign the same role
+// twice, sign after expiry, or sign a role that wasn't required to.
+const signGuardClause = `
+	AND status NOT IN ('cancelled', 'expired', 'completed')
+	AND (expires_at IS NULL OR expires_at > now())
+	AND $5 = ANY(required_signers)
+`
+
 func (r *AgreementInstanceRepository) Sign(ctx context.Context, id uuid.UUID, req SignAgreementRequest) (*AgreementInstance, error) {
 	now := time.Now().UTC()
 	var sql string
@@ -435,6 +444,8 @@ func (r *AgreementInstanceRepository) Sign(ctx context.Context, id uuid.UUID, re
 				END,
 				updated_at = $1
 			WHERE id = $3 AND updated_at = $4
+				AND dj_signed_at IS NULL
+				` + signGuardClause + `
 			RETURNING id, template_id, template_version, gig_id, content_md, document_id, status, required_signers,
 				dj_signed_at, dj_signed_by, client_signed_at, client_signed_by, expires_at, internal_notes, updated_at, created_at
 		`
@@ -449,6 +460,8 @@ func (r *AgreementInstanceRepository) Sign(ctx context.Context, id uuid.UUID, re
 				END,
 				updated_at = $1
 			WHERE id = $3 AND updated_at = $4
+				AND client_signed_at IS NULL
+				` + signGuardClause + `
 			RETURNING id, template_id, template_version, gig_id, content_md, document_id, status, required_signers,
 				dj_signed_at, dj_signed_by, client_signed_at, client_signed_by, expires_at, internal_notes, updated_at, created_at
 		`
@@ -457,18 +470,37 @@ func (r *AgreementInstanceRepository) Sign(ctx context.Context, id uuid.UUID, re
 	}
 
 	var inst AgreementInstance
-	err := r.db.QueryRow(ctx, sql, now, req.SignedBy, id, req.UpdatedAt).Scan(
+	err := r.db.QueryRow(ctx, sql, now, req.SignedBy, id, req.UpdatedAt, req.SignerRole).Scan(
 		&inst.ID, &inst.TemplateID, &inst.TemplateVersion, &inst.GigID, &inst.ContentMD, &inst.DocumentID,
 		&inst.Status, &inst.RequiredSigners, &inst.DJSignedAt, &inst.DJSignedBy,
 		&inst.ClientSignedAt, &inst.ClientSignedBy, &inst.ExpiresAt, &inst.InternalNotes,
 		&inst.UpdatedAt, &inst.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrAgreementConflict
+			return nil, r.classifySignFailure(ctx, id, req)
 		}
 		return nil, fmt.Errorf("sign instance: %w", err)
 	}
 	return &inst, nil
+}
+
+// classifySignFailure re-reads the instance after a Sign UPDATE matched zero
+// rows to distinguish *why*: the row doesn't exist, the optimistic-concurrency
+// token was stale, or the guard clause rejected the state transition (bad
+// state, e.g. cancelled/expired/completed, already signed by that role, or
+// role not in required_signers).
+func (r *AgreementInstanceRepository) classifySignFailure(ctx context.Context, id uuid.UUID, req SignAgreementRequest) error {
+	current, err := r.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrAgreementInstanceNotFound) {
+			return ErrAgreementInstanceNotFound
+		}
+		return fmt.Errorf("classify sign failure: %w", err)
+	}
+	if !current.UpdatedAt.Equal(req.UpdatedAt) {
+		return ErrAgreementConflict
+	}
+	return ErrAgreementBadState
 }
 
 // AgreementTemplateService coordinates template operations.
@@ -607,25 +639,37 @@ func (s *AgreementInstanceService) GeneratePDF(ctx context.Context, id uuid.UUID
 type AgreementTemplateValidationErrors []AgreementFieldError
 
 func (es AgreementTemplateValidationErrors) Error() string {
-	if len(es) == 0 { return "validation failed" }
+	if len(es) == 0 {
+		return "validation failed"
+	}
 	parts := make([]string, len(es))
-	for i, e := range es { parts[i] = e.Error() }
+	for i, e := range es {
+		parts[i] = e.Error()
+	}
 	return "validation failed: " + strings.Join(parts, "; ")
 }
 
-func (es AgreementTemplateValidationErrors) Is(target error) bool { return target == ErrAgreementValidation }
+func (es AgreementTemplateValidationErrors) Is(target error) bool {
+	return target == ErrAgreementValidation
+}
 func (es AgreementTemplateValidationErrors) Unwrap() error { return ErrAgreementValidation }
 
 type AgreementInstanceValidationErrors []AgreementFieldError
 
 func (es AgreementInstanceValidationErrors) Error() string {
-	if len(es) == 0 { return "validation failed" }
+	if len(es) == 0 {
+		return "validation failed"
+	}
 	parts := make([]string, len(es))
-	for i, e := range es { parts[i] = e.Error() }
+	for i, e := range es {
+		parts[i] = e.Error()
+	}
 	return "validation failed: " + strings.Join(parts, "; ")
 }
 
-func (es AgreementInstanceValidationErrors) Is(target error) bool { return target == ErrAgreementValidation }
+func (es AgreementInstanceValidationErrors) Is(target error) bool {
+	return target == ErrAgreementValidation
+}
 func (es AgreementInstanceValidationErrors) Unwrap() error { return ErrAgreementValidation }
 
 type AgreementFieldError struct {

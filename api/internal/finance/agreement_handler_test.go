@@ -226,6 +226,110 @@ func TestAgreementInstanceHandler_SignEnvelope(t *testing.T) {
 	}
 }
 
+func TestAgreementInstanceHandler_Sign_CancelledReturnsBadState(t *testing.T) {
+	tplRepo := newFakeTemplateRepo()
+	instRepo := newFakeInstanceRepo()
+	tplSvc := NewAgreementTemplateService(tplRepo)
+	tpl, _ := tplSvc.Create(context.Background(), CreateAgreementTemplateRequest{Name: "Test", ContentMD: "x"})
+	instSvc := NewAgreementInstanceService(instRepo, tplRepo, nil)
+	h := NewAgreementInstanceHandler(instSvc)
+
+	inst, _ := instRepo.Create(context.Background(), CreateAgreementInstanceRequest{
+		TemplateID: tpl.ID, GigID: uuid.New(), RequiredSigners: []string{"dj", "client"},
+	}, "content", 1)
+	inst.Status = AgreementStatusCancelled
+
+	signBody, _ := json.Marshal(SignAgreementRequest{SignerRole: "dj", SignedBy: "dj-user", UpdatedAt: inst.UpdatedAt})
+	signReq := httptest.NewRequest(http.MethodPost, "/api/v1/finance/agreements/instances/"+inst.ID.String()+"/sign", bytes.NewReader(signBody))
+	signRec := httptest.NewRecorder()
+	h.ServeHTTP(signRec, signReq)
+
+	if signRec.Code != http.StatusBadRequest {
+		t.Fatalf("status: %d body=%s", signRec.Code, signRec.Body.String())
+	}
+}
+
+func TestAgreementInstanceHandler_Sign_ExpiredReturnsBadState(t *testing.T) {
+	tplRepo := newFakeTemplateRepo()
+	instRepo := newFakeInstanceRepo()
+	tplSvc := NewAgreementTemplateService(tplRepo)
+	tpl, _ := tplSvc.Create(context.Background(), CreateAgreementTemplateRequest{Name: "Test", ContentMD: "x"})
+	instSvc := NewAgreementInstanceService(instRepo, tplRepo, nil)
+	h := NewAgreementInstanceHandler(instSvc)
+
+	past := time.Now().UTC().Add(-time.Hour)
+	inst, _ := instRepo.Create(context.Background(), CreateAgreementInstanceRequest{
+		TemplateID: tpl.ID, GigID: uuid.New(), RequiredSigners: []string{"dj", "client"}, ExpiresAt: &past,
+	}, "content", 1)
+
+	signBody, _ := json.Marshal(SignAgreementRequest{SignerRole: "dj", SignedBy: "dj-user", UpdatedAt: inst.UpdatedAt})
+	signReq := httptest.NewRequest(http.MethodPost, "/api/v1/finance/agreements/instances/"+inst.ID.String()+"/sign", bytes.NewReader(signBody))
+	signRec := httptest.NewRecorder()
+	h.ServeHTTP(signRec, signReq)
+
+	if signRec.Code != http.StatusBadRequest {
+		t.Fatalf("status: %d body=%s", signRec.Code, signRec.Body.String())
+	}
+}
+
+func TestAgreementInstanceHandler_Sign_DoubleSignReturnsBadState(t *testing.T) {
+	tplRepo := newFakeTemplateRepo()
+	instRepo := newFakeInstanceRepo()
+	tplSvc := NewAgreementTemplateService(tplRepo)
+	tpl, _ := tplSvc.Create(context.Background(), CreateAgreementTemplateRequest{Name: "Test", ContentMD: "x"})
+	instSvc := NewAgreementInstanceService(instRepo, tplRepo, nil)
+	h := NewAgreementInstanceHandler(instSvc)
+
+	createBody, _ := json.Marshal(CreateAgreementInstanceRequest{TemplateID: tpl.ID, GigID: uuid.New()})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/finance/agreements/instances", bytes.NewReader(createBody))
+	createRec := httptest.NewRecorder()
+	h.ServeHTTP(createRec, createReq)
+	var created struct{ Data AgreementInstance }
+	json.Unmarshal(createRec.Body.Bytes(), &created)
+
+	signBody, _ := json.Marshal(SignAgreementRequest{SignerRole: "dj", SignedBy: "dj-user", UpdatedAt: created.Data.UpdatedAt})
+	signReq := httptest.NewRequest(http.MethodPost, "/api/v1/finance/agreements/instances/"+created.Data.ID.String()+"/sign", bytes.NewReader(signBody))
+	signRec := httptest.NewRecorder()
+	h.ServeHTTP(signRec, signReq)
+	if signRec.Code != http.StatusOK {
+		t.Fatalf("first sign status: %d body=%s", signRec.Code, signRec.Body.String())
+	}
+	var signed struct{ Data AgreementInstance }
+	json.Unmarshal(signRec.Body.Bytes(), &signed)
+
+	// Re-sign the same role.
+	reSignBody, _ := json.Marshal(SignAgreementRequest{SignerRole: "dj", SignedBy: "dj-user-again", UpdatedAt: signed.Data.UpdatedAt})
+	reSignReq := httptest.NewRequest(http.MethodPost, "/api/v1/finance/agreements/instances/"+created.Data.ID.String()+"/sign", bytes.NewReader(reSignBody))
+	reSignRec := httptest.NewRecorder()
+	h.ServeHTTP(reSignRec, reSignReq)
+
+	if reSignRec.Code != http.StatusBadRequest {
+		t.Fatalf("status: %d body=%s", reSignRec.Code, reSignRec.Body.String())
+	}
+}
+
+func TestAgreementInstanceHandler_Sign_RoleNotRequiredReturnsBadState(t *testing.T) {
+	tplRepo := newFakeTemplateRepo()
+	instRepo := newFakeInstanceRepo()
+	tplSvc := NewAgreementTemplateService(tplRepo)
+	tpl, _ := tplSvc.Create(context.Background(), CreateAgreementTemplateRequest{Name: "Test", ContentMD: "x"})
+	instSvc := NewAgreementInstanceService(instRepo, tplRepo, nil)
+	h := NewAgreementInstanceHandler(instSvc)
+
+	inst, _ := instRepo.Create(context.Background(), CreateAgreementInstanceRequest{
+		TemplateID: tpl.ID, GigID: uuid.New(), RequiredSigners: []string{"dj"},
+	}, "content", 1)
+
+	signBody, _ := json.Marshal(SignAgreementRequest{SignerRole: "client", SignedBy: "client-user", UpdatedAt: inst.UpdatedAt})
+	signReq := httptest.NewRequest(http.MethodPost, "/api/v1/finance/agreements/instances/"+inst.ID.String()+"/sign", bytes.NewReader(signBody))
+	signRec := httptest.NewRecorder()
+	h.ServeHTTP(signRec, signReq)
+
+	if signRec.Code != http.StatusBadRequest {
+		t.Fatalf("status: %d body=%s", signRec.Code, signRec.Body.String())
+	}
+}
+
 // ---------------------------------------------------------------------------
 // /api/v1/finance/emails
 // ---------------------------------------------------------------------------
