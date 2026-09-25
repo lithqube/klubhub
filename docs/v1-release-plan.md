@@ -29,7 +29,7 @@ KlubHub DJ v1.0 is the complete, self-hosted, open-source DJ career toolkit. It 
 | 6 | Gig Tracker | 4 | Gig CRUD, status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views |
 | 6a | Rider Templates | 4.5 | Named rider templates, per-gig attachment with overrides, rider PDF export |
 | 6b | Bandsintown Sync | 4.8 | Optional outbound event push to Bandsintown on gig confirmed |
-| 7 | Finance Tracker | 5 | Income/expense logging, multi-currency summaries, PDF invoices |
+| 7 | Finance Tracker | 5 | Income/expense logging, multi-currency summaries, PDF invoices — **Shipped**, see [`release-notes/v1.1.0-phase5.md`](release-notes/v1.1.0-phase5.md) |
 | 8 | Release Planner | 6 | Release CRUD, deadline tracking, promo checklists |
 | 9 | Tour Manager | 7 | Named tour groups, per-stop logistics, tour budget (OSS; collaboration is KlubHub Cloud TEAM) |
 | 10 | Unified Dashboard | 8 | Aggregated career overview + career analytics (gig frequency, top venues, income trend) |

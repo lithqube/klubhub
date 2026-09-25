@@ -4,6 +4,98 @@ All notable changes to KlubHub DJ are documented in this file. The
 format follows [Keep a Changelog](https://keepachangelog.com/) and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Phase 5 — Finance Tracker
+
+Additive only. No breaking changes to existing endpoints. See
+[`docs/release-notes/v1.1.0-phase5.md`](docs/release-notes/v1.1.0-phase5.md)
+for the full surface (lifecycle diagrams, API curl examples, schema
+graph, configuration matrix, mock-data policy, open production gates).
+
+#### Added
+
+- **Billing identity** (`billing_profiles`): singleton legal entity
+  record (legal_name, tax_id, address, payment_instructions,
+  default_currency). Snapshotted onto issued invoices as
+  `billing_profile_snapshot` (JSONB).
+- **Invoices**: draft → issued → paid | cancelled | corrected.
+  Numbered per-(DJ, currency) via `invoice_number_sequences` with
+  `FOR UPDATE` locking. Line items on a child table (`invoice_lines`)
+  with automatic gig fee + extras population. PDF rendering via the
+  pure-Go [`gofpdf`](https://github.com/jung-kurt/gofpdf) library.
+- **Payments**: deposit / payment / refund kinds; pending / completed
+  / failed / refunded statuses; sum-by-invoice aggregation used by the
+  "auto-pay on total reached" derived state.
+- **Documents**: persistent store behind a swappable `ObjectStore`
+  interface; default backend is the existing **Garage S3** container;
+  SHA-256 integrity check; auto-incrementing version per
+  (owner_type, owner_id) with partial-unique-index for `is_current`.
+- **Agreements**: versioned templates + per-gig instances with
+  `draft → sent → signed | declined | expired` lifecycle and snapshot
+  of template text at instance creation time.
+- **Email outbox** (`email_messages`): durable queuing with retry,
+  cron-style exponential backoff, status enum
+  `queued | sending | sent | failed`.
+- **Plunk transactional email** ([`useplunk/plunk`](https://github.com/useplunk/plunk)):
+  `PlunkSender` posts to `POST {BaseURL}/api/v1/{ProjectID}/emails`
+  with `Authorization: Bearer ***` and an `Idempotency-Key: <msg.ID>` header
+  for retry dedupe. The same Go code works against hosted Plunk or a
+  self-hosted instance — only `PLUNK_BASE_URL` changes.
+- **Self-hosted Plunk overlay**: opt-in
+  [`docker-compose.email.yml`](docker-compose.email.yml) adds
+  `ghcr.io/useplunk/plunk:latest` under the `email` profile with a
+  dedicated Postgres database on the stack's existing `db` service.
+  [`scripts/plunk-bootstrap.sh`](scripts/plunk-bootstrap.sh)
+  provisions `secrets/email.env` (gitignored, 0600). Documented under
+  [`docs/SELF-HOSTING.md`](docs/SELF-HOSTING.md#optional-self-hosted-email-plunk).
+- **Per-currency dashboard endpoint**: `GET /api/v1/finance/invoices/summaries`
+  returns issued / paid / outstanding / deposits / refunds / minimum
+  balance grouped by currency.
+
+#### Added (frontend)
+
+- Verification targets updated to include the Phase 5 finance routes
+  in [`apps/dj/app/utils/__tests__/verification-targets.test.ts`](apps/dj/app/utils/__tests__/verification-targets.test.ts).
+- Frontend mocks for Phase 5 surfaces stay in dev/staging builds and
+  are excluded from `apps/dj/.output/`.
+
+#### Backend (Go)
+
+- 8 new migrations under `api/internal/platform/migrations/`:
+  `011_billing_profiles.sql`, `012_invoices.sql`,
+  `013_invoice_lines.sql`, `014_payments.sql`, `015_documents.sql`,
+  `016_agreements.sql`, `017_email.sql`.
+- New package `api/internal/finance/` (~3,500 lines + tests)
+  composed of layer files (`model.go`, `repository.go`, `service.go`,
+  `handler.go`) per sub-resource plus shared `mux.go`, `pdf_renderer.go`,
+  `plunk_sender.go`, and a per-feature `*_contract_test.go`.
+- New config: `PLUNK_BASE_URL`, `PLUNK_PROJECT_ID`, `PLUNK_API_KEY`,
+  `PLUNK_API_KEY_FILE`, `PLUNK_FROM_EMAIL`, `PLUNK_FROM_NAME`,
+  `DOCUMENT_STORE_BUCKET`.
+- Dependency: `github.com/jung-kurt/gofpdf v1.16.2`.
+
+#### Verification
+
+- `pnpm nx run api:test` → all 14 packages green; finance at `-race` (79 tests).
+- `pnpm nx test @dev/dj` → 196/196 Vitest passing.
+- `pnpm nx run @dev/dj:typecheck` → Phase 5 surface: 0 errors
+  (scripts/typecheck-phase5.sh).
+- `python3 -m unittest discover -s scripts -p 'test_stack_setup.py'`
+  → 5/5, includes new
+  `test_email_overlay_wires_plunk_when_email_env_present`.
+
+#### Open production gates (documented; out of Phase 5 scope)
+
+- Jurisdiction + tax treatment per gig type (deposit tax, travel
+  exemption, EU VAT B2B reverse-charge wording).
+- Approved agreement wording (legal review per jurisdiction).
+- Plunk API key + sender domain verification (DKIM/SPF/DMARC).
+- Garage adapter wiring for `finance.NewDocumentService` (skeleton
+  already in place; needs final `*minio.Client` signature bridge).
+- CI gate that asserts no `mock:`-prefixed fixtures reach
+  `apps/dj/.output/`.
+
 ## [1.0.1] - 2026-09-19
 
 ### Runtime, CI, and onboarding fixes since v1.0.0

@@ -695,6 +695,99 @@ Cover art is the highest-value cache: 4,000 unique covers × ~500 KB = ~2 GB sav
 
 Back up PostgreSQL and Garage together, and preserve matching private configuration and encryption keys separately in secure storage. Target the correct Compose project and verify recovery in an isolated restore drill. Restore is destructive, not a guaranteed non-destructive operation; see [Operations](./OPERATIONS.md#backup-and-restore) for script prerequisites and safeguards.
 
+### 5.7 Phase 5 Schema Additions (Finance Tracker)
+
+The Finance Tracker module added eight tables and one sequencing table
+under `internal/platform/migrations/011_…017_*.sql`. See
+[`release-notes/v1.1.0-phase5.md`](./release-notes/v1.1.0-phase5.md)
+for the full surface; the data-model rationale is here.
+
+```
+billing_profiles        (singleton)
+invoices                ┐
+invoice_lines           │  one-to-many: invoice → lines
+payments                ┘  one-to-many: invoice → payments
+documents               ─ owned by invoice or agreement (partial unique idx)
+agreement_templates     ─ versioned, shared
+agreement_instances     ─ per-gig; references template at instance creation
+email_messages          ─ outbox
+invoice_number_sequences─ per-(DJ, currency); FOR UPDATE locked
+```
+
+**Snapshot pattern (NFR-104 / audit):**
+
+Issued invoices carry a `billing_profile_snapshot` JSONB column. Agreement
+instances carry a `template_snapshot` JSONB. Both are filled at the
+moment of state transition and never updated thereafter. The point is to
+keep the historical record immutable when the source record later
+changes — accounting and contract law both reward this.
+
+**Partial unique index (NFR-306):**
+
+```
+CREATE UNIQUE INDEX documents_one_current_per_owner
+  ON documents (owner_type, owner_id)
+  WHERE is_current;
+```
+
+Exactly one row per owner may have `is_current = true`. The
+`document_repository.CreateWithDetails` query uses a CTE that flips
+the previous current to false and inserts the new row in the same
+transaction, so two concurrent uploads can't both end up "current".
+
+**Numbering (NFR-103):**
+
+```
+CREATE TABLE invoice_number_sequences (
+  dj_id     UUID   NOT NULL,
+  currency  TEXT   NOT NULL,
+  prefix    TEXT   NOT NULL,
+  last_value BIGINT NOT NULL,
+  PRIMARY KEY (dj_id, currency)
+);
+```
+
+Issuance uses `SELECT … FOR UPDATE` on the sequence row, computes
+`last_value + 1`, inserts the new invoice with
+`INV-{year}-{zero-padded}`, and commits. The lock is per-row, not
+per-table, so concurrent issuances in different currencies don't
+block each other. The `FOR UPDATE` is what prevents double-allocation
+under contention; a naive `MAX(number)+1` query would have a race.
+
+**Currency as part of identity:**
+
+`invoices.currency` is part of the natural key alongside `gig_id`.
+A gig with multiple currencies (rare but real — multi-country tours)
+produces multiple invoice drafts, each numbered independently. The
+service layer's `Summaries()` aggregates per-currency totals so the
+dashboard endpoint returns one row per (DJ, currency).
+
+**Storage interface:**
+
+```go
+type ObjectStore interface {
+    PutObject(ctx context.Context, bucket, key string,
+              r io.Reader, size int64, contentType string) error
+    GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, error)
+    DeleteObject(ctx context.Context, bucket, key string) error
+}
+```
+
+The production binding is **Garage S3** (the existing storage
+service). The same interface makes it trivial to swap in MinIO for
+developers who don't run the full Compose stack, or an in-memory fake
+for tests. `finance/document_contract_test.go` uses the
+in-memory `fakeObjectStore`.
+
+**Email outbox pattern:**
+
+Every transactional send enqueues an `email_messages` row first, then
+a goroutine picks it up and invokes the configured `EmailSender`
+(Plunk in production). Failed sends become `status = failed` with
+`attempts++` and `next_attempt_at = now + backoff(attempts)`. This is
+the same pattern as the social module's `scheduled_posts` table —
+intentionally, so the operations playbook is identical.
+
 ---
 
 ## 6. Cross-Cutting Concerns

@@ -60,8 +60,31 @@ Rotate on the host through a controlled maintenance procedure, not by editing or
 - **Calendar secret:** replacing `ICAL_SECRET` invalidates existing calendar and booking links. Update subscribers after the change.
 - **Postgres password:** updating the secret file does not rotate the password inside an existing database. Coordinate the database change and API credentials.
 - **Garage credentials:** rotate keys/tokens through Garage's supported administration flow, update their private files and configuration, verify object access, then revoke old credentials.
+- **Plunk credentials:** the API bearer token (`PLUNK_API_KEY`) and the project API key live in `secrets/email.env`. Rotation requires replacing the value, restarting the API container, and verifying transactional email delivery against a test message (an invoice issuance creates a real `email_messages` row). Old tokens can be revoked on the Plunk side once the new one is verified.
 
 Do not paste generated secrets into terminals, logs, or support requests. CORS and TLS settings do not substitute for user authentication or network restrictions.
+
+## Email outbox (Phase 5)
+
+Transactional email (invoices issued/paid/cancelled, agreement sent/signed/completed) is queued in `email_messages` and delivered by a background goroutine through the configured `EmailSender` (Plunk in production; see [`CONFIGURATION.md`](./CONFIGURATION.md#phase-5--plunk-and-document-storage)).
+
+To inspect the outbox:
+
+```bash
+# Show recent + currently-retrying messages.
+docker compose -f docker-compose.prod.yml exec db psql -U klubhub -d klubhub \
+  -c "SELECT id, kind, status, attempts, last_error FROM email_messages
+      ORDER BY created_at DESC LIMIT 50;"
+
+# Replay anything stuck in 'failed':
+curl -X POST http://127.0.0.1:8080/api/v1/finance/emails/{id}/retry
+```
+
+If delivery fails repeatedly, the row sits at `status='failed'` with
+`attempts++` and `next_attempt_at = now + backoff(attempts)`. The
+backoff is exponential; the maximum interval is bounded by config.
+Once Plunk credentials are restored, the existing rows deliver on
+the next retry tick — the outbox is durable.
 
 ## Persistent storage and resource monitoring
 

@@ -355,6 +355,13 @@ KlubHub DJ v1 is a tracking tool, not an accounting or tax tool. The system does
 
 Example: `INV-2026-001`, `INV-2026-002`. If `INV-2026-002` is deleted, the next invoice is `INV-2026-003`.
 
+> **Phase 5 implementation note.** Numbering is **per (DJ, currency)** under
+> `invoice_number_sequences`, locked with `SELECT … FOR UPDATE` so
+> concurrent issuance never double-allocates. Multi-currency invoices
+> (rare; e.g. multi-country tours) therefore produce independent
+> sequences: `INV-2026-EUR-001` and `INV-2026-USD-001` are valid in
+> parallel. See [`docs/release-notes/v1.1.0-phase5.md`](release-notes/v1.1.0-phase5.md).
+
 ### A10.4 Multi-Currency Summaries
 
 All summary views (monthly, yearly, P&L) SHALL group totals by currency. Example:
