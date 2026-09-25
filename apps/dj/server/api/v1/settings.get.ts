@@ -1,6 +1,6 @@
 export default defineEventHandler(() => {
   return {
-    dj_name: 'SYNC_ERROR',
+    dj_name: 'SAMPLE_RATE',
     logo_path: null,
     logo_position: 'top-left',
     custom_placeholder_path: null,

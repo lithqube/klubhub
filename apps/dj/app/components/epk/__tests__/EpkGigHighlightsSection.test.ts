@@ -5,7 +5,7 @@ import { reactive, nextTick } from 'vue'
 import EpkGigHighlightsSection from '../EpkGigHighlightsSection.vue'
 
 const mockStore = reactive({
-  gigHighlights: ['Berghain 2024', 'Fabric London'] as string[],
+  gigHighlights: ['Club Alpha 2024', 'Gamma Hall'] as string[],
 })
 
 vi.mock('~/stores/epk', () => ({
@@ -23,7 +23,7 @@ describe('EpkGigHighlightsSection', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    mockStore.gigHighlights = ['Berghain 2024', 'Fabric London']
+    mockStore.gigHighlights = ['Club Alpha 2024', 'Gamma Hall']
   })
 
   it('renders existing highlights from store', async () => {
@@ -31,8 +31,8 @@ describe('EpkGigHighlightsSection', () => {
     await nextTick()
     const inputs = wrapper.findAll('[data-testid^="highlight-input-"]')
     expect(inputs.length).toBe(2)
-    expect((inputs[0].element as HTMLInputElement).value).toBe('Berghain 2024')
-    expect((inputs[1].element as HTMLInputElement).value).toBe('Fabric London')
+    expect((inputs[0].element as HTMLInputElement).value).toBe('Club Alpha 2024')
+    expect((inputs[1].element as HTMLInputElement).value).toBe('Gamma Hall')
   })
 
   it('renders empty list when gigHighlights is empty', () => {
@@ -51,7 +51,7 @@ describe('EpkGigHighlightsSection', () => {
     await nextTick()
     const inputs = wrapper.findAll('[data-testid^="highlight-input-"]')
     expect(inputs.length).toBe(3)
-    expect(mockScheduleSave).toHaveBeenCalledWith({ gigHighlights: ['Berghain 2024', 'Fabric London', ''] })
+    expect(mockScheduleSave).toHaveBeenCalledWith({ gigHighlights: ['Club Alpha 2024', 'Gamma Hall', ''] })
   })
 
   it('remove highlight button removes the correct entry', async () => {
@@ -63,7 +63,7 @@ describe('EpkGigHighlightsSection', () => {
     await nextTick()
     const inputs = wrapper.findAll('[data-testid^="highlight-input-"]')
     expect(inputs.length).toBe(1)
-    expect(mockScheduleSave).toHaveBeenCalledWith({ gigHighlights: ['Fabric London'] })
+    expect(mockScheduleSave).toHaveBeenCalledWith({ gigHighlights: ['Gamma Hall'] })
   })
 
   it('import-from-gigs button is disabled', () => {
