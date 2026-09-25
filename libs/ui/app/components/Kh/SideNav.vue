@@ -96,9 +96,16 @@ function isActive(to: string) {
       :style="collapsed ? 'padding:8px;' : 'padding:8px 10px;'"
       aria-label="Primary navigation"
     >
+      <template v-for="(item, i) in props.items" :key="item.to">
+      <div
+        v-if="item.group && item.group !== props.items[i - 1]?.group && !collapsed"
+        class="section-lbl"
+        style="padding:10px 12px 4px;font-size:7px;"
+        role="presentation"
+      >
+        {{ item.group }}
+      </div>
       <NuxtLink
-        v-for="item in props.items"
-        :key="item.to"
         :to="item.to"
         :aria-current="isActive(item.to) ? 'page' : undefined"
         :title="collapsed ? item.label : undefined"
@@ -117,7 +124,20 @@ function isActive(to: string) {
           aria-hidden="true"
         />
         <span :class="{ 'sr-only': collapsed }">{{ item.label }}</span>
+        <span
+          v-if="item.count && !collapsed"
+          style="margin-left:auto;font-family:var(--font-command);font-size:9px;font-weight:700;"
+          :style="item.countTone === 'error' ? 'color:var(--color-error);' : ''"
+          :aria-label="`${item.count} need attention`"
+        >{{ item.count }}</span>
+        <span
+          v-else-if="item.tag && !collapsed"
+          class="data-frag"
+          style="margin-left:auto;font-size:7px;padding:1px 5px;color:var(--color-tertiary);"
+          :aria-label="`coming in ${item.tag}`"
+        >{{ item.tag }}</span>
       </NuxtLink>
+      </template>
     </nav>
 
     <!-- Footer: theme switcher + logout -->

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Sun, Moon, Monitor } from 'lucide-vue-next'
+import { useOnline } from '@vueuse/core'
 
 /** KhMobileHeader — mobile brand bar + theme toggle shared by every KlubHub product. */
 const props = withDefaults(defineProps<{ brand: string, status?: string }>(), {
@@ -7,6 +8,10 @@ const props = withDefaults(defineProps<{ brand: string, status?: string }>(), {
 })
 
 const { mode, setTheme } = useTheme()
+
+// Real connectivity: the header status is a promise to someone backstage.
+const online = useOnline()
+const statusText = computed(() => (online.value ? props.status : 'OFFLINE'))
 
 const opts = [
   { id: 'dark',   icon: Moon    },
@@ -28,7 +33,7 @@ const opts = [
       <div style="display:flex;align-items:center;gap:5px;margin-top:3px;">
         <div class="pulse-dot" aria-hidden="true" />
         <span style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);">
-          {{ props.status }}
+          {{ statusText }}
         </span>
       </div>
     </div>
@@ -38,7 +43,7 @@ const opts = [
       <button
         v-for="opt in opts"
         :key="opt.id"
-        class="theme-opt"
+        class="theme-opt hit-44"
         :class="mode === opt.id ? 'active' : ''"
         :aria-pressed="mode === opt.id"
         style="width:32px;height:26px;"

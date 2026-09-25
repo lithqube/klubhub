@@ -27,3 +27,17 @@ export function apiFetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   }
   return $fetch<T>(url, o as Parameters<typeof $fetch>[1]) as Promise<T>
 }
+
+/** Normalise an ofetch error into the API's JSON error shape. */
+export function toApiError(e: unknown): import('~/types/event').ApiError {
+  const err = e as { data?: Record<string, unknown>, statusCode?: number, status?: number }
+  const data = (err?.data ?? {}) as Record<string, unknown>
+  return {
+    error: typeof data.error === 'string' ? data.error : 'network_error',
+    field: typeof data.field === 'string' ? data.field : undefined,
+    problem: typeof data.problem === 'string' ? data.problem : undefined,
+    issues: Array.isArray(data.issues) ? (data.issues as never) : undefined,
+    entries: Array.isArray(data.entries) ? (data.entries as string[]) : undefined,
+    status: err?.statusCode ?? err?.status,
+  }
+}

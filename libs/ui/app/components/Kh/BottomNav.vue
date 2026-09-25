@@ -42,6 +42,8 @@ function isActive(to: string) {
           {{ item.label }}
         </span>
       </NuxtLink>
+      <!-- Extra actions (e.g. a MORE sheet trigger) supplied by the product. -->
+      <slot name="after" />
     </div>
   </nav>
 </template>
