@@ -531,6 +531,10 @@ pnpm nx build site
 - **D2 Public pages → SaaS-only.** Self-hosted Promoter is an **admin-only, private** tool, like DJ today. Hosted public pages are a SaaS feature. See §12 for the consequences.
 - **D3 MVP cut → P0 through P3.** The first release covers foundations, events, guest list and door, plus audience and promotion.
 - **D4 DJ-app auth → Promoter only.** DJ stays single-user. Only the promoter binary uses `platform/auth`.
+- **D5 Zero knowledge → Tiered.** Public data stays plaintext. Personal and financial data use per-org envelope encryption: the server can decrypt only during processing, and deleting the org destroys its key. The most sensitive items are **end-to-end sealed** in the browser, so the operator can never read them. See §13.
+- **D6 Identity → Zitadel for SaaS only.** Self-host gets a simpler **built-in single-org login**. Both paths sit behind one `IdentityProvider` interface and produce the same `Principal`, so authorisation (OPA) and tenancy (RLS) are identical.
+- **D7 Secrets → Infisical optional, env fallback.** Infisical is used for dev, CI and our own deploys. Self-hosters can use plain env or `*_FILE` secrets. Root-of-trust keys stay offline.
+- **D8 Messaging → NATS JetStream in P0.** Go uses a transactional outbox → NATS (`nats.go`) with nsc JWT/NKey credentials per service and tenant-scoped subjects. **The Nuxt server uses the user-maintained [`nuxt-nats`](https://github.com/lithqube/nuxt-nats) module** (MIT, `~/dev/nuxt-nats`, beta 0.1.0-beta.3+).
 
 ## 12. What D2 (SaaS-only public pages) changes
 
