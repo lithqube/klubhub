@@ -77,6 +77,10 @@ func (h *Handler) handleCreateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contact, err := h.svc.CreateContact(r.Context(), &body)
+	if errors.Is(err, ErrValidation) {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -119,6 +123,10 @@ func (h *Handler) handleUpdateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contact, err := h.svc.UpdateContact(r.Context(), id, &body)
+	if errors.Is(err, ErrValidation) {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if errors.Is(err, ErrNotFound) {
 		h.writeError(w, http.StatusNotFound, "contact not found")
 		return

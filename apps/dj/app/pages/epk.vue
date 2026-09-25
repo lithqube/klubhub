@@ -283,7 +283,7 @@ async function handleExportPdf() {
           {{ saveState === 'saving' ? 'SAVING…' : saveState === 'saved' ? 'ALL CHANGES SAVED' : 'NOT SAVED — RETRY BY EDITING' }}
         </span>
         <button
-          class="btn-hud btn-hud-violet"
+          class="btn-hud btn-hud-cta"
           style="padding:0 14px;"
           :disabled="exporting"
           @click="handleExportPdf"
@@ -300,8 +300,8 @@ async function handleExportPdf() {
       v-if="exportUrl || exportError"
       :role="exportError ? 'alert' : 'status'"
       data-testid="epk-export-result"
-      style="display:flex;align-items:center;gap:10px;padding:9px 20px;border-bottom:1px solid rgba(200,184,255,.08);"
-      :style="exportError ? 'background:rgba(255,113,108,.06)' : 'background:rgba(150,248,255,.04)'"
+      style="display:flex;align-items:center;gap:10px;padding:9px 20px;border-bottom:1px solid color-mix(in srgb, var(--color-secondary) 8%, transparent);"
+      :style="exportError ? 'background:color-mix(in srgb, var(--color-error) 6%, transparent)' : 'background:color-mix(in srgb, var(--color-primary) 4%, transparent)'"
     >
       <span class="section-lbl" :style="exportError ? 'color:var(--color-error)' : 'color:var(--color-primary)'">
         {{ exportError || 'YOUR PDF IS READY' }}
@@ -342,7 +342,7 @@ async function handleExportPdf() {
       <!-- ─── Editor ─── -->
       <div
         class="w-full md:w-[320px] md:min-w-[320px] md:overflow-y-auto"
-        style="border-right:1px solid rgba(200,184,255,.08);padding:14px;display:flex;flex-direction:column;gap:14px;background:rgba(22,22,24,.4);"
+        style="border-right:1px solid color-mix(in srgb, var(--color-secondary) 8%, transparent);padding:14px;display:flex;flex-direction:column;gap:14px;background:color-mix(in srgb, var(--color-surface-container-low) 40%, transparent);"
       >
         <!-- Quick start -->
         <EpkRaImportPanel />
@@ -448,7 +448,7 @@ async function handleExportPdf() {
             {{ photoError }}
           </p>
           <div v-if="photoPaths.length > 0" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
-            <div v-for="path in photoPaths" :key="path" style="position:relative;aspect-ratio:1;overflow:hidden;border:1px solid rgba(200,184,255,.12);">
+            <div v-for="path in photoPaths" :key="path" style="position:relative;aspect-ratio:1;overflow:hidden;border:1px solid color-mix(in srgb, var(--color-secondary) 12%, transparent);">
               <img :src="photoUrls[path]" alt="Press photo" style="width:100%;height:100%;object-fit:cover;">
               <button
                 class="btn-hud btn-hud-xs"
@@ -490,7 +490,7 @@ async function handleExportPdf() {
           <div
             v-for="(line, idx) in gigHighlights"
             :key="`${idx}-${line}`"
-            style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(200,184,255,.06);"
+            style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid color-mix(in srgb, var(--color-secondary) 6%, transparent);"
           >
             <span style="flex:1;font-family:var(--font-data);font-size:11px;color:var(--color-on-surface);line-height:1.4;">{{ line }}</span>
             <button
@@ -562,7 +562,7 @@ async function handleExportPdf() {
       <!-- ─── Live preview (real data only) ─── -->
       <div
         class="md:flex-1 md:overflow-y-auto"
-        style="background:var(--color-surface-container-lowest);border:1px solid rgba(200,184,255,.12);"
+        style="background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-secondary) 12%, transparent);"
         aria-label="Press kit preview"
       >
         <div v-if="loading" style="padding:40px 20px;display:flex;align-items:center;gap:10px;color:var(--color-tertiary);">
@@ -584,7 +584,7 @@ async function handleExportPdf() {
           </div>
 
           <!-- Bio -->
-          <div v-if="isVisible('bio')" style="padding:16px 20px;border-bottom:1px solid rgba(200,184,255,.06);">
+          <div v-if="isVisible('bio')" style="padding:16px 20px;border-bottom:1px solid color-mix(in srgb, var(--color-secondary) 6%, transparent);">
             <div class="glass-violet hud-card hud-card-v" style="padding:16px 18px;">
               <div class="epk-preview-label">BIO</div>
               <div v-if="previewBio" class="epk-preview-text" style="white-space:pre-line;">{{ previewBio }}</div>
@@ -595,7 +595,7 @@ async function handleExportPdf() {
           </div>
 
           <!-- Photos -->
-          <div v-if="isVisible('photos')" style="padding:16px 20px;border-bottom:1px solid rgba(200,184,255,.06);display:flex;flex-direction:column;gap:10px;">
+          <div v-if="isVisible('photos')" style="padding:16px 20px;border-bottom:1px solid color-mix(in srgb, var(--color-secondary) 6%, transparent);display:flex;flex-direction:column;gap:10px;">
             <div class="epk-preview-label">PRESS PHOTOS</div>
             <div v-if="photoPaths.length > 0" class="photo-grid">
               <div v-for="path in photoPaths.slice(0, 6)" :key="path" class="photo-slot">
@@ -615,7 +615,7 @@ async function handleExportPdf() {
           </div>
 
           <!-- Gig highlights -->
-          <div v-if="isVisible('gig_highlights')" style="padding:16px 20px;border-bottom:1px solid rgba(200,184,255,.06);display:flex;flex-direction:column;gap:10px;">
+          <div v-if="isVisible('gig_highlights')" style="padding:16px 20px;border-bottom:1px solid color-mix(in srgb, var(--color-secondary) 6%, transparent);display:flex;flex-direction:column;gap:10px;">
             <div class="epk-preview-label">GIG HIGHLIGHTS</div>
             <div v-if="gigHighlights.length > 0" class="glass-violet" style="overflow:hidden;">
               <div v-for="(line, idx) in gigHighlights" :key="`${idx}-${line}`" class="gig-row accent-bar-draft">
@@ -628,7 +628,7 @@ async function handleExportPdf() {
           </div>
 
           <!-- Social links -->
-          <div v-if="isVisible('social_links')" style="padding:16px 20px;border-bottom:1px solid rgba(200,184,255,.06);display:flex;flex-direction:column;gap:10px;">
+          <div v-if="isVisible('social_links')" style="padding:16px 20px;border-bottom:1px solid color-mix(in srgb, var(--color-secondary) 6%, transparent);display:flex;flex-direction:column;gap:10px;">
             <div class="epk-preview-label">SOCIAL &amp; STREAMING</div>
             <div v-if="activeLinks.length > 0" style="display:flex;flex-wrap:wrap;gap:6px;">
               <a

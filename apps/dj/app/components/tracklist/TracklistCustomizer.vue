@@ -50,7 +50,7 @@ const saveSettings = async () => {
   saveError.value = null;
   try {
     await $fetch('/api/v1/settings', {
-      method: 'PUT',
+      method: 'put',
       body: {
         tracklist_preferences: {
           preset: preset.value,
@@ -118,7 +118,7 @@ const onLogoUpload = async (e: Event) => {
   formData.append('file', file);
   try {
     const result = await $fetch<{ path: string }>('/api/v1/settings/logo', {
-      method: 'POST',
+      method: 'post',
       body: formData,
     });
     logoPath.value = result.path;
@@ -182,7 +182,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
             :class="[
               'py-1.5 px-3 font-terminal tracking-terminal text-xs uppercase transition-colors',
               bgMode === opt.value
-                ? 'bg-secondary text-on-primary'
+                ? 'bg-primary text-on-primary'
                 : 'ghost-border text-tertiary hover:text-on-surface',
             ]"
             @click="onBgModeChange(opt.value)"
@@ -267,7 +267,7 @@ const isFieldVisible = (field: string) => visibleFields.value.includes(field);
             :class="[
               'py-1.5 px-2 font-terminal tracking-terminal text-xs uppercase transition-colors',
               logoPosition === opt.value
-                ? 'bg-secondary text-on-primary'
+                ? 'bg-primary text-on-primary'
                 : 'ghost-border text-tertiary hover:text-on-surface',
             ]"
             @click="onLogoPositionChange(opt.value)"

@@ -69,6 +69,40 @@ Compose secrets are mounted files, not an encrypted secret-management service. P
 | `DISCOGS_API_KEY` | Empty | Optional cover-art integration. |
 | `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET` | Empty | Optional Instagram OAuth integration. |
 
+## Phase 5 — Plunk and document storage
+
+All variables in this section are **optional**: missing values do not
+disable the Finance module, only the parts that depend on them. The
+finance HTTP routes still mount; transactional email is simply queued
+without delivery until the outbox replay finds a working sender.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PLUNK_BASE_URL` | empty | Plunk API base. `https://app.useplunk.com` for hosted Plunk, `http://plunk:3000` for the self-hosted overlay (see [`SELF-HOSTING.md`](./SELF-HOSTING.md#optional-self-hosted-email-plunk)). |
+| `PLUNK_PROJECT_ID` | empty | Plunk project UUID from the Plunk admin UI. |
+| `PLUNK_API_KEY` *or* `PLUNK_API_KEY_FILE` | empty | Bearer token for `Authorization`. `PLUNK_API_KEY_FILE` keeps the secret out of process env (compatible with the existing `${X_FILE}` pattern). |
+| `PLUNK_FROM_EMAIL` | empty | Default sender for transactional messages; e.g. `noreply@klubhub.dj`. Must be a verified Plunk sender domain. |
+| `PLUNK_FROM_NAME` | empty | Display name; e.g. `KlubHub`. |
+| `DOCUMENT_STORE_BUCKET` | empty | S3 bucket for uploaded PDFs and signed agreement scans. Defaults to the existing `S3_BUCKET` if unset. |
+
+Hosted vs self-hosted Plunk is the same wire format — only
+`PLUNK_BASE_URL` changes. The implementation lives in
+`api/internal/finance/plunk_sender.go`; the Go code is unchanged.
+
+If the desired mode is **self-hosted**, run
+`scripts/plunk-bootstrap.sh` once to provision `secrets/email.env`,
+then start the stack with the `email` profile:
+
+```bash
+bash scripts/plunk-bootstrap.sh
+docker compose -f docker-compose.yml -f docker-compose.email.yml \
+  --profile email up -d
+```
+
+The overlay reuses the stack's existing `db` service with a dedicated
+`klubhub_plunk` database; for multi-host production, point Plunk at a
+separate database container.
+
 An API setting must be passed to the container to take effect; setting a host environment variable alone does not automatically inject it into Compose services. Review the service environment mapping when adding an override.
 
 ## Legacy configuration and release access

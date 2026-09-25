@@ -46,6 +46,10 @@ export default defineNuxtConfig({
     typeCheck: false,
     tsConfig: {
       extends: '../../../tsconfig.base.json', // Nuxt copies this string as-is to the `./.nuxt/tsconfig.json`, therefore it needs to be relative to that directory
+      // The finance mock routes are type-checked through the generated
+      // nitro route types; their shared in-memory store is a "-" prefixed
+      // (non-route) module, which the composite project must list too.
+      include: ['../server/api/v1/finance/-mockDb.ts'],
     },
   },
   imports: {

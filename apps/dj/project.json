@@ -2,6 +2,18 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "@dev/dj",
   "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [],
+      "syncGenerators": [],
+      "outputs": [],
+      "options": {
+        "command": "bash scripts/typecheck-phase5.sh",
+        "cwd": ".",
+        "envFile": "{workspaceRoot}/.env.example"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
       "options": {

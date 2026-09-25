@@ -61,7 +61,7 @@ function hasEvent(date: Date) {
         <!-- Event indicator dot (below date) -->
         <span
           v-if="hasEvent(date)"
-          class="w-1.5 h-1.5 rounded-full bg-primary mt-1"
+          class="w-1.5 h-1.5 bg-primary mt-1"
           aria-label="has event"
         />
         <span v-else class="w-1.5 h-1.5 mt-1" />

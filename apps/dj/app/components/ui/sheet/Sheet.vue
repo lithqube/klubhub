@@ -1,16 +1,33 @@
 <script setup lang="ts">
-import { DialogRoot, DialogPortal, DialogOverlay, DialogContent, DialogClose } from 'radix-vue'
+import { computed } from 'vue'
+import { DialogRoot, DialogPortal, DialogOverlay, DialogContent, DialogClose, useForwardProps } from 'radix-vue'
 import { cn } from '@/lib/utils'
 import { X } from 'lucide-vue-next'
 
+// Controlled (`open` + `update:open`) or uncontrolled (`defaultOpen`, or a
+// DialogTrigger in the `trigger` slot). Props that are not passed are not
+// forwarded, so omitting `open` keeps radix in uncontrolled mode.
 interface Props {
+  open?: boolean
+  defaultOpen?: boolean
+  modal?: boolean
   side?: 'top' | 'right' | 'bottom' | 'left'
   class?: string
+  overlayClass?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   side: 'right',
 })
+
+const emits = defineEmits<{
+  'update:open': [value: boolean]
+  openAutoFocus: [event: Event]
+  closeAutoFocus: [event: Event]
+}>()
+
+const rootProps = computed(() => ({ open: props.open, defaultOpen: props.defaultOpen, modal: props.modal }))
+const forwarded = useForwardProps(rootProps)
 
 const sideClasses = {
   top: 'inset-x-0 top-0 border-b border-surface-container-high',
@@ -21,9 +38,15 @@ const sideClasses = {
 </script>
 
 <template>
-  <DialogRoot>
+  <DialogRoot v-bind="forwarded" @update:open="emits('update:open', $event)">
+    <slot name="trigger" />
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-50 bg-surface/80 backdrop-blur-glass data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+      <DialogOverlay
+        :class="cn(
+          'fixed inset-0 z-50 bg-surface/80 backdrop-blur-glass data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+          props.overlayClass,
+        )"
+      />
       <DialogContent
         :class="cn(
           'fixed z-50 gap-4 glass-panel-heavy p-6 shadow-glow-primary transition ease-in-out',
@@ -31,6 +54,8 @@ const sideClasses = {
           sideClasses[side],
           props.class
         )"
+        @open-auto-focus="emits('openAutoFocus', $event)"
+        @close-auto-focus="emits('closeAutoFocus', $event)"
       >
         <slot />
         <DialogClose

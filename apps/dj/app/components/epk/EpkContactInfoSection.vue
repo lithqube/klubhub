@@ -29,7 +29,7 @@ function scheduleSave() {
   saveTimer = setTimeout(async () => {
     try {
       await $fetch('/api/v1/settings', {
-        method: 'PUT',
+        method: 'put',
         body: { contact_info: contact.value },
       })
     } catch {

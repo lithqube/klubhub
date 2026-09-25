@@ -128,7 +128,6 @@ const emit = defineEmits<{
         v-for="(day, idx) in daysInMonth"
         :key="idx"
         class="cal-day"
-        :style="{ opacity: day.getMonth() === viewDate.getMonth() ? 1 : 0.4 }"
       >
         <div
           class="cal-day-num"
@@ -140,7 +139,10 @@ const emit = defineEmits<{
         >
           {{ day.getDate() }}
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:2px;">
+        <div
+          style="display:flex;flex-wrap:wrap;gap:2px;"
+          :style="{ opacity: day.getMonth() === viewDate.getMonth() ? 1 : 0.4 }"
+        >
           <template
             v-if="gigsByDate.has(dayKey(day))"
           >

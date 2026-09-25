@@ -1,12 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { uploadTracklist, listTracklists, getTracklist, updateTrack, uploadTrackArtwork } from './useTracklist';
 
-// Mock $fetch (Nuxt global) before importing the composable
+// Mock $fetch (Nuxt global). The composable resolves $fetch at call time,
+// so stubbing after the (hoisted) import is sufficient.
 const mockFetch = vi.fn();
 vi.stubGlobal('$fetch', mockFetch);
-
-// Import after stubbing
-// NOTE: adjust import path if Nuxt auto-imports make direct import needed
-import { uploadTracklist, listTracklists, getTracklist, updateTrack, uploadTrackArtwork } from './useTracklist';
 
 beforeEach(() => {
   mockFetch.mockReset();

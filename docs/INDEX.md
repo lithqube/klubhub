@@ -13,7 +13,8 @@ matches your role.
 | [`CONFIGURATION.md`](./CONFIGURATION.md) | Every env var, type, default, and example. Required vs. optional. |
 | [`OPERATIONS.md`](./OPERATIONS.md) | Day-to-day operations: health, log shipping, key rotation, restore drills, container resource limits |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | What changed between the last feature branch and v1.0.0; what's shipping in this release |
-| [`release-notes/v1.0.1.md`](./release-notes/v1.0.1.md) | Runtime, CI, and onboarding hardening (PRs #5, #7, #9, #10, #11, #12); operator follow-up steps for GHCR publish and Plunk workflow rename |
+|| [`release-notes/v1.0.1.md`](./release-notes/v1.0.1.md) | Runtime, CI, and onboarding hardening (PRs #5, #7, #9, #10, #11, #12); operator follow-up steps for GHCR publish and Plunk workflow rename |
+|| [`release-notes/v1.1.0-phase5.md`](./release-notes/v1.1.0-phase5.md) | **Phase 5** — Finance Tracker module: invoices, payments, agreements, PDF rendering, self-hostable Plunk email |
 | [`../SECURITY.md`](../SECURITY.md) | Threat model, supported versions, vulnerability reporting |
 | [`../.env.example`](../.env.example) | Annotated template for the env vars |
 

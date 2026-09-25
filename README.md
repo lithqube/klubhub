@@ -53,7 +53,7 @@ You get:
 | 3 | **EPK / Press Kit Builder** | ✅ Complete | Bio, press photos, tech rider, PDF export (go-pdf/fpdf) |
 | 4 | **Gig Tracker** | ✅ Complete | CRUD, status / payment workflows, venue & contact database, iCal feed, booking confirmation PDF |
 | 4.5 | **Rider Templates** | 🔜 Planned | Named tech/hospitality templates attachable to gigs with per-gig overrides |
-| 5 | **Finance Tracker** | 🔜 Planned | Income/expense logging, PDF invoices, gig-payout aggregation |
+| 5 | **Finance Tracker** | ✅ Shipped (Phase 5) | Invoices (draft → issued → paid), deposits + partial payments, event agreements with signing workflow, EU/US-ready invoicing (customer details, VAT treatment incl. reverse charge, credit notes, artist withholding), PDF invoice rendering ([go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf)), transactional email via [Plunk](https://github.com/useplunk/plunk) (hosted or self-hosted). See [`docs/INVOICING.md`](./docs/INVOICING.md) and [`docs/release-notes/v1.1.0-phase5.md`](./docs/release-notes/v1.1.0-phase5.md). |
 | 6 | **Release Planner** | 🔜 Planned | Release status workflow, promo checklist, deadline tracking |
 | 7 | **Tour Manager** | 🔜 Planned | Tour groups, per-stop logistics, budget aggregation |
 | 8 | **Unified Dashboard** | 🔜 Planned | Cross-module overview, career analytics |
@@ -237,9 +237,8 @@ Back up both Postgres and Garage, along with the private configuration needed to
 The full v1 release plan lives in [`docs/v1-release-plan.md`](./docs/v1-release-plan.md).
 At a glance:
 
-- **Now:** Phase 4 — Gig Tracker (CRUD, iCal, booking PDF, venue/contact DB)
-- **Next:** Phases 4.5 (Rider Templates) → 5 (Finance Tracker) → 6 (Release Planner)
-- **Later:** Phases 7 (Tour Manager) → 8 (Unified Dashboard) → 9 (Production Hardening)
+- **Now:** Phase 5 — Finance Tracker (invoices, payments, agreements, PDF, Plunk email)
+- **Next:** Phases 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard) → 9 (Production Hardening)
 
 Per-phase status is tracked in [`CHANGELOG.md`](./CHANGELOG.md) and the
 roadmap doc. Releases follow [semver](https://semver.org) once v1.0.0 ships.
@@ -271,8 +270,8 @@ The frontend can run in two modes:
 | `/tracklist` Tracklist | ✅ | ✅ GET | ✅ CRUD, parse, generate-image |
 | `/social` Scheduler | ✅ | ✅ GET | ✅ CRUD, schedule, publish, worker |
 | `/epk` Press Kit | ✅ | ✅ GET/PUT | ✅ CRUD, photo upload, PDF export |
-| `/gigs` Gig Tracker | 🚧 | Static | 🚧 (Phase 4 — in progress) |
-| `/finance` Finance | ⚠️ | Static | — (Phase 5) |
+| `/gigs` Gig Tracker | ✅ | Static | ✅ CRUD, iCal feed, booking confirmation PDF |
+| `/finance` Finance | 🚧 | 🚧 | ✅ invoicing, payments, agreements, email outbox (Phase 5 — UI wiring in progress) |
 
 ---
 

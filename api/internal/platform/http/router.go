@@ -54,6 +54,7 @@ func NewRouter(
 	gigHandler http.Handler,
 	venueHandler http.Handler,
 	contactHandler http.Handler,
+	financeHandler http.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -89,6 +90,12 @@ func NewRouter(
 
 	// Contact database routes
 	r.Mount("/api/v1/contacts", contactHandler)
+
+	// Finance: billing profile, invoices, payments, agreements, email.
+	// finance.Mux parses the full /api/v1/finance/... path itself.
+	if financeHandler != nil {
+		r.Mount("/api/v1/finance", financeHandler)
+	}
 
 	if cfg.ServeFrontend {
 		r.NotFound(frontendHandler(cfg.NuxtInternalURL))

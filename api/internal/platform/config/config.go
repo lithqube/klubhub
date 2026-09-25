@@ -98,6 +98,30 @@ type Config struct {
 
 	// Optional: Nuxt internal URL for screenshot generation and frontend proxying.
 	NuxtInternalURL string `envconfig:"NUXT_INTERNAL_URL" default:"http://localhost:3000"`
+
+	// Optional: Plunk (https://github.com/useplunk/plunk) transactional
+	// email — open-source self-hosted email platform built on AWS SES.
+	//
+	// If any of PLUNK_BASE_URL/PLUNK_PROJECT_ID/PLUNK_API_KEY_FILE are set,
+	// the API delivers transactional email (invoices issued/paid/cancelled,
+	// agreement sent/signed/completed) via Plunk's REST API:
+	//
+	//     POST {PLUNK_BASE_URL}/api/v1/{PLUNK_PROJECT_ID}/emails
+	//     Authorization: Bearer {PLUNK_API_KEY}
+	//
+	// The same wire format works against hosted Plunk
+	// (https://app.useplunk.com) and self-hosted Plunk (PLUNK_BASE_URL
+	// points at the self-hosted host/port). Leave all fields blank to
+	// disable transactional email — SMTP delivery is not exposed yet;
+	// keep PLUNK_BASE_URL empty until credentials are provisioned.
+	PlunkBaseURL    string `envconfig:"PLUNK_BASE_URL" default:""`
+	PlunkProjectID  string `envconfig:"PLUNK_PROJECT_ID" default:""`
+	PlunkAPIKeyFile string `envconfig:"PLUNK_API_KEY_FILE" default:""`
+	// PlunkAPIKey is populated from PLUNK_API_KEY_FILE by loadFileSecrets
+	// (or set directly). The _FILE field above only holds the path.
+	PlunkAPIKey    string `envconfig:"PLUNK_API_KEY" default:""`
+	PlunkFromEmail string `envconfig:"PLUNK_FROM_EMAIL" default:""`
+	PlunkFromName  string `envconfig:"PLUNK_FROM_NAME" default:""`
 }
 
 // Load reads configuration from environment variables. For each env var
@@ -136,6 +160,10 @@ func Load() (*Config, error) {
 	}
 	if cfg.DatabaseURL == "_pending_synthesis_" {
 		cfg.DatabaseURL = ""
+		// Note: we cannot Unsetenv here — the second envconfig.Process
+		// pass below still needs the placeholder to be non-empty so the
+		// required-key check passes. That pass is responsible for
+		// clearing the placeholder via its own deferred Unsetenv.
 	}
 	if cfg.DatabaseURL == "" {
 		dsn, err := synthesizeDSN(cfg)
@@ -164,6 +192,17 @@ func Load() (*Config, error) {
 		_ = os.Setenv("DATABASE_URL", cfg.DatabaseURL)
 		defer func() {
 			if got == "_pending_synthesis_" {
+				os.Unsetenv("DATABASE_URL")
+			}
+		}()
+	} else if got := os.Getenv("DATABASE_URL"); got == "_pending_synthesis_" && cfg.DatabaseURL == "" {
+		// No POSTGRES_* parts to synthesize from and no DATABASE_URL set
+		// by the caller — leave the placeholder so the required-key
+		// check fires with a clear message instead of silently failing
+		// elsewhere. The placeholder is cleaned up by Load's exit path
+		// below; sibling tests see a clean environment.
+		defer func() {
+			if os.Getenv("DATABASE_URL") == "_pending_synthesis_" {
 				os.Unsetenv("DATABASE_URL")
 			}
 		}()

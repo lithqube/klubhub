@@ -69,7 +69,7 @@ async function handleDownload() {
     <div class="flex flex-col gap-2 p-3 flex-1">
       <!-- Status badge -->
       <div class="flex items-center gap-2">
-        <span class="px-2 py-0.5 font-terminal tracking-terminal text-[10px] uppercase bg-error text-white">
+        <span class="px-2 py-0.5 font-terminal tracking-terminal text-[10px] uppercase bg-error text-on-error">
           {{ statusLabel }}
         </span>
       </div>

@@ -107,14 +107,14 @@ function clearForm() {
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       <div class="flex items-center gap-2" style="gap:8px;">
-        <div style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(200,184,255,.2);border-radius:4px;background:rgba(200,184,255,.04);">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--color-secondary);">
+        <div style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);background:color-mix(in srgb, var(--color-primary) 4%, transparent);">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--color-primary);">
             <circle cx="12" cy="12" r="10"/>
             <circle cx="12" cy="12" r="3"/>
             <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
           </svg>
         </div>
-        <span class="section-lbl" style="color:var(--color-secondary);font-size:9px;letter-spacing:.08em;">
+        <span class="section-lbl" style="color:var(--color-primary);font-size:9px;letter-spacing:.08em;">
           IMPORT FROM RA
         </span>
       </div>
@@ -141,7 +141,7 @@ function clearForm() {
           style="height:34px;font-size:12px;"
         />
         <button
-          class="btn-hud btn-hud-violet btn-hud-sm"
+          class="btn-hud btn-hud-cta btn-hud-sm"
           :disabled="!artistSlug.trim() || importing"
           style="height:34px;min-height:34px;"
           @click="fetchArtist"
@@ -157,19 +157,19 @@ function clearForm() {
         </button>
       </div>
       <p style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);margin-top:6px;letter-spacing:.05em;text-transform:uppercase;">
-        Enter artist slug from <span style="color:var(--color-secondary);">ra.co/dj/</span><span style="color:var(--color-secondary);text-transform:lowercase;">&lt;slug&gt;</span>
+        Enter artist slug from <span style="color:var(--color-primary);">ra.co/dj/</span><span style="color:var(--color-primary);text-transform:lowercase;">&lt;slug&gt;</span>
       </p>
     </div>
 
     <!-- Artist info card -->
     <div
       v-if="importedArtist"
-      class="hud-card hud-card-v"
-      style="padding:13px 15px;background:var(--color-surface-container-lowest);border:1px solid rgba(200,184,255,.10);margin-bottom:14px;"
+      class="hud-card"
+      style="padding:13px 15px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);margin-bottom:14px;"
     >
       <!-- Artist header -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px;">
-        <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--color-secondary-container),var(--color-primary-container));display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 24px rgba(200,184,255,.15);border:1px solid rgba(200,184,255,.1);">
+        <div class="gradient-cta" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);">
           <span style="font-family:var(--font-command);font-size:14px;color:var(--color-on-primary);font-weight:700;line-height:1;">
             {{ importedArtist.name.charAt(0) }}
           </span>
@@ -186,7 +186,7 @@ function clearForm() {
           :href="importedArtist.url"
           target="_blank"
           rel="noopener noreferrer"
-          class="social-chip"
+          class="social-chip social-chip-cyan"
           style="flex-shrink:0;padding:5px 9px;"
         >
           <ExternalLink style="width:10px;height:10px;" aria-hidden="true" />
@@ -197,9 +197,9 @@ function clearForm() {
       <!-- Bio -->
       <div
         v-if="importedArtist.biography"
-        style="padding:11px 13px;background:rgba(150,248,255,.03);border:1px solid rgba(150,248,255,.07);margin-bottom:11px;border-radius:2px;"
+        style="padding:11px 13px;background:color-mix(in srgb, var(--color-primary) 3%, transparent);border:1px solid color-mix(in srgb, var(--color-primary) 7%, transparent);margin-bottom:11px;"
       >
-        <div class="epk-preview-label" style="margin-bottom:7px;">
+        <div class="epk-preview-label" style="margin-bottom:7px;color:var(--color-primary);">
           BIOGRAPHY
         </div>
         <p style="font-family:var(--font-data);font-size:12px;color:var(--color-on-surface-variant);line-height:1.6;margin:0;">
@@ -211,52 +211,52 @@ function clearForm() {
       <div style="display:flex;flex-wrap:wrap;gap:7px;">
         <span
           v-if="importedArtist.instagram"
-          class="social-chip"
+          class="social-chip social-chip-cyan"
         >
           <span style="color:var(--color-tertiary);font-weight:600;">IG</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-secondary);">{{ importedArtist.instagram }}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-primary);">{{ importedArtist.instagram }}</span>
         </span>
         <span
           v-if="importedArtist.soundcloud"
-          class="social-chip"
+          class="social-chip social-chip-cyan"
         >
           <span style="color:var(--color-tertiary);font-weight:600;">SC</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-secondary);">{{ importedArtist.soundcloud }}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-primary);">{{ importedArtist.soundcloud }}</span>
         </span>
         <span
           v-if="importedArtist.bandcamp"
-          class="social-chip"
+          class="social-chip social-chip-cyan"
         >
           <span style="color:var(--color-tertiary);font-weight:600;">BC</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-secondary);">{{ importedArtist.bandcamp }}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-primary);">{{ importedArtist.bandcamp }}</span>
         </span>
         <span
           v-if="importedArtist.website"
-          class="social-chip"
+          class="social-chip social-chip-cyan"
         >
           <span style="color:var(--color-tertiary);font-weight:600;">WEB</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-secondary);">{{ importedArtist.website }}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-primary);">{{ importedArtist.website }}</span>
         </span>
         <span
           v-if="importedArtist.twitter"
-          class="social-chip"
+          class="social-chip social-chip-cyan"
         >
           <span style="color:var(--color-tertiary);font-weight:600;">X</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-secondary);">{{ importedArtist.twitter }}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-primary);">{{ importedArtist.twitter }}</span>
         </span>
         <span
           v-if="importedArtist.facebook"
-          class="social-chip"
+          class="social-chip social-chip-cyan"
         >
           <span style="color:var(--color-tertiary);font-weight:600;">FB</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-secondary);">{{ importedArtist.facebook }}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-primary);">{{ importedArtist.facebook }}</span>
         </span>
         <span
           v-if="importedArtist.discogs"
-          class="social-chip"
+          class="social-chip social-chip-cyan"
         >
           <span style="color:var(--color-tertiary);font-weight:600;">DS</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-secondary);">{{ importedArtist.discogs }}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-primary);">{{ importedArtist.discogs }}</span>
         </span>
       </div>
     </div>
@@ -264,7 +264,7 @@ function clearForm() {
     <!-- Apply button -->
     <div v-if="importedArtist" style="margin-bottom:14px;">
       <button
-        class="btn-hud btn-hud-violet luminous-threshold"
+        class="btn-hud btn-hud-cta luminous-threshold"
         style="width:100%;padding:0 20px;height:36px;display:inline-flex;align-items:center;gap:8px;"
         :disabled="applyState === 'applying'"
         @click="applyToEpk"
@@ -299,10 +299,10 @@ function clearForm() {
     <!-- Loading -->
     <div
       v-if="importing && !importedArtist"
-      style="padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--color-surface-container-lowest);border:1px solid rgba(200,184,255,.10);border-radius:2px;"
+      style="padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);"
     >
-      <Loader class="animate-spin" style="width:16px;height:16px;color:var(--color-secondary);filter:drop-shadow(0 0 8px rgba(200,184,255,.4));" aria-hidden="true" />
-      <span class="section-lbl" style="color:var(--color-secondary);font-size:9px;letter-spacing:.08em;">
+      <Loader class="animate-spin" style="width:16px;height:16px;color:var(--color-primary);filter:drop-shadow(0 0 8px color-mix(in srgb, var(--color-primary) 40%, transparent));" aria-hidden="true" />
+      <span class="section-lbl" style="color:var(--color-primary);font-size:9px;letter-spacing:.08em;">
         FETCHING FROM RA...
       </span>
     </div>
@@ -310,14 +310,14 @@ function clearForm() {
     <!-- Error -->
     <div
       v-if="raStore.error && !importing"
-      style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:rgba(255,113,108,.06);border:1px solid rgba(255,113,108,.15);border-radius:2px;"
+      style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:color-mix(in srgb, var(--color-error) 4%, transparent);border:1px solid color-mix(in srgb, var(--color-error) 15%, transparent);"
     >
       <AlertCircle style="width:14px;height:14px;color:var(--color-error);flex-shrink:0;filter:drop-shadow(0 0 6px rgba(255,113,108,.3));" aria-hidden="true" />
       <span style="font-family:var(--font-data);font-size:12px;color:var(--color-error);line-height:1.4;">{{ raStore.error }}</span>
     </div>
 
     <!-- Footer info -->
-    <div style="margin-top:12px;padding-top:11px;border-top:1px solid rgba(200,184,255,.05);">
+    <div style="margin-top:12px;padding-top:11px;border-top:1px solid color-mix(in srgb, var(--color-primary) 5%, transparent);">
       <p style="font-family:var(--font-data);font-size:11px;color:var(--color-tertiary);line-height:1.55;margin:0;">
         Resident Advisor is the primary platform for electronic music.
         Importing from RA brings verified bio, social links, and profile URL

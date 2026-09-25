@@ -59,7 +59,7 @@ onMounted(async () => {
         </div>
 
         <!-- Right: desktop preview panel -->
-        <div class="hidden lg:flex" style="width:380px;flex-shrink:0;border-left:1px solid rgba(150,248,255,.08);overflow-y:auto;">
+        <div class="hidden lg:flex" style="width:380px;flex-shrink:0;border-left:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);overflow-y:auto;">
           <TrackcardPreviewPanel>
             <TrackcardPreview
               v-if="tracklist"

@@ -18,6 +18,9 @@ func NewService(repo *Repository) *Service {
 
 // CreateContact creates a new contact.
 func (s *Service) CreateContact(ctx context.Context, req *ContactCreate) (*Contact, error) {
+	if err := NormalizeCreate(req); err != nil {
+		return nil, err
+	}
 	return s.repo.Create(ctx, req)
 }
 
@@ -33,6 +36,9 @@ func (s *Service) ListContacts(ctx context.Context, name *string, contactType *C
 
 // UpdateContact updates a contact.
 func (s *Service) UpdateContact(ctx context.Context, id uuid.UUID, req *ContactUpdate) (*Contact, error) {
+	if err := NormalizeUpdate(req); err != nil {
+		return nil, err
+	}
 	return s.repo.Update(ctx, id, req)
 }
 

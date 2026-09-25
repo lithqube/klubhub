@@ -4,11 +4,11 @@ import { DialogClose, DialogContent, type DialogContentEmits, type DialogContent
 import { X } from 'lucide-vue-next'
 import { computed } from 'vue'
 
-const props = defineProps<DialogContentProps & { class?: string }>()
+const props = defineProps<DialogContentProps & { class?: string; overlayClass?: string }>()
 const emits = defineEmits<DialogContentEmits>()
 
 const delegatedProps = computed(() => {
-  const { class: _, ...delegated } = props
+  const { class: _, overlayClass: _o, ...delegated } = props
   return delegated
 })
 
@@ -17,7 +17,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
 
 <template>
   <DialogPortal>
-    <DialogOverlay class="fixed inset-0 z-50 bg-surface/80 backdrop-blur-glass data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+    <DialogOverlay :class="cn('fixed inset-0 z-50 bg-surface/80 backdrop-blur-glass data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0', props.overlayClass)" />
     <DialogContent
       v-bind="forwarded"
       :class="cn(

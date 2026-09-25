@@ -23,7 +23,7 @@ COPY api/go.mod api/go.sum ./
 RUN go mod download
 COPY api/ ./
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-    go build -trimpath -ldflags='-s -w -X main.productName=KlubHub-DJ -X main.version=1.0.0' -o /out/api ./cmd/api
+    go build -trimpath -ldflags='-s -w -X main.productName=KlubHub-DJ -X main.version=1.1.0' -o /out/api ./cmd/api
 
 # Retain Node, Chromium, its Debian shared libraries and fonts at runtime.
 # Browser installation is mandatory: never silently ship disabled rendering.

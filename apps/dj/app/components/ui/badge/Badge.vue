@@ -16,10 +16,10 @@ const badgeVariants = cva(
         'soft-hold': 'ghost-border text-on-surface',
 
         // FILLED PILLS
-        failed:              'bg-error text-white',
+        failed:              'bg-error text-on-error',
         scheduled:           'bg-primary text-on-primary',
         published:           'bg-surface-container-high text-tertiary',
-        'awaiting-deposit':  'bg-error text-white',
+        'awaiting-deposit':  'bg-error text-on-error',
         nominal:             'bg-primary text-on-primary',
 
         // NON-PILL: left bar + text

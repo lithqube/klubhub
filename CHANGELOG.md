@@ -4,6 +4,107 @@ All notable changes to KlubHub DJ are documented in this file. The
 format follows [Keep a Changelog](https://keepachangelog.com/) and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [1.1.0] - 2026-09-25
+
+### Phase 5 — Finance: invoicing, payments, agreements, email
+
+Additive for existing modules: no existing endpoint changes shape. New
+database migrations 011–022 run automatically at API start. The
+invoicing contract (JSON shapes, endpoints, VAT rules, extension points)
+is [`docs/INVOICING.md`](docs/INVOICING.md); background and diagrams are in
+[`docs/release-notes/v1.1.0-phase5.md`](docs/release-notes/v1.1.0-phase5.md).
+
+This is product functionality, not tax advice: have an accountant review
+the legal wording printed on invoices for each market you invoice in.
+
+#### Added
+
+- **Invoicing UI** on the Finance page: invoice list with status filters
+  (draft, issued, overdue, paid, void); create a draft from a gig in two
+  or three clicks; detail sheet with editable *Bill to* and *Tax*, a
+  pre-issue checklist, balance (outstanding, net payable, withheld,
+  received, pending), payment ledger, and credit note / correct / cancel
+  with confirmation. Invoice entry point in the gig form.
+- **EU/US invoice compliance**:
+  - Customer (bill-to) party on every invoice, pre-filled from the gig's
+    promoter contact and frozen at issue. Contacts gain address, country,
+    VAT ID, tax ID and business flag.
+  - VAT treatment per invoice — domestic, EU reverse charge, exempt
+    (small business), outside scope, US sales tax, none — suggested from
+    supplier and customer country and VAT ID, with the matching legal note
+    and a per-rate tax breakdown. Billing profiles gain
+    `vat_exempt_small_business` and `default_vat_rate_bps`.
+  - Pre-issue validation (`GET /invoices/{id}/issue-check`); issuing an
+    incomplete invoice returns `422 not_issuable` with a problem list.
+  - Gap-free numbering: drafts are unnumbered, numbers are allocated at
+    issue per `(prefix, currency)` series under an advisory lock.
+  - Credit notes (`CN` series) reverse an issued invoice; *correct* issues
+    a credit note plus a replacement draft.
+  - Artist withholding: net payable drives balances, "paid" and the gig's
+    `payment_status`, which now syncs automatically from payments.
+- **Payments**: deposits, partial payments and refunds with enforced
+  limits — no over-collection, refunds never exceed receipts, same
+  currency as the invoice, only on issued/paid invoices.
+- **Agreements**: versioned templates and per-gig instances with a
+  two-party signing workflow; signing is rejected once cancelled,
+  expired, completed, already signed by that role, or for a role that
+  isn't required.
+- **Documents**: versioned storage on Garage S3 with SHA-256 checksums.
+- **Invoice PDFs** via `codeberg.org/go-pdf/fpdf` with an embedded DejaVu
+  font (full UTF-8): customer, supply date, VAT note, breakdown,
+  withholding and credit-note references.
+- **Transactional email outbox** delivered through
+  [Plunk](https://github.com/useplunk/plunk) (hosted or self-hosted via the
+  opt-in [`docker-compose.email.yml`](docker-compose.email.yml) and
+  [`scripts/plunk-bootstrap.sh`](scripts/plunk-bootstrap.sh)). Rows are
+  claimed with `FOR UPDATE SKIP LOCKED`, stuck sends are re-queued, and
+  retries back off with an attempt cap. Email endpoints are mounted only
+  when `PLUNK_BASE_URL`, `PLUNK_PROJECT_ID` and `PLUNK_API_KEY(_FILE)` are
+  all set.
+- **Website** (klubhub.io): full current feature set and an Editions
+  section (self-hosted now; licensed and hosted editions coming soon).
+
+#### Changed
+
+- Webfonts rebuilt from Google Fonts (OFL) with Latin Extended-A/B and
+  Additional coverage, so names such as "Łukasz" or "Perić" no longer fall
+  back to the system font. Inter is now `Inter[wght].woff2` (the previous
+  file had no slant axis).
+- Finance `500` responses no longer include raw database errors.
+
+#### Fixed
+
+- Finance routes were never mounted in the API server; they are now
+  served under `/api/v1/finance`.
+- Invoice creation and correction crashed (nil-pointer scan) and called an
+  undefined SQL function.
+- Agreement-instance and email creation failed on NULL text columns
+  (migration 019).
+- `docker-compose.email.yml`: the Plunk API key secret was never mounted
+  and Plunk sat on a different network from the app.
+- SMTP header injection via CR/LF in subject, names or addresses.
+- `scripts/typecheck-phase5.sh` reported success when vue-tsc never ran.
+
+#### Upgrade notes
+
+- Back up the database before upgrading; migrations 018–022 alter
+  invoices, contacts and billing profiles and back-fill existing rows.
+- Existing draft invoices lose their pre-assigned number (numbers are now
+  allocated at issue) and need a customer and VAT treatment before they
+  can be issued; the pre-issue checklist lists what's missing.
+- Fill in your billing profile (address, country, VAT ID where
+  applicable) before issuing invoices.
+
+#### Verification
+
+- `pnpm nx run api:test` — all Go packages green with `-race`, including
+  real-Postgres integration tests (testcontainers) and a migration
+  up/down/up round trip.
+- `pnpm nx test @dev/dj` — 316/316 Vitest.
+- `node --test apps/site/site.test.mjs` and `responsive.test.mjs` green.
+
 ## [1.0.1] - 2026-09-19
 
 ### Runtime, CI, and onboarding fixes since v1.0.0

@@ -115,7 +115,7 @@ const hasFile = computed(() => !!uploadFile.value);
         <div style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);text-transform:uppercase;letter-spacing:.05em;">{{ uploadFileSize }}</div>
       </div>
 
-      <div style="font-family:var(--font-terminal);font-size:7px;letter-spacing:.06em;text-transform:uppercase;color:rgba(150,248,255,.4);margin-top:2px;">
+      <div style="font-family:var(--font-terminal);font-size:7px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);margin-top:2px;">
         OR CLICK TO BROWSE FILES
       </div>
 
@@ -144,7 +144,7 @@ const hasFile = computed(() => !!uploadFile.value);
     <!-- Error display -->
     <div
       v-if="uploadError"
-      style="padding:12px 14px;border:1px dashed rgba(255,113,108,.3);box-shadow:0 0 16px rgba(255,113,108,.15);"
+      style="padding:12px 14px;border:1px dashed color-mix(in srgb, var(--color-error) 30%, transparent);box-shadow:var(--shadow-glow-error);"
     >
       <span class="spost-meta" style="color:var(--color-error);">
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>

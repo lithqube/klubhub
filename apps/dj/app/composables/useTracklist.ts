@@ -16,20 +16,6 @@ interface TracklistDetailResponse {
   message?: string;
 }
 
-interface TrackResponse {
-  track: Track;
-  error?: string;
-  message?: string;
-}
-
-interface ArtworkResponse {
-  artwork_url: string;
-  artwork_source: 'manual';
-  artwork_status: 'manual';
-  error?: string;
-  message?: string;
-}
-
 // Upload a tracklist file (TXT format)
 export function uploadTracklist(file: File): Promise<{
   tracklist: Tracklist;
@@ -105,8 +91,8 @@ export function uploadTrackArtwork(
   file: File,
 ): Promise<{
   artworkUrl: string;
-  artworkStatus: 'manual';
-  artworkSource: 'manual';
+  artworkStatus: Track['artworkStatus'];
+  artworkSource: Track['artworkSource'];
 }> {
   const formData = new FormData();
   formData.append('file', file);

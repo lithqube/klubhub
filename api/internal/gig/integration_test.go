@@ -505,10 +505,14 @@ func TestIntegration_MigrationsRunClean(t *testing.T) {
 		if rec2.Code != http.StatusOK {
 			t.Fatalf("GET detail after link: status=%d body=%s", rec2.Code, rec2.Body.String())
 		}
-		var detail gig.GigDetailResponse
-		if err := json.Unmarshal(rec2.Body.Bytes(), &detail); err != nil {
+		t.Logf("GET detail body=%s", rec2.Body.String())
+		var detailEnv struct {
+			Data gig.GigDetailResponse `json:"data"`
+		}
+		if err := json.Unmarshal(rec2.Body.Bytes(), &detailEnv); err != nil {
 			t.Fatalf("unmarshal detail: %v", err)
 		}
+		detail := detailEnv.Data
 		if len(detail.Tracklists) != 1 {
 			t.Fatalf("expected 1 tracklist in detail after link, got %d", len(detail.Tracklists))
 		}
@@ -528,10 +532,13 @@ func TestIntegration_MigrationsRunClean(t *testing.T) {
 		if rec4.Code != http.StatusOK {
 			t.Fatalf("GET detail after unlink: status=%d", rec4.Code)
 		}
-		var detail2 gig.GigDetailResponse
-		if err := json.Unmarshal(rec4.Body.Bytes(), &detail2); err != nil {
+		var detailEnv2 struct {
+			Data gig.GigDetailResponse `json:"data"`
+		}
+		if err := json.Unmarshal(rec4.Body.Bytes(), &detailEnv2); err != nil {
 			t.Fatalf("unmarshal detail after unlink: %v", err)
 		}
+		detail2 := detailEnv2.Data
 		if len(detail2.Tracklists) != 0 {
 			t.Fatalf("expected 0 tracklists after unlink, got %d", len(detail2.Tracklists))
 		}

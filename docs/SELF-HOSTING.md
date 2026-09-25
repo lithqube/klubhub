@@ -52,6 +52,49 @@ docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.dev.
 
 Garage admin uses container port `3903`; S3 uses container port `3900`. Do not confuse either with the RPC port `3901`, and do not expose admin or RPC to untrusted networks. The setup script handles provisioning without asking you to print keys or evaluate shell output.
 
+### Optional self-hosted email (Plunk)
+
+Transactional email (invoices issued/paid/cancelled, agreement sent/signed) is delivered through [Plunk](https://github.com/useplunk/plunk), an open-source email platform built on AWS SES. The compose stack supports **both** options without modifying the base services:
+
+| Mode | Command | Email delivery |
+|---|---|---|
+| Hosted Plunk | (no overlay) | Outbound to `https://app.useplunk.com`; requires `PLUNK_API_KEY` env var |
+| Self-hosted Plunk | overlay below | Outbound to your cluster's SMTP relay (default: AWS SES); no third-party account required |
+
+For the **stand-alone product** specifically, self-host Plunk so email data never leaves the host's infrastructure. Bootstrap:
+
+```bash
+# Generate secrets/email.env + secrets/plunk_api_key (both gitignored) and
+# start the plunk service alongside the rest of the stack under the
+# `email` profile.
+bash scripts/plunk-bootstrap.sh
+docker compose \
+  --env-file /dev/null \
+  -f docker-compose.yml \
+  -f docker-compose.email.yml \
+  --profile email \
+  up -d
+```
+
+After the first start, open http://localhost:3030 in a browser, create the admin account, copy the project ID into `secrets/email.env`, and paste the project API key into `secrets/plunk_api_key` (single value, no other content — it is mounted verbatim as the `plunk_api_key` Docker secret). Restart the API so the new env vars and secret take effect:
+
+```bash
+docker compose --env-file /dev/null \
+  -f docker-compose.yml -f docker-compose.email.yml --profile email \
+  restart app
+```
+
+The same overlay applies to `docker-compose.prod.yml`; substitute it for `docker-compose.yml` in the commands above. `secrets/email.env` and `secrets/plunk_api_key` are **not** committed and are the only places these secrets live outside of the standard `secrets/dev/` tree. `secrets/plunk_api_key` is mounted on the `app` service as the `plunk_api_key` Docker secret at `/run/secrets/plunk_api_key` — a Compose secret always mounts as a single file at `/run/secrets/<name>`, never a directory, so this is a dedicated file rather than a value inside `email.env`. Override its location with `PLUNK_API_KEY_SECRET_FILE` if you manage secrets elsewhere; `PLUNK_API_KEY_FILE` on the `app` service is kept in sync with the same default.
+
+**Wiring at runtime:**
+
+- `PLUNK_BASE_URL` → either `https://app.useplunk.com` (hosted) or `http://plunk:3000` (self-hosted, default in the overlay)
+- `PLUNK_PROJECT_ID` → Plunk project UUID
+- `PLUNK_API_KEY_FILE` → path to a file containing the project API token (Bearer); defaults to `/run/secrets/plunk_api_key`, backed by `secrets/plunk_api_key` on the host
+- `PLUNK_FROM_EMAIL` / `PLUNK_FROM_NAME` → default sender for transactional messages
+
+If any of these are missing at boot, the API still mounts `/api/v1/finance/emails/*` but queues messages without sending them — the outbox row is preserved for replay once Plunk is reachable.
+
 ## Production
 
 Use `docker-compose.prod.yml` **alone**, not merged with the development files. It contains only image references, with no local application build:

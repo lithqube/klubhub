@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, GigReader interface for downstream modules
 - [ ] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export
 - [ ] **Phase 4.8: Bandsintown Sync** - INSERTED (optional) — Outbound event push to Bandsintown on gig confirmed
-- [ ] **Phase 5: Finance Tracker** - Income/expense logging, multi-currency summaries, auto-income on gig payment, PDF invoice generation
+- [ ] **Phase 5: Finance Tracker** - In progress — income/expenses, per-currency summaries, invoices/payments, versioned PDFs, event agreements and explicit email sends
 - [ ] **Phase 6: Release Planner** - Release CRUD with status workflow, deadline tracking, promo checklist with customizable default template
 - [ ] **Phase 7: Tour Manager** - Named tour groups of linked gigs, per-stop logistics, tour budget aggregate (OSS; collaboration is SaaS v2)
 - [ ] **Phase 8: Unified Dashboard** - Aggregated view of all modules: upcoming gigs, scheduled posts, recent tracklists, finance summary, release deadlines, career analytics
@@ -216,13 +216,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 5: Finance Tracker
 
-**Goal**: Users can track all DJ income and expenses, see multi-currency summaries, and generate PDF invoices from gig data
+**Goal**: Users can track DJ income and expenses by currency, create gig-linked invoices and event agreements, retain immutable PDF versions, explicitly send reviewed email attachments, and record payments without duplicate income
 **Depends on**: Phase 4
 **Requirements**: FIN-01 through FIN-10
-**Status**: Not started
-**Plans**: TBD
+**Status**: In progress — wave 0 prerequisites and baseline recorded 2026-09-24; implementation and integration gates remain open
+**Plans**: `.hermes/plans/2026-09-24_213014-phase-5-invoices-agreements-email.md`
+**Progress / evidence**: `.hermes/plans/phase-5-progress.md`
 
-> Note: `finance.vue` page already exists with HUD-styled static mock data from Phase 1.5.5. Phase 5 plans will wire it to the real API.
+> Added scope: structured billing identity, draft/atomic invoice issuance, deposits and payments, immutable Garage PDF exports, versioned agreements, and explicit SMTP outbox sends. No real mail is authorized for tests. FIN-10 excludes tax/VAT calculation; the plan's tax-calculation proposal requires resolution before implementation. Existing `finance.vue` remains a labelled dev/staging mock with a production empty state until wired to persisted records. Baseline failures are recorded, not waived.
 
 ### Phase 6: Release Planner
 
@@ -284,7 +285,7 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 || 4.5. Rider Templates             | 0/TBD          | Future       | —          |
 || 4.8. Spotify Integration (INSERTED) | 0/TBD       | Future       | —          |
 || 4.9. RA Integration (INSERTED)    | 3/3            | ✅ Complete  | 2026-09-20 |
-|| 5. Finance Tracker               | 0/TBD          | Future       | —          |
+| 5. Finance Tracker               | Wave 0 baseline recorded; waves 1–8 pending | In progress | — |
 | 6. Release Planner               | 0/TBD          | Future       | —          |
 | 7. Tour Manager                  | 0/TBD          | Future       | —          |
 | 8. Unified Dashboard             | 0/TBD          | Future       | —          |

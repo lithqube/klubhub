@@ -83,6 +83,21 @@ test('separates future products and SaaS from available source', async () => {
   assert.match(html, /pricing, and launch date have not been announced/);
 });
 
+test('lists the shipped KlubHub DJ modules and the editions', async () => {
+  const html = await read('index.html');
+  for (const feature of [
+    'Tracklist artwork', 'Social scheduling', 'Press kits',
+    'Gig tracking', 'Invoices and agreements',
+  ]) {
+    assert.ok(html.includes(feature), feature);
+  }
+  for (const edition of ['SELF-HOSTED', 'COMMERCIAL LICENSE', 'MANAGED SAAS']) {
+    assert.ok(html.includes(edition), edition);
+  }
+  // Resident Advisor integration is intentionally not marketed for now.
+  assert.doesNotMatch(html, /Resident Advisor|\bRA\b|ra\.co/);
+});
+
 test('newsletter form is wired to Plunk public-key track endpoint', async () => {
   const html = await read('index.html');
   const js = await read('newsletter.js');

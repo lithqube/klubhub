@@ -51,7 +51,7 @@ function scheduleSave() {
   saveTimer = setTimeout(async () => {
     try {
       await $fetch('/api/v1/settings', {
-        method: 'PUT',
+        method: 'put',
         body: { social_links: links.value },
       })
     } catch {

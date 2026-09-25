@@ -41,7 +41,7 @@ func TestFrontendRouting(t *testing.T) {
 		t.Run("enabled="+enabled, func(t *testing.T) {
 			cfg := frontendConfig(t, enabled, frontend.URL)
 			api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
-			router := apphttp.NewRouter(cfg, nil, nil, zerolog.Nop(), api, api, api, api, api, api, api)
+			router := apphttp.NewRouter(cfg, nil, nil, zerolog.Nop(), api, api, api, api, api, api, api, api)
 			for _, path := range []string{"/", "/tracklists/123?preview=true", "/_nuxt/app.js", "/api/render"} {
 				rr := httptest.NewRecorder()
 				router.ServeHTTP(rr, httptest.NewRequest("GET", path, nil))

@@ -139,6 +139,26 @@ class Stack:
             raise RuntimeError("Garage bucket permissions could not be verified")
         print("Garage provisioned; S3 credentials saved privately (not printed).")
 
+    def plunk(self):
+        """Provision self-hosted Plunk secrets if the email overlay is enabled.
+
+        Reads secrets/email.env (created by scripts/plunk-bootstrap.sh) and
+        forwards the values to the api/plunk containers. Idempotent: a
+        second run with the same file is a no-op. Skipped silently when
+        the overlay is not requested (no `profiles: ["email"]` service).
+        """
+        plunk_env = self.secret_dir / "email.env"
+        if not plunk_env.exists():
+            print("Plunk overlay not requested (secrets/email.env absent); skipping")
+            return
+        # Compose reads secrets/email.env automatically because it is
+        # gitignored and the email overlay wires `${PLUNK_*}` lookups
+        # back to that file. We don't print the contents.
+        size = plunk_env.stat().st_size
+        if size < 32:
+            raise RuntimeError("secrets/email.env looks empty or truncated; refusing")
+        print(f"Plunk overlay active; secrets/email.env loaded ({size} bytes, not printed)")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -166,6 +186,7 @@ def main():
         stack.bootstrap()
         if not args.bootstrap_only:
             stack.run(["up", "-d", "--wait"] + (["--build"] if mode == "dev" else []))
+            stack.plunk()
             print("Stack ready.")
             if mode == "dev":
                 print("Host frontend: NUXT_PUBLIC_API_BASE=http://127.0.0.1:8080 pnpm nx serve @dev/dj --host 0.0.0.0 --port 4200")

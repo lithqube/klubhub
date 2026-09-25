@@ -21,18 +21,31 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
+// contactColumns is the SELECT/RETURNING list matching Contact.scanTargets.
+const contactColumns = `id, name, company, email, phone, type, notes,
+	address_line1, address_line2, city, region, postal_code, country,
+	vat_id, tax_id, is_business,
+	created_at, updated_at, deleted_at`
+
+func (c *Contact) scanTargets() []any {
+	return []any{
+		&c.ID, &c.Name, &c.Company, &c.Email, &c.Phone, &c.Type, &c.Notes,
+		&c.AddressLine1, &c.AddressLine2, &c.City, &c.Region, &c.PostalCode, &c.Country,
+		&c.VATID, &c.TaxID, &c.IsBusiness,
+		&c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
+	}
+}
+
 // GetByID returns a contact by ID, or ErrNotFound.
 func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*Contact, error) {
 	var c Contact
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, name, company, email, phone, type, notes,
-		       created_at, updated_at, deleted_at
+		SELECT `+contactColumns+`
 		FROM contacts
 		WHERE id = $1 AND deleted_at IS NULL`,
 		id,
 	).Scan(
-		&c.ID, &c.Name, &c.Company, &c.Email, &c.Phone, &c.Type, &c.Notes,
-		&c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
+		c.scanTargets()...,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -46,8 +59,7 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*Contact, error
 // List returns all contacts (optionally filtered by name/type), ordered by name.
 func (r *Repository) List(ctx context.Context, name *string, contactType *ContactType) ([]*Contact, error) {
 	query := `
-		SELECT id, name, company, email, phone, type, notes,
-		       created_at, updated_at, deleted_at
+		SELECT ` + contactColumns + `
 		FROM contacts
 		WHERE deleted_at IS NULL`
 	args := []interface{}{}
@@ -76,8 +88,7 @@ func (r *Repository) List(ctx context.Context, name *string, contactType *Contac
 	for rows.Next() {
 		var c Contact
 		err := rows.Scan(
-			&c.ID, &c.Name, &c.Company, &c.Email, &c.Phone, &c.Type, &c.Notes,
-			&c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
+			c.scanTargets()...,
 		)
 		if err != nil {
 			return nil, err
@@ -93,17 +104,17 @@ func (r *Repository) Create(ctx context.Context, c *ContactCreate) (*Contact, er
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO contacts (
 			id, name, company, email, phone, type, notes,
+			address_line1, address_line2, city, region, postal_code, country,
+			vat_id, tax_id, is_business,
 			created_at, updated_at
 		) VALUES (
-			gen_random_uuid(), $1, $2, $3, $4, $5, $6, now(), now()
-		) RETURNING
-			id, name, company, email, phone, type, notes,
-			created_at, updated_at, deleted_at`,
+			gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11, $12, $13, $14, $15, now(), now()
+		) RETURNING `+contactColumns,
 		c.Name, c.Company, c.Email, c.Phone, c.Type, c.Notes,
-	).Scan(
-		&out.ID, &out.Name, &out.Company, &out.Email, &out.Phone, &out.Type, &out.Notes,
-		&out.CreatedAt, &out.UpdatedAt, &out.DeletedAt,
-	)
+		c.AddressLine1, c.AddressLine2, c.City, c.Region, c.PostalCode, c.Country,
+		c.VATID, c.TaxID, c.IsBusiness,
+	).Scan(out.scanTargets()...)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +155,28 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *ContactUpdate)
 	if u.Notes != nil {
 		setClauses = append(setClauses, "notes = $"+strconv.Itoa(argID))
 		args = append(args, *u.Notes)
+		argID++
+	}
+	for _, f := range []struct {
+		col string
+		val any
+		set bool
+	}{
+		{"address_line1", u.AddressLine1, u.AddressLine1 != nil},
+		{"address_line2", u.AddressLine2, u.AddressLine2 != nil},
+		{"city", u.City, u.City != nil},
+		{"region", u.Region, u.Region != nil},
+		{"postal_code", u.PostalCode, u.PostalCode != nil},
+		{"country", u.Country, u.Country != nil},
+		{"vat_id", u.VATID, u.VATID != nil},
+		{"tax_id", u.TaxID, u.TaxID != nil},
+		{"is_business", u.IsBusiness, u.IsBusiness != nil},
+	} {
+		if !f.set {
+			continue
+		}
+		setClauses = append(setClauses, f.col+" = $"+strconv.Itoa(argID))
+		args = append(args, f.val)
 		argID++
 	}
 
@@ -188,8 +221,7 @@ func (r *Repository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 func (r *Repository) SearchByName(ctx context.Context, query string, limit int) ([]*Contact, error) {
 	pattern := "%" + strings.ToLower(query) + "%"
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, name, company, email, phone, type, notes,
-		       created_at, updated_at, deleted_at
+		SELECT `+contactColumns+`
 		FROM contacts
 		WHERE deleted_at IS NULL AND LOWER(name) LIKE $1
 		ORDER BY name ASC
@@ -205,8 +237,7 @@ func (r *Repository) SearchByName(ctx context.Context, query string, limit int) 
 	for rows.Next() {
 		var c Contact
 		err := rows.Scan(
-			&c.ID, &c.Name, &c.Company, &c.Email, &c.Phone, &c.Type, &c.Notes,
-			&c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
+			c.scanTargets()...,
 		)
 		if err != nil {
 			return nil, err

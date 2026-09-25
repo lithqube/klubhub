@@ -57,7 +57,7 @@ async function handleAuthorize() {
     <!-- Not-connected banner -->
     <div
       v-if="!account || account.status === 'disconnected'"
-      style="margin:0 20px;margin-top:14px;padding:12px 16px;border:1px dashed rgba(150,248,255,.2);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"
+      style="margin:0 20px;margin-top:14px;padding:12px 16px;border:1px dashed color-mix(in srgb, var(--color-primary) 20%, transparent);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"
       class="glass"
     >
       <div>
