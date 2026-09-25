@@ -1,0 +1,117 @@
+# Self-hosted Plunk email overlay (opt-in).
+#
+# Adds the Plunk email platform (https://github.com/useplunk/plunk) as a
+# sibling service to the main KlubHub DJ stack. The api service learns about
+# Plunk via the PLUNK_* environment variables; nothing else changes.
+#
+# Plunk is a transactional email service built on AWS SES. Self-hosting it
+# in the same docker network keeps email delivery inside the stand-alone
+# KlubHub DJ product — no Plunk cloud account required, no third-party
+# secret to provision beyond SES itself.
+#
+# Why self-host: the stand-alone product runs entirely on user-owned
+# infrastructure. Outsourcing email to a hosted SaaS defeats the point.
+# Self-hosted Plunk keeps the data-plane local; only outbound SMTP to AWS
+# SES (or any SMTP relay you wire in Plunk's admin UI) leaves the host.
+#
+# Usage:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.email.yml \
+#     up -d
+#
+# First-time setup:
+#
+#   1. Visit http://localhost:3030 (the Plunk web UI) and create the first
+#      project + admin user.
+#   2. In the Plunk admin UI, set the SMTP credentials (AWS SES by default,
+#      or any SMTP relay).
+#   3. Copy the project ID + a project API key into secrets/email.env
+#      (gitignored; plunk-bootstrap.sh provisions it once).
+#   4. Restart the api service so it picks up the new env vars:
+#        docker compose restart api
+#
+# Standalone-only path: when running the binary outside Compose, set
+# PLUNK_BASE_URL=http://localhost:3030 (or the host's reverse-proxy URL)
+# and the same PLUNK_PROJECT_ID + PLUNK_API_KEY_FILE.
+#
+# This overlay does NOT change the api image; it just adds the plunk
+# service and forwards PLUNK_* env vars to api. Existing stacks without
+# Plunk continue to run untouched.
+
+services:
+  plunk:
+    image: ghcr.io/useplunk/plunk:latest
+    container_name: klubhub-plunk
+    restart: unless-stopped
+    profiles: ["email"]
+    ports:
+      # Bound to loopback so the admin UI isn't publicly exposed without
+      # an explicit auth proxy. Operators put it behind nginx/caddy in
+      # production (see SELF-HOSTING.md); the documented bind address
+      # is `127.0.0.1:3030` for local dev.
+      - "127.0.0.1:${PLUNK_PUBLIC_PORT:-3030}:3000/tcp"
+    environment:
+      # ===== Plunk runtime =====
+      # Plunk ships with a postgres container of its own; the dev overlay
+      # below points at the main stack's pg so plunk reuses the existing
+      # volume. In prod you'll want a dedicated plunk-database volume —
+      # see docker-compose.email.prod.yml (Phase 5 follow-up).
+      # postgres here is the existing db service from docker-compose.yml —
+      # Plunk reuses the stack's Postgres container with a dedicated
+      # database name (`${POSTGRES_DB}_plunk`). For multi-host prod
+      # deployments, point PLUNK at a dedicated Plunk database container.
+      DATABASE_URL: postgres://${POSTGRES_USER:-klubhub}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in secrets/dev.env}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-klubhub}_plunk?schema=public
+      DIRECT_URL: postgres://${POSTGRES_USER:-klubhub}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in secrets/dev.env}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-klubhub}_plunk?schema=public
+      # Required Plunk secrets — bootstrapped by plunk-bootstrap.sh into
+      # secrets/email.env. Reuse the read-only-files-from-secrets pattern
+      # the rest of the stack uses for SMTP/Postgres passwords.
+      AUTH_SECRET: ${PLUNK_AUTH_SECRET:?set PLUNK_AUTH_SECRET in secrets/email.env}
+      # PLUNK_INTERNAL_DOMAINS replaces the placeholder hostname Plunk
+      # uses in links. The dev overlay uses localhost; production should
+      # override this in docker-compose.email.prod.yml.
+      PLUNK_INTERNAL_DOMAINS: ${PLUNK_INTERNAL_DOMAINS:-localhost:3030}
+    volumes:
+      # Plunk writes uploaded assets + signed PDFs to disk; backing this
+      # with a named volume survives container restarts.
+      - plunk_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/v1/projects"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - klubhub-net
+
+  # The api service learns about Plunk via PLUNK_* env vars. We override
+  # only those here; everything else from docker-compose.yml stays the
+  # same. The api image itself is unchanged.
+  app:
+    environment:
+      # Plunk discovery. The api service picks these up at boot and
+      # constructs the EmailSender; if BaseURL is empty or unreachable
+      # the email subdomain stays mounted with a noop sender so the
+      # outbox queues mail without dropping it.
+      PLUNK_BASE_URL: ${PLUNK_BASE_URL:-http://plunk:3000}
+      PLUNK_PROJECT_ID: ${PLUNK_PROJECT_ID:-}
+      PLUNK_API_KEY_FILE: ${PLUNK_API_KEY_FILE:-/run/secrets/email/plunk_api_key}
+      PLUNK_FROM_EMAIL: ${PLUNK_FROM_EMAIL:-noreply@klubhub.local}
+      PLUNK_FROM_NAME: ${PLUNK_FROM_NAME:-KlubHub}
+
+volumes:
+  plunk_uploads:
+    name: klubhub-plunk-uploads
+
+secrets:
+  email:
+    file: ${EMAIL_SECRETS_FILE:-./secrets/email.env}
+
+networks:
+  klubhub-net:
+    name: klubhub-net
+    external: true

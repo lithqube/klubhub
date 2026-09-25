@@ -98,6 +98,27 @@ type Config struct {
 
 	// Optional: Nuxt internal URL for screenshot generation and frontend proxying.
 	NuxtInternalURL string `envconfig:"NUXT_INTERNAL_URL" default:"http://localhost:3000"`
+
+	// Optional: Plunk (https://github.com/useplunk/plunk) transactional
+	// email — open-source self-hosted email platform built on AWS SES.
+	//
+	// If any of PLUNK_BASE_URL/PLUNK_PROJECT_ID/PLUNK_API_KEY_FILE are set,
+	// the API delivers transactional email (invoices issued/paid/cancelled,
+	// agreement sent/signed/completed) via Plunk's REST API:
+	//
+	//     POST {PLUNK_BASE_URL}/api/v1/{PLUNK_PROJECT_ID}/emails
+	//     Authorization: Bearer {PLUNK_API_KEY}
+	//
+	// The same wire format works against hosted Plunk
+	// (https://app.useplunk.com) and self-hosted Plunk (PLUNK_BASE_URL
+	// points at the self-hosted host/port). Leave all fields blank to
+	// disable transactional email — SMTP delivery is not exposed yet;
+	// keep PLUNK_BASE_URL empty until credentials are provisioned.
+	PlunkBaseURL    string `envconfig:"PLUNK_BASE_URL" default:""`
+	PlunkProjectID  string `envconfig:"PLUNK_PROJECT_ID" default:""`
+	PlunkAPIKeyFile string `envconfig:"PLUNK_API_KEY_FILE" default:""`
+	PlunkFromEmail  string `envconfig:"PLUNK_FROM_EMAIL" default:""`
+	PlunkFromName   string `envconfig:"PLUNK_FROM_NAME" default:""`
 }
 
 // Load reads configuration from environment variables. For each env var

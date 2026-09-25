@@ -100,6 +100,57 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(len(admin), 1)
         self.assertEqual(admin[0]["host_ip"], "127.0.0.1")
 
+    def test_email_overlay_wires_plunk_when_email_env_present(self):
+        """Plunk overlay must not break the existing dev/prod configs.
+
+        Run `docker compose config` with the email overlay applied and
+        assert the plunk service shows up under the 'email' profile. The
+        base dev/prod compose files (without the overlay) must remain
+        unchanged.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / "email.env"
+            env_file.write_text(
+                "PLUNK_AUTH_SECRET=test-only-not-real\n"
+                "POSTGRES_PASSWORD=test-only-not-real\n"
+            )
+            base_env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT")}
+            base_env.update(
+                SECRET_DIR=tmp,
+                GARAGE_CONFIG_FILE=str(Path(tmp) / "garage.toml"),
+                ENV_FILE=str(Path(tmp) / ".env"),
+                POSTGRES_PASSWORD="test-only-not-real",
+                POSTGRES_USER="klubhub",
+                POSTGRES_HOST="db",
+                POSTGRES_PORT="5432",
+                POSTGRES_DB="klubhub",
+                PLUNK_AUTH_SECRET="test-only-not-real",
+            )
+            command = [
+                "docker", "compose", "--env-file", "/dev/null",
+                "-f", str(setup.ROOT / "docker-compose.yml"),
+                "-f", str(setup.ROOT / "docker-compose.email.yml"),
+                "--profile", "email",
+                "config", "--format", "json",
+            ]
+            try:
+                result = subprocess.run(
+                    command, env=base_env, check=True, capture_output=True, text=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                self.fail(
+                    "compose config failed:\nstdout=%s\nstderr=%s"
+                    % (exc.stdout, exc.stderr)
+                )
+            config = json.loads(result.stdout)
+            services = config.get("services", {})
+            self.assertIn("plunk", services, "plunk service missing from email overlay")
+            self.assertIn("app", services, "api service missing under email profile")
+            api_env = services["app"]["environment"]
+            self.assertIn("PLUNK_BASE_URL", api_env)
+            self.assertEqual(api_env["PLUNK_BASE_URL"], "http://plunk:3000")
+            self.assertEqual(api_env["PLUNK_FROM_EMAIL"], "noreply@klubhub.local")
+
 
 if __name__ == "__main__":
     unittest.main()
