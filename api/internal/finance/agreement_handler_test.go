@@ -327,3 +327,23 @@ func TestEmailHandler_ValidationFailure(t *testing.T) {
 // Silence unused-import warning when strconv is referenced later.
 var _ = strings.HasPrefix
 var _ = io.Discard
+
+func TestInvoiceHandler_SummariesEndpoint(t *testing.T) {
+	repo := newFakeInvoiceRepo()
+	svc := NewInvoiceService(repo, newFakeBillingService(), newFakeGigFeeProvider())
+	h := NewInvoiceHandler(svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/finance/invoices/summaries", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Data []CurrencySummary
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+}

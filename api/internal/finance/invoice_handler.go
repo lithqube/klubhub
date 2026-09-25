@@ -29,10 +29,15 @@ func NewInvoiceHandler(svc *InvoiceService) *InvoiceHandler {
 // POST   /api/v1/finance/invoices/{id}/cancel  -> cancel (draft/issued -> cancelled)
 // POST   /api/v1/finance/invoices/{id}/correct -> correct (issued/paid -> corrected + new draft)
 func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Parse path: /api/v1/finance/invoices[/{id}[/action]]
+	// Parse path: /api/v1/finance/invoices[/{id}[/action]] or /api/v1/finance/invoices/summaries
 	path := r.URL.Path
 	const base = "/api/v1/finance/invoices"
-	if path == base {
+	if path == base || path == base+"/summaries" {
+		// /api/v1/finance/invoices/summaries → per-currency dashboard
+		if path == base+"/summaries" && r.Method == http.MethodGet {
+			h.handleSummaries(w, r)
+			return
+		}
 		switch r.Method {
 		case http.MethodGet:
 			h.handleList(w, r)
@@ -340,4 +345,18 @@ func (h *InvoiceHandler) handleCorrect(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv})
+}
+
+// handleSummaries returns per-currency dashboard aggregates.
+func (h *InvoiceHandler) handleSummaries(w http.ResponseWriter, r *http.Request) {
+	summaries, err := h.svc.Summaries(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	out := make([]CurrencySummary, 0, len(summaries))
+	for _, s := range summaries {
+		out = append(out, s)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": out})
 }
