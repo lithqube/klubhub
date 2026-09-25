@@ -322,7 +322,7 @@ func (h *Handler) exportJSONLD(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/ld+json")
-	_ = json.NewEncoder(w).Encode(JSONLD(x.Event, x.Location, Organizer{Name: x.Organizer}, x.Lineup))
+	_ = json.NewEncoder(w).Encode(JSONLD(x.Event, x.Location, x.Profile, x.Lineup))
 }
 
 func (h *Handler) exportICS(w http.ResponseWriter, r *http.Request) {

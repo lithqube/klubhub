@@ -87,6 +87,7 @@ type Organization struct {
 	Slug     string `json:"slug"`
 	Timezone string `json:"timezone"`
 	Currency string `json:"currency"`
+	Profile
 }
 
 // BootstrapInput creates the instance organisation and its first owner.
@@ -479,8 +480,8 @@ func (s *Service) Org(ctx context.Context, p authz.Principal) (Organization, err
 	}
 	var o Organization
 	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT id::text, name, slug, timezone, currency FROM organizations WHERE id = $1`, tenant).
-			Scan(&o.ID, &o.Name, &o.Slug, &o.Timezone, &o.Currency)
+		return tx.QueryRow(ctx, `SELECT id::text, name, slug, timezone, currency, `+profileCols+` FROM organizations WHERE id = $1`, tenant).
+			Scan(append([]any{&o.ID, &o.Name, &o.Slug, &o.Timezone, &o.Currency}, o.Profile.scanDest()...)...)
 	})
 	return o, err
 }

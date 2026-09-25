@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ExportData } from '~/types/event'
 import { dayLabel, rangeLabel } from '~/utils/datetime'
+import { accentOf } from '~/utils/exportPack'
 
 const props = defineProps<{ data: ExportData }>()
 const emit = defineEmits<{ download: [] }>()
@@ -28,15 +29,16 @@ async function draw() {
   if (!c || !ctx) return
   await document.fonts?.ready
   const e = props.data.event
+  const accent = accentOf(props.data)
   ctx.fillStyle = '#0e0e0f'
   ctx.fillRect(0, 0, W, H)
   // Scan lines + accent bar: Kinetic HUD, independent of the viewer's theme.
   ctx.fillStyle = 'rgba(150,248,255,0.04)'
   for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 1)
-  ctx.fillStyle = '#96f8ff'
+  ctx.fillStyle = accent
   ctx.fillRect(0, 0, 12, H)
   ctx.textBaseline = 'top'
-  ctx.fillStyle = '#96f8ff'
+  ctx.fillStyle = accent
   ctx.font = '600 26px Inter, system-ui, sans-serif'
   ctx.fillText(`${props.data.organizer.toUpperCase()} PRESENTS`, 72, 64)
   ctx.fillStyle = '#e0e0e2'

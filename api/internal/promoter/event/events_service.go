@@ -640,7 +640,28 @@ type ExportData struct {
 	Stages    []Stage        `json:"stages"`
 	Location  PublicLocation `json:"location"`
 	Organizer string         `json:"organizer"`
+	Profile   Organizer      `json:"organizer_profile"`
 	Embargoed bool           `json:"embargoed"`
+}
+
+// organizer reads the collective profile for exports.
+func organizer(ctx context.Context, tx pgx.Tx) (Organizer, error) {
+	var o Organizer
+	var website, instagram, soundcloud, ra, accent *string
+	err := tx.QueryRow(ctx, `SELECT name, bio, website_url, instagram_url, soundcloud_url, ra_url, accent_color
+	  FROM organizations WHERE id = $1`, tenantOf(ctx)).Scan(&o.Name, &o.Bio, &website, &instagram, &soundcloud, &ra, &accent)
+	if website != nil {
+		o.URL = *website
+	}
+	for _, l := range []*string{instagram, soundcloud, ra} {
+		if l != nil {
+			o.SameAs = append(o.SameAs, *l)
+		}
+	}
+	if accent != nil {
+		o.AccentColor = *accent
+	}
+	return o, err
 }
 
 // Export assembles export data. Blocked while the timetable has errors.
@@ -682,13 +703,13 @@ func (s *Service) Export(ctx context.Context, id uuid.UUID) (ExportData, error) 
 			}
 			venue = &v
 		}
-		var orgName string
-		if err := tx.QueryRow(ctx, `SELECT name FROM organizations WHERE id = $1`, tenantOf(ctx)).Scan(&orgName); err != nil {
+		org, err := organizer(ctx, tx)
+		if err != nil {
 			return err
 		}
 		out = ExportData{
 			Event: d.Event, Lineup: SortByBilling(d.Lineup), Stages: d.Stages,
-			Location: LocationAt(d.Event, venue, now), Organizer: orgName,
+			Location: LocationAt(d.Event, venue, now), Organizer: org.Name, Profile: org,
 			Embargoed: d.Status == StatusDraft || (d.PublishAt != nil && now.Before(*d.PublishAt)),
 		}
 		return nil

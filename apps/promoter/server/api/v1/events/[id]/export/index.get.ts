@@ -1,5 +1,5 @@
 import { hasErrors } from '~/utils/timetable'
-import { findEvent, venues } from '../../../-mockDb'
+import { findEvent, orgProfile, venues } from '../../../-mockDb'
 export default defineEventHandler((event) => {
   const e = findEvent(getRouterParam(event, 'id')!)
   if (hasErrors(e.issues)) throw createError({ statusCode: 409, data: { error: 'timetable_errors', issues: e.issues } })
@@ -12,6 +12,12 @@ export default defineEventHandler((event) => {
   const { venue: _v, stages, lineup, issues: _i, ...ev } = e
   return {
     event: ev, stages, lineup: [...lineup].sort((a, b) => a.billing_order - b.billing_order), location,
-    organizer: 'Nachtwerk Collective', embargoed: e.status === 'draft' || (!!e.publish_at && now < Date.parse(e.publish_at)),
+    organizer: 'Nachtwerk Collective',
+    organizer_profile: {
+      name: 'Nachtwerk Collective', url: orgProfile.website_url ?? undefined, bio: orgProfile.bio || undefined,
+      same_as: [orgProfile.instagram_url, orgProfile.soundcloud_url, orgProfile.ra_url].filter((l): l is string => !!l),
+      accent_color: orgProfile.accent_color ?? undefined,
+    },
+    embargoed: e.status === 'draft' || (!!e.publish_at && now < Date.parse(e.publish_at)),
   }
 })

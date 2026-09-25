@@ -21,7 +21,8 @@ export const useSessionStore = defineStore('session', () => {
   /** Owner/admin/finance without TOTP: most of their actions will be refused. */
   const needsMfa = computed(() => !!me.value && !me.value.mfa && me.value.roles.some(r => MFA_ROLES.has(r)))
 
-  /** UI hint only; the API enforces the same rule through OPA. */
+  /** UI hints only; the API enforces the same rules through OPA. */
+  const canManageOrg = computed(() => !!me.value?.roles.some(r => r === 'owner' || r === 'admin'))
   const canEditEvents = computed(() => !!me.value?.roles.some(r => EDIT_ROLES.has(r)))
 
   async function fetchMe(): Promise<Me | null> {
@@ -77,5 +78,5 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  return { me, loaded, isAuthenticated, needsMfa, canEditEvents, fetchMe, login, logout, completeSetup, enrollTotp, confirmTotp }
+  return { me, loaded, isAuthenticated, needsMfa, canEditEvents, canManageOrg, fetchMe, login, logout, completeSetup, enrollTotp, confirmTotp }
 })

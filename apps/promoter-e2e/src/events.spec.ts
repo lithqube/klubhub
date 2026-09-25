@@ -52,4 +52,15 @@ test.describe('events, export and venues (mock API)', () => {
     await page.getByRole('button', { name: 'ARCHIVE' }).click();
     await expect(page.getByRole('alert')).toContainText('Upcoming events still use this venue');
   });
+
+  test('collective profile refuses non-https links and warns on low contrast', async ({ page }) => {
+    await page.goto('/settings');
+    await hydrated(page);
+    await page.getByLabel('WEBSITE').fill('http://nachtwerk.example');
+    await page.getByLabel('Accent colour hex').fill('#1a1a40');
+    await expect(page.getByText(/hard to read/)).toBeVisible();
+    await page.getByRole('button', { name: 'SAVE PROFILE' }).click();
+    await expect(page.getByText('Use a full https:// link.')).toBeVisible();
+    await expect(page.getByLabel('WEBSITE')).toBeFocused();
+  });
 });

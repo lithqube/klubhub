@@ -12,6 +12,7 @@ const x: ExportData = {
   },
   lineup: [{ id: 'l', stage_id: null, display_name: 'Ben Klock', profile_url: null, billing_order: 0, b2b_group: null, set_start: null, set_end: null }],
   stages: [], organizer: 'Nachtwerk', embargoed: false,
+  organizer_profile: { name: 'Nachtwerk', url: 'https://nachtwerk.example', same_as: ['javascript:alert(1)', 'https://instagram.com/nachtwerk'], accent_color: '#c3a9ff' },
   location: { name: 'Berlin — location TBA', city: 'Berlin', withheld: true, reveal_at: '2026-10-03T10:00:00Z' },
 }
 
@@ -41,5 +42,19 @@ describe('export pack links', () => {
   it('keeps unlisted pages out of search engines', () => {
     expect(staticPage({ ...x, event: { ...x.event, visibility: 'unlisted' } }, null)).toContain('noindex')
     expect(staticPage(x, null)).not.toContain('noindex')
+  })
+})
+
+describe('export pack profile', () => {
+  it('uses the collective accent and only safe profile links', () => {
+    const html = staticPage(x, null)
+    expect(html).toContain('background:#c3a9ff')
+    expect(html).toContain('href="https://instagram.com/nachtwerk"')
+    expect(html.match(/javascript:/g)).toBeNull()
+    expect(platformFields(x, 'generic').at(-1)?.value).toBe('Nachtwerk · https://nachtwerk.example')
+  })
+
+  it('falls back to the default accent for malformed colours', () => {
+    expect(embedSnippet({ ...x, organizer_profile: { name: 'N', accent_color: 'red;background:url(x)' } })).toContain('#96f8ff')
   })
 })

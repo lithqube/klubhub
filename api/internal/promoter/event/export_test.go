@@ -107,3 +107,15 @@ func TestPlainText(t *testing.T) {
 }
 
 func ptrS(s string) *string { return &s }
+
+func TestJSONLDOrganizerCarriesProfileLinks(t *testing.T) {
+	ev := sampleEvent()
+	org := Organizer{Name: "Nachtwerk", URL: "https://nachtwerk.example", SameAs: []string{"https://instagram.com/nachtwerk", "https://ra.co/promoters/1"}}
+	o, _ := JSONLD(ev, LocationAt(ev, venue, *at(1, 0, 0)), org, nil)["organizer"].(map[string]any)
+	if o["url"] != "https://nachtwerk.example" {
+		t.Errorf("organizer url: %v", o)
+	}
+	if links, _ := o["sameAs"].([]string); len(links) != 2 {
+		t.Errorf("organizer sameAs: %v", o)
+	}
+}

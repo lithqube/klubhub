@@ -2,6 +2,7 @@
 // Shapes mirror the Go API; timetable issues come from the shared client
 // validator so the UI behaves as it will against the server.
 import type { EventDetail, EventSummary, Venue } from '~/types/event'
+import type { Organization, OrgProfile } from '~/types/org'
 import { validateTimetable } from '~/utils/timetable'
 
 const DAY = 86_400_000
@@ -90,3 +91,14 @@ export const newId = (p: string) => `${p}-${Math.random().toString(36).slice(2, 
 
 /** Mock session: an owner who turns on TOTP via ACCOUNT → SECURITY. */
 export const mockSession = { mfa: false }
+
+/** Mock collective profile (P1.5). */
+export const orgProfile: OrgProfile = {
+  bio: 'Berlin techno nights since 2019.', website_url: 'https://nachtwerk.example', instagram_url: 'https://instagram.com/nachtwerk',
+  soundcloud_url: null, ra_url: null, accent_color: null,
+}
+
+export const mockOrg = (): Organization => ({
+  id: '0190f1d2-7c1a-7a00-9f00-000000000001', name: 'Nachtwerk Collective', slug: 'nachtwerk',
+  timezone: 'Europe/Berlin', currency: 'EUR', ...orgProfile,
+})

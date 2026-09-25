@@ -161,12 +161,22 @@ export interface PublicLocation {
   reveal_at?: string
 }
 
+/** The collective as exports show it (P1.5). */
+export interface OrganizerProfile {
+  name: string
+  url?: string
+  same_as?: string[]
+  bio?: string
+  accent_color?: string
+}
+
 export interface ExportData {
   event: PromoterEvent
   lineup: LineupEntry[]
   stages: Stage[]
   location: PublicLocation
   organizer: string
+  organizer_profile: OrganizerProfile
   embargoed: boolean
 }
 

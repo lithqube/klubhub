@@ -271,3 +271,33 @@ func TestOrgIsReadableOnlyForItsTenant(t *testing.T) {
 		t.Fatalf("org: %+v %v", org, err)
 	}
 }
+
+func TestProfileIsValidatedStoredAndAudited(t *testing.T) {
+	svc, _ := fresh(t)
+	bootstrapOwner(t, svc)
+	res, _ := svc.Login(context.Background(), identity.LoginInput{Email: "owner@nachtwerk.example", Password: ownerPass})
+	r, _ := authenticate(svc, res.Cookie)
+	p, _ := svc.Authenticate(r)
+	ctx := context.Background()
+	s := func(v string) *string { return &v }
+
+	var perr *identity.ProfileError
+	if _, err := svc.UpdateProfile(ctx, p, identity.Profile{WebsiteURL: s("http://nachtwerk.example")}); !errors.As(err, &perr) || perr.Field != "website_url" {
+		t.Fatalf("plain http must be refused, got %v", err)
+	}
+	if _, err := svc.UpdateProfile(ctx, p, identity.Profile{AccentColor: s("cyan")}); !errors.As(err, &perr) || perr.Field != "accent_color" {
+		t.Fatalf("bad colour must be refused, got %v", err)
+	}
+	org, err := svc.UpdateProfile(ctx, p, identity.Profile{Bio: "  Berlin techno since 2019. ", WebsiteURL: s(" https://nachtwerk.example "), AccentColor: s("#C3A9FF"), RAURL: s("")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if org.Bio != "Berlin techno since 2019." || *org.WebsiteURL != "https://nachtwerk.example" || *org.AccentColor != "#c3a9ff" || org.RAURL != nil {
+		t.Fatalf("profile not normalised: %+v", org.Profile)
+	}
+	var n int
+	_ = testDB.Owner.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE action = 'org.update'`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("profile change must be audited once, got %d", n)
+	}
+}

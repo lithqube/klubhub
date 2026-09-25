@@ -52,10 +52,13 @@ func LocationAt(ev Event, venue *PublicVenue, now time.Time) PublicLocation {
 	return PublicLocation{Name: venue.Name, City: city, Country: venue.Country, Address: venue.Address}
 }
 
-// Organizer is the collective as it appears in exports.
+// Organizer is the collective as it appears in exports (P1.5 profile).
 type Organizer struct {
-	Name string
-	URL  string
+	Name        string   `json:"name"`
+	URL         string   `json:"url,omitempty"`
+	SameAs      []string `json:"same_as,omitempty"`
+	Bio         string   `json:"bio,omitempty"`
+	AccentColor string   `json:"accent_color,omitempty"`
 }
 
 var schemaStatus = map[string]string{
@@ -100,6 +103,9 @@ func JSONLD(ev Event, loc PublicLocation, org Organizer, lineup []LineupEntry) m
 		o := map[string]any{"@type": "Organization", "name": org.Name}
 		if org.URL != "" {
 			o["url"] = org.URL
+		}
+		if len(org.SameAs) > 0 {
+			o["sameAs"] = org.SameAs
 		}
 		doc["organizer"] = o
 	}

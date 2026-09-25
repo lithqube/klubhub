@@ -38,6 +38,7 @@ func (h *Handler) Mount(r chi.Router, e *authz.Engine, reg *authz.Registry, onDe
 	pub(http.MethodPost, "/api/v1/door/login", h.doorLogin)
 
 	guarded(http.MethodGet, "/api/v1/org", "org.read", "org", h.org)
+	guarded(http.MethodPut, "/api/v1/org/profile", "org.update", "org", h.updateProfile)
 	guarded(http.MethodPost, "/api/v1/auth/totp/enroll", "account.self", "account", h.totpEnroll)
 	guarded(http.MethodPost, "/api/v1/auth/totp/confirm", "account.self", "account", h.totpConfirm)
 	guarded(http.MethodPost, "/api/v1/members/invites", "member.manage", "member", h.invite)
@@ -64,7 +65,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func fail(w http.ResponseWriter, err error) {
+	var perr *ProfileError
 	switch {
+	case errors.As(err, &perr):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid", "field": perr.Field, "problem": perr.Problem})
 	case errors.Is(err, ErrTOTPRequired):
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "totp_required"})
 	case errors.Is(err, ErrInvalidCredentials):
@@ -153,6 +157,20 @@ func (h *Handler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) org(w http.ResponseWriter, r *http.Request) {
 	p, _ := authz.PrincipalFrom(r.Context())
 	o, err := h.svc.Org(r.Context(), p)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, o)
+}
+
+func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
+	p, _ := authz.PrincipalFrom(r.Context())
+	var in Profile
+	if !decode(w, r, &in) {
+		return
+	}
+	o, err := h.svc.UpdateProfile(r.Context(), p, in)
 	if err != nil {
 		fail(w, err)
 		return
