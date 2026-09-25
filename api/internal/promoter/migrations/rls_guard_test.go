@@ -75,7 +75,7 @@ func TestEveryTableIsTenantIsolated(t *testing.T) {
 			key = "tenant_id"
 		}
 		t.Run(table, func(t *testing.T) {
-			if !regexp.MustCompile(`(?im)^\s*` + key + `\s+UUID\b.*NOT\s+NULL`).MatchString(body) &&
+			if !regexp.MustCompile(`(?im)^\s*`+key+`\s+UUID\b.*NOT\s+NULL`).MatchString(body) &&
 				!(key == "id" && regexp.MustCompile(`(?im)^\s*id\s+UUID\s+PRIMARY\s+KEY`).MatchString(body)) {
 				t.Errorf("%s: missing %s UUID NOT NULL column", table, key)
 			}
