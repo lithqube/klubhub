@@ -333,8 +333,12 @@ func (s *Service) Authenticate(r *http.Request) (authz.Principal, error) {
 			expires    time.Time
 		)
 		err := tx.QueryRow(ctx, `SELECT s.id, s.user_id, s.device_id, s.event_scope, s.amr, s.auth_time, s.last_seen_at, s.expires_at
-		  FROM sessions s LEFT JOIN users u ON u.id = s.user_id
-		  WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND (s.user_id IS NULL OR u.status = 'active')`, hash).
+		  FROM sessions s
+		  LEFT JOIN users u ON u.id = s.user_id
+		  LEFT JOIN door_devices d ON d.id = s.device_id
+		  WHERE s.token_hash = $1 AND s.revoked_at IS NULL
+		    AND (s.user_id IS NULL OR u.status = 'active')
+		    AND (s.device_id IS NULL OR d.revoked_at IS NULL)`, hash).
 			Scan(&id, &userID, &deviceID, &eventScope, &amr, &authTime, &lastSeen, &expires)
 		if err != nil {
 			return auth.ErrUnauthenticated
