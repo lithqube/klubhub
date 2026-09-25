@@ -90,3 +90,7 @@ apps/dj/tsconfig.tsbuildinfo
 brag-output/
 brag-output-*
 .playwright-mcp/
+
+# KlubHub Promoter local state (generated secrets, NATS creds) and Infisical link
+.local/
+.infisical.json

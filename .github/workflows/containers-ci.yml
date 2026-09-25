@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'apps/dj/**'
+      - 'libs/ui/**'
       - 'Dockerfile'
       - '.github/workflows/containers-ci.yml'
       - 'package.json'

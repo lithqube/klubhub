@@ -1,26 +1,13 @@
+# Gitleaks — secret scanning gate (CI: .github/workflows/promoter-ci.yml).
+# Extends the default ruleset. Allowlisted paths contain fixtures that are
+# fake by construction; adding a path here is a review decision.
+
 [extend]
 useDefault = true
 
-# The credential was committed before this hardening PR. This exception is
-# deliberately constrained to both the introducing commit and the one launch
-# file; future findings in that path or commit do not match independently.
-[[allowlists]]
-description = "pre-v1 launch config credential removed and rotated"
-condition = "AND"
-commits = ["0ee380af4ef7a6ccc737153238bd54b89e8a4d51"]
-paths = ['''^\.claude/launch\.json$''']
-
-[[allowlists]]
-description = "historical empty Garage variable mistaken for a generic key"
-condition = "AND"
-commits = ["35a3d6fa56305d7d9114c9cae97aa3f16adce78c"]
-paths = ['''^\.planning/phases/00-infrastructure/00-02-PLAN\.md$''']
-
-[[allowlists]]
-description = "generated file-manifest SHA hashes mistaken for Discord tokens"
-condition = "AND"
-commits = ["4e5eff76d5182a9cebac25a3d82ee4864644a592"]
+[allowlist]
+description = "Fake test fixtures and templates"
 paths = [
-  '''^\.claude/gsd-file-manifest\.json$''',
-  '''^\.opencode/gsd-file-manifest\.json$''',
+  '''apps/site/site\.test\.mjs$''',  # pk_test_… placeholder Plunk key
+  '''\.infisical\.example\.json$''',
 ]

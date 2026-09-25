@@ -99,13 +99,16 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 	return r, reg
 }
 
+// securityHeaders covers API responses. Pages proxied from Nuxt carry
+// nuxt-security's headers (CSP with nonce, HSTS, …); setting them here too
+// would duplicate X-Frame-Options, which some browsers then ignore.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
-		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Referrer-Policy", "no-referrer")
 			h.Set("Cache-Control", "no-store")
 			h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 		}

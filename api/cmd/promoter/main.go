@@ -27,6 +27,7 @@ import (
 
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
+	platformconfig "github.com/klubhub/dj/api/internal/platform/config"
 	"github.com/klubhub/dj/api/internal/platform/envelope"
 	"github.com/klubhub/dj/api/internal/platform/events"
 	applog "github.com/klubhub/dj/api/internal/platform/log"
@@ -36,6 +37,9 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/migrations"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
+
+// version is set at build time (-ldflags -X main.version).
+var version = "dev"
 
 func main() {
 	cmd := "serve"
@@ -53,6 +57,8 @@ func main() {
 		err = bootstrap(args)
 	case "healthcheck":
 		err = healthcheck()
+	case "version":
+		fmt.Println(version)
 	default:
 		err = fmt.Errorf("unknown command %q (serve | migrate | bootstrap | healthcheck)", cmd)
 	}
@@ -212,15 +218,17 @@ func startRelay(ctx context.Context, rt *runtime) (func(), error) {
 	}, nil
 }
 
+// migrate needs only the schema-owner connection (and optional role
+// passwords), so the one-shot migration container never holds the KEK.
 func migrate() error {
-	cfg, err := config.Load()
-	if err != nil {
+	if err := platformconfig.LoadFileSecrets(); err != nil {
 		return err
 	}
-	if cfg.MigrateDatabaseURL == "" {
+	dsn := os.Getenv("PROMOTER_MIGRATE_DATABASE_URL")
+	if dsn == "" {
 		return errors.New("PROMOTER_MIGRATE_DATABASE_URL (schema owner) is required for migrate")
 	}
-	db, err := sql.Open("pgx", cfg.MigrateDatabaseURL)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return err
 	}
@@ -229,6 +237,24 @@ func migrate() error {
 	defer cancel()
 	if err := migrations.Up(ctx, db); err != nil {
 		return err
+	}
+	// Runtime roles get LOGIN and their passwords from secrets, never from a
+	// migration file (plan §13.3). format(%L) quotes the literal server-side.
+	for role, env := range map[string]string{"klubhub_app": "PROMOTER_APP_DB_PASSWORD", "klubhub_relay": "PROMOTER_RELAY_DB_PASSWORD"} {
+		pw := os.Getenv(env)
+		if pw == "" {
+			continue
+		}
+		if len(pw) < 24 {
+			return fmt.Errorf("%s must be at least 24 characters", env)
+		}
+		var stmt string
+		if err := db.QueryRowContext(ctx, `SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', $1::text, $2::text)`, role, pw).Scan(&stmt); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("set %s password: %w", role, err)
+		}
 	}
 	fmt.Println("promoter: migrations applied")
 	return nil
