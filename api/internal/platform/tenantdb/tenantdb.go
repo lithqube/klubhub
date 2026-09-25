@@ -81,3 +81,39 @@ func AssertRuntimeRole(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	return nil
 }
+
+// DB is the handle Promoter domain packages hold instead of a pool, so the
+// only operations available to them are tenant-scoped transactions.
+type DB struct{ pool *pgxpool.Pool }
+
+// New wraps pool. Call AssertRuntimeRole on the pool first.
+func New(pool *pgxpool.Pool) *DB { return &DB{pool: pool} }
+
+// WithTenant runs fn in a transaction scoped to tenantID.
+func (d *DB) WithTenant(ctx context.Context, tenantID uuid.UUID, fn func(pgx.Tx) error) error {
+	return WithTenant(ctx, d.pool, tenantID, fn)
+}
+
+// Run runs fn scoped to the tenant carried by ctx.
+func (d *DB) Run(ctx context.Context, fn func(pgx.Tx) error) error {
+	return Run(ctx, d.pool, fn)
+}
+
+// ErrNoInstanceTenant means the self-hosted instance has no organisation
+// yet, or (misconfiguration) more than one.
+var ErrNoInstanceTenant = errors.New("tenantdb: no single instance organisation")
+
+// InstanceTenant returns the only organisation of a self-hosted instance
+// (plan D6: local identity is single-organisation). It is the one lookup
+// that runs before a tenant is known, through the narrow SECURITY DEFINER
+// function promoter_instance_tenant(), which returns an id only.
+func (d *DB) InstanceTenant(ctx context.Context) (uuid.UUID, error) {
+	var id *uuid.UUID
+	if err := d.pool.QueryRow(ctx, `SELECT promoter_instance_tenant()`).Scan(&id); err != nil {
+		return uuid.Nil, fmt.Errorf("tenantdb: instance tenant: %w", err)
+	}
+	if id == nil {
+		return uuid.Nil, ErrNoInstanceTenant
+	}
+	return *id, nil
+}

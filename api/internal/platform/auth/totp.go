@@ -67,3 +67,6 @@ func TOTPProvisioningURI(secret []byte, issuer, account string) string {
 	q := url.Values{"secret": {enc}, "issuer": {issuer}, "algorithm": {"SHA1"}, "digits": {"6"}, "period": {"30"}}
 	return "otpauth://totp/" + label + "?" + q.Encode()
 }
+
+// TOTPCode returns the 6-digit code for secret at t (tests and tooling).
+func TOTPCode(secret []byte, t time.Time) string { return totpCode(secret, t, totpDigits) }
