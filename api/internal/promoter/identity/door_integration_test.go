@@ -15,6 +15,19 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 )
 
+// newEvent inserts a minimal event for the owner's organisation (fixture,
+// as the schema owner; the events service is tested in its own package).
+func newEvent(t *testing.T, org string) uuid.UUID {
+	t.Helper()
+	id := uuid.Must(uuid.NewV7())
+	start := time.Now().Add(24 * time.Hour)
+	if _, err := testDB.Owner.Exec(context.Background(), `INSERT INTO events (id, tenant_id, title, slug, starts_at, ends_at, timezone, city)
+	  VALUES ($1, $2, 'Night', $3, $4, $5, 'UTC', 'Berlin')`, id, org, "night-"+id.String()[24:], start, start.Add(6*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func ownerPrincipal(t *testing.T, svc *identity.Service) authz.Principal {
 	t.Helper()
 	bootstrapOwner(t, svc)
@@ -35,7 +48,7 @@ func TestDoorDeviceAndPinYieldEventScopedSession(t *testing.T) {
 	svc, c := fresh(t)
 	owner := ownerPrincipal(t, svc)
 	ctx := context.Background()
-	event := uuid.Must(uuid.NewV7())
+	event := newEvent(t, owner.OrgID)
 
 	device, err := svc.RegisterDoorDevice(ctx, owner, "Door iPhone 1")
 	if err != nil {
@@ -67,7 +80,7 @@ func TestDoorLoginRefusesUnknownDevicesAndLocksOutPINGuessing(t *testing.T) {
 	svc, c := fresh(t)
 	owner := ownerPrincipal(t, svc)
 	ctx := context.Background()
-	event := uuid.Must(uuid.NewV7())
+	event := newEvent(t, owner.OrgID)
 	device, _ := svc.RegisterDoorDevice(ctx, owner, "Door 1")
 	pin, _ := svc.SetDoorPIN(ctx, owner, event, c.t.Add(10*time.Hour))
 
@@ -97,7 +110,7 @@ func TestRevokedDeviceAndExpiredPINAreRefused(t *testing.T) {
 	svc, c := fresh(t)
 	owner := ownerPrincipal(t, svc)
 	ctx := context.Background()
-	event := uuid.Must(uuid.NewV7())
+	event := newEvent(t, owner.OrgID)
 	device, _ := svc.RegisterDoorDevice(ctx, owner, "Door 1")
 	pin, _ := svc.SetDoorPIN(ctx, owner, event, c.t.Add(time.Hour))
 

@@ -183,7 +183,16 @@ func TestEndToEndSelfHostedFlow(t *testing.T) {
 		Token string `json:"token"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &device)
+	var orgID string
+	if err := testDB.Owner.QueryRow(ctx, `SELECT id::text FROM organizations`).Scan(&orgID); err != nil {
+		t.Fatal(err)
+	}
 	event := uuid.Must(uuid.NewV7())
+	start := time.Now().Add(time.Hour)
+	if _, err := testDB.Owner.Exec(ctx, `INSERT INTO events (id, tenant_id, title, slug, starts_at, ends_at, timezone, city)
+	  VALUES ($1, $2, 'Night', 'night', $3, $4, 'UTC', 'Berlin')`, event, orgID, start, start.Add(6*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
 	rec = owner.do(http.MethodPost, "/api/v1/door/events/"+event.String()+"/pin", map[string]any{"valid_until": time.Now().Add(8 * time.Hour)}, true)
 	var pin struct {
 		PIN string `json:"pin"`

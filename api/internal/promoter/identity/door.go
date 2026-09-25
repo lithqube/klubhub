@@ -85,6 +85,13 @@ func (s *Service) SetDoorPIN(ctx context.Context, by authz.Principal, event uuid
 		if err != nil {
 			return err
 		}
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM events WHERE id = $1)`, event).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrInvalidInput
+		}
 		_, err = tx.Exec(ctx, `INSERT INTO door_pins (tenant_id, event_id, pin_hash_enc, expires_at, created_by)
 		  VALUES ($1, $2, $3, $4, $5)
 		  ON CONFLICT (tenant_id, event_id) DO UPDATE
