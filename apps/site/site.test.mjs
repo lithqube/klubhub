@@ -21,6 +21,8 @@
  *     asset (no third-party script tag, no Mailtrap-shaped residue).
  *   - The build fails closed when PLUNK_PUBLIC_KEY is missing or is
  *     still the placeholder.
+ *   - The page links to the browser demo (https://klubhub.io/demo/),
+ *     which is kept out of the sitemap.
  *
  * Run via `node --test apps/site/site.test.mjs` or
  * `pnpm exec nx run site:test`.
@@ -59,6 +61,16 @@ test('local links resolve and section IDs are unique', async () => {
     else if (href.startsWith('./')) await stat(`dist/site/${href.slice(2)}`);
     else assert.ok(href.startsWith('https://'), href);
   }
+});
+
+test('links to the browser demo, which stays out of the sitemap', async () => {
+  const html = await read('index.html');
+  // Hero actions and the KlubHub DJ panel (next to "Get started").
+  const links = html.match(/href="https:\/\/klubhub\.io\/demo\/"/g) ?? [];
+  assert.ok(links.length >= 2, `expected two demo links, found ${links.length}`);
+  assert.match(html, /Try the demo/);
+  // The demo is noindex (docs/DEMO.md), so it is not listed for crawlers.
+  assert.doesNotMatch(await read('sitemap.xml'), /\/demo\//);
 });
 
 test('uses application design tokens and ships all local fonts', async () => {

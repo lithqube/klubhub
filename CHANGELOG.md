@@ -22,6 +22,16 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Browser-only demo at [klubhub.io/demo](https://klubhub.io/demo/).** The
+  app can be built as a static SPA with `NUXT_DEMO=1`
+  (`pnpm nx run @dev/dj:build-demo` writes `dist/demo`). An in-browser API
+  (`apps/dj/app/demo`) answers every `/api/v1` call from fictional sample
+  data kept in the visitor's `localStorage`, with a banner and a
+  **Reset demo** button. No request reaches the Go API or any third party.
+  The invoicing rules now live in `apps/dj/shared/finance-mock`, shared by
+  the demo and the Nitro dev mocks. The Pages workflow builds the demo and
+  publishes it under `/demo/`, and the site links to it. Normal dev and
+  production builds are unchanged. See [`docs/DEMO.md`](docs/DEMO.md).
 - A general edition feature-flag mechanism: `Features` in the API config
   (`FEATURE_*` env vars), `runtimeConfig.public.features` with the
   `useFeatures()` composable in the UI, and one registry of licensed

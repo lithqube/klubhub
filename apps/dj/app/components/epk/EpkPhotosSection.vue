@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useEpkStore } from '~/stores/epk'
+import { apiAssetUrl } from '~/utils/apiAssetUrl'
 
 const store = useEpkStore()
 
@@ -11,7 +12,7 @@ const photoCount = computed(() => store.photoCount)
 const fileInput = ref<HTMLInputElement>()
 
 function getPhotoUrl(path: string): string {
-  return `/api/v1/storage/proxy?path=${encodeURIComponent(path)}`
+  return apiAssetUrl(`/api/v1/storage/proxy?path=${encodeURIComponent(path)}`)
 }
 
 async function onFilesSelected(files: FileList | null) {

@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import type { ScheduledPost } from '~/types/social'
 import { useSocialStore } from '~/stores/social'
+import { apiAssetUrl } from '~/utils/apiAssetUrl'
 
 const props = defineProps<{
   post: ScheduledPost
@@ -88,7 +89,7 @@ const platformTag = computed(() =>
     <div class="h-40 bg-surface-variant flex items-center justify-center flex-shrink-0 overflow-hidden">
       <img
         v-if="post.imageMinioPath"
-        :src="`/api/v1/social/posts/${post.id}/image`"
+        :src="apiAssetUrl(`/api/v1/social/posts/${post.id}/image`)"
         class="w-full h-full object-cover"
         alt="Post image"
         @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"

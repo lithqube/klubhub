@@ -20,6 +20,25 @@
         "command": "node apps/dj/scripts/build-prod.mjs",
         "cwd": "."
       }
+    },
+    "build-demo": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "outputs": [
+        "{workspaceRoot}/dist/demo"
+      ],
+      "options": {
+        "command": "node apps/dj/scripts/build-demo.mjs",
+        "cwd": "."
+      }
+    },
+    "test-demo": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node --test apps/dj/tests-demo/smoke.test.mjs",
+        "cwd": "."
+      }
     }
   }
 }

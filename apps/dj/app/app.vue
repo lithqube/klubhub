@@ -31,6 +31,8 @@ onMounted(() => initTheme())
 // canvas, otherwise Playwright captures the nav and status bar too.
 const route = useRoute()
 const isBareRoute = computed(() => route.path.startsWith('/render/'))
+// Browser-only demo build (docs/DEMO.md) shows a slim banner on every page.
+const { isDemo } = useDemo()
 
 function handleError(error: Error) {
   console.error('[KlubHub] Unhandled error:', error)
@@ -55,6 +57,8 @@ function handleError(error: Error) {
         pb-16 (64px)  → clears TheBottomNav on mobile   (Fitts's Law: content not under tap targets)
         lg:pb-[var(--status-bar-h)] → clears TheStatusBar on desktop (was 40px under a 49px bar)
       -->
+
+      <TheDemoBanner v-if="isDemo" />
 
       <!-- Mobile brand bar: logo + status + theme toggle (lg:hidden) -->
       <TheMobileHeader />

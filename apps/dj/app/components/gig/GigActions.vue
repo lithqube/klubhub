@@ -3,6 +3,7 @@ import { useGigStore } from '../../stores/gig'
 import { useInvoiceStore, toFinanceError } from '../../stores/invoice'
 import { isActiveInvoice } from '../../utils/invoiceDisplay'
 import type { Gig } from '../../types/gig'
+import { DEMO_ICAL_HINT, useDemo } from '../../composables/useDemo'
 
 const props = defineProps<{
   gig: Gig
@@ -12,7 +13,10 @@ const gigStore = useGigStore()
 const toastMessage = ref('')
 const showToast = ref(false)
 
+const { isDemo, downloadCalendar } = useDemo()
+
 async function copyICalUrl() {
+  if (isDemo) return downloadCalendar().catch(() => flash('Calendar download failed'))
   const url = gigStore.generateICalUrl()
   try {
     await navigator.clipboard.writeText(
@@ -74,7 +78,7 @@ async function downloadPdf() {
   <div style="display:flex;gap:6px;align-items:center;">
     <button
       class="btn-hud btn-hud-xs"
-      title="Copy iCal feed URL"
+      :title="isDemo ? DEMO_ICAL_HINT : 'Copy iCal feed URL'"
       @click="copyICalUrl"
     >
       ICAL

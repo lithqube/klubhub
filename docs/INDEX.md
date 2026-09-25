@@ -24,6 +24,7 @@ matches your role.
 | Doc | Why read it |
 |-----|-------------|
 | [`../README.md`](../README.md) | Feature overview, quick-start, environment variables, project structure |
+| [`DEMO.md`](./DEMO.md) | The browser-only demo at [klubhub.io/demo](https://klubhub.io/demo/): how it works, what is simulated, how to build and preview it |
 | [`v1-release-plan.md`](./v1-release-plan.md) | The roadmap to v1.0.0 — what modules ship, what is gated behind the future cloud product |
 | [`v2-saas-migration-plan.md`](./v2-saas-migration-plan.md) | Future SaaS evolution (KlubHub Cloud) and how it relates to the open-source build |
 

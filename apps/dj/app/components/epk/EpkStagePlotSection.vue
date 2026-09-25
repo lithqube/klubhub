@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useEpkStore } from '~/stores/epk'
+import { apiAssetUrl } from '~/utils/apiAssetUrl'
 
 const store = useEpkStore()
 const stagePlotPath = computed(() => store.stagePlotPath)
@@ -10,14 +11,13 @@ const uploadedFilename = ref<string>('')
 
 const stagePlotUrl = computed(() => {
   if (!stagePlotPath.value) return ''
-  return `/api/v1/storage/proxy?path=${encodeURIComponent(stagePlotPath.value)}`
+  return apiAssetUrl(`/api/v1/storage/proxy?path=${encodeURIComponent(stagePlotPath.value)}`)
 })
 
 function onDrop(e: DragEvent) {
   const files = e.dataTransfer?.files ?? null
-  if (files && files.length > 0) {
-    handleFile(files[0])
-  }
+  const file = files?.[0]
+  if (file) handleFile(file)
 }
 
 function onFileChange(e: Event) {

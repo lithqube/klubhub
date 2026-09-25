@@ -9,6 +9,7 @@ import GigCalendarView from '../components/gig/GigCalendarView.vue'
 import GigFormDialog from '../components/gig/GigFormDialog.vue'
 import RaEventImport from '../components/gig/RaEventImport.vue'
 import { useFeatures } from '../composables/useFeatures'
+import { DEMO_ICAL_HINT, useDemo } from '../composables/useDemo'
 import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
 
 
@@ -61,7 +62,10 @@ function onGigClickFromCalendar(gig: Gig) {
   openEditGig(gig)
 }
 
+const { isDemo, downloadCalendar } = useDemo()
+
 async function copyICalUrl() {
+  if (isDemo) return downloadCalendar().catch((e) => console.warn('Calendar download failed:', e))
   const url = gigStore.generateICalUrl()
   try {
     await navigator.clipboard.writeText(`${window.location.origin}${url}`)
@@ -101,7 +105,7 @@ function clearFilters() {
         <button
           class="btn-hud btn-hud-ghost"
           style="padding:0 14px;"
-          title="Copy iCal feed URL"
+          :title="isDemo ? DEMO_ICAL_HINT : 'Copy iCal feed URL'"
           @click="copyICalUrl"
         >
           <Download style="width:12px;height:12px;" aria-hidden="true" />

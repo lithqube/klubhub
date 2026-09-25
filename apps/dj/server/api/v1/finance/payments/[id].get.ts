@@ -1,7 +1,4 @@
-import { fail, payments } from '../-mockDb'
+import * as ops from '../../../../../shared/finance-mock/ops'
+import { db, idOf, send } from '../-mockDb'
 
-export default defineEventHandler((event) => {
-  const p = payments.get(getRouterParam(event, 'id') ?? '')
-  if (!p) return fail(event, 404, 'not_found', 'payment not found')
-  return { data: p }
-})
+export default defineEventHandler((event) => send(event, ops.getPayment(db, idOf(event))))
