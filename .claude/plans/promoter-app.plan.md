@@ -675,3 +675,28 @@ The public surface is built as a **separate "public edge" module** (`api/interna
 10. CI: gitleaks, `opa test`, RLS and crypto guards, Trivy, SBOM, cosign.
 11. Docs: SECURITY.md (threat model and operator-visibility statement) plus ADRs under `docs/adr/` for D5–D8.
 12. Sealed-tier (E2EE) browser key management lands with the first sealed feature (P2 ban list), with the ADR written in P0.
+
+## 14. Status (2026-09-26)
+
+**P0 complete on `feat/promoter-app`** (not merged):
+
+| §13.8 task | Commit(s) | Verified by |
+|---|---|---|
+| 1 `libs/ui` layer | 3e7aaed, 4fcbddc | DJ 316/316 unit, DJ typecheck, compiled CSS identical to main (687 global rules) in the browser |
+| 2 `apps/promoter` + e2e | 4fcbddc, 0ccb9c4 | 12 unit, whole-app vue-tsc, 8 e2e (desktop + mobile) |
+| 3 RLS tenancy | 3509293 | RLS guard, 7 integration tests |
+| 4 envelope crypto | f77b44a | unit + keyring integration, data-class guard |
+| 5 embedded OPA | 50986ff | Rego tests, decision table, route coverage |
+| 6 identity (local, Zitadel, door) | 2aea49e, 7674d6a, 9d5542f, 1be3074 | unit + integration + end-to-end router test |
+| 7 NATS outbox + audit | 53ec953 | relay/least-privilege/immutability tests, JetStream dedupe on nats:2.11 |
+| 8 promoter binary | 1be3074 | Postgres smoke test |
+| 9 infra | 0aa4be5 | image build; compose stack healthy; bootstrap → door login → JetStream end to end |
+| 10 CI | 0aa4be5, 17dc896 | workflow YAML valid; gitleaks full history clean locally (not yet run on GitHub) |
+| 11 docs | ef3bacc | SECURITY.md, ADRs 0001–0006, SELF-HOSTING |
+| 12 sealed-tier browser keys | — | Model in ADR 0001; implementation with the P2 ban list |
+
+Deviations from the plan text: CSRF uses Origin/Referer + a custom header (not
+double-submit); Promoter migrations live in `api/internal/promoter/migrations`;
+dev port 4400; the promoter image has no browser runtime until P3.
+
+Next: P1 (events, venues, lineup, timetable, export pack).
