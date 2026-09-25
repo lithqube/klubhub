@@ -118,12 +118,28 @@ type SMTPConfig struct {
 	From     string
 }
 
-// SMTPSender is the abstraction over net/smtp for testability.
-type SMTPSender interface {
+// PlunkConfig holds Plunk credentials for delivery. Plunk is the open-source
+// email platform built on AWS SES (https://github.com/useplunk/plunk) that we
+// already use for the GitHub page. It exposes a public REST API:
+//   POST {BaseURL}/api/v1/{ProjectID}/emails
+//   Authorization: Bearer {APIKey}
+//   Content-Type: application/json
+//   Body: {"from": {...}, "to": "...", "subject": "...", "body": "...", ...}
+type PlunkConfig struct {
+	BaseURL   string // e.g. "https://app.useplunk.com" or self-hosted equivalent
+	ProjectID string // Plunk project UUID
+	APIKey    string // Bearer token
+	FromEmail string // default sender (override-able per message)
+	FromName  string
+}
+
+// EmailSender is the abstraction over delivery transports.
+// Implementations: DefaultSMTPSender (SMTP), PlunkSender (REST).
+type EmailSender interface {
 	Send(msg *EmailMessage) error
 }
 
-// DefaultSMTPSender is the real SMTP implementation.
+// DefaultSMTPSender is the SMTP implementation (kept for local dev / fallback).
 type DefaultSMTPSender struct {
 	cfg SMTPConfig
 }
@@ -172,10 +188,10 @@ type EmailRepositoryIface interface {
 // EmailService coordinates email creation and delivery.
 type EmailService struct {
 	repo   EmailRepositoryIface
-	sender SMTPSender
+	sender EmailSender
 }
 
-func NewEmailService(repo EmailRepositoryIface, sender SMTPSender) *EmailService {
+func NewEmailService(repo EmailRepositoryIface, sender EmailSender) *EmailService {
 	return &EmailService{repo: repo, sender: sender}
 }
 
