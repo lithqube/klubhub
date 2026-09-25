@@ -18,9 +18,10 @@
 }
 @font-face {
   font-family: 'Inter';
-  src: url('/fonts/Inter[slnt,wght].woff2') format('woff2-variations');
+  /* Google Fonts Inter 4 (OFL), opsz pinned to 14 (text), wght kept.
+     Subset: Latin incl. Extended-A/B/Additional, punctuation, currency. */
+  src: url('/fonts/Inter[wght].woff2') format('woff2-variations');
   font-weight: 100 900;
-  font-style: oblique 0deg 10deg;
   font-display: swap;
 }
 @font-face {
