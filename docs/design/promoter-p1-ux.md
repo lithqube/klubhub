@@ -221,5 +221,16 @@ Terminal labels uppercase; sentences in data register. Examples: "NO EVENTS YET 
 10. Design-system fixes: 44 px vs `btn-hud-sm/-xs`; MobileHeader theme buttons; `.row-selected` drift; `accent-bar-*` hex → tokens.
 11. Timetable snap: 15′ default, 5′ with Shift.
 
-## Decisions
-_To be filled as the product owner answers the open questions._
+## Decisions (product owner, 2026-09-26)
+| # | Decision |
+|---|---|
+| 1 | POSTPONED uses **violet** (secondary), always paired with its own icon and the word POSTPONED so it never relies on colour to differ from DRAFT. |
+| 2 | As recommended: `city_only` never exports the venue; `secret` shows the city and withholds the venue until `location_reveal_at` (no reveal time = hidden until changed). |
+| 3 | **Conflicted timetables may be saved** (team can share work in progress); the server returns the issues on every save, and **scheduling, publishing and exporting are blocked** while any timetable error exists. Device-local drafts remain for offline editing. |
+| 4 | Designer's matrix: owner/admin/booker edit events, venues and timetables; marketing reads and exports; finance reads; owner/admin/booker may reveal protected venue fields via `venue.reveal` (second factor required, every reveal audit-logged). |
+| 5 | As recommended: edits that would cut sets are rejected with a pre-check listing the affected sets. |
+| 6 | Unbuilt sections: grouped with phase tags on desktop, hidden on mobile. |
+| 7–8 | As recommended: private events export ICS + copy fields only; downloading before `publish_at` is allowed with an EMBARGOED banner and `-embargoed` ZIP suffix. |
+| 9 | Promoter status bar deferred to P2. |
+| 10 | Design-system fixes adopted: 44 px hit areas for small buttons, MobileHeader theme buttons, `.row-selected` uses a primary outline, accent-bar colours become tokens. |
+| 11 | Snap 15′, 5′ with Shift. |
