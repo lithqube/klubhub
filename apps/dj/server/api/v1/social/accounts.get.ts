@@ -4,7 +4,7 @@ export default defineEventHandler(() => {
       id: 'acc-001',
       platform: 'instagram',
       igUserId: '3891047256',
-      accountName: 'sync_error_dj',
+      accountName: 'sample_rate_dj',
       tokenExpiry: '2026-07-15T00:00:00Z',
       status: 'connected',
       createdAt: '2025-09-01T10:00:00Z',

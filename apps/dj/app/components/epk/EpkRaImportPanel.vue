@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRaStore } from '~/stores/ra'
+import { useFeatures } from '~/composables/useFeatures'
 import { useEpkStore } from '~/stores/epk'
 import { useSettingsStore } from '~/stores/settings'
 import Input from '~/components/ui/input/Input.vue'
 import { Search, ExternalLink, Check, AlertCircle, Loader, X } from 'lucide-vue-next'
 
+// Licensed edition feature: renders nothing unless RA import is enabled.
+const raImportEnabled = useFeatures().isEnabled('raImport')
 const raStore = useRaStore()
 const epkStore = useEpkStore()
 const settingsStore = useSettingsStore()
@@ -103,7 +106,7 @@ function clearForm() {
 </script>
 
 <template>
-  <div class="glass-panel" style="padding:14px 16px;">
+  <div v-if="raImportEnabled" class="glass-panel" style="padding:14px 16px;">
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       <div class="flex items-center gap-2" style="gap:8px;">

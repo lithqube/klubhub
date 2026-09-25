@@ -10,14 +10,17 @@ on:
     branches: [main]
     paths:
       - 'apps/site/**'
-      - 'apps/dj/app/assets/css/styles.css'
-      - 'apps/dj/public/fonts/**'
+      # The browser-only demo at /demo/ is built from the app (docs/DEMO.md).
+      - 'apps/dj/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/pages.yml'
   pull_request:
     paths:
       - 'apps/site/**'
-      - 'apps/dj/app/assets/css/styles.css'
-      - 'apps/dj/public/fonts/**'
+      - 'apps/dj/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 permissions:
@@ -26,7 +29,43 @@ concurrency:
   group: pages-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  # Browser-only demo of the app (NUXT_DEMO=1 static SPA, docs/DEMO.md),
+  # published at https://klubhub.io/demo/. Needs no secrets, so PR runs
+  # build it too.
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Same pnpm major as apps/dj/Dockerfile (the repo has no packageManager field).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # apps/dj/tsconfig.json extends the generated .nuxt/tsconfig.json, so
+      # vitest can't load any test until Nuxt has generated it. `nuxt
+      # prepare` runs in production mode, which requires an API base; the
+      # value is a placeholder (nothing is built or contacted).
+      - name: Generate Nuxt types
+        run: pnpm --filter @dev/dj exec nuxt prepare
+        env:
+          NUXT_PUBLIC_API_BASE: http://api:8080
+      - name: Test demo backend
+        run: pnpm --filter @dev/dj exec vitest run tests/demo-backend.test.ts tests/demo-fetch.test.ts tests/finance-mocks.test.ts
+      - name: Build demo
+        run: node apps/dj/scripts/build-demo.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo
+          path: dist/demo
+          if-no-files-found: error
+          retention-days: 3
   build:
+    needs: demo
     runs-on: ubuntu-latest
     # Bind the build job to the `github-pages` environment so it can
     # read environment secrets (PLUNK_PUBLIC_KEY, _STAGING, _PREVIEW).
@@ -84,6 +123,13 @@ jobs:
           PLUNK_PUBLIC_KEY: ${{ secrets.PLUNK_PUBLIC_KEY }}
           PLUNK_PUBLIC_KEY_STAGING: ${{ secrets.PLUNK_PUBLIC_KEY_STAGING }}
           PLUNK_PUBLIC_KEY_PREVIEW: ${{ secrets.PLUNK_PUBLIC_KEY_PREVIEW }}
+      # The site build wipes dist/site, so the demo goes in afterwards.
+      - uses: actions/download-artifact@v4
+        with:
+          name: demo
+          path: dist/site/demo
+      - name: Check demo placement
+        run: test -f dist/site/demo/index.html && test -f dist/site/demo/finance/index.html
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:

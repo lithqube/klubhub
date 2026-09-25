@@ -51,8 +51,10 @@ backups/work-*/
 
 # Nuxt dev/build outputs
 .output
+.output-demo
 .data
 .nuxt
+.nuxt-demo
 .nitro
 .cache
 vitest.config.*.timestamp*

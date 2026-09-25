@@ -8,12 +8,16 @@ import GigListRow from '../components/gig/GigListRow.vue'
 import GigCalendarView from '../components/gig/GigCalendarView.vue'
 import GigFormDialog from '../components/gig/GigFormDialog.vue'
 import RaEventImport from '../components/gig/RaEventImport.vue'
+import { useFeatures } from '../composables/useFeatures'
+import { DEMO_ICAL_HINT, useDemo } from '../composables/useDemo'
 import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
 
 
 useHead({ title: 'Gigs — KlubHub DJ' })
 
 const gigStore = useGigStore()
+// Licensed edition feature (docs/EDITIONS.md): hidden unless enabled.
+const raImportEnabled = useFeatures().isEnabled('raImport')
 const { gigs, loading, filters } = storeToRefs(gigStore)
 
 const viewMode = ref<'list' | 'calendar'>('list')
@@ -58,7 +62,10 @@ function onGigClickFromCalendar(gig: Gig) {
   openEditGig(gig)
 }
 
+const { isDemo, downloadCalendar } = useDemo()
+
 async function copyICalUrl() {
+  if (isDemo) return downloadCalendar().catch((e) => console.warn('Calendar download failed:', e))
   const url = gigStore.generateICalUrl()
   try {
     await navigator.clipboard.writeText(`${window.location.origin}${url}`)
@@ -98,7 +105,7 @@ function clearFilters() {
         <button
           class="btn-hud btn-hud-ghost"
           style="padding:0 14px;"
-          title="Copy iCal feed URL"
+          :title="isDemo ? DEMO_ICAL_HINT : 'Copy iCal feed URL'"
           @click="copyICalUrl"
         >
           <Download style="width:12px;height:12px;" aria-hidden="true" />
@@ -121,8 +128,8 @@ function clearFilters() {
       <!-- Stats row -->
       <GigStatsCards />
 
-      <!-- RA Event Import Panel -->
-      <div style="margin-bottom:12px;">
+      <!-- RA Event Import Panel (licensed edition feature) -->
+      <div v-if="raImportEnabled" style="margin-bottom:12px;">
         <RaEventImport />
       </div>
 

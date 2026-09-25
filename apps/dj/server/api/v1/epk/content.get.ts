@@ -1,30 +1,32 @@
 export default defineEventHandler(() => {
   return {
     id: 'epk-001',
-    bioShort: 'Berlin-based techno architect with a decade of residencies across Tresor, Berghain, and Fabric. Known for uncompromising hardware sets and a signature sound rooted in industrial textures and hypnotic rhythm structures.',
-    bioLong: 'SYNC_ERROR is the alias of Berlin-based producer and DJ Cristhian Ferrufino. Emerging from the city\'s underground circuit in 2015, he quickly earned a reputation for dense, hardware-driven sets that navigate the space between industrial techno and abstract club music.\n\nHis sound is built on layers — field recordings from disused factories, modular synthesis, and a meticulous crate-digging practice that spans decades of Detroit, British, and European techno. Residencies at Tresor (Globus floor) and regular appearances at Berghain have cemented his status as a key figure in Berlin\'s current techno landscape.\n\nBeyond the booth, SYNC_ERROR operates the LITHQUBE imprint, releasing music from a tight-knit network of producers who share his aesthetic vision. His debut album \'Persistence of Signal\' received critical acclaim from Resident Advisor and Groove Magazine.',
-    techRider: '2× Pioneer CDJ-3000\n1× Pioneer DJM-900NXS2 (or equivalent)\nMonitor: d&b audiotechnik (preferred) or similar full-range\nDI box for laptop (if used)\nBackstage: still water, towels\nSoundcheck: minimum 30 minutes before doors\nNote: Modular setup available on request — please contact booking 2 weeks in advance',
+    // Fictional placeholder persona: never use real people, venues, labels
+    // or publications in mock data.
+    bioShort: 'Sample City-based techno DJ with a decade of residencies across Club Alpha, Beta Warehouse and Gamma Hall. Known for hardware-driven sets rooted in industrial textures and hypnotic rhythm structures.',
+    bioLong: 'SAMPLE_RATE is the alias of Sample City producer and DJ Sam Example. Emerging from the local underground circuit in 2015, Sam built a reputation for dense, hardware-driven sets that sit between industrial techno and abstract club music.\n\nThe sound is built on layers: field recordings, modular synthesis and a long crate-digging practice. A residency at Club Alpha and regular appearances at Beta Warehouse made SAMPLE_RATE a fixture of the Sample City scene.\n\nBeyond the booth, SAMPLE_RATE runs the Example Records imprint, releasing music from a small network of like-minded producers. The debut album \'Placeholder Signal\' came out in 2025.',
+    techRider: '2× CDJ-3000 (or equivalent)\n1× 4-channel club mixer (DJM-900NXS2 or equivalent)\nMonitor: full-range booth monitor\nDI box for laptop (if used)\nBackstage: still water, towels\nSoundcheck: minimum 30 minutes before doors\nNote: modular setup available on request, please contact booking 2 weeks in advance',
     stagePlotPath: '',
     gigHighlights: [
-      'Tresor Berlin — Globus Floor Resident 2022–Present',
-      'Berghain Main Floor — May 2025',
-      'Dekmantel Festival — Shelter Stage 2024',
-      'Fabric London — Room 1 — April 2026',
-      'Ostgut Ton Label Night — Berghain 2023',
-      'Time Warp — DE — Mannheim 2024',
+      'Club Alpha — Resident 2022–Present',
+      'Beta Warehouse — Main Floor — May 2025',
+      'Delta Open Air Festival — Stage 2 — 2024',
+      'Gamma Hall — Room 1 — April 2026',
+      'Example Records Label Night — Club Alpha 2023',
+      'Epsilon Festival — Sample City 2024',
     ],
     pressQuotes: [
       {
-        text: 'A masterclass in tension and release. SYNC_ERROR understands that techno is architecture — every element placed with precision.',
-        source: 'Resident Advisor · Live Review',
+        text: 'A masterclass in tension and release. SAMPLE_RATE understands that techno is architecture — every element placed with precision.',
+        source: 'Example Beat Weekly · Live Review',
       },
       {
-        text: 'The kind of DJ who doesn\'t follow trends — he excavates them from the sub-bass floor up.',
-        source: 'Groove Magazine · Issue 221',
+        text: 'The kind of DJ who doesn\'t follow trends, but digs them up from the sub-bass floor.',
+        source: 'Placeholder Mag · Issue 12',
       },
       {
-        text: 'Unrelenting. When the kick hits at 145 BPM you stop thinking and just submit.',
-        source: 'Berghain Kantine — Crowd Review',
+        text: 'Unrelenting. When the kick hits at 145 BPM you stop thinking and just move.',
+        source: 'Club Alpha — Crowd Review',
       },
     ],
     photoPaths: [],

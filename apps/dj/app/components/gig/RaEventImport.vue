@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRaStore } from '~/stores/ra'
+import { useFeatures } from '~/composables/useFeatures'
 import Input from '~/components/ui/input/Input.vue'
 import { Search, ExternalLink, Check, AlertCircle, Loader, X, Plus, Calendar, MapPin, Users } from 'lucide-vue-next'
 import type { RAEVENT } from '~/types/ra'
 
+// Licensed edition feature: renders nothing unless RA import is enabled.
+const raImportEnabled = useFeatures().isEnabled('raImport')
 const raStore = useRaStore()
 
 const artistSlug = ref('')
@@ -118,7 +121,7 @@ function clearForm() {
 </script>
 
 <template>
-  <div class="glass-panel" style="padding:16px;">
+  <div v-if="raImportEnabled" class="glass-panel" style="padding:16px;">
     <!-- Header -->
     <div class="flex items-center justify-between" style="margin-bottom:14px;">
       <div class="flex items-center gap-2">
