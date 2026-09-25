@@ -26,21 +26,6 @@
       "port": 4300
     },
     {
-      "name": "KlubHub Site (review worktree)",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "4301", "--directory", "/Users/admin/dev/klubhub-dj-review/dist/site"],
-      "port": 4301
-    },
-    {
-      "name": "Nuxt Frontend (review worktree, mocks)",
-      "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": [
-        "-c",
-        "cd /Users/admin/dev/klubhub-dj-review && unset NUXT_PUBLIC_API_BASE && pnpm --config.verify-deps-before-run=false nx serve @dev/dj --port 4210"
-      ],
-      "port": 4210
-    },
-    {
       "name": "Go API",
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [
