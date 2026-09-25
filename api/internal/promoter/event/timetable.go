@@ -90,23 +90,32 @@ func ValidateTimetable(ev Event, stages []Stage, lineup []LineupEntry) []Issue {
 		slots := perStage[id]
 		sort.Slice(slots, func(i, j int) bool { return slots[i].start.Before(slots[j].start) })
 		changeover := time.Duration(st.ChangeoverMinutes) * time.Minute
+		// Compare each slot with the latest end so far, not just the previous
+		// slot: a short set inside a long one must not hide the long one.
+		last := slots[0]
 		for i := 1; i < len(slots); i++ {
-			prev, next := slots[i-1], slots[i]
+			next := slots[i]
 			stageID := st.ID
-			entries := append(append([]uuid.UUID{}, prev.entries...), next.entries...)
-			gap := next.start.Sub(prev.end)
+			entries := append(append([]uuid.UUID{}, last.entries...), next.entries...)
+			gap := next.start.Sub(last.end)
 			switch {
 			case gap < 0:
-				from, to := next.start, prev.end
+				from, to := next.start, last.end
+				if next.end.Before(to) {
+					to = next.end
+				}
 				issues = append(issues, Issue{Code: "overlap", Severity: SeverityError, StageID: &stageID,
-					EntryIDs: entries, From: &from, To: &to, Minutes: int(-gap.Minutes())})
+					EntryIDs: entries, From: &from, To: &to, Minutes: int(to.Sub(from).Minutes())})
 			case gap < changeover:
 				issues = append(issues, Issue{Code: "short_changeover", Severity: SeverityWarning, StageID: &stageID,
 					EntryIDs: entries, Minutes: int(gap.Minutes())})
 			case gap > changeover:
-				from, to := prev.end.Add(changeover), next.start
+				from, to := last.end.Add(changeover), next.start
 				issues = append(issues, Issue{Code: "dead_air", Severity: SeverityWarning, StageID: &stageID,
 					From: &from, To: &to, Minutes: int(to.Sub(from).Minutes())})
+			}
+			if next.end.After(last.end) {
+				last = next
 			}
 		}
 	}

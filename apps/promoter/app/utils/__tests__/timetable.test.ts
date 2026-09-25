@@ -38,4 +38,11 @@ describe('validateTimetable (parity with Go)', () => {
     b.set_end = at(4, 3, 30)
     expect(codes(validateTimetable(ev, [main], [a, b]))).toEqual({ b2b_mismatch: 1 })
   })
+  it('reports a set inside a longer one as one overlap, without phantom dead air', () => {
+    const issues = validateTimetable(ev, [main], [
+      set('main', at(4, 0), at(4, 2)), set('main', at(4, 0, 15), at(4, 1)), set('main', at(4, 2, 15), at(4, 5)),
+    ])
+    expect(codes(issues)).toEqual({ overlap: 1 })
+    expect(issues[0]?.minutes).toBe(45)
+  })
 })

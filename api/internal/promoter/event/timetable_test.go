@@ -114,3 +114,18 @@ func TestDSTNight(t *testing.T) {
 }
 
 func ptr(t time.Time) *time.Time { return &t }
+
+func TestContainedSetOverlapsTheLongSetOnly(t *testing.T) {
+	ev, main, _ := night()
+	long := set(main, "Dasha Rush", at(4, 0, 0), at(4, 2, 0))
+	inner := set(main, "Kaiser", at(4, 0, 15), at(4, 1, 0))
+	after := set(main, "Ben Klock", at(4, 2, 15), at(4, 5, 0))
+	issues := ValidateTimetable(ev, []Stage{main}, []LineupEntry{long, inner, after})
+	c := codes(issues)
+	if c["overlap"] != 1 || c["dead_air"] != 0 || len(issues) != 1 {
+		t.Fatalf("a set inside a longer one is one overlap and no dead air: %+v", issues)
+	}
+	if issues[0].Minutes != 45 {
+		t.Fatalf("overlap is the contained set's 45 min, got %d", issues[0].Minutes)
+	}
+}

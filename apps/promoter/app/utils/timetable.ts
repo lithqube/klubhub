@@ -63,19 +63,22 @@ export function validateTimetable(ev: Window, stages: Stage[], lineup: LineupEnt
     const st = byId.get(id)!
     const slots = perStage.get(id)!.sort((a, b) => a.start - b.start)
     const changeover = st.changeover_minutes * 60000
+    // Compare with the latest end so far (a short set inside a long one).
+    let last = slots[0]!
     for (let i = 1; i < slots.length; i++) {
-      const prev = slots[i - 1]!
       const next = slots[i]!
-      const gap = next.start - prev.end
-      const entries = [...prev.entries, ...next.entries]
+      const gap = next.start - last.end
+      const entries = [...last.entries, ...next.entries]
       if (gap < 0) {
-        issues.push({ code: 'overlap', severity: 'error', stage_id: id, entry_ids: entries, from: new Date(next.start).toISOString(), to: new Date(prev.end).toISOString(), minutes: Math.round(-gap / 60000) })
+        const to = Math.min(last.end, next.end)
+        issues.push({ code: 'overlap', severity: 'error', stage_id: id, entry_ids: entries, from: new Date(next.start).toISOString(), to: new Date(to).toISOString(), minutes: Math.round((to - next.start) / 60000) })
       } else if (gap < changeover) {
         issues.push({ code: 'short_changeover', severity: 'warning', stage_id: id, entry_ids: entries, minutes: Math.round(gap / 60000) })
       } else if (gap > changeover) {
-        const from = prev.end + changeover
+        const from = last.end + changeover
         issues.push({ code: 'dead_air', severity: 'warning', stage_id: id, from: new Date(from).toISOString(), to: new Date(next.start).toISOString(), minutes: Math.round((next.start - from) / 60000) })
       }
+      if (next.end > last.end) last = next
     }
   }
   return issues
