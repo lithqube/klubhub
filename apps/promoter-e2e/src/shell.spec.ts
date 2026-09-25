@@ -15,7 +15,7 @@ test.describe('promoter shell (desktop)', () => {
   test('primary navigation reaches every section', async ({ page }) => {
     await page.goto('/');
     const nav = page.getByRole('navigation', { name: 'Primary navigation' }).first();
-    for (const label of ['EVENTS', 'GUESTS', 'DOOR', 'AUDIENCE', 'CAMPAIGNS', 'BOOKINGS', 'SETTINGS']) {
+    for (const label of ['EVENTS', 'VENUES', 'GUESTS', 'DOOR', 'AUDIENCE', 'CAMPAIGNS', 'BOOKINGS', 'SETTINGS']) {
       await nav.getByRole('link', { name: label }).click();
       await expect(page.locator('.page-title')).toHaveText(label);
     }

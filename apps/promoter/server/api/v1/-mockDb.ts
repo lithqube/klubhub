@@ -59,10 +59,13 @@ export const events: EventDetail[] = [
 ]
 
 export function summary(e: EventDetail): EventSummary {
-  const { venue, stages, lineup, issues: _issues, ...rest } = e
+  const { venue, stages, lineup, issues, ...rest } = e
+  const past = Date.parse(e.ends_at) <= Date.now() && e.status !== 'draft'
   return {
     ...rest, venue_name: venue?.name ?? null, act_count: lineup.length, stage_count: stages.length,
     untimed_count: lineup.filter(l => !l.set_start).length,
+    error_count: past ? 0 : issues.filter(i => i.severity === 'error').length,
+    warning_count: past ? 0 : issues.filter(i => i.severity === 'warning').length,
   }
 }
 
@@ -84,3 +87,6 @@ export function assertVersion(e: EventDetail, version: number) {
 }
 
 export const newId = (p: string) => `${p}-${Math.random().toString(36).slice(2, 10)}`
+
+/** Mock session: an owner who turns on TOTP via ACCOUNT → SECURITY. */
+export const mockSession = { mfa: false }

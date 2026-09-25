@@ -5,6 +5,8 @@ import { apiFetch } from '~/utils/api'
 
 /** Roles the policy requires a second factor for (security, finance). */
 const MFA_ROLES = new Set(['owner', 'admin', 'finance'])
+/** Roles the policy lets edit events, venues and timetables (UX decision 4). */
+const EDIT_ROLES = new Set(['owner', 'admin', 'booker'])
 
 function errorCode(e: unknown): string {
   const data = (e as { data?: { error?: string } })?.data
@@ -18,6 +20,9 @@ export const useSessionStore = defineStore('session', () => {
   const isAuthenticated = computed(() => me.value !== null)
   /** Owner/admin/finance without TOTP: most of their actions will be refused. */
   const needsMfa = computed(() => !!me.value && !me.value.mfa && me.value.roles.some(r => MFA_ROLES.has(r)))
+
+  /** UI hint only; the API enforces the same rule through OPA. */
+  const canEditEvents = computed(() => !!me.value?.roles.some(r => EDIT_ROLES.has(r)))
 
   async function fetchMe(): Promise<Me | null> {
     try {
@@ -72,5 +77,5 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  return { me, loaded, isAuthenticated, needsMfa, fetchMe, login, logout, completeSetup, enrollTotp, confirmTotp }
+  return { me, loaded, isAuthenticated, needsMfa, canEditEvents, fetchMe, login, logout, completeSetup, enrollTotp, confirmTotp }
 })

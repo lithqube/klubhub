@@ -78,6 +78,9 @@ export interface EventSummary extends PromoterEvent {
   act_count: number
   stage_count: number
   untimed_count: number
+  /** Timetable issue counts; 0 on past events. */
+  error_count: number
+  warning_count: number
 }
 
 export interface EventInput {

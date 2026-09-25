@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -166,6 +167,18 @@ func TestConflictsSaveButBlockPublishAndExport(t *testing.T) {
 	}
 	if _, err := f.svc.Export(f.ctx, d.ID); !errors.As(err, &blocked) {
 		t.Fatalf("export must be blocked, got %v", err)
+	}
+	drafts, err := f.svc.ListEvents(f.ctx, "drafts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(drafts, func(x event.Summary) bool { return x.ID == d.ID }) {
+		t.Fatal("the new night must be listed as a draft")
+	}
+	for _, x := range drafts {
+		if x.ID == d.ID && (x.ErrorCount == 0 || x.WarningCount == 0 || x.UntimedCount != 1) {
+			t.Fatalf("list must summarise issues for the dashboard: %+v", x)
+		}
 	}
 
 	// Fix: Ben Klock starts after the changeover.

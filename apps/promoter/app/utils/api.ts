@@ -31,7 +31,9 @@ export function apiFetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
 /** Normalise an ofetch error into the API's JSON error shape. */
 export function toApiError(e: unknown): import('~/types/event').ApiError {
   const err = e as { data?: Record<string, unknown>, statusCode?: number, status?: number }
-  const data = (err?.data ?? {}) as Record<string, unknown>
+  let data = (err?.data ?? {}) as Record<string, unknown>
+  // h3's createError (the dev mocks) nests the API body under `data`.
+  if (typeof data.error !== 'string' && data.data && typeof data.data === 'object') data = data.data as Record<string, unknown>
   return {
     error: typeof data.error === 'string' ? data.error : 'network_error',
     field: typeof data.field === 'string' ? data.field : undefined,

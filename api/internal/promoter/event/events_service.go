@@ -119,6 +119,9 @@ type Summary struct {
 	ActCount     int     `json:"act_count"`
 	StageCount   int     `json:"stage_count"`
 	UntimedCount int     `json:"untimed_count"`
+	// ErrorCount and WarningCount summarise timetable issues (upcoming and drafts only).
+	ErrorCount   int `json:"error_count"`
+	WarningCount int `json:"warning_count"`
 }
 
 // VenueRef is the venue as shown on an event.
@@ -181,7 +184,27 @@ func (s *Service) ListEvents(ctx context.Context, view string) ([]Summary, error
 			x.Event, err = scanEvent(r, &x.VenueName, &x.ActCount, &x.StageCount, &x.UntimedCount)
 			return x, err
 		})
-		return err
+		if err != nil || view == "past" || len(out) == 0 {
+			return err
+		}
+		ids := make([]uuid.UUID, len(out))
+		for i := range out {
+			ids[i] = out[i].ID
+		}
+		stages, lineup, err := timetablesFor(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
+		for i := range out {
+			for _, is := range ValidateTimetable(out[i].Event, stages[out[i].ID], lineup[out[i].ID]) {
+				if is.Severity == SeverityError {
+					out[i].ErrorCount++
+				} else {
+					out[i].WarningCount++
+				}
+			}
+		}
+		return nil
 	})
 	if out == nil {
 		out = []Summary{}
@@ -215,40 +238,11 @@ func (s *Service) detail(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Detail, 
 			d.Venue = &v
 		}
 	}
-	rows, err := tx.Query(ctx, `SELECT id, name, position, curfew_at, changeover_minutes FROM event_stages WHERE event_id = $1 ORDER BY position`, id)
+	stages, lineup, err := timetablesFor(ctx, tx, []uuid.UUID{id})
 	if err != nil {
 		return Detail{}, err
 	}
-	d.Stages, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (Stage, error) {
-		var x Stage
-		var pos, co int16
-		err := r.Scan(&x.ID, &x.Name, &pos, &x.CurfewAt, &co)
-		x.Position, x.ChangeoverMinutes = int(pos), int(co)
-		return x, err
-	})
-	if err != nil {
-		return Detail{}, err
-	}
-	rows, err = tx.Query(ctx, `SELECT id, stage_id, display_name, profile_url, billing_order, b2b_group, set_start, set_end
-	  FROM lineup_entries WHERE event_id = $1 ORDER BY billing_order, display_name`, id)
-	if err != nil {
-		return Detail{}, err
-	}
-	d.Lineup, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (LineupEntry, error) {
-		var x LineupEntry
-		var order int16
-		var group *int16
-		err := r.Scan(&x.ID, &x.StageID, &x.DisplayName, &x.ProfileURL, &order, &group, &x.SetStart, &x.SetEnd)
-		x.BillingOrder = int(order)
-		if group != nil {
-			g := int(*group)
-			x.B2BGroup = &g
-		}
-		return x, err
-	})
-	if err != nil {
-		return Detail{}, err
-	}
+	d.Stages, d.Lineup = stages[id], lineup[id]
 	if d.Stages == nil {
 		d.Stages = []Stage{}
 	}
@@ -260,6 +254,56 @@ func (s *Service) detail(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Detail, 
 		d.Issues = []Issue{}
 	}
 	return d, nil
+}
+
+// timetablesFor loads stages and lineup for several events in two queries.
+func timetablesFor(ctx context.Context, tx pgx.Tx, ids []uuid.UUID) (map[uuid.UUID][]Stage, map[uuid.UUID][]LineupEntry, error) {
+	stages := make(map[uuid.UUID][]Stage, len(ids))
+	lineup := make(map[uuid.UUID][]LineupEntry, len(ids))
+	for _, id := range ids {
+		stages[id], lineup[id] = []Stage{}, []LineupEntry{}
+	}
+	rows, err := tx.Query(ctx, `SELECT event_id, id, name, position, curfew_at, changeover_minutes
+	  FROM event_stages WHERE event_id = ANY($1) ORDER BY position`, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rows.Next() {
+		var ev uuid.UUID
+		var x Stage
+		var pos, co int16
+		if err := rows.Scan(&ev, &x.ID, &x.Name, &pos, &x.CurfewAt, &co); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		x.Position, x.ChangeoverMinutes = int(pos), int(co)
+		stages[ev] = append(stages[ev], x)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	rows, err = tx.Query(ctx, `SELECT event_id, id, stage_id, display_name, profile_url, billing_order, b2b_group, set_start, set_end
+	  FROM lineup_entries WHERE event_id = ANY($1) ORDER BY billing_order, display_name`, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rows.Next() {
+		var ev uuid.UUID
+		var x LineupEntry
+		var order int16
+		var group *int16
+		if err := rows.Scan(&ev, &x.ID, &x.StageID, &x.DisplayName, &x.ProfileURL, &order, &group, &x.SetStart, &x.SetEnd); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		x.BillingOrder = int(order)
+		if group != nil {
+			g := int(*group)
+			x.B2BGroup = &g
+		}
+		lineup[ev] = append(lineup[ev], x)
+	}
+	return stages, lineup, rows.Err()
 }
 
 // CreateEvent stores a draft; the venue's rooms become its stages.
