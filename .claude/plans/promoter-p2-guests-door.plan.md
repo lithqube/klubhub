@@ -117,9 +117,22 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 
 | Slice | State | Commits |
 |---|---|---|
-| P2.1 Guest lists & guest table | Not started | — |
+| P2.1 Guest lists & guest table | Done | `3b8b018` (API, migration 00008), `b0aa9e2` (guest table, /guests, mocks, e2e) |
 | P2.2 Attendee import | Not started | — |
 | P2.3 Offline door | Not started | — |
 | P2.4 Post-event report | Not started | — |
 | P2.5 Privacy & retention | Not started | — |
 | P2.6 Sealed tier + ban list | Not started | — |
+
+### P2.1 decisions (implementation)
+
+- **Quota counts heads** (guest + N) of going, pending and invited guests; waitlisted and declined guests hold none. Lowering a quota below the heads already on it is refused.
+- **Standing lists carry a local cutoff** (`entry_terms.cutoff_local`, "HH:MM"); on copy it becomes `cutoff_at` = the first occurrence of that time at or after 12 h before the event start, in the event's timezone. Event lists only store `cutoff_at`. Copies are independent of later template edits.
+- **Standing lists are copied through `event.Service.OnCreate`** (a hook run inside the event-creation transaction), so `event` does not import `guest`.
+- **Duplicates are skipped, not rejected:** the same email anywhere in the event, or the same normalised name on the same list (name-only guests), is reported back by input index.
+- **Explicit status wins over approval:** "add directly as Going" sends `status: going`; without it, allocations that need approval add guests as pending.
+- **Revoke is `DELETE …/allocations/{id}`** and keeps the allocation's guests; deleting a list with guests needs `?force=true`.
+- **Turning `collect_contact` off erases** stored emails and phones on that list (notes stay).
+- **Extra route:** `GET /api/v1/guests/overview` (guestlist.read) feeds the cross-event page, instead of one request per event.
+- **CSV export** is audited (`guestlist.export`), starts with a UTF-8 BOM, and prefixes cells starting with `= + - @`, tab or CR with an apostrophe.
+- **Blind indexes use the current DEK version.** After a key rotation, lookups by old index values miss until guests are re-indexed; P2.5 or the rotation job must re-index (noted, not built).
