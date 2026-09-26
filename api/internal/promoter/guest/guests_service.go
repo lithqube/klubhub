@@ -303,7 +303,7 @@ func (f *GuestFilter) validate() error {
 // counts respect the list filter but not the status filter, so every tab
 // shows its own number.
 func (s *Service) ListGuests(ctx context.Context, eventID uuid.UUID, f GuestFilter) (GuestPage, error) {
-	page := GuestPage{Guests: []Guest{}}
+	page := GuestPage{Guests: []Guest{}, Tickets: []Ticket{}}
 	if err := f.validate(); err != nil {
 		return page, err
 	}
@@ -323,6 +323,10 @@ func (s *Service) ListGuests(ctx context.Context, eventID uuid.UUID, f GuestFilt
 			page.Guests = append(page.Guests, g)
 		}
 		page.Counts, err = counts(ctx, tx, eventID, f.ListID)
+		if err != nil || f.Status != "" || f.ListID != nil {
+			return err
+		}
+		page.Tickets, err = s.tickets(ctx, tx, eventID, f.Q)
 		return err
 	})
 	return page, err
@@ -371,7 +375,11 @@ func counts(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, listID *uuid.UUID
 		}
 		c.add(st, n, heads)
 	}
-	return c, rows.Err()
+	if err := rows.Err(); err != nil || listID != nil {
+		return c, err
+	}
+	err = tx.QueryRow(ctx, `SELECT count(*) FROM order_positions WHERE event_id = $1 AND status = 'valid'`, eventID).Scan(&c.Tickets)
+	return c, err
 }
 
 // UpdateGuest replaces a guest's fields. Quota and +N are re-checked when
@@ -641,7 +649,8 @@ func (s *Service) Overview(ctx context.Context) ([]OverviewRow, error) {
 		  (SELECT count(*) FROM guests g WHERE g.event_id = e.id AND g.status = 'pending'),
 		  (SELECT COALESCE(sum(1 + g.plus_n), 0) FROM guests g JOIN guest_allocations a ON a.id = g.allocation_id
 		     WHERE g.event_id = e.id AND a.revoked_at IS NULL AND g.status IN ('going', 'pending', 'invited')),
-		  (SELECT COALESCE(sum(a.quota), 0) FROM guest_allocations a WHERE a.event_id = e.id AND a.revoked_at IS NULL)
+		  (SELECT COALESCE(sum(a.quota), 0) FROM guest_allocations a WHERE a.event_id = e.id AND a.revoked_at IS NULL),
+		  (SELECT count(*) FROM order_positions p WHERE p.event_id = e.id AND p.status = 'valid')
 		  FROM events e WHERE e.ends_at > $1 AND e.status <> 'cancelled' ORDER BY e.starts_at LIMIT 50`, s.now())
 		if err != nil {
 			return err
@@ -649,7 +658,7 @@ func (s *Service) Overview(ctx context.Context) ([]OverviewRow, error) {
 		out, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (OverviewRow, error) {
 			var x OverviewRow
 			err := r.Scan(&x.EventID, &x.Title, &x.Status, &x.StartsAt, &x.Timezone, &x.Capacity, &x.Lists, &x.Guests,
-				&x.GoingHeads, &x.Pending, &x.Used, &x.Quota)
+				&x.GoingHeads, &x.Pending, &x.Used, &x.Quota, &x.Tickets)
 			return x, err
 		})
 		return err

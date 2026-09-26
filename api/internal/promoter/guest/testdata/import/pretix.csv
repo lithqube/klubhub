@@ -1,0 +1,5 @@
+﻿Order code,Position ID,Status,Email,Order date,Product,Variation,Price,Attendee name,Attendee email,Secret
+AB12C,1,Paid,buyer@example.org,2026-09-01,Early bird,,15.00,Mara Weiss,mara@example.org,k2x9fvq8mzq7hs4p
+AB12C,2,Paid,buyer@example.org,2026-09-01,Early bird,,15.00,José Müller,,p7wd3nn2c8x4ra1z
+XY34Z,3,Canceled,tom@example.org,2026-09-02,Regular,,20.00,Tomasz Nowak,,q9ee4bb1v6m2kd8t
+QQ55R,4,Pending,ines@example.org,2026-09-03,Regular,,20.00,"Ines ""Nes"" Duarte",,z1aa2bb3cc4dd5ee

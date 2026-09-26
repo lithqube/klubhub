@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -399,5 +400,95 @@ func TestGuestsAPI(t *testing.T) {
 	}
 	if rec := c.do(http.MethodGet, "/api/v1/events/"+uuid.NewString()+"/guests", nil, false); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown event: %d", rec.Code)
+	}
+}
+
+func (c *client) upload(path, preset string, mapping map[string]string, csvText string) *httptest.ResponseRecorder {
+	c.t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	_ = mw.WriteField("preset", preset)
+	if mapping != nil {
+		m, _ := json.Marshal(mapping)
+		_ = mw.WriteField("mapping", string(m))
+	}
+	fw, _ := mw.CreateFormFile("file", "export.csv")
+	_, _ = fw.Write([]byte(csvText))
+	_ = mw.Close()
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Origin", origin)
+	req.Header.Set(auth.CSRFHeader, "1")
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: c.cookie})
+	rec := httptest.NewRecorder()
+	c.h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestAttendeeImportAPI(t *testing.T) {
+	h, svc, _ := stack(t)
+	ctx := context.Background()
+	setup, _ := svc.Bootstrap(ctx, identity.BootstrapInput{OrgName: "Nachtwerk", Slug: "nachtwerk", OwnerEmail: "o@n.example", OwnerName: "O"})
+	_ = svc.CompleteSetup(ctx, setup, "the owner passphrase")
+	c := &client{t: t, h: h}
+	c.do(http.MethodPost, "/api/v1/auth/login", map[string]string{"email": "o@n.example", "password": "the owner passphrase"}, true)
+	start := time.Unix(time.Now().Add(72*time.Hour).Unix()/3600*3600, 0).UTC()
+	rec := c.do(http.MethodPost, "/api/v1/events", map[string]any{"title": "Klubnacht", "starts_at": start, "ends_at": start.Add(8 * time.Hour),
+		"timezone": "Europe/Berlin", "city": "Berlin"}, true)
+	var ev struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &ev)
+	path := "/api/v1/events/" + ev.ID + "/attendees/import"
+	csvText := "\xef\xbb\xbfOrder ID;Ticket ID;First name;Last name;Email;Ticket type;Barcode;Status\n9001;T-1;Lena;Vogt;lena@example.org;Tier 1;RA-1;Valid\n9002;T-2;Kofi;Mensah;;Tier 2;RA-2;Refunded\n"
+
+	// Without dry_run=false nothing is written.
+	rec = c.upload(path, "ra", nil, csvText)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"dry_run":true`) || !strings.Contains(rec.Body.String(), `"positions_new":2`) ||
+		!strings.Contains(rec.Body.String(), `"name":"Le… V…"`) || strings.Contains(rec.Body.String(), "Vogt") {
+		t.Fatalf("dry run: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodGet, "/api/v1/events/"+ev.ID+"/guests", nil, false); !strings.Contains(rec.Body.String(), `"tickets":[]`) {
+		t.Fatalf("dry run wrote tickets: %s", rec.Body)
+	}
+	rec = c.upload(path+"?dry_run=false", "ra", nil, csvText)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"dry_run":false`) || !strings.Contains(rec.Body.String(), `"import_id":"`) {
+		t.Fatalf("import: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodGet, "/api/v1/events/"+ev.ID+"/guests", nil, false)
+	if !strings.Contains(rec.Body.String(), `"name":"Lena Vogt"`) || !strings.Contains(rec.Body.String(), `"tickets":1`) || strings.Contains(rec.Body.String(), "RA-1") {
+		t.Fatalf("tickets in the guest table (never their barcode): %s", rec.Body)
+	}
+
+	// JSON rows with an explicit generic mapping.
+	rec = c.do(http.MethodPost, path+"?dry_run=true", map[string]any{"preset": "generic", "mapping": map[string]string{"name": "Guest", "order_ref": "Ref"},
+		"rows": []map[string]string{{"Guest": "Anna", "Ref": "G1"}, {"Guest": "", "Ref": "G2"}}}, true)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"rejected":[{"line":2,"reason":"no name or email"}]`) {
+		t.Fatalf("json rows: %d %s", rec.Code, rec.Body)
+	}
+	// A preset that finds no key column says what it saw.
+	rec = c.upload(path, "dice", nil, "Guest,Notes\nA,b\n")
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `"error":"mapping_incomplete"`) || !strings.Contains(rec.Body.String(), `"headers":["Guest","Notes"]`) {
+		t.Fatalf("mapping error: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.upload(path, "dice", nil, "Name,Order ID\n"); rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "no rows") {
+		t.Fatalf("empty export: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.upload(path, "dice", nil, strings.Repeat("x", guest.MaxImportBytes+128<<10)); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized upload: %d %s", rec.Code, rec.Body)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("a,b"))
+	req.Header.Set("Content-Type", "text/csv")
+	req.Header.Set("Origin", origin)
+	req.Header.Set(auth.CSRFHeader, "1")
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: c.cookie})
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("raw CSV body: %d", rr.Code)
+	}
+	anon := &client{t: t, h: h}
+	if rec := anon.upload(path, "ra", nil, csvText); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous import: %d", rec.Code)
 	}
 }

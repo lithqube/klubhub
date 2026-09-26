@@ -1,0 +1,4 @@
+api_id,name,first_name,last_name,email,phone_number,created_at,approval_status,checked_in_at,qr_code_url,ticket_type_id,ticket_name
+gst-a1,Mara Weiss,Mara,Weiss,mara@example.org,,2026-09-01T10:00:00Z,approved,,https://lu.ma/check-in/evt-1?pk=g-a1,tkt-free,Free RSVP
+gst-b2,Tom Novak,Tom,Novak,tom@example.org,,2026-09-02T10:00:00Z,pending_approval,,https://lu.ma/check-in/evt-1?pk=g-b2,tkt-free,Free RSVP
+gst-c3,Ines Duarte,Ines,Duarte,ines@example.org,,2026-09-03T10:00:00Z,declined,,https://lu.ma/check-in/evt-1?pk=g-c3,tkt-vip,VIP

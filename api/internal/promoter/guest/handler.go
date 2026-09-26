@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
+	"mime"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -40,6 +42,7 @@ func (h *Handler) Mount(r chi.Router, e *authz.Engine, reg *authz.Registry, onDe
 	route(http.MethodGet, ev+"/guests/export.csv", "guestlist.read", "guest", h.exportCSV)
 	route(http.MethodPut, ev+"/guests/{guestID}", "guestlist.write", "guest", h.updateGuest)
 	route(http.MethodDelete, ev+"/guests/{guestID}", "guestlist.write", "guest", h.deleteGuest)
+	route(http.MethodPost, ev+"/attendees/import", "guestlist.write", "guest", h.importAttendees)
 
 	route(http.MethodGet, "/api/v1/standing-lists", "guestlist.read", "guestlist", h.listStanding)
 	route(http.MethodPost, "/api/v1/standing-lists", "guestlist.write", "guestlist", h.createStanding)
@@ -71,7 +74,11 @@ func fail(w http.ResponseWriter, err error) {
 	var inv *InvalidError
 	var quota *QuotaError
 	var notEmpty *NotEmptyError
+	var mapping *MappingError
 	switch {
+	case errors.As(err, &mapping):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "mapping_incomplete", "missing": mapping.Missing,
+			"headers": mapping.Headers, "problem": mapping.Problem})
 	case errors.As(err, &inv):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid", "field": inv.Field, "problem": inv.Problem})
 	case errors.As(err, &quota):
@@ -305,5 +312,103 @@ func (h *Handler) deleteStanding(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	v, err := h.svc.Overview(r.Context())
+	respond(w, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------- attendees ---
+
+// importBody is the JSON form of an import: rows as header → value objects.
+type importBody struct {
+	Preset  string              `json:"preset"`
+	Mapping map[string]string   `json:"mapping"`
+	Rows    []map[string]string `json:"rows"`
+}
+
+// readImport accepts multipart/form-data (file, preset, mapping as a JSON
+// object) or application/json (importBody). Bodies over MaxImportBytes
+// (plus multipart overhead) are refused with 413.
+func readImport(w http.ResponseWriter, r *http.Request) (ImportInput, bool) {
+	var in ImportInput
+	r.Body = http.MaxBytesReader(w, r.Body, MaxImportBytes+64<<10)
+	tooLarge := func(err error) bool {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{"error": "too_large", "max_bytes": MaxImportBytes})
+			return true
+		}
+		return false
+	}
+	bad := func(field, problem string) (ImportInput, bool) {
+		fail(w, invalid(field, problem))
+		return in, false
+	}
+	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	switch ct {
+	case "multipart/form-data":
+		if err := r.ParseMultipartForm(MaxImportBytes); err != nil {
+			if tooLarge(err) {
+				return in, false
+			}
+			return bad("file", "could not read the upload")
+		}
+		defer func() { _ = r.MultipartForm.RemoveAll() }()
+		in.Preset = r.FormValue("preset")
+		if raw := r.FormValue("mapping"); raw != "" {
+			if err := json.Unmarshal([]byte(raw), &in.Mapping); err != nil {
+				return bad("mapping", "a JSON object of field → column")
+			}
+		}
+		f, _, err := r.FormFile("file")
+		if err != nil {
+			return bad("file", "attach the CSV export as \"file\"")
+		}
+		defer f.Close()
+		raw, err := io.ReadAll(io.LimitReader(f, MaxImportBytes+1))
+		if err != nil {
+			return bad("file", "could not read the upload")
+		}
+		t, err := ParseCSV(raw)
+		if err != nil {
+			fail(w, err)
+			return in, false
+		}
+		in.Table = t
+	case "application/json":
+		var body importBody
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&body); err != nil {
+			if tooLarge(err) {
+				return in, false
+			}
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+			return in, false
+		}
+		t, err := TableFromObjects(body.Rows)
+		if err != nil {
+			fail(w, err)
+			return in, false
+		}
+		in.Preset, in.Mapping, in.Table = body.Preset, body.Mapping, t
+	default:
+		writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "unsupported_media_type"})
+		return in, false
+	}
+	return in, true
+}
+
+// importAttendees: POST .../attendees/import?dry_run=true|false. Without
+// dry_run=false nothing is written: checking is the default.
+func (h *Handler) importAttendees(w http.ResponseWriter, r *http.Request) {
+	ids, ok := idParam(w, r, "eventID")
+	if !ok {
+		return
+	}
+	in, ok := readImport(w, r)
+	if !ok {
+		return
+	}
+	dry := r.URL.Query().Get("dry_run") != "false"
+	v, err := h.svc.ImportAttendees(r.Context(), ids[0], in, dry, actor(r))
 	respond(w, http.StatusOK, v, err)
 }

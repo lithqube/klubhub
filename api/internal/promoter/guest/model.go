@@ -308,6 +308,9 @@ type Counts struct {
 	Declined int `json:"declined"`
 	// GoingHeads adds the +N of going guests (the door's expected headcount).
 	GoingHeads int `json:"going_heads"`
+	// Tickets counts valid imported tickets (not on any list, so 0 when
+	// the list filter is set).
+	Tickets int `json:"tickets"`
 }
 
 func (c *Counts) add(status string, n, heads int) {
@@ -327,10 +330,28 @@ func (c *Counts) add(status string, n, heads int) {
 	}
 }
 
-// GuestPage is the guest table: matching guests plus tab counts.
+// GuestPage is the guest table: matching guests plus tab counts. Tickets
+// (imported attendees, P2.2) come along when no status or list filter is
+// set, since they have neither.
 type GuestPage struct {
-	Guests []Guest `json:"guests"`
-	Counts Counts  `json:"counts"`
+	Guests  []Guest  `json:"guests"`
+	Tickets []Ticket `json:"tickets"`
+	Counts  Counts   `json:"counts"`
+}
+
+// Ticket is an imported ticket holder as the guest table shows it. The
+// ticket secret is never listed; the door bundle (P2.3) carries it.
+type Ticket struct {
+	ID           uuid.UUID `json:"id"`
+	OrderID      uuid.UUID `json:"order_id"`
+	Source       string    `json:"source"`
+	OrderRef     string    `json:"order_ref"`
+	TicketTypeID uuid.UUID `json:"ticket_type_id"`
+	TicketType   string    `json:"ticket_type"`
+	Name         string    `json:"name"`
+	Email        string    `json:"email"`
+	Status       string    `json:"status"`
+	ImportedAt   time.Time `json:"imported_at"`
 }
 
 // GuestFilter narrows the guest table. Q is an exact lookup through the
@@ -386,4 +407,6 @@ type OverviewRow struct {
 	Pending    int `json:"pending"`
 	Used       int `json:"used"`
 	Quota      int `json:"quota"`
+	// Tickets counts valid imported tickets.
+	Tickets int `json:"tickets"`
 }
