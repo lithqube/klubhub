@@ -10,6 +10,13 @@ COPY apps/promoter/package.json apps/promoter/
 COPY libs/ui/package.json libs/ui/
 RUN pnpm install --frozen-lockfile
 COPY . .
+# The root solution tsconfig references every app, and the build's TS
+# transform follows those references into apps whose generated
+# .nuxt/tsconfig.json never exists here (only the promoter is installed and
+# built). Keep just the promoter reference for this build.
+RUN node -e "const f='tsconfig.json',t=JSON.parse(require('fs').readFileSync(f)); \
+    t.references=t.references.filter(r=>r.path==='./apps/promoter'); \
+    require('fs').writeFileSync(f,JSON.stringify(t,null,2))"
 # Nitro's production API proxy is baked into the bundle and always targets
 # the in-container Go API, never a public address.
 ENV NODE_ENV=production \

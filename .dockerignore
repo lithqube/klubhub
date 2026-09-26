@@ -30,12 +30,15 @@ backups/work-*/
 .vscode/
 
 # ---- Node / monorepo noise ----
-node_modules/
-.output/
-.nuxt/
-.nitro/
-.data/
-.cache/
+# `**/` so per-app copies (apps/*/node_modules, apps/*/.nuxt, …) stay out
+# too; a bare `.nuxt/` only matches at the context root, which let local
+# builds pick up generated files that CI never has.
+**/node_modules/
+**/.output/
+**/.nuxt/
+**/.nitro/
+**/.data/
+**/.cache/
 .nx/cache
 .nx/workspace-data
 .nx/polygraph
