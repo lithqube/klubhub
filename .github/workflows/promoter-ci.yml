@@ -67,6 +67,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # Both apps' tsconfig.json extend the generated .nuxt/tsconfig.json, so
+      # vitest can't load any test until Nuxt has generated them. The API
+      # base is a placeholder (nothing is built or contacted).
+      - name: Generate Nuxt types
+        run: |
+          pnpm --filter @dev/dj exec nuxt prepare
+          pnpm --filter @dev/promoter exec nuxt prepare
+        env:
+          NUXT_PUBLIC_API_BASE: http://api:8080
       - run: pnpm nx run-many -t lint -p @dev/promoter @dev/promoter-e2e
       - run: pnpm nx typecheck @dev/promoter
       # The shared layer also ships in KlubHub DJ: keep DJ's suite green.
