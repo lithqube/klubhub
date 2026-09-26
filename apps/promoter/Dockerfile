@@ -35,6 +35,11 @@ ENV NODE_ENV=production \
     PROMOTER_PORT=8080
 RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+# The runtime only execs node and /promoter. Drop the base image's bundled
+# npm and corepack: unused here, and their dependencies carry fixable CVEs
+# that fail the Trivy gate.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 COPY --from=api-builder /out/promoter /promoter
 COPY --from=frontend-builder /repo/apps/promoter/.output /opt/frontend
 COPY apps/promoter/scripts/runtime.mjs /opt/runtime.mjs
