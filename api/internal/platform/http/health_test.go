@@ -238,3 +238,23 @@ func TestHealthHandler_RespondsUnder500ms(t *testing.T) {
 
 // compile-time check: ensure pgxpool.Pool satisfies DBPinger (won't fail at test time, only compile time)
 var _ apphttp.DBPinger = (*pgxpool.Pool)(nil)
+
+func TestHealthHandler_ReportsEditionFeatures(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		cfg := testConfig("")
+		cfg.Features.RAImport = on
+		handler := apphttp.NewHealthHandler(&fakePool{}, &fakeStore{}, cfg)
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/health", nil))
+
+		var resp apphttp.HealthResponse
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		got, ok := resp.Features["ra_import"]
+		if !ok || got != on {
+			t.Errorf("RAImport=%v: expected features.ra_import=%v, got %v (present=%v)", on, on, got, ok)
+		}
+	}
+}

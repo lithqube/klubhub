@@ -6,6 +6,38 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Resident Advisor (RA) import is now a licensed feature and is off by
+  default.** This affects existing self-hosters: after upgrading, the RA
+  import panels on the EPK and Gigs pages and the RA link field in the EPK
+  editor are hidden. The API no longer mounts `/api/v1/epk/import-ra`,
+  `/api/v1/gigs/import-ra` or `/api/v1/gigs/info/{slug}` (they return
+  404), and it makes no requests to RA. Gigs and EPK data you already
+  imported, and any RA link you saved, are kept. To turn RA import back
+  on, set `FEATURE_RA_IMPORT=true` for the API and
+  `NUXT_PUBLIC_FEATURES_RA_IMPORT=true` for the UI. With the production
+  Compose file, `FEATURE_RA_IMPORT=true` in `.env` sets both. See
+  [`docs/EDITIONS.md`](docs/EDITIONS.md).
+
+### Added
+
+- **Browser-only demo at [klubhub.io/demo](https://klubhub.io/demo/).** The
+  app can be built as a static SPA with `NUXT_DEMO=1`
+  (`pnpm nx run @dev/dj:build-demo` writes `dist/demo`). An in-browser API
+  (`apps/dj/app/demo`) answers every `/api/v1` call from fictional sample
+  data kept in the visitor's `localStorage`, with a banner and a
+  **Reset demo** button. No request reaches the Go API or any third party.
+  The invoicing rules now live in `apps/dj/shared/finance-mock`, shared by
+  the demo and the Nitro dev mocks. The Pages workflow builds the demo and
+  publishes it under `/demo/`, and the site links to it. Normal dev and
+  production builds are unchanged. See [`docs/DEMO.md`](docs/DEMO.md).
+- A general edition feature-flag mechanism: `Features` in the API config
+  (`FEATURE_*` env vars), `runtimeConfig.public.features` with the
+  `useFeatures()` composable in the UI, and one registry of licensed
+  features in `apps/dj/app/utils/features.ts`. `GET /api/v1/health` now
+  also returns a `features` map.
+
 ## [1.1.0] - 2026-09-25
 
 ### Phase 5 — Finance: invoicing, payments, agreements, email

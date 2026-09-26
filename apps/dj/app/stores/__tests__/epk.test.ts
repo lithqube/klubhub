@@ -9,7 +9,7 @@ const mockEpkContent: EPKContent = {
   bioLong: 'Long bio text',
   techRider: 'Technical rider info',
   stagePlotPath: 'epk/stage-plot.png',
-  gigHighlights: ['Club Tresor', 'Fabric London'],
+  gigHighlights: ['Club Alpha', 'Gamma Hall'],
   pressQuotes: [{ text: 'Amazing set', source: 'DJ Mag' }],
   photoPaths: ['epk/photo1.jpg', 'epk/photo2.jpg'],
   sectionVisibility: { bio: true, techRider: false },
@@ -121,7 +121,7 @@ describe('useEpkStore', () => {
       // @ts-expect-error - mocking global $fetch
       global.$fetch = vi.fn().mockResolvedValue({ data: mockEpkContent });
       await store.loadFromApi();
-      expect(store.gigHighlights).toEqual(['Club Tresor', 'Fabric London']);
+      expect(store.gigHighlights).toEqual(['Club Alpha', 'Gamma Hall']);
     });
 
     it('populates photoPaths from API response', async () => {

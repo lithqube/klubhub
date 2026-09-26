@@ -26,8 +26,8 @@ import (
 // comparison uses crypto/subtle.ConstantTimeCompare to mitigate timing
 // attacks.
 type Handler struct {
-	svc            ServiceIface
-	icalSecret     []byte
+	svc             ServiceIface
+	icalSecret      []byte
 	raImportHandler *RAImportHandler
 }
 
@@ -97,8 +97,16 @@ func (h *Handler) Routes() http.Handler {
 
 	// RA import sub-router. Only mount when it was injected: Routes() on a
 	// nil handler mounts fine, then panics on the first request.
+	//
+	// RA import is a licensed edition feature (FEATURE_RA_IMPORT). When it
+	// is disabled the RA paths answer an explicit 404 — otherwise
+	// POST /import-ra would fall through to the /{id} pattern and chi
+	// would report 405, leaking that the path shape exists.
 	if h.raImportHandler != nil {
 		r.Mount("/", h.raImportHandler.Routes())
+	} else {
+		r.Post("/import-ra", http.NotFound)
+		r.Get("/info/{artistSlug}", http.NotFound)
 	}
 
 	return r
@@ -292,64 +300,64 @@ func (h *Handler) handleLinkContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		if err := h.svc.LinkContact(r.Context(), gigID, contactID, body.Role); err != nil {
-			h.writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+	if err := h.svc.LinkContact(r.Context(), gigID, contactID, body.Role); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleLinkTracklist links a tracklist to a gig.
+func (h *Handler) handleLinkTracklist(w http.ResponseWriter, r *http.Request) {
+	gigID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid gig id")
+		return
 	}
 
-	// handleLinkTracklist links a tracklist to a gig.
-	func (h *Handler) handleLinkTracklist(w http.ResponseWriter, r *http.Request) {
-		gigID, err := uuid.Parse(chi.URLParam(r, "id"))
-		if err != nil {
-			h.writeError(w, http.StatusBadRequest, "invalid gig id")
-			return
-		}
-
-		tracklistID, err := uuid.Parse(chi.URLParam(r, "tracklistId"))
-		if err != nil {
-			h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
-			return
-		}
-
-		if err := h.svc.LinkTracklist(r.Context(), gigID, tracklistID); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				h.writeError(w, http.StatusNotFound, "gig not found")
-				return
-			}
-			if errors.Is(err, tracklist.ErrNotFound) {
-				h.writeError(w, http.StatusNotFound, "tracklist not found")
-				return
-			}
-			h.writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+	tracklistID, err := uuid.Parse(chi.URLParam(r, "tracklistId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
+		return
 	}
 
-	// handleUnlinkTracklist unlinks a tracklist from a gig.
-	func (h *Handler) handleUnlinkTracklist(w http.ResponseWriter, r *http.Request) {
-		gigID, err := uuid.Parse(chi.URLParam(r, "id"))
-		if err != nil {
-			h.writeError(w, http.StatusBadRequest, "invalid gig id")
+	if err := h.svc.LinkTracklist(r.Context(), gigID, tracklistID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, "gig not found")
 			return
 		}
+		if errors.Is(err, tracklist.ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, "tracklist not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 
-		tracklistID, err := uuid.Parse(chi.URLParam(r, "tracklistId"))
-		if err != nil {
-			h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
-			return
-		}
-
-		if err := h.svc.UnlinkTracklist(r.Context(), gigID, tracklistID); err != nil {
-			h.writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+// handleUnlinkTracklist unlinks a tracklist from a gig.
+func (h *Handler) handleUnlinkTracklist(w http.ResponseWriter, r *http.Request) {
+	gigID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid gig id")
+		return
 	}
 
-	// handleAutocomplete returns gigs for "Copy from Previous Gig" dropdown.
+	tracklistID, err := uuid.Parse(chi.URLParam(r, "tracklistId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
+		return
+	}
+
+	if err := h.svc.UnlinkTracklist(r.Context(), gigID, tracklistID); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleAutocomplete returns gigs for "Copy from Previous Gig" dropdown.
 func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if len(q) < 2 {

@@ -16,7 +16,7 @@ const MOCK_TRACKLISTS = [
   },
   {
     id: 'tl-002',
-    title: 'TRESOR CLOSING SET',
+    title: 'CLUB ALPHA CLOSING SET',
     sourceFormat: 'rekordbox',
     rawFilePath: null,
     preset: 'dark',
@@ -46,7 +46,7 @@ const MOCK_TRACKLISTS = [
   },
   {
     id: 'tl-004',
-    title: 'FABRIC ROOM 1 PREP',
+    title: 'GAMMA HALL ROOM 1 PREP',
     sourceFormat: 'traktor',
     rawFilePath: null,
     preset: 'dark',

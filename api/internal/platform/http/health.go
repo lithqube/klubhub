@@ -24,6 +24,9 @@ type HealthResponse struct {
 	Status       string                       `json:"status"`
 	Integrations map[string]IntegrationStatus `json:"integrations"`
 	MigrationsOK bool                         `json:"migrations_ok"`
+	// Features reports which edition-gated capabilities are switched on
+	// (e.g. "ra_import"). See docs/EDITIONS.md.
+	Features map[string]bool `json:"features"`
 }
 
 // IntegrationStatus describes the health of a single downstream integration.
@@ -106,6 +109,7 @@ func NewHealthHandler(pool DBPinger, store StorageHealthChecker, cfg *config.Con
 			Status:       overallStatus,
 			Integrations: integrations,
 			MigrationsOK: true, // migrations ran at startup; if we're here, they succeeded
+			Features:     cfg.Features.Enabled(),
 		}
 
 		w.Header().Set("Content-Type", "application/json")

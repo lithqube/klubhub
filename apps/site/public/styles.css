@@ -48,6 +48,8 @@ h3 { font-size: 28px; }
 .dj-intro p { margin-bottom: 16px; }
 .muted { color: var(--color-on-surface-variant); font-size: 14px; }
 .dj-intro .button { margin: 8px 0 12px; }
+.dj-intro .button + .button { margin-left: 10px; }
+.dj-intro .demo-note { font-size: 13px; }
 .text-link { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; text-decoration: underline; text-underline-offset: 5px; }
 .dj-intro .text-link { display: flex; }
 .features { margin: 0; padding: 18px 30px; border-left: 1px dashed var(--color-outline); }

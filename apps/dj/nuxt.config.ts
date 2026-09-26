@@ -17,7 +17,16 @@ import { defineNuxtConfig } from 'nuxt/config';
 // Production builds are launched by scripts/build-prod.mjs, which stages the
 // mocks before Nuxt starts. Hooks/config evaluation are too late for route
 // discovery. This guard remains as defense in depth for direct Nuxt builds.
-if (process.env.NODE_ENV === 'production') {
+// Browser-only demo build (docs/DEMO.md): `NUXT_DEMO=1 nuxi generate`. A
+// static SPA with an in-browser API (app/demo) — no Go API, no Nitro server
+// routes, no proxy. NUXT_APP_BASE_URL overrides the /demo/ base locally.
+const isDemo = process.env.NUXT_DEMO === '1' || process.env.NUXT_DEMO === 'true'
+const demoBaseURL = process.env.NUXT_APP_BASE_URL || '/demo/'
+// App pages prerendered as SPA shells so deep links work on static hosting
+// (/render/* is the screenshot target and stays out of the demo).
+const DEMO_ROUTES = ['/', '/tracklist', '/social', '/epk', '/gigs', '/finance']
+
+if (process.env.NODE_ENV === 'production' && !isDemo) {
   if (!process.env.NUXT_PUBLIC_API_BASE) {
     throw new Error(
       'Refusing to build a production Nuxt image without NUXT_PUBLIC_API_BASE. ' +
@@ -47,9 +56,10 @@ export default defineNuxtConfig({
     tsConfig: {
       extends: '../../../tsconfig.base.json', // Nuxt copies this string as-is to the `./.nuxt/tsconfig.json`, therefore it needs to be relative to that directory
       // The finance mock routes are type-checked through the generated
-      // nitro route types; their shared in-memory store is a "-" prefixed
-      // (non-route) module, which the composite project must list too.
-      include: ['../server/api/v1/finance/-mockDb.ts'],
+      // nitro route types; their in-memory store is a "-" prefixed
+      // (non-route) module and its rules live in shared/finance-mock (also
+      // used by the browser demo), so the composite project lists both.
+      include: ['../server/api/v1/finance/-mockDb.ts', '../shared/**/*.ts'],
     },
   },
   imports: {
@@ -70,14 +80,19 @@ export default defineNuxtConfig({
   // Proxy /api/v1/* to the Go backend in production (and dev when
   // NUXT_PUBLIC_API_BASE is set). Without it, dev Nitro serves the
   // mock handlers from server/api/v1/.
-  routeRules: process.env.NUXT_PUBLIC_API_BASE
+  routeRules: process.env.NUXT_PUBLIC_API_BASE && !isDemo
     ? {
         '/api/v1/**': {
           proxy: process.env.NUXT_PUBLIC_API_BASE + '/api/v1/**',
         },
       }
     : {},
-  nitro: process.env.NUXT_PUBLIC_API_BASE
+  nitro: isDemo
+    ? {
+        prerender: { crawlLinks: false, routes: DEMO_ROUTES },
+        output: { dir: '.output-demo' },
+      }
+    : process.env.NUXT_PUBLIC_API_BASE
     ? {
         devProxy: {
           '/api/v1': {
@@ -97,6 +112,34 @@ export default defineNuxtConfig({
       // now exclusively server-side via process.env.ICAL_SECRET read by
       // the Nitro handlers under apps/dj/server/api/v1/gigs/.
       // Plan B.9: no other secret-bearing fields are allowed here.
+
+      // Edition features (licensed / SaaS). All off by default so the
+      // self-hosted open-source build and the public demo never show them.
+      // Override per key at runtime, e.g. NUXT_PUBLIC_FEATURES_RA_IMPORT=true.
+      // Registry: app/utils/features.ts · docs/EDITIONS.md
+      features: {
+        raImport: false,
+      },
+      // Browser-only demo build: app/plugins/00.demo.client.ts serves the
+      // API in the browser. Only the NUXT_DEMO build sets this.
+      demo: isDemo,
     },
   },
+  ...(isDemo
+    ? {
+        ssr: false,
+        // Separate build dirs so a demo build never clobbers .nuxt/.output.
+        buildDir: '.nuxt-demo',
+        // No server in the demo: an empty server dir keeps the dev mocks,
+        // the screenshot route and the Playwright plugin out of the build.
+        serverDir: '.demo-no-server',
+        app: {
+          baseURL: demoBaseURL,
+          head: {
+            meta: [{ name: 'robots', content: 'noindex' }],
+            link: [{ rel: 'icon', href: `${demoBaseURL}favicon.ico` }],
+          },
+        },
+      }
+    : {}),
 }) as any;

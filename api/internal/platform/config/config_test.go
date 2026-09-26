@@ -193,3 +193,47 @@ func TestConfigLoadRequiresEitherDSNOrPostgresParts(t *testing.T) {
 		t.Error("expected error when neither DATABASE_URL nor POSTGRES_* parts are set")
 	}
 }
+
+// setRequiredEnv sets the minimum env for config.Load and returns a cleanup.
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("DATABASE_URL", "postgres://localhost:5432/testdb")
+	t.Setenv("S3_ENDPOINT", "localhost:9000")
+	t.Setenv("S3_ACCESS_KEY", "test-access")
+	t.Setenv("S3_SECRET_KEY", "test-secret")
+	t.Setenv("ICAL_SECRET", "test-ical-secret")
+}
+
+func TestConfigFeaturesDefaultOff(t *testing.T) {
+	setRequiredEnv(t)
+	os.Unsetenv("FEATURE_RA_IMPORT")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if cfg.Features.RAImport {
+		t.Error("expected Features.RAImport to default to false")
+	}
+	for name, on := range cfg.Features.Enabled() {
+		if on {
+			t.Errorf("expected edition feature %q to be off by default", name)
+		}
+	}
+}
+
+func TestConfigFeatureRAImportFromEnv(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("FEATURE_RA_IMPORT", "true")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !cfg.Features.RAImport {
+		t.Error("expected FEATURE_RA_IMPORT=true to enable Features.RAImport")
+	}
+	if !cfg.Features.Enabled()["ra_import"] {
+		t.Error("expected Enabled()[\"ra_import\"] to be true")
+	}
+}

@@ -21,21 +21,21 @@ import (
 // ─── Mock service ─────────────────────────────────────────────────────────────
 
 type mockService struct {
-	getContentResult    *epk.EPKContent
-	getContentErr       error
-	upsertContentResult *epk.EPKContent
-	upsertContentErr    error
+	getContentResult     *epk.EPKContent
+	getContentErr        error
+	upsertContentResult  *epk.EPKContent
+	upsertContentErr     error
 	upsertContentRequest epk.UpsertEPKContentRequest
-	uploadPhotoPath     string
-	uploadPhotoErr      error
-	deletePhotoErr      error
-	uploadStagePath     string
-	uploadStagePlotErr  error
-	generatePDFResult   *epk.ExportResult
-	generatePDFErr      error
-	listExportsResult   []epk.EPKExport
-	listExportsErr      error
-	deleteExportErr     error
+	uploadPhotoPath      string
+	uploadPhotoErr       error
+	deletePhotoErr       error
+	uploadStagePath      string
+	uploadStagePlotErr   error
+	generatePDFResult    *epk.ExportResult
+	generatePDFErr       error
+	listExportsResult    []epk.EPKExport
+	listExportsErr       error
+	deleteExportErr      error
 }
 
 func (m *mockService) GetContent(_ context.Context) (*epk.EPKContent, error) {
@@ -82,7 +82,7 @@ func (m *mockService) DeleteExport(_ context.Context, _ uuid.UUID) error {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func newHandlerRoutes(svc *mockService) http.Handler {
-	h := epk.NewHandler(svc, nil) // nil = default RA client, as in main.go
+	h := epk.NewHandler(svc, nil) // nil = RA import disabled (default edition)
 	return h.Routes()
 }
 
@@ -195,7 +195,7 @@ func TestHandler_PostPhoto_415_BadMIME(t *testing.T) {
 func TestHandler_DeletePhoto_204(t *testing.T) {
 	svc := &mockService{}
 	r := chi.NewRouter()
-	h := epk.NewHandler(svc, nil) // nil = default RA client, as in main.go
+	h := epk.NewHandler(svc, nil) // nil = RA import disabled (default edition)
 	r.Mount("/", h.Routes())
 
 	req := httptest.NewRequest(http.MethodDelete, "/photos/epk%2Fphotos%2Ftest.jpg", nil)
@@ -260,7 +260,7 @@ func TestHandler_DeleteExport_204(t *testing.T) {
 		},
 	}
 	r := chi.NewRouter()
-	h := epk.NewHandler(svc, nil) // nil = default RA client, as in main.go
+	h := epk.NewHandler(svc, nil) // nil = RA import disabled (default edition)
 	r.Mount("/", h.Routes())
 
 	req := httptest.NewRequest(http.MethodDelete, "/exports/"+exportID.String(), nil)

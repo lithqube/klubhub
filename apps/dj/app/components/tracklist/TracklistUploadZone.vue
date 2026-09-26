@@ -34,7 +34,8 @@ const finishProgress = () => {
 const dropZoneRef = ref<HTMLDivElement | null>(null);
 const { isOverDropZone } = useDropZone(dropZoneRef, {
   onDrop: (files) => {
-    if (files && files.length > 0) handleFile(files[0]);
+    const file = files?.[0];
+    if (file) handleFile(file);
   },
 });
 
@@ -70,7 +71,7 @@ const parseFile = async (file: File) => {
     const result = await uploadTracklist(file);
     tracklistStore.tracklist = result.tracklist;
     tracklistStore.tracks = result.tracks;
-    tracklistStore.warnings = result.warnings as string[];
+    tracklistStore.warnings = result.warnings;
     finishProgress();
     uiStore.step = 'edit';
   } catch (err: unknown) {
@@ -86,6 +87,12 @@ const openFilePicker = () => {
 };
 
 const hasFile = computed(() => !!uploadFile.value);
+
+// Demo build only: parse a bundled sample export (docs/DEMO.md).
+const { isDemo, sampleTracklist } = useDemo();
+const loadSampleFile = () => {
+  handleFile(new File([sampleTracklist], 'sample-rekordbox-history.txt', { type: 'text/plain' }));
+};
 </script>
 
 <template>
@@ -127,6 +134,17 @@ const hasFile = computed(() => !!uploadFile.value);
         @change="onFileSelect"
       >
     </div>
+
+    <button
+      v-if="isDemo && sampleTracklist"
+      type="button"
+      class="btn-hud btn-hud-ghost btn-hud-sm w-full"
+      data-testid="demo-sample-tracklist"
+      :disabled="uploadLoading"
+      @click="loadSampleFile"
+    >
+      NO EXPORT HANDY? USE A SAMPLE FILE
+    </button>
 
     <!-- Progress indicator -->
     <div v-if="uploadLoading" class="glass" style="padding:14px 16px;">
