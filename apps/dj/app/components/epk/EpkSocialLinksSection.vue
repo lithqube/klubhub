@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import Input from '~/components/ui/input/Input.vue'
+import Input from '#kui/components/ui/input/Input.vue'
 import { useFeatures } from '~/composables/useFeatures'
 
 type SocialLinks = Record<string, string>

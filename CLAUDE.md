@@ -14,6 +14,8 @@ This file provides Claude-specific instructions for working with the KlubHub DJ 
 
 **Current state:** Phases 0-3 and 1.5, 1.5.5 complete. Phase 4 (Gig Tracker) is next.
 
+**KlubHub Promoter** (branch work, plan `.claude/plans/promoter-app.plan.md`): `apps/promoter` (Nuxt, port 4400), `api/cmd/promoter` + `api/internal/promoter/*`, shared UI in `libs/ui` (Nuxt layer, `#kui` alias). P0 foundations done: RLS tenancy, envelope encryption, embedded OPA, local/Zitadel identity, NATS outbox. ADRs in `docs/adr/`.
+
 ---
 
 ## Architecture Summary
@@ -76,6 +78,14 @@ Local fixes are not automatically in GHCR: publish a new version and verify pack
 5. **No design guesswork** — use the Kinetic HUD design tokens in `apps/dj/app/assets/css/styles.css`
 
 ---
+
+## Promoter security invariants (enforced by tests; do not bypass)
+
+- Promoter DB access only via `tenantdb.WithTenant/Run`; never import `pgxpool` in `internal/promoter/**`.
+- Every new table: `tenant_id`, `ENABLE` + `FORCE` RLS, fail-closed policy, and a `data_class` comment; personal/financial columns are `*_enc` / `*_bidx` BYTEA.
+- Every route goes through `authz.Engine.Handle` with an action known to the Rego policy.
+- Events carry identifiers only (`events.New`); publish via the outbox in the same transaction.
+- Client code patterns from bridge-latam are reimplemented, never copied.
 
 ## Useful Commands
 

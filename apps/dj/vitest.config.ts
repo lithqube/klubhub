@@ -11,6 +11,7 @@ export default defineConfig(() => ({
     alias: {
       '~': path.resolve(import.meta.dirname, 'app'),
       '@': path.resolve(import.meta.dirname, 'app'),
+      '#kui': path.resolve(import.meta.dirname, '../../libs/ui/app'),
     },
   },
   // Uncomment this if you are using workers.

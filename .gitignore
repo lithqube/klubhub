@@ -87,8 +87,12 @@ apps/dj/.mock-api-v1/
 
 # Generated TypeScript incremental build cache — not source, drifts on
 # every local build.
-apps/dj/tsconfig.tsbuildinfo
+*.tsbuildinfo
 
 brag-output/
 brag-output-*
 .playwright-mcp/
+
+# KlubHub Promoter local state (generated secrets, NATS creds) and Infisical link
+.local/
+.infisical.json

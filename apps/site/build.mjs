@@ -93,7 +93,7 @@ await writeFile(path.join(output, 'index.html'), rendered);
 // Public assets include valid, OFL-licensed Latin font subsets for the site.
 // Extract the application's tokens at build time: no second palette to maintain.
 const themeSource = await readFile(
-  path.join(root, 'apps/dj/app/assets/css/styles.css'),
+  path.join(root, 'libs/ui/app/assets/css/kinetic.css'),
   'utf8',
 );
 const tokens = themeSource.match(/@theme\s*\{([\s\S]*?)\n\}/)?.[1];

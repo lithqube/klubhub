@@ -5,7 +5,7 @@
 import { storeToRefs } from 'pinia'
 import type { Invoice } from '../../types/finance'
 import { useInvoiceStore } from '../../stores/invoice'
-import { useToast } from '../ui/toast/use-toast'
+import { useToast } from '#kui/components/ui/toast/use-toast'
 import InvoiceCreateDialog from './InvoiceCreateDialog.vue'
 import InvoiceDetailSheet from './InvoiceDetailSheet.vue'
 

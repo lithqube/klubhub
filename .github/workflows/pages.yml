@@ -14,6 +14,7 @@ on:
       - 'apps/dj/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'libs/ui/**'
       - '.github/workflows/pages.yml'
   pull_request:
     paths:
@@ -21,6 +22,7 @@ on:
       - 'apps/dj/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'libs/ui/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 permissions:
@@ -49,9 +51,13 @@ jobs:
       # apps/dj/tsconfig.json extends the generated .nuxt/tsconfig.json, so
       # vitest can't load any test until Nuxt has generated it. `nuxt
       # prepare` runs in production mode, which requires an API base; the
-      # value is a placeholder (nothing is built or contacted).
+      # value is a placeholder (nothing is built or contacted). The root
+      # tsconfig.json references apps/promoter too, and the build's TS
+      # transform follows those references, so its types must exist as well.
       - name: Generate Nuxt types
-        run: pnpm --filter @dev/dj exec nuxt prepare
+        run: |
+          pnpm --filter @dev/dj exec nuxt prepare
+          pnpm --filter @dev/promoter exec nuxt prepare
         env:
           NUXT_PUBLIC_API_BASE: http://api:8080
       - name: Test demo backend

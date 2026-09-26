@@ -5,8 +5,16 @@ WORKDIR /repo
 RUN npm install -g pnpm@12.4.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/dj/package.json apps/dj/
+COPY libs/ui/package.json libs/ui/
 RUN pnpm install --frozen-lockfile
 COPY . .
+# The root solution tsconfig references every app, and the build's TS
+# transform follows those references into apps whose generated
+# .nuxt/tsconfig.json never exists here (only DJ is built). Keep just the
+# DJ reference for this build.
+RUN node -e "const f='tsconfig.json',t=JSON.parse(require('fs').readFileSync(f)); \
+    t.references=t.references.filter(r=>r.path==='./apps/dj'); \
+    require('fs').writeFileSync(f,JSON.stringify(t,null,2))"
 # Nitro's production API proxy is baked into the bundle. Never point it at
 # the public ingress: the Go API owns /api/v1 and proxies everything else.
 ENV NODE_ENV=production \

@@ -12,7 +12,8 @@
     "pinia": "^3.0.4",
     "radix-vue": "^1.9.17",
     "tailwind-merge": "^3.7.0",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "@dev/ui": "workspace:*"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0",

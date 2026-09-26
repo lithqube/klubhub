@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import Input from '~/components/ui/input/Input.vue'
+import Input from '#kui/components/ui/input/Input.vue'
 
 type ContactInfo = { name: string; email: string; phone: string }
 

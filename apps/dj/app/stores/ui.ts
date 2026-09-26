@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { useToast } from '~/components/ui/toast/use-toast';
+import { useToast } from '#kui/components/ui/toast/use-toast';
 
 export const useUiStore = defineStore('ui', () => {
   const step = ref<string>('upload');
