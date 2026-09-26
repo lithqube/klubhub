@@ -12,7 +12,7 @@ const store = useGuestStore()
 const { lists, guests, counts, loading, error } = storeToRefs(store)
 
 const id = computed(() => current.value?.id ?? '')
-await useAsyncData(() => `guests-${id.value}`, () => (id.value ? store.load(id.value) : Promise.resolve()), { watch: [id] })
+await useAsyncData(() => `guests-${id.value}`, () => (id.value ? store.load(id.value).then(() => true) : Promise.resolve(null)), { watch: [id] })
 
 const panel = ref<'add' | 'bulk' | 'list' | null>(null)
 const listFilter = ref('')
