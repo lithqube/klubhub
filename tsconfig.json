@@ -8,6 +8,12 @@
     },
     {
       "path": "./apps/dj"
+    },
+    {
+      "path": "./apps/promoter"
+    },
+    {
+      "path": "./apps/promoter-e2e"
     }
   ]
 }

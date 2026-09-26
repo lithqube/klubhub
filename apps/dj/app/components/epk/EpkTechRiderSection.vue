@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useEpkStore } from '~/stores/epk'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
-import Textarea from '~/components/ui/textarea/Textarea.vue'
+import Textarea from '#kui/components/ui/textarea/Textarea.vue'
 
 const store = useEpkStore()
 const techRider = computed({

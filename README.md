@@ -21,7 +21,7 @@ Self-hosted. Open-source. Built for DJs who want to own their workflow.
 
 ## A monorepo for the KlubHub family
 
-This repository is the shared home for the **[KlubHub](https://klubhub.io)** product family — one scene, a growing toolkit — managed as a single Nx + pnpm workspace under `apps/`. **KlubHub DJ** is the first product to live here; **KlubHub Promoter** and **KlubHub Label** are coming soon and will land the same way: a new `apps/<product>` workspace project sharing this repo's tooling, CI, and design system rather than starting from scratch.
+This repository is the shared home for the **[KlubHub](https://klubhub.io)** product family — one scene, a growing toolkit — managed as a single Nx + pnpm workspace under `apps/`. **KlubHub DJ** is the first product to live here. **KlubHub Promoter** (for promoters, collectives and event organisers) is in development under `apps/promoter` and `api/cmd/promoter`; see [its self-hosting preview](./docs/SELF-HOSTING.md#klubhub-promoter--self-hosting-preview) and [security model](./SECURITY.md#klubhub-promoter-security-model). **KlubHub Label** will land the same way. Products share the Kinetic HUD design system as a Nuxt layer in `libs/ui`.
 
 Most KlubHub DJ features will stay open source under this repository's MIT license; some future features across the family may be offered as SaaS. SaaS scope, pricing, and availability have not been announced.
 

@@ -2,7 +2,7 @@
 
 Character: tactical instrument panel for an independent DJ's career — mission control, not a SaaS dashboard. Dense telemetry, one radioactive signal color against obsidian, zero-radius angular geometry, dashed schematic lines, corner-bracket targeting reticles.
 
-*(Extracted from `apps/dj/app/assets/css/styles.css` — "The Kinetic HUD" / dark default, "Daytime HUD" / light variant. Not invented; this file documents decisions already encoded in the CSS and flags where implementation drifts from them.)*
+*(Extracted from the shared layer `libs/ui/app/assets/css/kinetic.css` (product surfaces stay in each app's `styles.css`) — "The Kinetic HUD" / dark default, "Daytime HUD" / light variant. Not invented; this file documents decisions already encoded in the CSS and flags where implementation drifts from them.)*
 
 ## Color
 

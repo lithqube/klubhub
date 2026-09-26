@@ -1,0 +1,21 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "@dev/promoter",
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "NODE_ENV=development nuxt prepare >/dev/null && vue-tsc --noEmit -p .nuxt/tsconfig.json",
+        "cwd": "apps/promoter"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/promoter/scripts/build-prod.mjs",
+        "cwd": "."
+      }
+    }
+  }
+}

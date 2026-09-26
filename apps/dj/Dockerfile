@@ -5,6 +5,7 @@ WORKDIR /repo
 RUN npm install -g pnpm@12.4.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/dj/package.json apps/dj/
+COPY libs/ui/package.json libs/ui/
 RUN pnpm install --frozen-lockfile
 COPY . .
 # Nitro's production API proxy is baked into the bundle. Never point it at

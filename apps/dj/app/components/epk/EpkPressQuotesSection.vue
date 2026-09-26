@@ -3,9 +3,9 @@ import { ref, watch } from 'vue'
 import { useEpkStore } from '~/stores/epk'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
 import type { PressQuote } from '~/types/epk'
-import Input from '~/components/ui/input/Input.vue'
-import Textarea from '~/components/ui/textarea/Textarea.vue'
-import Button from '~/components/ui/button/Button.vue'
+import Input from '#kui/components/ui/input/Input.vue'
+import Textarea from '#kui/components/ui/textarea/Textarea.vue'
+import Button from '#kui/components/ui/button/Button.vue'
 
 const store = useEpkStore()
 const { scheduleSave } = useEpkAutosave()

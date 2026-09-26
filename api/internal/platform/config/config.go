@@ -302,3 +302,7 @@ func loadFileSecrets() error {
 	}
 	return nil
 }
+
+// LoadFileSecrets resolves every `NAME_FILE` env var into `NAME` (see
+// loadFileSecrets). Exported for the Promoter binary's own config.
+func LoadFileSecrets() error { return loadFileSecrets() }

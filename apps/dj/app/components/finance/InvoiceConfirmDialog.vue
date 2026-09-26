@@ -7,10 +7,10 @@ import type { Invoice, InvoiceConfirmAction } from '../../types/finance'
 import { formatMinor } from '../../utils/money'
 import { invoiceNumberLabel } from '../../utils/invoiceDisplay'
 import { useDialogFocus } from '../../utils/dialogFocus'
-import Dialog from '../ui/dialog/Dialog.vue'
-import DialogContent from '../ui/dialog/DialogContent.vue'
-import DialogTitle from '../ui/dialog/DialogTitle.vue'
-import DialogDescription from '../ui/dialog/DialogDescription.vue'
+import Dialog from '#kui/components/ui/dialog/Dialog.vue'
+import DialogContent from '#kui/components/ui/dialog/DialogContent.vue'
+import DialogTitle from '#kui/components/ui/dialog/DialogTitle.vue'
+import DialogDescription from '#kui/components/ui/dialog/DialogDescription.vue'
 
 const props = withDefaults(defineProps<{
   open: boolean

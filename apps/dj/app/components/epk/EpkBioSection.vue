@@ -2,8 +2,8 @@
 import { ref, watch } from 'vue'
 import { useEpkStore } from '~/stores/epk'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
-import Input from '~/components/ui/input/Input.vue'
-import Textarea from '~/components/ui/textarea/Textarea.vue'
+import Input from '#kui/components/ui/input/Input.vue'
+import Textarea from '#kui/components/ui/textarea/Textarea.vue'
 
 const store = useEpkStore()
 const { scheduleSave } = useEpkAutosave()

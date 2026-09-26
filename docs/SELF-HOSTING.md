@@ -157,3 +157,53 @@ For later upgrades within the same project, back up first, select the new `IMAGE
 ## Operations and security
 
 See [Operations](./OPERATIONS.md) for health, logs, backup prerequisites, and rotation. Report security issues through [SECURITY.md](../SECURITY.md).
+
+---
+
+# KlubHub Promoter — self-hosting (preview)
+
+KlubHub Promoter runs as its own Compose project (`klubhub-promoter`) with its
+own database, NATS server and volumes. It never shares data with KlubHub DJ.
+Self-hosted Promoter is a **private** tool: the UI is published on
+`127.0.0.1:8090` only. Reach it over a VPN such as Tailscale or a reverse
+proxy you control; door phones need that same network. Public event pages,
+RSVP and submission links are a SaaS feature (see
+`.claude/plans/promoter-app.plan.md` §12).
+
+Requirements: Docker with Compose v2, `openssl`, and
+[`nsc`](https://github.com/nats-io/nsc) (`brew install nsc`) to create the
+NATS credentials.
+
+```bash
+# 1. Secrets and NATS credentials (created once, never overwritten)
+scripts/promoter-secrets.sh
+
+# 2. Back up the key-encryption key OFFLINE before storing any data
+#    .local/promoter/secrets/kek and .local/promoter/secrets/kek_id
+
+# 3. Start the stack (migrations run automatically)
+docker compose -f docker-compose.promoter.yml up -d
+
+# 4. Create your organisation and first owner, then open the printed link
+docker compose -f docker-compose.promoter.yml run --rm promoter bootstrap \
+  --org-name "My Collective" --slug my-collective \
+  --timezone Europe/Berlin --currency EUR \
+  --owner-email you@example.com --owner-name "Your Name"
+```
+
+After signing in, open **Account security** and add an authenticator app.
+Owners, admins and finance need it to manage members, security and money.
+
+Set `PROMOTER_PUBLIC_ORIGIN` to the exact URL you use in the browser (for
+example `https://promoter.tailnet.example`); requests from any other origin
+are refused.
+
+Optional: with Infisical, wrap commands in `scripts/with-secrets.sh`.
+
+**Frontend-only development** (mock API): `pnpm nx serve @dev/promoter`
+(port 4400). **Backend development**: start `promoter-db` and
+`promoter-nats` from the compose file, run `promoter migrate`, then
+`pnpm nx serve @dev/promoter` with
+`NUXT_PUBLIC_API_BASE=http://127.0.0.1:8081`.
+
+Security model, key custody and KEK rotation: [SECURITY.md](../SECURITY.md#klubhub-promoter-security-model).

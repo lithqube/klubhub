@@ -1,0 +1,108 @@
+# KlubHub Promoter — self-hosted stack (separate Compose project, own volumes).
+#
+#   scripts/promoter-secrets.sh                      # once: secrets + NATS creds
+#   docker compose -f docker-compose.promoter.yml up -d
+#   docker compose -f docker-compose.promoter.yml run --rm promoter bootstrap \
+#     --org-name "My Collective" --slug my-collective --owner-email me@example.com --owner-name Me
+#
+# Self-hosted Promoter is a private tool (plan D2): the UI is published on
+# 127.0.0.1 only. Reach it over a VPN (e.g. Tailscale) or a reverse proxy you
+# control; door phones need the same network. Secrets live in
+# .local/promoter/secrets (gitignored) and are mounted as Docker secrets.
+name: klubhub-promoter
+
+x-promoter-image: &promoter-image ${PROMOTER_IMAGE:-ghcr.io/lithqube/klubhub-promoter-api}:${PROMOTER_TAG:-v0.1.0}
+
+services:
+  promoter-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: klubhub_owner
+      POSTGRES_DB: promoter
+      POSTGRES_PASSWORD_FILE: /run/secrets/promoter_postgres_password
+    secrets: [promoter_postgres_password]
+    volumes:
+      - promoter-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U klubhub_owner -d promoter"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    stop_grace_period: 30s
+
+  promoter-nats:
+    image: nats:2.11-alpine
+    restart: unless-stopped
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    volumes:
+      - ./infra/promoter/nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - ./.local/promoter/secrets/nats/auth.conf:/etc/nats/auth.conf:ro
+      - promoter-nats:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: schema migrations as the owner, then LOGIN + passwords for the
+  # runtime roles. Holds no KEK.
+  promoter-migrate:
+    image: *promoter-image
+    entrypoint: ["/promoter", "migrate"]
+    restart: "no"
+    environment:
+      PROMOTER_MIGRATE_DATABASE_URL_FILE: /run/secrets/promoter_migrate_database_url
+      PROMOTER_APP_DB_PASSWORD_FILE: /run/secrets/promoter_app_db_password
+      PROMOTER_RELAY_DB_PASSWORD_FILE: /run/secrets/promoter_relay_db_password
+    secrets: [promoter_migrate_database_url, promoter_app_db_password, promoter_relay_db_password]
+    depends_on:
+      promoter-db:
+        condition: service_healthy
+
+  promoter:
+    image: *promoter-image
+    restart: unless-stopped
+    environment:
+      PROMOTER_DATABASE_URL_FILE: /run/secrets/promoter_database_url
+      PROMOTER_RELAY_DATABASE_URL_FILE: /run/secrets/promoter_relay_database_url
+      PROMOTER_KEK_FILE: /run/secrets/promoter_kek
+      PROMOTER_KEK_ID_FILE: /run/secrets/promoter_kek_id
+      PROMOTER_PUBLIC_ORIGIN: ${PROMOTER_PUBLIC_ORIGIN:-http://localhost:8090}
+      PROMOTER_AUTH_PROVIDER: local
+      PROMOTER_NATS_SERVERS: nats://promoter-nats:4222
+      PROMOTER_NATS_CREDS_FILE: /run/secrets/promoter_api_creds
+      NUXT_NATS_SERVERS: nats://promoter-nats:4222
+      NUXT_NATS_CREDS_FILE: /run/secrets/promoter_bff_creds
+      PROMOTER_LOG_LEVEL: ${PROMOTER_LOG_LEVEL:-info}
+    secrets:
+      - promoter_database_url
+      - promoter_relay_database_url
+      - promoter_kek
+      - promoter_kek_id
+      - promoter_api_creds
+      - promoter_bff_creds
+    ports:
+      - "${PROMOTER_BIND:-127.0.0.1}:${PROMOTER_HOST_PORT:-8090}:8080"
+    depends_on:
+      promoter-migrate:
+        condition: service_completed_successfully
+      promoter-nats:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+secrets:
+  promoter_postgres_password: { file: ./.local/promoter/secrets/postgres_password }
+  promoter_app_db_password: { file: ./.local/promoter/secrets/app_db_password }
+  promoter_relay_db_password: { file: ./.local/promoter/secrets/relay_db_password }
+  promoter_migrate_database_url: { file: ./.local/promoter/secrets/migrate_database_url }
+  promoter_database_url: { file: ./.local/promoter/secrets/database_url }
+  promoter_relay_database_url: { file: ./.local/promoter/secrets/relay_database_url }
+  promoter_kek: { file: ./.local/promoter/secrets/kek }
+  promoter_kek_id: { file: ./.local/promoter/secrets/kek_id }
+  promoter_api_creds: { file: ./.local/promoter/secrets/nats/promoter-api.creds }
+  promoter_bff_creds: { file: ./.local/promoter/secrets/nats/promoter-bff.creds }
+
+volumes:
+  promoter-db:
+  promoter-nats:

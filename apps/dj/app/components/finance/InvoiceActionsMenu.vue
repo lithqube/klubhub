@@ -5,10 +5,10 @@ import { computed } from 'vue'
 import { MoreVertical } from 'lucide-vue-next'
 import type { Invoice, InvoiceConfirmAction } from '../../types/finance'
 import { invoiceNumberLabel } from '../../utils/invoiceDisplay'
-import DropdownMenu from '../ui/dropdown-menu/DropdownMenu.vue'
-import DropdownMenuTrigger from '../ui/dropdown-menu/DropdownMenuTrigger.vue'
-import DropdownMenuContent from '../ui/dropdown-menu/DropdownMenuContent.vue'
-import DropdownMenuItem from '../ui/dropdown-menu/DropdownMenuItem.vue'
+import DropdownMenu from '#kui/components/ui/dropdown-menu/DropdownMenu.vue'
+import DropdownMenuTrigger from '#kui/components/ui/dropdown-menu/DropdownMenuTrigger.vue'
+import DropdownMenuContent from '#kui/components/ui/dropdown-menu/DropdownMenuContent.vue'
+import DropdownMenuItem from '#kui/components/ui/dropdown-menu/DropdownMenuItem.vue'
 
 const props = defineProps<{ invoice: Invoice }>()
 const emit = defineEmits<{ action: [action: InvoiceConfirmAction] }>()

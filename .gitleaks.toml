@@ -24,3 +24,9 @@ paths = [
   '''^\.claude/gsd-file-manifest\.json$''',
   '''^\.opencode/gsd-file-manifest\.json$''',
 ]
+
+[[allowlists]]
+description = "fake pk_test_ Plunk key fixture in the site build test"
+condition = "AND"
+commits = ["325583b117fedfa3b0d2b003896e8ad98ac59875"]
+paths = ['''^apps/site/site\.test\.mjs$''']
