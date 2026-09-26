@@ -34,6 +34,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/config"
 	"github.com/klubhub/dj/api/internal/promoter/event"
+	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/migrations"
 	"github.com/klubhub/dj/api/internal/promoter/server"
@@ -123,9 +124,13 @@ func serve() error {
 	}
 	defer rt.pool.Close()
 
+	events := event.NewService(rt.db, rt.keys, nil)
+	guests := guest.NewService(rt.db, rt.keys, nil)
+	events.OnCreate(guests.CopyStandingLists) // standing lists join each new event atomically
 	deps := server.Deps{
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),
-		Events:        event.NewHandler(event.NewService(rt.db, rt.keys, nil)),
+		Events:        event.NewHandler(events),
+		Guests:        guest.NewHandler(guests),
 		ServeFrontend: rt.cfg.ServeFrontend, NuxtURL: rt.cfg.NuxtInternalURL,
 	}
 	switch rt.cfg.AuthProvider {

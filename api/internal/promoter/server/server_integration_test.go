@@ -25,6 +25,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/pgtest"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/event"
+	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
@@ -96,10 +97,14 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	keys := envelope.NewKeyring(kek)
+	events := event.NewService(db, keys, nil)
+	guests := guest.NewService(db, keys, nil)
+	events.OnCreate(guests.CopyStandingLists)
 	mux, reg := server.New(server.Deps{
 		Log: zerolog.Nop(), DB: db, Authz: engine, Authn: svc,
 		Identity: identity.NewHandler(svc), Origins: []string{origin},
-		Events: event.NewHandler(event.NewService(db, envelope.NewKeyring(kek), nil)),
+		Events: event.NewHandler(events), Guests: guest.NewHandler(guests),
 	})
 	return mux, svc, func() []error { return authz.VerifyCoverage(context.Background(), mux, reg) }
 }
@@ -322,5 +327,77 @@ func TestEventsAPI(t *testing.T) {
 	}
 	if rec := c.do(http.MethodGet, "/api/v1/events?view=drafts", nil, false); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"act_count":2`) {
 		t.Fatalf("list drafts: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestGuestsAPI(t *testing.T) {
+	h, svc, _ := stack(t)
+	ctx := context.Background()
+	setup, _ := svc.Bootstrap(ctx, identity.BootstrapInput{OrgName: "Nachtwerk", Slug: "nachtwerk", OwnerEmail: "o@n.example", OwnerName: "O"})
+	_ = svc.CompleteSetup(ctx, setup, "the owner passphrase")
+	c := &client{t: t, h: h}
+	c.do(http.MethodPost, "/api/v1/auth/login", map[string]string{"email": "o@n.example", "password": "the owner passphrase"}, true)
+
+	if rec := c.do(http.MethodPost, "/api/v1/standing-lists", map[string]any{"name": "Residents", "type": "artist",
+		"entry_terms": map[string]any{"cutoff_local": "01:00"}}, true); rec.Code != http.StatusCreated {
+		t.Fatalf("standing list: %d %s", rec.Code, rec.Body)
+	}
+	start := time.Unix(time.Now().Add(72*time.Hour).Unix()/3600*3600, 0).UTC()
+	rec := c.do(http.MethodPost, "/api/v1/events", map[string]any{"title": "Klubnacht", "starts_at": start, "ends_at": start.Add(8 * time.Hour),
+		"timezone": "Europe/Berlin", "city": "Berlin"}, true)
+	var ev struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &ev)
+	base := "/api/v1/events/" + ev.ID
+
+	rec = c.do(http.MethodGet, base+"/lists", nil, false)
+	var lists []struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &lists)
+	if rec.Code != http.StatusOK || len(lists) != 1 || !strings.Contains(rec.Body.String(), `"cutoff_at"`) {
+		t.Fatalf("the standing list must be copied into the new event: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, base+"/lists/"+lists[0].ID+"/allocations", map[string]any{"label": "Ben Klock", "quota": 2}, true)
+	var alloc struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &alloc)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("allocation: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, base+"/guests", map[string]any{"list_id": lists[0].ID, "allocation_id": alloc.ID, "source": "paste",
+		"guests": []map[string]any{{"name": "=SUM(A1)", "plus_n": 0}, {"name": "Mara"}}}, true)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"status":"going"`) {
+		t.Fatalf("add guests: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, base+"/guests", map[string]any{"list_id": lists[0].ID, "allocation_id": alloc.ID, "guests": []map[string]any{{"name": "Kim"}}}, true)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"error":"quota_exceeded"`) {
+		t.Fatalf("over quota must be 409 quota_exceeded: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, base+"/guests", map[string]any{"list_id": lists[0].ID, "guests": []map[string]any{{"name": "Kim", "email": "kim@example.org"}}}, true)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "name-only") {
+		t.Fatalf("email on a name-only list must be 422: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodGet, base+"/guests?status=going", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"going":2`) {
+		t.Fatalf("list guests: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodGet, base+"/guests/export.csv", nil, false)
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/csv; charset=utf-8" ||
+		!strings.Contains(rec.Header().Get("Content-Disposition"), `klubnacht-guests.csv`) ||
+		!strings.HasPrefix(body, "\xef\xbb\xbfname,plus_n") || !strings.Contains(body, "'=SUM(A1)") {
+		t.Fatalf("csv: %d %v %q", rec.Code, rec.Header(), body)
+	}
+	if rec := c.do(http.MethodGet, "/api/v1/guests/overview", nil, false); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"going_heads":2`) {
+		t.Fatalf("overview: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodDelete, base+"/lists/"+lists[0].ID, nil, true); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "list_not_empty") {
+		t.Fatalf("deleting a list with guests needs force: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodGet, "/api/v1/events/"+uuid.NewString()+"/guests", nil, false); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown event: %d", rec.Code)
 	}
 }
