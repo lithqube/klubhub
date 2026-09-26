@@ -31,19 +31,19 @@ const common = {
 export const events: EventDetail[] = [
   detail({
     ...common, id: 'e-klubnacht', title: 'Klubnacht 03', slug: 'klubnacht-03', status: 'published',
-    starts_at: iso(7), ends_at: iso(7, 8), doors_at: iso(7, -0.5), venue_id: 'v-tresor', city: 'Berlin',
+    starts_at: iso(6), ends_at: iso(6, 8), doors_at: iso(6, -0.5), venue_id: 'v-tresor', city: 'Berlin',
     location_mode: 'venue', external_ticket_url: 'https://tickets.example/klubnacht-03', version: 4,
     venue: { id: 'v-tresor', name: 'Tresor.West', city: 'Berlin' },
     stages: [
-      { id: 's-main', name: 'Main Room', position: 0, curfew_at: iso(7, 6), changeover_minutes: 15 },
+      { id: 's-main', name: 'Main Room', position: 0, curfew_at: iso(6, 6), changeover_minutes: 15 },
       { id: 's-garden', name: 'Garden', position: 1, curfew_at: null, changeover_minutes: 10 },
     ],
     lineup: [
-      { id: 'l1', stage_id: 's-main', display_name: 'Ben Klock', profile_url: 'https://ra.co/dj/benklock', billing_order: 0, b2b_group: null, set_start: iso(7, 3, 15), set_end: iso(7, 6) },
-      { id: 'l2', stage_id: 's-main', display_name: 'Dasha Rush', profile_url: null, billing_order: 1, b2b_group: null, set_start: iso(7, 1), set_end: iso(7, 3) },
-      { id: 'l3', stage_id: 's-main', display_name: 'Kaiser', profile_url: null, billing_order: 3, b2b_group: null, set_start: iso(7, 0), set_end: iso(7, 0, 45) },
+      { id: 'l1', stage_id: 's-main', display_name: 'Ben Klock', profile_url: 'https://ra.co/dj/benklock', billing_order: 0, b2b_group: null, set_start: iso(6, 3, 15), set_end: iso(6, 6) },
+      { id: 'l2', stage_id: 's-main', display_name: 'Dasha Rush', profile_url: null, billing_order: 1, b2b_group: null, set_start: iso(6, 1), set_end: iso(6, 3) },
+      { id: 'l3', stage_id: 's-main', display_name: 'Kaiser', profile_url: null, billing_order: 3, b2b_group: null, set_start: iso(6, 0), set_end: iso(6, 0, 45) },
       { id: 'l4', stage_id: null, display_name: 'Oscar Mulero', profile_url: null, billing_order: 2, b2b_group: null, set_start: null, set_end: null },
-      { id: 'l5', stage_id: 's-garden', display_name: 'Lena W', profile_url: null, billing_order: 4, b2b_group: null, set_start: iso(7, 0), set_end: iso(7, 2, 30) },
+      { id: 'l5', stage_id: 's-garden', display_name: 'Lena W', profile_url: null, billing_order: 4, b2b_group: null, set_start: iso(6, 0), set_end: iso(6, 2, 30) },
     ],
   }),
   detail({
