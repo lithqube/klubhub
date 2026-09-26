@@ -12,7 +12,8 @@ await useAsyncData(() => `event-${id.value}`, () => store.fetchEvent(id.value), 
 useHead(() => ({ title: current.value?.title ?? 'Event' }))
 
 const tabs = [
-  { to: 'details', label: 'DETAILS' }, { to: 'lineup', label: 'LINEUP & TIMETABLE' }, { to: 'export', label: 'EXPORT' },
+  { to: 'details', label: 'DETAILS' }, { to: 'lineup', label: 'LINEUP & TIMETABLE' }, { to: 'guests', label: 'GUESTS' },
+  { to: 'export', label: 'EXPORT' },
 ]
 
 const past = computed(() => !!current.value && Date.parse(current.value.ends_at) <= Date.now())
@@ -77,7 +78,7 @@ async function change(to: EventStatus) {
         {{ statusError }}
         <NuxtLink v-if="statusError.includes('LINEUP')" :to="`/events/${current.id}/lineup`" style="color:var(--color-primary);">Open timetable →</NuxtLink>
       </p>
-      <nav class="tabs-bar" aria-label="Event sections">
+      <nav class="tabs-bar" aria-label="Event sections" style="overflow-x:auto;">
         <NuxtLink
           v-for="t in tabs" :key="t.to" :to="`/events/${current.id}/${t.to}`" class="tab-item"
           active-class="active" style="min-height:44px;display:inline-flex;align-items:center;"

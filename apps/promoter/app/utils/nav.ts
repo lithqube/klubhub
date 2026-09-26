@@ -21,7 +21,7 @@ export const PROMOTER_NAV: KhNavItem[] = [
   { label: 'DASHBOARD', icon: LayoutDashboard, to: '/', group: 'PLAN' },
   { label: 'EVENTS',    icon: CalendarRange,   to: '/events', group: 'PLAN' },
   { label: 'VENUES',    icon: MapPin,          to: '/venues', group: 'PLAN' },
-  { label: 'GUESTS',    icon: ListChecks,      to: '/guests', group: 'RUN', tag: 'P2' },
+  { label: 'GUESTS',    icon: ListChecks,      to: '/guests', group: 'RUN' },
   { label: 'DOOR',      icon: ScanLine,        to: '/door', group: 'RUN', tag: 'P2' },
   { label: 'AUDIENCE',  icon: Users,           to: '/audience', group: 'GROW', tag: 'P3' },
   { label: 'CAMPAIGNS', icon: Megaphone,       to: '/campaigns', group: 'GROW', tag: 'P3' },

@@ -188,4 +188,6 @@ export interface ApiError {
   issues?: Issue[]
   entries?: string[]
   status?: number
+  /** The raw error body, for errors with extra fields (e.g. quota_exceeded). */
+  detail?: Record<string, unknown>
 }
