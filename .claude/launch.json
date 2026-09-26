@@ -22,11 +22,10 @@
     },
     {
       "name": "Nuxt Frontend (promoter)",
-      "runtimeExecutable": "pnpm",
+      "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [
-        "nx",
-        "serve",
-        "@dev/promoter"
+        "-c",
+        "cd apps/promoter && pnpm exec nuxt dev"
       ],
       "port": 4400
     },
@@ -35,7 +34,7 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [
         "-c",
-        "pnpm exec nx run site:build && python3 -m http.server 4300 --directory dist/site"
+        "PLUNK_PUBLIC_KEY=${PLUNK_PUBLIC_KEY:-pk_ci_pr_preview_only_do_not_subscribe} pnpm exec nx run site:build && python3 -m http.server 4300 --directory dist/site"
       ],
       "port": 4300
     },
@@ -44,9 +43,9 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [
         "-c",
-        "cd /Users/admin/dev/klubhub-dj/api && go run ./cmd/api"
+        "cd api && PORT=8090 POSTGRES_HOST=127.0.0.1 POSTGRES_USER=klubhub POSTGRES_DB=klubhub POSTGRES_SSLMODE=disable POSTGRES_PASSWORD_FILE=../secrets/dev/postgres_password S3_ENDPOINT=127.0.0.1:39000 S3_PUBLIC_ENDPOINT=http://127.0.0.1:39000 S3_BUCKET=klubhub S3_ACCESS_KEY_FILE=../secrets/dev/s3_access_key S3_SECRET_KEY_FILE=../secrets/dev/s3_secret_key TOKEN_ENCRYPTION_KEY_FILE=../secrets/dev/token_encryption_key ICAL_SECRET_FILE=../secrets/dev/ical_secret CORS_ORIGIN=http://127.0.0.1:4200 go run ./cmd/api"
       ],
-      "port": 8080
+      "port": 8090
     }
   ]
 }
