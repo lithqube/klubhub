@@ -4,6 +4,56 @@ This is the canonical setup guide for frontend mocks, a local development backen
 
 > **Release status:** local runtime changes do not update an existing GHCR tag. The production default is `IMAGE_TAG=v1.0.0`, but these fixes require a newly published image. Anonymous requests for the existing v1.0.0 package returned 403. Confirm package access and select a release that contains the fixes before deploying. See [container images](./container-images.md).
 
+## One-line install
+
+For a production install on one machine, the installer does everything below for you: DJ, Promoter, or both.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lithqube/klubhub/main/scripts/install.sh | bash
+```
+
+It checks Docker (Compose v2), git, curl, openssl and python3 plus free ports; fetches this repository at one commit into `~/klubhub` and uses the images built from that same commit; creates all secrets (never overwriting existing ones); starts the stack(s); and for Promoter creates the NATS credentials (`nsc` runs in a container), the encryption key and your organisation, printing a one-time owner sign-up link. Everything stays on `127.0.0.1` unless you choose otherwise.
+
+Non-interactive examples:
+
+```bash
+# Promoter only, no questions
+curl -fsSL …/install.sh | bash -s -- --promoter --yes \
+  --org-name "My Collective" --owner-email me@example.com --owner-name "Me"
+
+# Both, behind a reverse proxy on your own domains
+curl -fsSL …/install.sh | bash -s -- --both --yes \
+  --dj-url https://dj.example.com --s3-url https://files.example.com \
+  --origin https://promoter.example.com --owner-email me@example.com
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--dj`, `--promoter`, `--both` | ask | Products to install |
+| `--dir DIR` | `~/klubhub` | Install directory |
+| `--ref REF` | `main` | Branch, tag or commit; images default to `sha-<commit>` (`--dj-tag`, `--promoter-tag` override) |
+| `--bind ADDR` | `127.0.0.1` | Host address to publish on (`0.0.0.0` only behind a firewall or VPN) |
+| `--dj-port`, `--s3-port`, `--promoter-port` | 8080, 39000, 8090 | Published ports |
+| `--dj-url`, `--s3-url`, `--origin` | local URLs | Browser-facing URLs (CORS, presigned storage links, Promoter origin) |
+| `--ra-import`, `--log-level LEVEL` | off, `info` | Feature and logging switches |
+| `--dj-env KEY=VALUE`, `--promoter-env KEY=VALUE` | — | Any other Compose variable (repeatable), e.g. `SPOTIFY_CLIENT_ID=…` |
+| `--org-name`, `--slug`, `--owner-email`, `--owner-name`, `--timezone`, `--currency` | ask | Promoter organisation and first owner |
+| `--emulate-arm64` | off | Run the arm64-only DJ image on x86 through QEMU (slow) |
+| `-y`, `--yes` | off | Accept defaults, never prompt |
+
+Every option can also be given as `KLUBHUB_<OPTION>` in the environment. Settings are saved privately in `~/klubhub/.local/` and reused on every re-run. Afterwards use `~/klubhub/klubhub`:
+
+```bash
+~/klubhub/klubhub status            # containers and ports
+~/klubhub/klubhub logs promoter     # follow logs (dj | promoter)
+~/klubhub/klubhub config            # saved settings (secrets masked)
+~/klubhub/klubhub set dj LOG_LEVEL=debug   # change a setting and apply it
+~/klubhub/klubhub update            # newest main (or: update <ref>)
+~/klubhub/klubhub backup-info       # what to back up
+```
+
+KlubHub DJ images are arm64-only (Apple Silicon, Raspberry Pi 5, Graviton/Ampere); on x86 the installer offers emulation or suggests Promoter only. The rest of this guide explains each step for manual setups and operations.
+
 ## System requirements
 
 - Use Docker Engine 24+ with Compose v2 and a running daemon. On Apple Silicon, Docker Desktop or OrbStack provides the Linux VM.
@@ -185,7 +235,7 @@ scripts/promoter-secrets.sh
 docker compose -f docker-compose.promoter.yml up -d
 
 # 4. Create your organisation and first owner, then open the printed link
-docker compose -f docker-compose.promoter.yml run --rm promoter bootstrap \
+docker compose -f docker-compose.promoter.yml run --rm --entrypoint /promoter promoter bootstrap \
   --org-name "My Collective" --slug my-collective \
   --timezone Europe/Berlin --currency EUR \
   --owner-email you@example.com --owner-name "Your Name"

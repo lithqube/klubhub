@@ -72,6 +72,16 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for what hardened between the last feature 
 
 Choose a mode. The [canonical setup guide](./docs/SELF-HOSTING.md) covers prerequisites, first startup, networking, and safe upgrades. The [production runbook](./docs/PRODUCTION.md) is the agent-focused operator reference for verify, upgrade, rotate, and troubleshoot.
 
+**Run it in production with one line** (Docker required; asks DJ, Promoter or both):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lithqube/klubhub/main/scripts/install.sh | bash
+```
+
+The same installer is published as a [gist](https://gist.github.com/lithqube/3a73d34d4dbdcbb602359362eff31e47): `curl -fsSL https://gist.githubusercontent.com/lithqube/3a73d34d4dbdcbb602359362eff31e47/raw/klubhub-install.sh | bash`.
+
+It checks the machine, fetches the scripts and matching images, creates every secret, starts the stack and prints the URLs, and for Promoter creates your organisation with a one-time owner link. Re-run it (or `~/klubhub/klubhub update`) to update; secrets and data are kept. Options such as `--promoter --yes`, `--bind`, ports and public URLs: [one-line install](./docs/SELF-HOSTING.md#one-line-install).
+
 | Mode | Command | What runs |
 |---|---|---|
 | Frontend mocks | `pnpm install`, then `pnpm nx serve @dev/dj` | Local Nuxt at http://localhost:4200; leave `NUXT_PUBLIC_API_BASE` unset. |
