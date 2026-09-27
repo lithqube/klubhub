@@ -324,3 +324,54 @@ Guest/ticket JSON for purged rows: `name` is `""`, `email`/`phone`/`note` `""`, 
 - **Event**: after the event ends, the guests and report tabs show a quiet banner "Guest names and contacts for this event are erased on 12 Nov (30 days after it ended)" with a link to settings; owners get ERASE NOW (typed-title confirm + step-up flow as other step-up actions do). After purge: guest table shows "Erased guest" rows (still with list, status, check-in state), export and list-back are disabled with the reason, and add/import/door PIN controls explain the event is erased.
 - **Lists**: the collect-contact toggle explains "Off: names only (default). On: also email and phone, erased with the rest after the retention period."
 - Mocks for every route; e2e for settings, the banner, erase-now and the purged guest table.
+
+## P2.6 contract (sealed tier and ban list)
+
+ADR 0001 `sealed` class: encrypted **in the browser**; the server stores ciphertext and public keys only and has no decryption path. The ban list is the first sealed feature.
+
+### Cryptography (browser; `@noble/curves` + `@noble/hashes`, WebCrypto for AES-GCM/HKDF)
+
+- **Seal to a public key** (`seal(pub, plaintext, aad)`): ephemeral X25519 keypair; `k = HKDF-SHA256(ikm = X25519(eph, pub), salt = eph_pub ‖ pub, info = "klubhub-seal-v1")`; AES-256-GCM, random 96-bit nonce, AAD = context string. Output `v1 ‖ eph_pub(32) ‖ nonce(12) ‖ ct+tag`, base64url in JSON.
+- **Member key:** X25519 keypair per user, generated in the browser. The private key is encrypted with AES-256-GCM under `Argon2id(passphrase, salt 16 B, m = 64 MiB, t = 3, p = 1)` → 32 B; params stored with it. The sealed passphrase is separate from the login password (works with Zitadel too), ≥ 12 chars.
+- **Org sealed key (OSK):** random 32 B AES key with a `version`. Wrapped (sealed) to each member's public key, each provisioned door device's public key, and the recovery key. AAD for a wrap: `klubhub-osk|<tenant>|<version>|<recipient_kind>|<recipient_id>`.
+- **Recovery kit (mandatory):** 32 random bytes shown once as 8 groups of base32 plus a downloadable text file; recovery keypair = X25519 private from `HKDF(secret, info = "klubhub-recovery-v1")`. The OSK is wrapped to the recovery public key; the server keeps the recovery public key and a fingerprint (first 8 bytes of SHA-256(pub), hex). Setup cannot finish until the owner re-types two random groups.
+- **Ban entry:** JSON `{name, email?, reason, note?}` encrypted with AES-256-GCM under the OSK, AAD `klubhub-ban|<tenant>|<entry_id>|<key_version>`; stored as `entry_sealed` = `v1 ‖ nonce ‖ ct+tag`. Name and reason are required (client-enforced); the server enforces `expires_at` between now + 1 day and now + 3 years.
+- Unlocked keys live **in memory only** (Pinia state, never storage); auto-lock after 30 min idle and on logout.
+
+### Migration 00012_sealed.sql
+
+- `member_keys` (internal): `tenant_id`, `user_id` PK part, `public_key` BYTEA (32), `private_sealed` BYTEA, `kdf` jsonb (`{alg:"argon2id",m,t,p,salt}`), `created_at`, `updated_at`.
+- `org_sealed_keys` (internal): `tenant_id`, `version` (PK together), `status` active / retired, `recovery_public_key`, `recovery_fingerprint`, `created_by`, `created_at`, `retired_at`; at most one active per tenant.
+- `org_key_wraps` (internal): `tenant_id`, `version`, `recipient_kind` member / device / recovery, `recipient_id` (user id, device id, or null for recovery), `wrap_sealed` BYTEA, `created_by`, `created_at`; unique per (tenant, version, kind, recipient).
+- `org_key_state` (internal): `tenant_id` PK, `rotation_pending` bool, `rotation_reason`, `pending_since`.
+- `ban_entries` (**personal** class, sealed columns only): `id`, `tenant_id`, `key_version`, `entry_sealed` BYTEA, `expires_at` (plaintext, for purge), `created_by`, `created_at`, `updated_at`.
+- `door_devices` gains `public_key` BYTEA (nullable; set by the device at registration).
+- The retention worker also deletes expired `ban_entries`.
+
+### Routes
+
+| Route | Action | Notes |
+|---|---|---|
+| `GET /api/v1/keys/me` | account.self | `{public_key, private_sealed, kdf}` or 404 `no_member_key` |
+| `PUT /api/v1/keys/me` | account.self | Create own key; later calls may only re-wrap the private key (same `public_key`), e.g. a passphrase change |
+| `GET /api/v1/keys/org` | account.self | `{status: not_setup / ready / rotation_pending, version, my_wrap, recovery_fingerprint}` (`my_wrap` = caller's wrap for the active version or null) |
+| `GET /api/v1/keys/org/recipients` | security.manage | Members `{user_id, name, email, role, public_key, has_wrap}` and devices `{device_id, label, public_key, has_wrap, revoked}` for the active version |
+| `POST /api/v1/keys/org/setup` | security.manage | `{version: 1, recovery:{public_key, fingerprint, wrap}, wraps:[…]}`; must include a wrap for the caller; 409 if already set up |
+| `POST /api/v1/keys/org/wraps` | security.manage | Add wraps for the active version (members / devices) |
+| `POST /api/v1/keys/org/rotate` | security.manage | `{from_version, to_version, recovery:{…}, wraps:[…], ban_entries:[{id, entry_sealed}]}` — atomic: retire old, activate new, replace every ban entry (must cover all), clear `rotation_pending`; 409 `version_conflict` if `from_version` isn't active |
+| `GET /api/v1/keys/org/recovery` | security.manage | The recovery wrap + public key + fingerprint (for recovering with the kit) |
+| `PUT /api/v1/keys/devices/{deviceID}/wrap` | door.device.manage | Wrap for a door device (active version) |
+| `DELETE /api/v1/members/{userID}` | member.manage | Removes the membership, revokes sessions, deletes that member's wraps and key, sets `rotation_pending`; cannot remove the last owner or yourself |
+| `GET /api/v1/ban-list` | guestlist.read | `{key_version, entries:[{id, key_version, entry_sealed, expires_at, created_at, updated_at}]}` (expired excluded) |
+| `POST /api/v1/ban-list` | guestlist.write | `{id (client uuid), key_version, entry_sealed, expires_at}`; `key_version` must be active |
+| `PUT /api/v1/ban-list/{id}`, `DELETE /api/v1/ban-list/{id}` | guestlist.write | |
+
+`security.manage` is owner-only with MFA and step-up (existing policy). Revoking a door device deletes its wraps and sets `rotation_pending`. `POST /door/devices` accepts an optional `public_key`. The door bundle gains `sealed: {key_version, wrap, ban_entries:[{id, entry_sealed, expires_at}]} | null` (null when the org isn't set up or this device has no wrap for the active version). Events: `keys.rotated`, `banlist.updated` (ids only). Every key and ban-list write is audited (no content).
+
+### Frontend
+
+- **Settings → ENCRYPTION & BAN LIST:** state-driven: *set up your key* (passphrase + confirm, strength hint) → owners with no org key: *set up sealed data* wizard (member key → OSK → recovery kit shown, downloaded, re-typed → done); *unlock* (passphrase → keys in memory, auto-lock); *grant access* to members and door devices without a wrap (owner, unlocked); *rotation pending* banner with ROTATE NOW (owner, unlocked; re-encrypts the ban list); *recover with kit* (type kit → new member key → new wrap).
+- **Ban list** page `/ban-list` (nav under GUESTS; linked from settings): locked state explains unlock; list decrypted in the browser (name, reason, expiry, added by/when), add / edit / remove with required reason and expiry presets (30 days, 6 months, 1 year, custom ≤ 3 years), search; no export.
+- **Door tab:** device rows show sealed status (no key / key present / provisioned); PROVISION (needs unlocked keys) wraps the OSK to the device. Registration generates the device keypair in the door browser (private key kept in the door vault, encrypted like the rest) and sends the public key.
+- **Door app:** decrypts the ban list offline with the device key; the card shows a quiet amber "BAN LIST · POSSIBLE MATCH — ASK A MANAGER" on a normalised name or email match; the reason is revealed only after the manager PIN (offline verifier). No match UI when `sealed` is null.
+- Mocks for every route (the mock server stores ciphertext and never decrypts); crypto unit tests (seal/open round trip, wrong AAD fails, Argon2id KDF with small test params, recovery derivation, ban entry round trip, tamper detection), store tests, e2e for setup → kit → unlock → add ban → door warning.
