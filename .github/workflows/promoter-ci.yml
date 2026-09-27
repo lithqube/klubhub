@@ -21,7 +21,9 @@ permissions:
 
 concurrency:
   group: promoter-ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push supersedes a PR run. On main a run is never cancelled
+  # mid-publish; the newer push waits its turn.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   IMAGE: ghcr.io/lithqube/klubhub-promoter-api
@@ -83,31 +85,37 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm nx e2e @dev/promoter-e2e
 
+  # One native runner per platform. The arm64 image used to build under
+  # QEMU on an x86 runner, where the Vite client build hung until the
+  # 6-hour job limit (2026-09-27). Off pull requests, each platform is
+  # pushed by digest and image-merge tags and signs the combined image.
   image:
+    name: image (${{ matrix.arch }})
     needs: [secrets-scan, go, frontend]
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - { arch: amd64, platform: linux/amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    # A native build takes minutes; fail fast on a hang.
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
-      id-token: write   # cosign keyless signing
-      attestations: write
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      - name: Tag
-        id: tag
-        run: echo "tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
       - name: Build (local, for scanning)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/promoter/Dockerfile
-          platforms: linux/amd64
+          platforms: ${{ matrix.platform }}
           load: true
           tags: ${{ env.IMAGE }}:scan
-          cache-from: type=gha,scope=promoter
-          cache-to: type=gha,mode=max,scope=promoter
+          cache-from: type=gha,scope=promoter-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=promoter-${{ matrix.arch }}
       - name: Trivy (fail on fixable HIGH/CRITICAL)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -123,9 +131,9 @@ jobs:
         with:
           image: ${{ env.IMAGE }}:scan
           format: spdx-json
-          output-file: promoter-sbom.spdx.json
+          output-file: promoter-sbom-${{ matrix.arch }}.spdx.json
       - uses: actions/upload-artifact@v4
-        with: { name: promoter-sbom, path: promoter-sbom.spdx.json }
+        with: { name: 'promoter-sbom-${{ matrix.arch }}', path: 'promoter-sbom-${{ matrix.arch }}.spdx.json' }
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -133,21 +141,87 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push (amd64 + arm64)
+      # Untagged: image-merge publishes the sha tag once both platforms exist.
+      - name: Push by digest
         if: github.event_name != 'pull_request'
         id: push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/promoter/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
+          platforms: ${{ matrix.platform }}
           provenance: mode=max
           sbom: true
-          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
-          cache-from: type=gha,scope=promoter
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=promoter-${{ matrix.arch }}
+      - name: Record digest
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: promoter-digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  image-merge:
+    if: github.event_name != 'pull_request'
+    needs: [image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # cosign keyless signing
+    steps:
+      - uses: actions/checkout@v4
+      # scripts/install.sh looks up sha-<7..10 chars> for each commit on
+      # main, so keep git's short form.
+      - name: Tag
+        id: tag
+        run: echo "tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: promoter-digest-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag the multi-platform image
+        id: merge
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ref="${IMAGE}:${TAG}"
+          sources=()
+          for d in *; do sources+=("$IMAGE@sha256:$d"); done
+          docker buildx imagetools create -t "$ref" "${sources[@]}"
+          docker buildx imagetools inspect "$ref"
+          # Attestation manifests carry platform unknown/unknown; skip them.
+          platforms=$(docker buildx imagetools inspect "$ref" --raw \
+            | jq -r '[.manifests[] | select(.platform.os == "linux") | .platform.architecture] | sort | join(",")')
+          if [ "$platforms" != "amd64,arm64" ]; then
+            echo "::error::$ref has platforms '$platforms', expected amd64,arm64"
+            exit 1
+          fi
+          digest=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest)
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::could not read the digest of $ref"
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - uses: sigstore/cosign-installer@v3
-        if: github.event_name != 'pull_request'
       - name: Sign image (keyless, GitHub OIDC)
-        if: github.event_name != 'pull_request'
-        run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
+        run: cosign sign --yes "${IMAGE}@${{ steps.merge.outputs.digest }}"
