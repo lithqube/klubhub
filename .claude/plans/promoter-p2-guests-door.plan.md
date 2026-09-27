@@ -121,8 +121,8 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 | P2.2 Attendee import | Done | `67acbac` (API, migration 00009, presets), next commit (import panel, ticket badges, mocks, e2e) |
 | P2.3 Offline door | Done | `2c97f57` (API, migration 00010, manager PIN), next commit (`/door`, event Door tab, encrypted cache, service worker, jsQR, mocks, e2e) |
 | P2.4 Post-event report | Done | `5ed04eb` (report API, list-back CSV), `e851b9e` (REPORT tab, curve, mocks, e2e) |
-| P2.5 Privacy & retention | Not started | — |
-| P2.6 Sealed tier + ban list | Not started | — |
+| P2.5 Privacy & retention | Done | `496d324` (retention job, purge, privacy API), `71cd4bd` (settings, erase-now, erased UI), `583d1be` (UX review fixes, guarded shortening) |
+| P2.6 Sealed tier + ban list | Not started (migration 00012) | — |
 
 ### P2.1 decisions (implementation)
 
@@ -168,6 +168,16 @@ All P0/P1/P2 findings fixed. The deferred check-in state landed with P2.4 (`6d42
 ### API tests
 
 `tests/bruno-promoter` (commit `a04766e`), run with `pnpm nx run api:test-api` against a disposable Postgres + promoter API with per-run secrets. Not covered there (covered by Go integration tests): two-device conflicts, PIN lockout exhaustion, login with a TOTP code right after enrolment (replay window), step-up after 15 min.
+
+### P2.5 decisions (implementation)
+
+- **Anonymise in place** (see the P2.5 contract): every event-scoped `*_enc`/`*_bidx` column is nulled — the contract table missed `order_positions.attendee_email_enc` and `attendee_name_bidx`, now included, and an integration test fails if a future column is left out. DB constraints keep purged rows anonymous and personal columns NOT NULL until purged; the down migration refuses while purged rows exist. The purge also deletes the event's door PINs and revokes its door sessions.
+- **`event.purge`** is its own Rego action (owner/admin, step-up ≤ 15 min, no MFA) rather than step-up on every `org.update`. Checks run 404 → 409 `event_purged` → 409 `event_not_ended` → 422 `confirm`. The typed title is compared after normalisation (NFKC, case-fold, dashes, quotes, whitespace) on both client and server.
+- **Shortening retention is guarded like an erase:** `GET /org/retention/preview?days=` lists events that would *newly* become due; `PUT` answers 409 `retention_would_purge` unless `confirm_purge` equals that count, and the confirmed save needs the `event.purge` step-up (checked and saved in one transaction under a per-tenant lock, audited). Lengthening needs nothing.
+- **Cross-tenant job:** tenant ids come from a narrow `SECURITY DEFINER` function `promoter_tenant_ids()` (ids only, fixed search_path, EXECUTE for the app role only); every purge runs inside `WithTenant`. `purge_after` is recomputed on retention changes and every run (under the event lock, so a moved `ends_at` is honoured); reads compute it live. Retention counts whole 24 h days; `ends_at` is NOT NULL today, so the `starts_at + 24 h` fallback is dormant.
+- **Writers vs purge:** writers take `FOR SHARE` on the event row first, the purge takes `FOR UPDATE`, so a write lands before the purge (and is erased with it) or sees 409. Beyond the contract, guest updates, allocation writes carrying a contact, import dry runs, the door bundle and a second manual purge also answer 409 `event_purged`.
+- **UI:** erased rows read "Erased guest" but keep list, +N, status and check-in; actions that no longer apply are removed (export stays, disabled with its reason); the erase dialog asks for a recent sign-in *first* and returns to itself afterwards, says when the erase would happen anyway, and warns about unsynced door devices within the grace window. Disabled buttons now look disabled app-wide.
+- **No ID images:** a migration guard test rejects image/photo/passport/id-document/selfie/scan columns (allow-list empty).
 
 ## P2.3 contract (offline door)
 
@@ -268,3 +278,49 @@ Definitions: a guest **arrived** when its non-undone `in` heads ≥ 1; **heads a
 List-back CSV columns: `name, plus_n, status, arrived, heads_admitted, first_in_local` (event timezone, `YYYY-MM-DD HH:MM`). No email or phone.
 
 Frontend: new event tab **REPORT** (`/events/[id]/report`): KPI tiles (arrived / going, no-show rate, heads admitted vs expected vs capacity, +1s used, walk-ups, peak occupancy and time), check-in curve as an inline SVG chart (no chart dependency; in, out and occupancy, keyboard- and screen-reader-accessible table fallback), by-list and by-submitter tables with a LIST BACK CSV button per allocation (artist lists first), tickets by type, empty state when nothing happened yet, LIVE badge while the event runs. Mock handlers derive the report from the mock guests, tickets and check-ins.
+
+## P2.5 contract (privacy and retention)
+
+Name-only stays the default (`collect_contact` false on lists and standing lists — already true since P2.1; the UI must say what turning it on means). No ID images anywhere (nothing accepts uploads for guests or door; a guard test keeps it that way).
+
+**Anonymise in place, don't delete rows.** Purging an event nulls every personal column and blind index but keeps the rows, so the P2.4 report (counts, curve, by list/submitter) keeps working without names. This replaces the "materialised aggregates" idea: the rows left behind carry no identifier. Purged rows get `purged_at`.
+
+| Data | Purged |
+|---|---|
+| `guests` | `name_enc`, `email_enc`, `phone_enc`, `note_enc`, `email_bidx`, `name_bidx` → NULL |
+| `orders` | `buyer_name_enc`, `buyer_email_enc`, `buyer_email_bidx` → NULL |
+| `order_positions` | `attendee_name_enc`, `attendee_email_bidx`, `secret_enc`, `secret_bidx` (and any other `*_enc`/`*_bidx`) → NULL |
+| `guest_allocations` | `submitter_contact_enc` → NULL (submitter label is public and stays) |
+| `checkins`, `door_counters` | kept (they only point at anonymised rows) |
+| `door_pins` for the event | deleted |
+
+### Migration 00011_retention.sql
+
+- `org_privacy` (internal): `tenant_id` PK, `retention_days` int 1..365 default 30, `updated_at`, `updated_by`. Missing row = 30 days.
+- `event_purges` (internal): `tenant_id`, `event_id` PK, `purge_after` (event `ends_at` + retention at scheduling time — recomputed when retention or `ends_at` changes until purged), `purged_at`, `counts` jsonb (rows anonymised per table), `trigger` (`schedule` / `manual`).
+- `purged_at` columns on `guests`, `orders`, `order_positions`; relax NOT NULL on the purged personal columns (with CHECK: NOT NULL unless `purged_at` is set).
+- RLS + data_class as always. The sealed tier (P2.6) moves to migration 00012.
+
+### Job
+
+A retention worker in `promoter serve` (same lifecycle as the outbox relay): every hour, and once at start, it finds events with `ends_at + retention ≤ now` not yet purged — across tenants, each purge inside `tenantdb.WithTenant` for that tenant — and anonymises one event per transaction. It emits `retention.purged` (event id only) through the outbox and audits `retention.purged` with counts. `promoter purge --dry-run` lists what would be purged; `promoter purge` runs it once. Events without `ends_at` use `starts_at + 24 h`.
+
+After an event is purged, writes that would add personal data to it are refused with 409 `event_purged` (adding guests, importing attendees, door adds, generating door PINs).
+
+### Routes
+
+| Route | Action | Notes |
+|---|---|---|
+| `GET /api/v1/org/retention` | org.read | `{retention_days, upcoming:[{event_id,title,ends_at,purge_after}], recent:[{event_id,title,purged_at,trigger,counts}]}` (upcoming: next 20 by purge_after among ended/ending events; recent: last 20) |
+| `PUT /api/v1/org/retention` | org.update | `{retention_days}` 1..365; audited; recomputes unpurged `purge_after` |
+| `POST /api/v1/events/{eventID}/purge` | org.update + step-up (recent auth) | Purge one event now. Body `{"confirm":"<event title>"}` must match; refused for events that haven't ended (409 `event_not_ended`); audited |
+| `GET /api/v1/events/{eventID}/privacy` | event.read | `{purge_after, purged_at, retention_days, personal_rows}` (`personal_rows` = count of non-purged guests + positions with personal data) |
+
+Guest/ticket JSON for purged rows: `name` is `""`, `email`/`phone`/`note` `""`, plus `"purged": true`. The list-back CSV and guest export answer 409 `event_purged`.
+
+### Frontend
+
+- **Settings → DATA RETENTION**: retention days (presets 7 / 30 / 90 / 365 + custom), plain explanation of what is erased and what survives (counts, curve, list/submitter numbers), upcoming purges with dates, recent purges with counts. Replace the "coming" item.
+- **Event**: after the event ends, the guests and report tabs show a quiet banner "Guest names and contacts for this event are erased on 12 Nov (30 days after it ended)" with a link to settings; owners get ERASE NOW (typed-title confirm + step-up flow as other step-up actions do). After purge: guest table shows "Erased guest" rows (still with list, status, check-in state), export and list-back are disabled with the reason, and add/import/door PIN controls explain the event is erased.
+- **Lists**: the collect-contact toggle explains "Off: names only (default). On: also email and phone, erased with the rest after the retention period."
+- Mocks for every route; e2e for settings, the banner, erase-now and the purged guest table.
