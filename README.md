@@ -1,10 +1,10 @@
 <div align="center">
 
-# KlubHub DJ
+# KlubHub
 
-**All-in-one career management platform for independent DJs** — tracklist image generator, social media scheduler, press kit builder, gig tracker, finance tracker, and more.
+**Self-hosted, open-source tools for the independent music scene**, built as one product family in one Nx + pnpm workspace. **[KlubHub DJ](#why-klubhub-dj)** — available now: tracklist images, social scheduling, a press kit builder, gig and finance tracking. **[KlubHub Promoter](./docs/SELF-HOSTING.md#klubhub-promoter--self-hosting-preview)** — self-hosting preview: events, guest lists, an offline door app. **KlubHub Label** — planned.
 
-Self-hosted. Open-source. Built for DJs who want to own their workflow.
+Own your data, your storage, your workflow.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-22d3ee.svg)](./LICENSE)
 [![Made with Nuxt](https://img.shields.io/badge/Nuxt-4.3-00DC82.svg)](https://nuxt.com)
@@ -21,7 +21,7 @@ Self-hosted. Open-source. Built for DJs who want to own their workflow.
 
 ## A monorepo for the KlubHub family
 
-This repository is the shared home for the **[KlubHub](https://klubhub.io)** product family — one scene, a growing toolkit — managed as a single Nx + pnpm workspace under `apps/`. **KlubHub DJ** is the first product to live here. **KlubHub Promoter** (for promoters, collectives and event organisers) is in development under `apps/promoter` and `api/cmd/promoter`; see [its self-hosting preview](./docs/SELF-HOSTING.md#klubhub-promoter--self-hosting-preview) and [security model](./SECURITY.md#klubhub-promoter-security-model). **KlubHub Label** will land the same way. Products share the Kinetic HUD design system as a Nuxt layer in `libs/ui`.
+Each product lives under `apps/` (and its own `api/cmd/<product>` binary). **KlubHub DJ** is the first and only fully released product. **KlubHub Promoter** (for promoters, collectives and event organisers) lives under `apps/promoter` and `api/cmd/promoter`; see [its self-hosting preview](./docs/SELF-HOSTING.md#klubhub-promoter--self-hosting-preview) and [security model](./SECURITY.md#klubhub-promoter-security-model). **KlubHub Label** will land the same way, once planned. Products share the Kinetic HUD design system as a Nuxt layer in `libs/ui`.
 
 Most KlubHub DJ features will stay open source under this repository's MIT license; some future features across the family may be offered as SaaS. SaaS scope, pricing, and availability have not been announced.
 
