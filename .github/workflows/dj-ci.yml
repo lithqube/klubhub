@@ -62,10 +62,16 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # apps/dj/tsconfig.json extends the generated .nuxt/tsconfig.json, so
-      # lint/typecheck/vitest can't load until Nuxt has generated it. The
-      # API base is a placeholder (nothing is built or contacted).
+      # lint/typecheck/vitest can't load until Nuxt has generated it. Both
+      # apps' — not just DJ's — because libs/ui is shared: a shared file
+      # pulled into a DJ test makes Vite (and Nx's own project graph)
+      # resolve apps/promoter/tsconfig.json too, which itself extends
+      # apps/promoter/.nuxt/tsconfig.json. The API base is a placeholder
+      # (nothing is built or contacted).
       - name: Generate Nuxt types
-        run: pnpm --filter @dev/dj exec nuxt prepare
+        run: |
+          pnpm --filter @dev/dj exec nuxt prepare
+          pnpm --filter @dev/promoter exec nuxt prepare
         env:
           NUXT_PUBLIC_API_BASE: http://api:8080
       - run: pnpm nx run-many -t lint -p @dev/dj @dev/dj-e2e
