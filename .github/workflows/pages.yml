@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'apps/site/**'
+      - 'scripts/install.sh'
       # The browser-only demo at /demo/ is built from the app (docs/DEMO.md).
       - 'apps/dj/**'
       - 'package.json'
@@ -19,6 +20,7 @@ on:
   pull_request:
     paths:
       - 'apps/site/**'
+      - 'scripts/install.sh'
       - 'apps/dj/**'
       - 'package.json'
       - 'pnpm-lock.yaml'

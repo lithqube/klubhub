@@ -38,6 +38,10 @@ const PUBLIC_KEY_PLACEHOLDER = 'pk_replace_me_in_your_fork';
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 await cp(path.join(root, 'apps/site/public'), output, { recursive: true });
+// The one-line installer is served from the site root so the documented
+// command is `curl -fsSL https://klubhub.io/install.sh | bash`. It is the
+// repository's scripts/install.sh, byte for byte.
+await cp(path.join(root, 'scripts/install.sh'), path.join(output, 'install.sh'));
 
 // Inject the Plunk public key. CI passes one of three values:
 //   PLUNK_PUBLIC_KEY             — production (klubhub.io)

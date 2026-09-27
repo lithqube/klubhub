@@ -9,10 +9,10 @@ This is the canonical setup guide for frontend mocks, a local development backen
 For a production install on one machine, the installer does everything below for you: DJ, Promoter, or both.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lithqube/klubhub/main/scripts/install.sh | bash
+curl -fsSL https://klubhub.io/install.sh | bash
 ```
 
-It checks Docker (Compose v2), git, curl, openssl and python3 plus free ports; fetches this repository at one commit into `~/klubhub` and uses the images built from that same commit; creates all secrets (never overwriting existing ones); starts the stack(s); and for Promoter creates the NATS credentials (`nsc` runs in a container), the encryption key and your organisation, printing a one-time owner sign-up link. Everything stays on `127.0.0.1` unless you choose otherwise.
+`klubhub.io/install.sh` is this repository's `scripts/install.sh`, published by the site build; `https://raw.githubusercontent.com/lithqube/klubhub/main/scripts/install.sh` serves the same file. It checks Docker (Compose v2), git, curl, openssl and python3 plus free ports; fetches this repository at one commit into `~/klubhub` and uses the newest images CI built from that commit or its history (images are only rebuilt when a product's files change); creates all secrets (never overwriting existing ones); starts the stack(s); and for Promoter creates the NATS credentials (`nsc` runs in a container), the encryption key and your organisation, printing a one-time owner sign-up link. Everything stays on `127.0.0.1` unless you choose otherwise.
 
 Non-interactive examples:
 
@@ -31,7 +31,8 @@ curl -fsSL …/install.sh | bash -s -- --both --yes \
 |---|---|---|
 | `--dj`, `--promoter`, `--both` | ask | Products to install |
 | `--dir DIR` | `~/klubhub` | Install directory |
-| `--ref REF` | `main` | Branch, tag or commit; images default to `sha-<commit>` (`--dj-tag`, `--promoter-tag` override) |
+| `--ref REF` | `main` | Branch, tag or commit; images default to the newest `sha-<commit>` build in its history (`--dj-tag`, `--promoter-tag` override) |
+| `--check` | off | Check the machine and show the commit, images and ports that would be used; starts nothing |
 | `--bind ADDR` | `127.0.0.1` | Host address to publish on (`0.0.0.0` only behind a firewall or VPN) |
 | `--dj-port`, `--s3-port`, `--promoter-port` | 8080, 39000, 8090 | Published ports |
 | `--dj-url`, `--s3-url`, `--origin` | local URLs | Browser-facing URLs (CORS, presigned storage links, Promoter origin) |

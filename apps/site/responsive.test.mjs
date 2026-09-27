@@ -88,3 +88,56 @@ test('newsletter remains readable and its controls fit at every breakpoint', asy
     await browser.close();
   }
 });
+
+test('phones get full-width actions, readable text and a reachable install block', async (t) => {
+  const browser = await chromium.launch();
+  try {
+    for (const width of [320, 375, 390, 650, 651, 1280]) {
+      await t.test(`${width}px`, async () => {
+        const page = await browser.newPage({ viewport: { width, height: 900 } });
+        try {
+          await page.route(/^https?:/, (route) => route.abort());
+          await page.goto(siteUrl);
+          await page.evaluate(() => document.fonts.ready);
+          const m = await page.evaluate(() => {
+            const box = (el) => el.getBoundingClientRect();
+            const visible = (el) => box(el).width > 0 && getComputedStyle(el).visibility !== 'hidden';
+            const texts = [...document.querySelectorAll('body *')].filter((el) => visible(el)
+              && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));
+            return {
+              pageWidth: document.documentElement.scrollWidth,
+              smallestText: Math.min(...texts.map((el) => parseFloat(getComputedStyle(el).fontSize))),
+              smallTargets: [...document.querySelectorAll('a.button, button, .brand, nav a, .text-link')]
+                .filter(visible).filter((el) => box(el).height < 44).map((el) => el.textContent.trim().slice(0, 24)),
+              heroButtons: [...document.querySelectorAll('.hero .actions .button')].map((el) => box(el).width),
+              djButtons: [...document.querySelectorAll('.dj-intro .button')].map((el) => ({ x: box(el).x, width: box(el).width })),
+              install: box(document.getElementById('install')),
+              command: box(document.getElementById('install-command')),
+              copy: box(document.querySelector('.install .copy')),
+              navInstall: !!document.querySelector('nav a[href="#install"]'),
+            };
+          });
+          t.diagnostic(`${width}px: smallest text ${m.smallestText}px, hero buttons ${m.heroButtons.map(Math.round).join('/')}`);
+          assert.ok(m.pageWidth <= width, 'page must not scroll horizontally');
+          assert.ok(m.navInstall, 'the header links to the install block');
+          assert.ok(m.smallestText >= 10, `no text below 10px (found ${m.smallestText}px)`);
+          assert.deepEqual(m.smallTargets, [], 'links and buttons stay at least 44px tall');
+          assert.ok(m.command.right <= m.install.right + 1 && m.copy.right <= m.install.right + 1,
+            'install command and copy button fit inside the install block');
+          assert.ok(m.copy.height >= 44, 'copy button is a usable touch target');
+          if (width <= 650) {
+            const [first, ...rest] = m.heroButtons;
+            assert.ok(rest.every((w) => Math.abs(w - first) <= 1), 'hero buttons share one full width on phones');
+            assert.ok(m.djButtons.every((b) => Math.abs(b.x - m.djButtons[0].x) <= 1 && Math.abs(b.width - m.djButtons[0].width) <= 1),
+              'DJ panel buttons stack aligned, without a leftover desktop offset');
+            assert.ok(m.copy.y >= m.command.bottom, 'copy button stacks under the command on phones');
+          }
+        } finally {
+          await page.close();
+        }
+      });
+    }
+  } finally {
+    await browser.close();
+  }
+});
