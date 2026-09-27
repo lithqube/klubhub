@@ -120,7 +120,7 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 | P2.1 Guest lists & guest table | Done | `3b8b018` (API, migration 00008), `b0aa9e2` (guest table, /guests, mocks, e2e) |
 | P2.2 Attendee import | Done | `67acbac` (API, migration 00009, presets), next commit (import panel, ticket badges, mocks, e2e) |
 | P2.3 Offline door | Done | `2c97f57` (API, migration 00010, manager PIN), next commit (`/door`, event Door tab, encrypted cache, service worker, jsQR, mocks, e2e) |
-| P2.4 Post-event report | Not started | — |
+| P2.4 Post-event report | Done | `5ed04eb` (report API, list-back CSV), `e851b9e` (REPORT tab, curve, mocks, e2e) |
 | P2.5 Privacy & retention | Not started | — |
 | P2.6 Sealed tier + ban list | Not started | — |
 
@@ -150,6 +150,24 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 - **QR:** `BarcodeDetector` where available, otherwise **jsQR** (`jsqr` ^1.4.0, lazy chunk ≈ 130 KB / 46 KB gzip, prefetched on browsers without `BarcodeDetector` so it works offline); typed code always available. Camera needs HTTPS or localhost (so does WebCrypto); `camera=(self)` only on `/door`.
 - **`/door` always loads as a full document** (camera permission and service worker scope apply that way); its theme script forces dark before paint. The service worker is told about already-loaded assets after registering so they are cached too.
 - **Default PIN window:** event end + 6 h, capped at 36 h from now, at least 1 h ahead. The device cache is wiped on logout, session expiry, or 6 h after the event ends.
+
+### P2.4 decisions (implementation)
+
+- **`live`** is `now < ends_at`; the UI shows LIVE only once the event has started and an empty state before any activity.
+- **Arrived and scanned count any status** with a live `in` (a pending guest admitted anyway, a scanned refunded ticket), while the no-show rate uses going guests only — so arrived can exceed going and scanned can exceed valid; the UI shows counts, never ratios above 100 %.
+- **Heads admitted** sums every non-undone `in` (re-entry counts again); +1s used stays capped at `plus_n`.
+- **Curve:** manual in/out add to `in`/`out`, occupancy includes walk-ups; each row is floored to the local :00/:15/:30/:45 (a DST fall-back night keeps two distinct repeated-hour buckets, spring-forward has no gap, :30/:45-offset zones align locally); `bucket_start` is UTC and uses the device clock; rows more than 24 h outside the event are clamped into the first/last bucket (totals unaffected); `peak_at` is the start of the first bucket reaching the peak, null when the peak is 0.
+- **List-back** includes every status and revoked allocations; `arrived` is yes/no; 422 for a missing/malformed `allocation_id`, 404 for another event's; filename `<slug>-list-back-<label>.csv`; audited with counts only.
+- **`by_submitter`** orders artist lists first, then list position, then creation; revoked allocations stay (muted in the UI).
+- **Chart:** two panels on one time axis (occupancy line; arrivals up / exits down per bucket), keyboard readout, screen-reader table and SHOW AS TABLE; walk-ups are merged into arrivals in the chart (a third hue was indistinguishable in light mode) and broken out in the readout and table.
+
+### UX review of P2.1–P2.3 (commit `99ea899`)
+
+All P0/P1/P2 findings fixed except showing check-in state in the guest table (needs P2.4 aggregates; follow-up). API change: locked PIN → **429 `pin_locked`** with `Retry-After` and `retry_after` (429 rather than 423: the lock rate-limits guessing and lifts itself; the fifth wrong try already gets it), expired PIN → 401 `pin_expired`; unknown/revoked devices still only see `invalid_credentials`. PIN status gains `locked_until`. Queued ops survive session expiry (door goes to re-login instead of wiping).
+
+### API tests
+
+`tests/bruno-promoter` (commit `a04766e`), run with `pnpm nx run api:test-api` against a disposable Postgres + promoter API with per-run secrets. Not covered there (covered by Go integration tests): two-device conflicts, PIN lockout exhaustion, login with a TOTP code right after enrolment (replay window), step-up after 15 min.
 
 ## P2.3 contract (offline door)
 
@@ -219,3 +237,34 @@ Response: `{"results":[{"nonce","status":"applied|duplicate|rejected","conflict"
 - On-the-spot add: name, +N, list, manager PIN verified offline (PBKDF2 via WebCrypto), then queued add + check-in.
 - Door shell service worker (`public/door-sw.js`, production only): caches `/door` and `/_nuxt/*`, never `/api`. `public/door.webmanifest` with `display: standalone`, `start_url: /door`.
 - Mock handlers for every route above.
+
+## P2.4 contract (post-event report)
+
+Read-only aggregates over guests, allocations, tickets, `checkins` and `door_counters`. No names in the report JSON except allocation submitter labels (public class, as in P2.1). Undone rows never count.
+
+| Route | Action | Notes |
+|---|---|---|
+| `GET /api/v1/events/{eventID}/report` | guestlist.read | Works during the event too (`live: true` while now < ends_at) |
+| `GET /api/v1/events/{eventID}/report/list-back.csv?allocation_id=` | guestlist.read | One allocation's guests; audited `guestlist.export`; same CSV hardening as the guest export (BOM, formula-prefix escaping) |
+
+Definitions: a guest **arrived** when its non-undone `in` heads ≥ 1; **heads admitted** = Σ non-undone `in` counts; **+1s used** = min(plus_n, heads admitted − 1) for arrived guests; **no-show rate** = going guests not arrived / going guests (null when 0 going); a ticket is **scanned** when it has a non-undone `in`; **occupancy** = running Σ(in − out) over check-ins + walk-ups + manual in − manual out.
+
+```json
+{
+  "event": {"id","title","starts_at","ends_at","timezone","capacity"},
+  "generated_at": "…", "live": false,
+  "totals": {"guests_going","guests_arrived","no_show_rate","heads_expected","heads_admitted",
+             "plus_ones_allowed","plus_ones_used","tickets_valid","tickets_scanned",
+             "walkups","peak_occupancy","peak_at","conflicts"},
+  "by_list": [{"list_id","name","type","going","arrived","no_show_rate","heads_expected","heads_admitted","plus_ones_allowed","plus_ones_used"}],
+  "by_submitter": [{"allocation_id","list_id","list_name","list_type","submitter","quota","going","arrived","no_show_rate","heads_admitted","revoked"}],
+  "tickets_by_type": [{"ticket_type_id","name","valid","scanned"}],
+  "curve": [{"bucket_start","in","out","walkups","occupancy"}]
+}
+```
+
+`heads_expected` = Σ (1 + plus_n) of going guests + valid tickets. `curve` has 15-minute buckets aligned to :00/:15/:30/:45 in the event's timezone, from the first to the last activity (empty array when none); `occupancy` is the value at the end of the bucket. `peak_occupancy`/`peak_at` come from the same series.
+
+List-back CSV columns: `name, plus_n, status, arrived, heads_admitted, first_in_local` (event timezone, `YYYY-MM-DD HH:MM`). No email or phone.
+
+Frontend: new event tab **REPORT** (`/events/[id]/report`): KPI tiles (arrived / going, no-show rate, heads admitted vs expected vs capacity, +1s used, walk-ups, peak occupancy and time), check-in curve as an inline SVG chart (no chart dependency; in, out and occupancy, keyboard- and screen-reader-accessible table fallback), by-list and by-submitter tables with a LIST BACK CSV button per allocation (artist lists first), tickets by type, empty state when nothing happened yet, LIVE badge while the event runs. Mock handlers derive the report from the mock guests, tickets and check-ins.
