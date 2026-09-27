@@ -2,7 +2,7 @@
 #
 #   scripts/promoter-secrets.sh                      # once: secrets + NATS creds
 #   docker compose -f docker-compose.promoter.yml up -d
-#   docker compose -f docker-compose.promoter.yml run --rm promoter bootstrap \
+#   docker compose -f docker-compose.promoter.yml run --rm --entrypoint /promoter promoter bootstrap \
 #     --org-name "My Collective" --slug my-collective --owner-email me@example.com --owner-name Me
 #
 # Self-hosted Promoter is a private tool (plan D2): the UI is published on
