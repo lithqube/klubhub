@@ -3,6 +3,7 @@ const { initTheme, theme } = useTheme()
 
 // Same theme bootstrap as KlubHub DJ: the inline script avoids a flash of the
 // wrong theme; the reactive htmlAttrs keep data-theme in sync after hydration.
+// The door (/door) is always dark.
 // nuxt-security adds a per-request nonce to this inline script (CSP).
 useHead(computed(() => ({
   htmlAttrs: { 'data-theme': theme.value },
@@ -10,7 +11,7 @@ useHead(computed(() => ({
     {
       innerHTML: `(function(){
         var k='klubhub-theme';
-        var s=localStorage.getItem(k);
+        var s=location.pathname.indexOf('/door')===0?'dark':localStorage.getItem(k);
         var os=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
         document.documentElement.setAttribute('data-theme', s||os);
       })();`,

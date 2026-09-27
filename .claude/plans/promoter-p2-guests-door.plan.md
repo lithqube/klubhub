@@ -119,7 +119,7 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 |---|---|---|
 | P2.1 Guest lists & guest table | Done | `3b8b018` (API, migration 00008), `b0aa9e2` (guest table, /guests, mocks, e2e) |
 | P2.2 Attendee import | Done | `67acbac` (API, migration 00009, presets), next commit (import panel, ticket badges, mocks, e2e) |
-| P2.3 Offline door | In progress | backend: API, migration 00010, manager PIN (this commit); frontend pending |
+| P2.3 Offline door | Done | `2c97f57` (API, migration 00010, manager PIN), next commit (`/door`, event Door tab, encrypted cache, service worker, jsQR, mocks, e2e) |
 | P2.4 Post-event report | Not started | — |
 | P2.5 Privacy & retention | Not started | — |
 | P2.6 Sealed tier + ban list | Not started | — |
@@ -136,6 +136,20 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 - **Extra route:** `GET /api/v1/guests/overview` (guestlist.read) feeds the cross-event page, instead of one request per event.
 - **CSV export** is audited (`guestlist.export`), starts with a UTF-8 BOM, and prefixes cells starting with `= + - @`, tab or CR with an apostrophe.
 - **Blind indexes use the current DEK version.** After a key rotation, lookups by old index values miss until guests are re-indexed; P2.5 or the rotation job must re-index (noted, not built).
+
+### P2.3 decisions (implementation)
+
+- **Conflicts:** an `in` is flagged only when another device already admitted the subject and in − out across all devices would exceed the allowance; re-entry after an `out` is not a conflict, and one device over-admitting is "admit anyway". `conflict_of` points at the earliest live `in` of another device.
+- **Cursor:** each bundle/sync takes a per-event advisory lock and stamps rows with the database clock read after it, so no later commit is skipped. Deltas include rows whose `received_at` **or** `undone_at` is after the cursor, so undos reach every device.
+- **Idempotency:** nonces are unique per tenant across check-ins, counters and undos; a repeat is `duplicate` with the original conflict flag; rejected ops are not stored and the door drops them from its queue after showing them. Undoing an undone row is a no-op `applied`.
+- **Rejection codes:** `invalid_op: …` / `invalid_add: …` (match by prefix), `unknown_subject`, `unknown_target`, `unknown_list`, `id_conflict`, `manager_pin_invalid` (also missing, expired or locked), `event_full`.
+- **Outbox events carry identifiers only** (`events.New` takes UUID refs); counts go to the audit entry in the same transaction. Door adds also emit `guestlist.updated` and audit `door.guests_added`.
+- **The server accepts any subject status**; the door blocks cancelled/refunded tickets and asks for a second tap for not-going guests, past cutoff and used-up allowance. Express mode checks in straight from a scan only when there is nothing to warn about.
+- **Manager PIN:** each distinct PIN in an add batch is verified once (one typo costs one attempt). Staff and manager hashes are sealed under different column labels. The offline PBKDF2 verifier of a 6-digit PIN is brute-forceable from an unlocked door device — accepted, since the device already holds the list and the server re-checks every add. With Zitadel identity there is no manager PIN source yet, so adds are rejected.
+- **Session interplay:** door login sets the same session cookie as staff login, so it signs the admin out on that browser (the Door tab warns; use a separate phone or profile). A reload reopens the door without the PIN until the session expires (needed offline); queued ops survive a server-side session end and sync after a new PIN login for the same event.
+- **QR:** `BarcodeDetector` where available, otherwise **jsQR** (`jsqr` ^1.4.0, lazy chunk ≈ 130 KB / 46 KB gzip, prefetched on browsers without `BarcodeDetector` so it works offline); typed code always available. Camera needs HTTPS or localhost (so does WebCrypto); `camera=(self)` only on `/door`.
+- **`/door` always loads as a full document** (camera permission and service worker scope apply that way); its theme script forces dark before paint. The service worker is told about already-loaded assets after registering so they are cached too.
+- **Default PIN window:** event end + 6 h, capped at 36 h from now, at least 1 h ahead. The device cache is wiped on logout, session expiry, or 6 h after the event ends.
 
 ## P2.3 contract (offline door)
 

@@ -13,7 +13,7 @@ useHead(() => ({ title: current.value?.title ?? 'Event' }))
 
 const tabs = [
   { to: 'details', label: 'DETAILS' }, { to: 'lineup', label: 'LINEUP & TIMETABLE' }, { to: 'guests', label: 'GUESTS' },
-  { to: 'export', label: 'EXPORT' },
+  { to: 'door', label: 'DOOR' }, { to: 'export', label: 'EXPORT' },
 ]
 
 const past = computed(() => !!current.value && Date.parse(current.value.ends_at) <= Date.now())

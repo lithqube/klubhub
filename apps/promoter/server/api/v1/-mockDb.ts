@@ -1,6 +1,11 @@
 // In-memory data for frontend-only development (no NUXT_PUBLIC_API_BASE).
 // Shapes mirror the Go API; timetable issues come from the shared client
 // validator so the UI behaves as it will against the server.
+import { pbkdf2Sync, randomBytes, randomInt } from 'node:crypto'
+import type {
+  AddResult as DoorAddResult, DoorAdd, DoorBundle, DoorCheckin, DoorCounters, DoorDevice, DoorOp, DoorSubject, ManagerPinVerifier, OpResult, PinStatus,
+  RegisteredDevice, SyncResponse,
+} from '~/types/door'
 import type { EventDetail, EventSummary, Venue } from '~/types/event'
 import type {
   AddGuestsInput, AddResult, Allocation, AllocationInput, BulkResult, BulkStatusInput, EntryTerms, Guest, GuestInput, GuestList, GuestPage,
@@ -576,4 +581,246 @@ export function importAttendees(eventId: string, preset: ImportPreset, explicit:
   }
   res.import_id = newId('imp')
   return res
+}
+
+// ---------------------------------------------------------------- door (P2.3)
+// Mirrors the P2.3 contract (api/internal/promoter/door + identity). Mock rules:
+// - Door login accepts ANY 6-digit PIN except '000000' (which fails like a
+//   wrong PIN), for any registered, unrevoked device token. The session is a
+//   cookie `klubhub_door_mock` naming the device and event.
+// - Generating a staff PIN returns a random 6-digit PIN; the manager PIN is
+//   always MOCK_MANAGER_PIN ('246810'), and the bundle carries a real
+//   PBKDF2-SHA256 verifier for it (210 000 iterations) so the offline check
+//   runs end to end. e-klubnacht starts with that manager PIN set.
+// - The sync cursor is opaque (base64url of a sequence number); inserts and
+//   undos both bump a row's sequence, so undos from other devices reach
+//   every door. Rejected ops are not stored: a re-send is evaluated again.
+// - Rejection codes match the Go API: unknown_subject, unknown_target,
+//   unknown_list, id_conflict, manager_pin_invalid, "invalid_op: …",
+//   "invalid_add: …".
+
+export const MOCK_MANAGER_PIN = '246810'
+export const MOCK_BAD_PIN = '000000'
+export const DOOR_COOKIE = 'klubhub_door_mock'
+const PIN_WINDOW_MS = 36 * 3_600_000
+
+interface DeviceRow extends DoorDevice { token: string }
+export const doorDevices: DeviceRow[] = [
+  { id: 'dd-front', label: 'Front door phone', token: 'mock-door-token-front', created_at: iso(-5), last_seen_at: null, revoked_at: null },
+]
+
+interface PinRow { pin: string, valid_until: string, verifier?: ManagerPinVerifier }
+const doorPins = new Map<string, { staff?: PinRow, manager?: PinRow }>([
+  ['e-klubnacht', { manager: { pin: MOCK_MANAGER_PIN, valid_until: iso(6, 14) } }],
+])
+
+interface DoorSessionRow { device_id: string, event_id: string, expires_at: string }
+const doorSessions = new Map<string, DoorSessionRow>()
+
+interface CheckinRow extends DoorCheckin { event_id: string, seq: number }
+interface CounterRow { event_id: string, nonce: string, kind: 'walkup' | 'in' | 'out', delta: number, at: string, device_id: string, undone: boolean, seq: number }
+const checkinRows: CheckinRow[] = []
+const counterRows: CounterRow[] = []
+const opResults = new Map<string, OpResult>()
+const addNonces = new Map<string, string>()
+let doorSeq = 0
+
+const unauthorized = () => createError({ statusCode: 401, data: { error: 'invalid_credentials' } })
+
+function verifierFor(pin: string): ManagerPinVerifier {
+  const salt = randomBytes(16)
+  const iterations = 210_000
+  return { salt: salt.toString('base64'), iterations, hash: pbkdf2Sync(pin, salt, iterations, 32, 'sha256').toString('base64') }
+}
+
+export const deviceList = (): DoorDevice[] => doorDevices.map(({ token: _t, ...d }) => d)
+
+export function registerDoorDevice(label: string): RegisteredDevice {
+  const l = (label ?? '').trim()
+  if (!l || l.length > 80) throw guestErr(400, { error: 'invalid_input' })
+  const d: DeviceRow = { id: newId('dd'), label: l, token: `mock-door-token-${randomBytes(12).toString('hex')}`, created_at: new Date().toISOString(), last_seen_at: null, revoked_at: null }
+  doorDevices.push(d)
+  return { id: d.id, label: d.label, token: d.token }
+}
+
+export function revokeDoorDevice(id: string) {
+  const d = doorDevices.find(x => x.id === id)
+  if (d && !d.revoked_at) d.revoked_at = new Date().toISOString()
+}
+
+export function setDoorPin(eventId: string, b: { manager?: boolean, valid_until?: string }): { pin: string, valid_until: string, manager: boolean } {
+  findEvent(eventId)
+  const until = Date.parse(b?.valid_until ?? '')
+  const now = Date.now()
+  if (!(until > now) || until - now > PIN_WINDOW_MS) throw guestErr(400, { error: 'invalid_input' })
+  const manager = !!b.manager
+  let pin = MOCK_MANAGER_PIN
+  if (!manager) {
+    do pin = String(randomInt(0, 1_000_000)).padStart(6, '0')
+    while (pin === MOCK_BAD_PIN || pin === MOCK_MANAGER_PIN)
+  }
+  const row: PinRow = { pin, valid_until: new Date(until).toISOString() }
+  doorPins.set(eventId, { ...doorPins.get(eventId), [manager ? 'manager' : 'staff']: row })
+  return { pin, valid_until: row.valid_until, manager }
+}
+
+export function doorPinStatus(eventId: string): PinStatus {
+  findEvent(eventId)
+  const p = doorPins.get(eventId) ?? {}
+  const live = (r?: PinRow) => (r && Date.parse(r.valid_until) > Date.now() ? { valid_until: r.valid_until } : null)
+  return { staff: live(p.staff), manager: live(p.manager) }
+}
+
+/** Door login: returns the session id for the mock cookie. */
+export function doorLogin(b: { device_token?: string, event_id?: string, pin?: string }): { session: string, expires_at: string } {
+  const d = doorDevices.find(x => x.token === b?.device_token && !x.revoked_at)
+  const pin = String(b?.pin ?? '').trim()
+  if (!d || !/^\d{6}$/.test(pin) || pin === MOCK_BAD_PIN || !events.some(e => e.id === b.event_id)) throw unauthorized()
+  const staff = doorPins.get(b.event_id!)?.staff
+  const expires = staff && Date.parse(staff.valid_until) > Date.now() ? staff.valid_until : new Date(Date.now() + 12 * 3_600_000).toISOString()
+  d.last_seen_at = new Date().toISOString()
+  const session = randomBytes(16).toString('hex')
+  doorSessions.set(session, { device_id: d.id, event_id: b.event_id!, expires_at: expires })
+  return { session, expires_at: expires }
+}
+
+export function doorSession(cookie: string | undefined): DoorSessionRow {
+  const s = cookie ? doorSessions.get(cookie) : undefined
+  const d = s && doorDevices.find(x => x.id === s.device_id)
+  if (!s || !d || d.revoked_at || Date.parse(s.expires_at) <= Date.now()) {
+    throw createError({ statusCode: 403, data: { error: 'door_session_required' } })
+  }
+  return s
+}
+
+const encodeCursor = (seq: number) => Buffer.from(`c${seq}`).toString('base64url')
+function decodeCursor(c: string | null | undefined): number {
+  if (!c) return 0
+  const m = /^c(\d+)$/.exec(Buffer.from(c, 'base64url').toString())
+  if (!m) throw guestErr(422, { error: 'invalid', field: 'since', problem: 'unknown cursor' })
+  return Number(m[1])
+}
+
+function eventCheckins(eventId: string, since = 0): DoorCheckin[] {
+  return checkinRows.filter(c => c.event_id === eventId && c.seq > since)
+    .map(({ event_id: _e, seq: _s, ...c }) => c)
+}
+
+function eventCounters(eventId: string): DoorCounters {
+  const c: DoorCounters = { walkups: 0, manual_in: 0, manual_out: 0 }
+  for (const r of counterRows) {
+    if (r.event_id !== eventId || r.undone) continue
+    if (r.kind === 'walkup') c.walkups += r.delta
+    else if (r.kind === 'in') c.manual_in += r.delta
+    else c.manual_out += r.delta
+  }
+  return c
+}
+
+export function doorBundle(s: DoorSessionRow): DoorBundle {
+  const e = findEvent(s.event_id)
+  const mgr = doorPins.get(e.id)?.manager
+  const liveMgr = mgr && Date.parse(mgr.valid_until) > Date.now() ? mgr : null
+  if (liveMgr && !liveMgr.verifier) liveMgr.verifier = verifierFor(liveMgr.pin)
+  return {
+    generated_at: new Date().toISOString(), device_id: s.device_id, session_expires_at: s.expires_at,
+    event: { id: e.id, title: e.title, starts_at: e.starts_at, ends_at: e.ends_at, doors_at: e.doors_at, timezone: e.timezone, capacity: e.capacity },
+    lists: guestLists.filter(l => l.event_id === e.id).sort((a, b) => a.position - b.position).map(l => ({
+      id: l.id, name: l.name, type: l.type,
+      entry_terms: { price_mode: l.entry_terms.price_mode, reduced_price_text: l.entry_terms.reduced_price_text, cutoff_at: l.entry_terms.cutoff_at ?? null, perks: l.entry_terms.perks },
+    })),
+    // Name-only: no email or phone ever reaches the door.
+    guests: guests.filter(g => g.event_id === e.id && g.status !== 'declined')
+      .map(g => ({ id: g.id, list_id: g.list_id, name: g.name, plus_n: g.plus_n, status: g.status, note: g.note })),
+    tickets: positions.filter(p => p.event_id === e.id).map((p) => {
+      const o = orders.find(x => x.id === p.order_id)!
+      return { id: p.id, name: p.name, ticket_type: ticketTypes.find(t => t.id === p.ticket_type_id)?.name ?? '', order_ref: o.ref, source: o.source, status: p.status, secret: p.secret }
+    }),
+    checkins: eventCheckins(e.id),
+    counters: eventCounters(e.id),
+    cursor: encodeCursor(doorSeq),
+    manager_pin: liveMgr?.verifier ?? null,
+  }
+}
+
+function subjectOf(eventId: string, s: DoorSubject | undefined): number | null {
+  if (s?.kind === 'guest') {
+    const g = guests.find(x => x.id === s.id && x.event_id === eventId && x.status !== 'declined')
+    return g ? 1 + g.plus_n : null
+  }
+  if (s?.kind === 'ticket') return positions.some(p => p.id === s.id && p.event_id === eventId) ? 1 : null
+  return null
+}
+
+function applyOp(sess: DoorSessionRow, op: DoorOp): OpResult {
+  const nonce = String(op?.nonce ?? '')
+  if (nonce.length < 8 || nonce.length > 64) return { nonce, status: 'rejected', conflict: false, error: 'invalid_op: nonce must be 8 to 64 characters' }
+  const prev = opResults.get(nonce)
+  if (prev) return { ...prev, status: 'duplicate' }
+  const at = op.at && !Number.isNaN(Date.parse(op.at)) ? op.at : new Date().toISOString()
+  let res: OpResult
+  if (op.type === 'checkin') {
+    const allow = subjectOf(sess.event_id, op.subject)
+    if (allow === null) res = { nonce, status: 'rejected', conflict: false, error: 'unknown_subject' }
+    else if (!(op.count >= 1 && op.count <= 50) || (op.direction !== 'in' && op.direction !== 'out')) res = { nonce, status: 'rejected', conflict: false, error: 'invalid_op: count 1 to 50, direction in or out' }
+    else {
+      const key = `${op.subject.kind}:${op.subject.id}`
+      const live = checkinRows.filter(c => c.event_id === sess.event_id && !c.undone && `${c.subject.kind}:${c.subject.id}` === key)
+      const heads = live.reduce((n, c) => n + (c.direction === 'in' ? c.count : -c.count), 0)
+      const conflict = op.direction === 'in' && heads + op.count > allow && live.some(c => c.direction === 'in' && c.device_id !== sess.device_id)
+      checkinRows.push({
+        event_id: sess.event_id, seq: ++doorSeq, nonce, subject: { kind: op.subject.kind, id: op.subject.id }, count: op.count,
+        direction: op.direction, at, device_id: sess.device_id, undone: false, conflict,
+      })
+      res = { nonce, status: 'applied', conflict }
+    }
+  } else if (op.type === 'undo') {
+    const c = checkinRows.find(x => x.nonce === op.target && x.event_id === sess.event_id)
+    const k = counterRows.find(x => x.nonce === op.target && x.event_id === sess.event_id)
+    // Undoing an already-undone row is a no-op that still applies.
+    if (c && !c.undone) Object.assign(c, { undone: true, seq: ++doorSeq })
+    if (k && !k.undone) Object.assign(k, { undone: true, seq: ++doorSeq })
+    res = c || k ? { nonce, status: 'applied', conflict: false } : { nonce, status: 'rejected', conflict: false, error: 'unknown_target' }
+  } else if (op.type === 'counter') {
+    if (!['walkup', 'in', 'out'].includes(op.kind) || !(op.delta >= 1 && op.delta <= 50)) res = { nonce, status: 'rejected', conflict: false, error: 'invalid_op: kind walkup, in or out; delta 1 to 50' }
+    else {
+      counterRows.push({ event_id: sess.event_id, nonce, kind: op.kind, delta: op.delta, at, device_id: sess.device_id, undone: false, seq: ++doorSeq })
+      res = { nonce, status: 'applied', conflict: false }
+    }
+  } else {
+    res = { nonce, status: 'rejected', conflict: false, error: 'invalid_op: unknown type' }
+  }
+  if (res.status !== 'rejected') opResults.set(nonce, res)
+  return res
+}
+
+export function doorSync(sess: DoorSessionRow, b: { since?: string | null, ops?: DoorOp[] }): SyncResponse {
+  const ops = b?.ops ?? []
+  if (ops.length > 500) throw guestErr(422, { error: 'invalid', field: 'ops', problem: 'at most 500 per request' })
+  const since = decodeCursor(b?.since)
+  const results = ops.map(op => applyOp(sess, op))
+  return { results, checkins: eventCheckins(sess.event_id, since), counters: eventCounters(sess.event_id), cursor: encodeCursor(doorSeq) }
+}
+
+export function doorAdds(sess: DoorSessionRow, b: { adds?: DoorAdd[] }): { results: DoorAddResult[] } {
+  const adds = b?.adds ?? []
+  if (!adds.length || adds.length > 50) throw guestErr(422, { error: 'invalid', field: 'adds', problem: '1 to 50 per request' })
+  const mgr = doorPins.get(sess.event_id)?.manager
+  const results = adds.map((a): DoorAddResult => {
+    const base = { nonce: a.nonce, id: a.id }
+    if (addNonces.get(a.nonce) === a.id) return { ...base, status: 'duplicate' }
+    if (guests.some(g => g.id === a.id)) return { ...base, status: 'rejected', error: 'id_conflict' }
+    if (!mgr || Date.parse(mgr.valid_until) <= Date.now() || a.manager_pin !== mgr.pin) return { ...base, status: 'rejected', error: 'manager_pin_invalid' }
+    const name = (a.name ?? '').replace(/\s+/g, ' ').trim()
+    if (!name || name.length > 120 || !(a.plus_n >= 0 && a.plus_n <= 10)) return { ...base, status: 'rejected', error: 'invalid_add: name 1 to 120 characters, plus_n 0 to 10' }
+    if (!guestLists.some(l => l.id === a.list_id && l.event_id === sess.event_id)) return { ...base, status: 'rejected', error: 'unknown_list' }
+    addNonces.set(a.nonce, a.id)
+    const now = new Date().toISOString()
+    guests.push({
+      id: a.id, event_id: sess.event_id, list_id: a.list_id, allocation_id: null, name, email: '', phone: '', note: '', plus_n: a.plus_n,
+      status: 'going', source: 'door', created_at: now, updated_at: now,
+    })
+    return { ...base, status: 'applied' }
+  })
+  return { results }
 }

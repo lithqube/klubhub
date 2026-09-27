@@ -188,6 +188,9 @@ importers:
       '@vueuse/core':
         specifier: ^14.4.0
         version: 14.4.0(vue@3.5.42(typescript@5.9.3))
+      jsqr:
+        specifier: ^1.4.0
+        version: 1.4.0
       lucide-vue-next:
         specifier: ^0.577.0
         version: 0.577.0(vue@3.5.42(typescript@5.9.3))
@@ -4376,6 +4379,9 @@ packages:
 
   jsonc-parser@3.2.0:
     resolution: {integrity: sha512-gfFQZrcTc8CnKXp6Y4/CBT3fTc0OVuDofpre4aEeEpSBPV5X5v4+Vmx+8snU7RLPrNHPKSgLxGo9YuQzz20o+w==}
+
+  jsqr@1.4.0:
+    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   keyv@5.6.0:
     resolution: {integrity: sha512-CYDD3SOtsHtyXeEORYRx2qBtpDJFjRTGXUtmNEMGyzYOKj1TE3tycdlho7kA1Ufx9OYWZzg52QFBGALTirzDSw==}
@@ -11130,6 +11136,8 @@ snapshots:
       semver: 7.8.5
 
   jsonc-parser@3.2.0: {}
+
+  jsqr@1.4.0: {}
 
   keyv@5.6.0:
     dependencies:
