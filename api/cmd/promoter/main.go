@@ -38,6 +38,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/migrations"
+	"github.com/klubhub/dj/api/internal/promoter/report"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
 
@@ -132,6 +133,7 @@ func serve() error {
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),
 		Events:        event.NewHandler(events),
 		Guests:        guest.NewHandler(guests),
+		Reports:       report.NewHandler(report.NewService(rt.db, rt.keys, nil)),
 		ServeFrontend: rt.cfg.ServeFrontend, NuxtURL: rt.cfg.NuxtInternalURL,
 	}
 	var managerPINs door.ManagerPINs // door sessions and PINs exist with local identity only

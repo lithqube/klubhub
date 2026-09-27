@@ -29,6 +29,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
+	"github.com/klubhub/dj/api/internal/promoter/report"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
 
@@ -107,7 +108,8 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 		Log: zerolog.Nop(), DB: db, Authz: engine, Authn: svc,
 		Identity: identity.NewHandler(svc), Origins: []string{origin},
 		Events: event.NewHandler(events), Guests: guest.NewHandler(guests),
-		Door: door.NewHandler(door.NewService(db, keys, svc, nil)),
+		Door:    door.NewHandler(door.NewService(db, keys, svc, nil)),
+		Reports: report.NewHandler(report.NewService(db, keys, nil)),
 	})
 	return mux, svc, func() []error { return authz.VerifyCoverage(context.Background(), mux, reg) }
 }
@@ -424,6 +426,17 @@ func TestGuestsAPI(t *testing.T) {
 		!strings.Contains(rec.Header().Get("Content-Disposition"), `klubnacht-guests.csv`) ||
 		!strings.HasPrefix(body, "\xef\xbb\xbfname,plus_n") || !strings.Contains(body, "'=SUM(A1)") {
 		t.Fatalf("csv: %d %v %q", rec.Code, rec.Header(), body)
+	}
+	rec = c.do(http.MethodGet, base+"/report", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"guests_going":2`) || !strings.Contains(rec.Body.String(), `"live":true`) ||
+		strings.Contains(rec.Body.String(), "Mara") {
+		t.Fatalf("report (no guest names): %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodGet, base+"/report/list-back.csv?allocation_id="+alloc.ID, nil, false)
+	if body := rec.Body.String(); rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/csv; charset=utf-8" ||
+		!strings.Contains(rec.Header().Get("Content-Disposition"), `klubnacht-list-back-ben-klock.csv`) ||
+		!strings.HasPrefix(body, "\xef\xbb\xbfname,plus_n,status,arrived,heads_admitted,first_in_local\n") || !strings.Contains(body, "'=SUM(A1),0,going,no,0,\n") {
+		t.Fatalf("list-back csv: %d %v %q", rec.Code, rec.Header(), body)
 	}
 	if rec := c.do(http.MethodGet, "/api/v1/guests/overview", nil, false); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"going_heads":2`) {
 		t.Fatalf("overview: %d %s", rec.Code, rec.Body)

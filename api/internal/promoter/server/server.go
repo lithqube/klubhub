@@ -24,6 +24,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
+	"github.com/klubhub/dj/api/internal/promoter/report"
 )
 
 // Pinger reports database health.
@@ -41,6 +42,7 @@ type Deps struct {
 	Events        *event.Handler
 	Guests        *guest.Handler
 	Door          *door.Handler
+	Reports       *report.Handler
 	Origins       []string
 	ServeFrontend bool
 	NuxtURL       string
@@ -92,6 +94,9 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 	}
 	if d.Door != nil {
 		d.Door.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Reports != nil {
+		d.Reports.Mount(r, d.Authz, reg, onDeny)
 	}
 
 	notFound := func(w http.ResponseWriter, req *http.Request) {
