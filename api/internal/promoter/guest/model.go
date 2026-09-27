@@ -45,6 +45,8 @@ func consumes(status string) bool {
 const (
 	SourceManual = "manual"
 	SourcePaste  = "paste"
+	// SourceDoor marks on-the-spot adds from the door (P2.3).
+	SourceDoor = "door"
 )
 
 // Price modes of entry terms.
@@ -58,6 +60,7 @@ const (
 	MaxPlusN     = 10
 	MaxBatch     = 500
 	MaxPerEvent  = 5000
+	MaxNameLen   = maxNameLen
 	maxPerks     = 8
 	maxPerkLen   = 24
 	maxNameLen   = 120

@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -62,10 +63,31 @@ func (s *Service) RevokeDoorDevice(ctx context.Context, by authz.Principal, devi
 	})
 }
 
-// SetDoorPIN generates a random 6-digit PIN for event, valid until
-// validUntil (at most 36h ahead), replacing any previous PIN. Staff never
-// choose PINs, so they cannot be weak or reused.
+// SetDoorPIN generates a random 6-digit staff PIN for event, valid until
+// validUntil (at most 36h ahead), replacing any previous staff PIN. Staff
+// never choose PINs, so they cannot be weak or reused.
 func (s *Service) SetDoorPIN(ctx context.Context, by authz.Principal, event uuid.UUID, validUntil time.Time) (string, error) {
+	return s.setPIN(ctx, by, event, validUntil, false)
+}
+
+// SetManagerPIN generates the event's manager PIN, which gates on-the-spot
+// adds at the door (P2.3). Besides the Argon2id hash it stores a sealed
+// PBKDF2 verifier that the door bundle hands to devices, so they can check
+// the PIN offline; the server still re-verifies every add.
+func (s *Service) SetManagerPIN(ctx context.Context, by authz.Principal, event uuid.UUID, validUntil time.Time) (string, error) {
+	return s.setPIN(ctx, by, event, validUntil, true)
+}
+
+// pinColumn binds the sealed hash to its row kind, so a staff hash copied
+// into the manager row does not open.
+func pinColumn(manager bool) string {
+	if manager {
+		return "pin_hash_enc#manager"
+	}
+	return "pin_hash_enc"
+}
+
+func (s *Service) setPIN(ctx context.Context, by authz.Principal, event uuid.UUID, validUntil time.Time, manager bool) (string, error) {
 	tenant, err := uuid.Parse(by.OrgID)
 	now := s.now()
 	if err != nil || event == uuid.Nil || !validUntil.After(now) || validUntil.Sub(now) > maxPINWindow {
@@ -80,10 +102,26 @@ func (s *Service) SetDoorPIN(ctx context.Context, by authz.Principal, event uuid
 	if err != nil {
 		return "", err
 	}
+	var check []byte
+	if manager {
+		v, err := NewPINCheck(pin)
+		if err != nil {
+			return "", err
+		}
+		if check, err = json.Marshal(v); err != nil {
+			return "", err
+		}
+	}
 	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
-		sealed, err := s.seal(ctx, tx, tenant, "door_pins", "pin_hash_enc", event, []byte(hash))
+		sealed, err := s.seal(ctx, tx, tenant, "door_pins", pinColumn(manager), event, []byte(hash))
 		if err != nil {
 			return err
+		}
+		var sealedCheck []byte
+		if check != nil {
+			if sealedCheck, err = s.seal(ctx, tx, tenant, "door_pins", "check_enc", event, check); err != nil {
+				return err
+			}
 		}
 		var exists bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM events WHERE id = $1)`, event).Scan(&exists); err != nil {
@@ -92,12 +130,12 @@ func (s *Service) SetDoorPIN(ctx context.Context, by authz.Principal, event uuid
 		if !exists {
 			return ErrInvalidInput
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO door_pins (tenant_id, event_id, pin_hash_enc, expires_at, created_by)
-		  VALUES ($1, $2, $3, $4, $5)
-		  ON CONFLICT (tenant_id, event_id) DO UPDATE
-		  SET pin_hash_enc = EXCLUDED.pin_hash_enc, expires_at = EXCLUDED.expires_at,
+		_, err = tx.Exec(ctx, `INSERT INTO door_pins (tenant_id, event_id, manager, pin_hash_enc, check_enc, expires_at, created_by)
+		  VALUES ($1, $2, $3, $4, $5, $6, $7)
+		  ON CONFLICT (tenant_id, event_id, manager) DO UPDATE
+		  SET pin_hash_enc = EXCLUDED.pin_hash_enc, check_enc = EXCLUDED.check_enc, expires_at = EXCLUDED.expires_at,
 		      failed_attempts = 0, locked_until = NULL, created_by = EXCLUDED.created_by, created_at = now()`,
-			tenant, event, sealed, validUntil, userIDFromSub(by.Sub))
+			tenant, event, manager, sealed, sealedCheck, validUntil, userIDFromSub(by.Sub))
 		return err
 	})
 	return pin, err
@@ -128,7 +166,7 @@ func (s *Service) DoorLogin(ctx context.Context, deviceToken string, event uuid.
 		var locked *time.Time
 		var expires time.Time
 		err = tx.QueryRow(ctx, `SELECT pin_hash_enc, failed_attempts, locked_until, expires_at
-		  FROM door_pins WHERE event_id = $1 FOR UPDATE`, event).Scan(&hashEnc, &failed, &locked, &expires)
+		  FROM door_pins WHERE event_id = $1 AND NOT manager FOR UPDATE`, event).Scan(&hashEnc, &failed, &locked, &expires)
 		if errors.Is(err, pgx.ErrNoRows) {
 			outcome = ErrInvalidCredentials
 			return nil
@@ -140,7 +178,7 @@ func (s *Service) DoorLogin(ctx context.Context, deviceToken string, event uuid.
 			outcome = ErrInvalidCredentials
 			return nil
 		}
-		hash, err := s.open(ctx, tx, tenant, "door_pins", "pin_hash_enc", event, hashEnc)
+		hash, err := s.open(ctx, tx, tenant, "door_pins", pinColumn(false), event, hashEnc)
 		if err != nil {
 			return err
 		}
@@ -152,10 +190,10 @@ func (s *Service) DoorLogin(ctx context.Context, deviceToken string, event uuid.
 				t := now.Add(pinLockout)
 				lockUntil, failed = &t, 0
 			}
-			_, err := tx.Exec(ctx, `UPDATE door_pins SET failed_attempts = $2, locked_until = $3 WHERE event_id = $1`, event, failed, lockUntil)
+			_, err := tx.Exec(ctx, `UPDATE door_pins SET failed_attempts = $2, locked_until = $3 WHERE event_id = $1 AND NOT manager`, event, failed, lockUntil)
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE door_pins SET failed_attempts = 0, locked_until = NULL WHERE event_id = $1`, event); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE door_pins SET failed_attempts = 0, locked_until = NULL WHERE event_id = $1 AND NOT manager`, event); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE door_devices SET last_seen_at = $2 WHERE id = $1`, deviceID, now); err != nil {

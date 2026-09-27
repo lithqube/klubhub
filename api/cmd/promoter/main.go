@@ -33,6 +33,7 @@ import (
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/config"
+	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
@@ -133,10 +134,12 @@ func serve() error {
 		Guests:        guest.NewHandler(guests),
 		ServeFrontend: rt.cfg.ServeFrontend, NuxtURL: rt.cfg.NuxtInternalURL,
 	}
+	var managerPINs door.ManagerPINs // door sessions and PINs exist with local identity only
 	switch rt.cfg.AuthProvider {
 	case "local":
 		svc := identity.NewService(rt.db, rt.keys, identity.Options{})
 		deps.Authn, deps.Identity = svc, identity.NewHandler(svc)
+		managerPINs = svc
 	case "zitadel":
 		jwks := rt.cfg.ZitadelJWKSURL
 		if jwks == "" {
@@ -152,6 +155,7 @@ func serve() error {
 		}
 		deps.Authn = z
 	}
+	deps.Door = door.NewHandler(door.NewService(rt.db, rt.keys, managerPINs, nil))
 	mux, _ := server.New(deps)
 
 	if rt.cfg.NATSServers != "" {

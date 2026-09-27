@@ -25,6 +25,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/envelope"
 	"github.com/klubhub/dj/api/internal/platform/pgtest"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
@@ -106,6 +107,7 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 		Log: zerolog.Nop(), DB: db, Authz: engine, Authn: svc,
 		Identity: identity.NewHandler(svc), Origins: []string{origin},
 		Events: event.NewHandler(events), Guests: guest.NewHandler(guests),
+		Door: door.NewHandler(door.NewService(db, keys, svc, nil)),
 	})
 	return mux, svc, func() []error { return authz.VerifyCoverage(context.Background(), mux, reg) }
 }
@@ -237,6 +239,37 @@ func TestEndToEndSelfHostedFlow(t *testing.T) {
 	rows.Close()
 	if strings.Join(subjects, ",") != "member.invited,door.session_started" {
 		t.Fatalf("outbox events: %v", subjects)
+	}
+
+	// Offline door: the device downloads its event; staff cannot.
+	rec = door.do(http.MethodGet, "/api/v1/door/bundle", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"`+event.String()+`"`) || !strings.Contains(rec.Body.String(), `"manager_pin":null`) {
+		t.Fatalf("door bundle: %d %s", rec.Code, rec.Body)
+	}
+	rec = door.do(http.MethodPost, "/api/v1/door/checkins", map[string]any{"since": nil, "ops": []map[string]any{
+		{"nonce": "walkup-0001", "type": "counter", "kind": "walkup", "delta": 2, "at": time.Now()}}}, true)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"walkups":2`) {
+		t.Fatalf("door sync: %d %s", rec.Code, rec.Body)
+	}
+	if rec := owner.do(http.MethodGet, "/api/v1/door/bundle", nil, false); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "door_session_required") {
+		t.Fatalf("staff on the door bundle: %d %s", rec.Code, rec.Body)
+	}
+	if rec := door.do(http.MethodGet, "/api/v1/door/devices", nil, false); rec.Code != http.StatusForbidden {
+		t.Fatalf("door staff must not list devices: %d", rec.Code)
+	}
+	rec = owner.do(http.MethodPost, "/api/v1/door/events/"+event.String()+"/pin", map[string]any{"valid_until": time.Now().Add(4 * time.Hour), "manager": true}, true)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"manager":true`) {
+		t.Fatalf("manager pin: %d %s", rec.Code, rec.Body)
+	}
+	rec = owner.do(http.MethodGet, "/api/v1/door/events/"+event.String()+"/pin", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"staff":{"valid_until"`) || !strings.Contains(rec.Body.String(), `"manager":{"valid_until"`) ||
+		strings.Contains(rec.Body.String(), `"pin"`) {
+		t.Fatalf("pin status (never the PIN): %d %s", rec.Code, rec.Body)
+	}
+	rec = owner.do(http.MethodGet, "/api/v1/door/devices", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"label":"Door iPhone"`) || !strings.Contains(rec.Body.String(), `"last_seen_at":"`) ||
+		strings.Contains(rec.Body.String(), "token") {
+		t.Fatalf("devices: %d %s", rec.Code, rec.Body)
 	}
 
 	if rec := owner.do(http.MethodPost, "/api/v1/auth/logout", nil, true); rec.Code != http.StatusNoContent {

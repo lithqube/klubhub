@@ -32,6 +32,11 @@ type Route struct {
 	// Public routes skip authorisation (health, login). Each one is a
 	// deliberate decision listed in the registry.
 	Public bool
+	// EventFromScope takes the resource's event from the principal's event
+	// scope instead of the URL (door routes): a door session can only ever
+	// act on its own event, and a principal without a scope presents no
+	// event at all.
+	EventFromScope bool
 }
 
 // Registry records the action of every route so tests can prove that no
@@ -87,13 +92,17 @@ func (e *Engine) Handle(mux chi.Router, reg *Registry, rt Route, h http.HandlerF
 			writeError(w, http.StatusUnauthorized, "unauthenticated")
 			return
 		}
+		eventID := chi.URLParam(r, "eventID")
+		if rt.EventFromScope {
+			eventID = p.EventScope
+		}
 		d := e.Authorize(r.Context(), Request{
 			Principal: p,
 			Action:    rt.Action,
 			Resource: Resource{
 				Type:    rt.ResourceType,
 				OrgID:   p.OrgID,
-				EventID: chi.URLParam(r, "eventID"),
+				EventID: eventID,
 			},
 			Route:  rt.Pattern,
 			Method: rt.Method,

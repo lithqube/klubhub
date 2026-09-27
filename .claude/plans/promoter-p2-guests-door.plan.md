@@ -119,7 +119,7 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 |---|---|---|
 | P2.1 Guest lists & guest table | Done | `3b8b018` (API, migration 00008), `b0aa9e2` (guest table, /guests, mocks, e2e) |
 | P2.2 Attendee import | Done | `67acbac` (API, migration 00009, presets), next commit (import panel, ticket badges, mocks, e2e) |
-| P2.3 Offline door | Not started | — |
+| P2.3 Offline door | In progress | backend: API, migration 00010, manager PIN (this commit); frontend pending |
 | P2.4 Post-event report | Not started | — |
 | P2.5 Privacy & retention | Not started | — |
 | P2.6 Sealed tier + ban list | Not started | — |
@@ -136,3 +136,72 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 - **Extra route:** `GET /api/v1/guests/overview` (guestlist.read) feeds the cross-event page, instead of one request per event.
 - **CSV export** is audited (`guestlist.export`), starts with a UTF-8 BOM, and prefixes cells starting with `= + - @`, tab or CR with an apostrophe.
 - **Blind indexes use the current DEK version.** After a key rotation, lookups by old index values miss until guests are re-indexed; P2.5 or the rotation job must re-index (noted, not built).
+
+## P2.3 contract (offline door)
+
+Backend (`api/internal/promoter/door`, new package) and frontend build against this. JSON is snake_case; times are RFC 3339 UTC.
+
+### Migration 00010_door.sql
+
+- `checkins` (data_class **personal** — links a person to a time and place): `id` uuid PK, `tenant_id`, `event_id` → events, `guest_id` → guests (nullable, ON DELETE CASCADE), `position_id` → order_positions (nullable, ON DELETE CASCADE), CHECK exactly one of guest/position, `count` int 1..50, `direction` in/out, `client_nonce` text (8..64), UNIQUE (`tenant_id`, `client_nonce`), `device_id` → door_devices, `at` (device clock), `received_at` default now(), `undone_at`, `undo_nonce` text, `conflict_of` uuid → checkins. Index (`tenant_id`, `event_id`, `received_at`).
+- `door_counters` (internal): `id`, `tenant_id`, `event_id`, `device_id`, `kind` walkup / in / out, `delta` int 1..50, `client_nonce` UNIQUE per tenant, `at`, `received_at`, `undone_at`.
+- `door_pins`: add `manager` boolean NOT NULL DEFAULT false and `check_enc` BYTEA (sealed offline verifier, manager rows only); primary key becomes (`tenant_id`, `event_id`, `manager`). Door login only accepts the staff row (`manager = false`).
+- All tables: ENABLE + FORCE RLS, fail-closed tenant policy, table and column `data_class` comments.
+
+### Routes
+
+The event always comes from the door principal (`EventScope`), never the URL: `authz.Route` gains `EventFromScope bool`, and the guard then sets `Resource.EventID = principal.EventScope`. Handlers answer 403 `door_session_required` when the principal has no event scope (staff cannot call door routes).
+
+| Route | Action | Notes |
+|---|---|---|
+| `GET /api/v1/door/bundle` | door.read | Audited `door.bundle_downloaded` (counts only) |
+| `POST /api/v1/door/checkins` | door.checkin | Batch of ≤ 500 ops, nonce-idempotent |
+| `POST /api/v1/door/adds` | door.checkin | ≤ 50 on-the-spot adds, each carries the manager PIN |
+| `GET /api/v1/door/devices` | door.device.manage | `[{id,label,created_at,last_seen_at,revoked_at}]` (new, staff) |
+| `POST /api/v1/door/events/{eventID}/pin` | door.device.manage | Existing; body gains optional `"manager": true` |
+| `GET /api/v1/door/events/{eventID}/pin` | door.device.manage | `{staff:{valid_until}\|null, manager:{valid_until}\|null}` (never the PIN) |
+
+**Bundle** (`GET /api/v1/door/bundle`):
+
+```json
+{
+  "generated_at": "…", "device_id": "uuid", "session_expires_at": "…",
+  "event": {"id","title","starts_at","ends_at","doors_at","timezone","capacity"},
+  "lists": [{"id","name","type","entry_terms":{"price_mode","reduced_price_text","cutoff_at","perks"}}],
+  "guests": [{"id","list_id","name","plus_n","status","note"}],
+  "tickets": [{"id","name","ticket_type","order_ref","source","status","secret"}],
+  "checkins": [{"nonce","subject":{"kind":"guest|ticket","id"},"count","direction","at","device_id","undone","conflict"}],
+  "counters": {"walkups","manual_in","manual_out"},
+  "cursor": "…",
+  "manager_pin": {"salt":"b64","iterations":210000,"hash":"b64"} | null
+}
+```
+
+Guests exclude `declined`; no email or phone ever reaches the door (name-only). Tickets carry the decrypted secret (the QR payload) so scans match offline; cancelled/refunded tickets are included with their status so the door can say why. `manager_pin` is PBKDF2-SHA256(pin, salt, iterations) → 32 bytes, computed when the manager PIN is generated, stored sealed in `check_enc`; the device verifies offline, the server re-verifies every add against the Argon2id hash.
+
+**Check-in sync** (`POST /api/v1/door/checkins`):
+
+```json
+{"since": "cursor|null", "ops": [
+  {"nonce","type":"checkin","subject":{"kind":"guest|ticket","id"},"count":1,"direction":"in|out","at"},
+  {"nonce","type":"undo","target":"nonce-of-checkin-or-counter","at"},
+  {"nonce","type":"counter","kind":"walkup|in|out","delta":1,"at"}
+]}
+```
+
+Response: `{"results":[{"nonce","status":"applied|duplicate|rejected","conflict":bool,"error":"…"}], "checkins":[…same shape as bundle, all devices, received after since…], "counters":{…}, "cursor":"…"}`. Ops apply in order in one transaction; a repeated nonce returns `duplicate` with the original outcome. A check-in `in` whose subject would exceed its allowance (guest: 1 + plus_n heads, ticket: 1) counting non-undone rows from **other** devices is stored anyway with `conflict_of` set to the earliest such row, and reported `conflict: true`. Subjects must belong to the session's event (else `rejected`). Undo sets `undone_at`; undoing an unknown nonce is `rejected`. Emits `door.checkins_synced` (counts only) through the outbox.
+
+**Adds** (`POST /api/v1/door/adds`): `{"adds":[{"id":"client uuid","nonce","list_id","name","plus_n","manager_pin","at"}]}` → guest with `source: door`, `status: going`, `id` = client uuid (so the device can queue a check-in for it before sync; an existing id is `duplicate`). Wrong manager PIN → `rejected` with `manager_pin_invalid`; failed attempts share the manager row's lockout (5 / 15 min). Response `{"results":[{"nonce","id","status","error"}]}`.
+
+### Frontend
+
+- `/door` (`public: true`, `layout: false`, bare): device not prepared → explains to prepare it from the event's Door tab; prepared → event title + PIN pad → `POST /api/v1/door/login` → bundle download → door UI. Forced dark theme, targets ≥ 56 px.
+- Device preparation lives on a new event tab **`/events/[id]/door`**: register this browser as a door device (token kept in `localStorage['klubhub-door-device']` = `{id,label,token,event:{id,title,starts_at}}`), generate staff and manager PINs (shown once), list/revoke devices.
+- `useDoorStore` + `utils/doorDb.ts`: IndexedDB (tiny wrapper, no dependency) holding the bundle and the op queue **AES-GCM encrypted** with a non-extractable key created per door session; wipe on logout, session expiry or event end.
+- Search: accent-folded, prefix per token, Damerau-Levenshtein ≤ 1 for tokens ≥ 4 chars (pure util + tests). Ticket order refs and secrets match exactly.
+- QR: `BarcodeDetector` where available, typed-code fallback; Express mode checks in on scan, Standard opens the card.
+- Card: list, entry terms, perks, **PAST CUTOFF** (admit anyway needs a second tap), +N stepper for partial arrivals, remaining heads; conflict flag after sync.
+- Undo toast (≈ 6 s) after every check-in; occupancy (in − out + walk-ups vs capacity) with walk-up and out buttons; sync badge (queued count, last sync, offline); sync every 15 s and on `online`.
+- On-the-spot add: name, +N, list, manager PIN verified offline (PBKDF2 via WebCrypto), then queued add + check-in.
+- Door shell service worker (`public/door-sw.js`, production only): caches `/door` and `/_nuxt/*`, never `/api`. `public/door.webmanifest` with `display: standalone`, `start_url: /door`.
+- Mock handlers for every route above.

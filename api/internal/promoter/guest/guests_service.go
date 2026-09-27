@@ -27,6 +27,10 @@ func nameIndex(dek *envelope.DEK, name string) []byte {
 	return dek.BlindIndex("guests", "name_bidx", envelope.NormalizeName(name))
 }
 
+// NameIndex is the guests.name_bidx blind index of name. The door package
+// uses it for on-the-spot adds, so exact lookups and dedupe keep working.
+func NameIndex(dek *envelope.DEK, name string) []byte { return nameIndex(dek, name) }
+
 type listInfo struct {
 	CollectContact bool
 	Name           string

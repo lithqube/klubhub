@@ -44,7 +44,9 @@ func (h *Handler) Mount(r chi.Router, e *authz.Engine, reg *authz.Registry, onDe
 	guarded(http.MethodPost, "/api/v1/members/invites", "member.manage", "member", h.invite)
 	guarded(http.MethodPost, "/api/v1/door/devices", "door.device.manage", "door_device", h.registerDevice)
 	guarded(http.MethodDelete, "/api/v1/door/devices/{deviceID}", "door.device.manage", "door_device", h.revokeDevice)
+	guarded(http.MethodGet, "/api/v1/door/devices", "door.device.manage", "door_device", h.listDevices)
 	guarded(http.MethodPost, "/api/v1/door/events/{eventID}/pin", "door.device.manage", "door_pin", h.setPIN)
+	guarded(http.MethodGet, "/api/v1/door/events/{eventID}/pin", "door.device.manage", "door_pin", h.pinStatus)
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -255,6 +257,16 @@ func (h *Handler) revokeDevice(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) listDevices(w http.ResponseWriter, r *http.Request) {
+	p, _ := authz.PrincipalFrom(r.Context())
+	list, err := h.svc.DoorDevices(r.Context(), p)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
 func (h *Handler) setPIN(w http.ResponseWriter, r *http.Request) {
 	p, _ := authz.PrincipalFrom(r.Context())
 	event, err := uuid.Parse(chi.URLParam(r, "eventID"))
@@ -264,16 +276,36 @@ func (h *Handler) setPIN(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct {
 		ValidUntil time.Time `json:"valid_until"`
+		Manager    bool      `json:"manager"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	pin, err := h.svc.SetDoorPIN(r.Context(), p, event, in.ValidUntil)
+	set := h.svc.SetDoorPIN
+	if in.Manager {
+		set = h.svc.SetManagerPIN
+	}
+	pin, err := set(r.Context(), p, event, in.ValidUntil)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"pin": pin, "valid_until": in.ValidUntil})
+	writeJSON(w, http.StatusCreated, map[string]any{"pin": pin, "valid_until": in.ValidUntil, "manager": in.Manager})
+}
+
+func (h *Handler) pinStatus(w http.ResponseWriter, r *http.Request) {
+	p, _ := authz.PrincipalFrom(r.Context())
+	event, err := uuid.Parse(chi.URLParam(r, "eventID"))
+	if err != nil {
+		fail(w, ErrInvalidInput)
+		return
+	}
+	st, err := h.svc.DoorPINStatus(r.Context(), p, event)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
 }
 
 func (h *Handler) doorLogin(w http.ResponseWriter, r *http.Request) {

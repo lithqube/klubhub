@@ -126,3 +126,52 @@ func TestRevokedDeviceAndExpiredPINAreRefused(t *testing.T) {
 		t.Fatalf("a revoked device must be refused, got %v", err)
 	}
 }
+
+func TestManagerPINIsSeparateFromTheStaffPIN(t *testing.T) {
+	svc, c := fresh(t)
+	owner := ownerPrincipal(t, svc)
+	ctx := context.Background()
+	event := newEvent(t, owner.OrgID)
+	device, _ := svc.RegisterDoorDevice(ctx, owner, "Door 1")
+
+	st, err := svc.DoorPINStatus(ctx, owner, event)
+	if err != nil || st.Staff != nil || st.Manager != nil {
+		t.Fatalf("no PINs yet: %+v %v", st, err)
+	}
+	staff, _ := svc.SetDoorPIN(ctx, owner, event, c.t.Add(10*time.Hour))
+	manager, err := svc.SetManagerPIN(ctx, owner, event, c.t.Add(8*time.Hour))
+	if err != nil || len(manager) != 6 {
+		t.Fatalf("manager pin %q %v", manager, err)
+	}
+	if manager != staff {
+		if _, err := svc.DoorLogin(ctx, device.Token, event, manager); !errors.Is(err, identity.ErrInvalidCredentials) {
+			t.Fatalf("the manager PIN must not open a door session, got %v", err)
+		}
+	}
+	if _, err := svc.DoorLogin(ctx, device.Token, event, staff); err != nil {
+		t.Fatalf("setting the manager PIN must keep the staff PIN: %v", err)
+	}
+	st, _ = svc.DoorPINStatus(ctx, owner, event)
+	if st.Staff == nil || !st.Staff.ValidUntil.Equal(c.t.Add(10*time.Hour)) || st.Manager == nil || !st.Manager.ValidUntil.Equal(c.t.Add(8*time.Hour)) {
+		t.Fatalf("pin status: %+v", st)
+	}
+	c.t = c.t.Add(9 * time.Hour)
+	if st, _ = svc.DoorPINStatus(ctx, owner, event); st.Manager != nil || st.Staff == nil {
+		t.Fatalf("an expired PIN is reported as none: %+v", st)
+	}
+}
+
+func TestDoorDeviceList(t *testing.T) {
+	svc, _ := fresh(t)
+	owner := ownerPrincipal(t, svc)
+	ctx := context.Background()
+	a, _ := svc.RegisterDoorDevice(ctx, owner, "Door A")
+	b, _ := svc.RegisterDoorDevice(ctx, owner, "Door B")
+	if err := svc.RevokeDoorDevice(ctx, owner, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	list, err := svc.DoorDevices(ctx, owner)
+	if err != nil || len(list) != 2 || list[0].ID != b.ID || list[0].RevokedAt != nil || list[1].RevokedAt == nil {
+		t.Fatalf("devices (active first): %+v %v", list, err)
+	}
+}
