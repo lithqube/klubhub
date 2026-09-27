@@ -2,7 +2,7 @@
  * Pure helpers for the guest table (P2.1): paste parsing, email extraction,
  * search folding, counts, cutoff times and CSV cells. No Vue, no fetch.
  */
-import type { Guest, GuestCounts, GuestStatus, ListType } from '~/types/guest'
+import type { Guest, GuestCounts, GuestStatus, ListType, Ticket } from '~/types/guest'
 import { instantToZoned, zonedToInstant } from '~/utils/datetime'
 
 export const MAX_PLUS_N = 10
@@ -86,9 +86,19 @@ export function searchGuests(guests: Guest[], q: string): Guest[] {
   })
 }
 
+/** Tickets whose holder, email, ticket type or order number contain every word of q. */
+export function searchTickets(tickets: Ticket[], q: string): Ticket[] {
+  const words = fold(q).split(' ').filter(Boolean)
+  if (!words.length) return tickets
+  return tickets.filter((t) => {
+    const hay = fold(`${t.name} ${t.email} ${t.ticket_type} ${t.order_ref}`)
+    return words.every(w => hay.includes(w))
+  })
+}
+
 /** Tab counts for a set of guests (what the server returns, computed locally). */
 export function countByStatus(guests: Guest[]): GuestCounts {
-  const c: GuestCounts = { all: 0, going: 0, pending: 0, waitlist: 0, invited: 0, declined: 0, going_heads: 0 }
+  const c: GuestCounts = { all: 0, going: 0, pending: 0, waitlist: 0, invited: 0, declined: 0, going_heads: 0, tickets: 0 }
   for (const g of guests) {
     c.all++
     c[g.status]++

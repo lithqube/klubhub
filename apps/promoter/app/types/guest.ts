@@ -97,11 +97,74 @@ export interface GuestCounts {
   invited: number
   declined: number
   going_heads: number
+  /** Valid imported tickets (0 when a list filter is set: tickets are on no list). */
+  tickets: number
 }
 
 export interface GuestPage {
   guests: Guest[]
+  /** Imported ticket holders; only sent without a status or list filter. */
+  tickets: Ticket[]
   counts: GuestCounts
+}
+
+// ---------------------------------------------------------------- attendee import (P2.2)
+
+export type ImportPreset = 'ra' | 'dice' | 'shotgun' | 'pretix' | 'luma' | 'generic'
+export type TicketStatus = 'valid' | 'pending' | 'cancelled' | 'refunded'
+export type ImportField =
+  | 'order_ref' | 'ticket_ref' | 'secret' | 'name' | 'first_name' | 'last_name' | 'email'
+  | 'buyer_name' | 'buyer_email' | 'ticket_type' | 'ticket_type_ref' | 'status'
+
+/** An imported ticket holder (order position). The barcode is never listed. */
+export interface Ticket {
+  id: string
+  order_id: string
+  source: ImportPreset
+  order_ref: string
+  ticket_type_id: string
+  ticket_type: string
+  name: string
+  email: string
+  status: TicketStatus
+  imported_at: string
+}
+
+export interface ImportCounts {
+  rows: number
+  orders_new: number
+  orders_updated: number
+  positions_new: number
+  positions_updated: number
+  positions_unchanged: number
+  rejected: number
+  /** Tickets imported earlier from the same platform that the file does not mention (left as they are). */
+  not_in_file: number
+  /** Rows whose email is also on a guest list. */
+  on_guest_list: number
+}
+
+export interface ImportResult {
+  dry_run: boolean
+  import_id: string | null
+  preset: ImportPreset
+  encoding: string
+  /** Field → the header it was read from. */
+  mapping: Partial<Record<ImportField, string>>
+  counts: ImportCounts
+  ticket_types: { name: string, new: boolean, tickets: number, valid: number }[]
+  /** At most 200; counts.rejected has the total. */
+  rejected: { line: number, reason: string }[]
+  /** First rows, names and emails masked. */
+  preview: { line: number, order_ref: string, name: string, email: string, ticket_type: string, status: TicketStatus, action: 'new' | 'update' | 'unchanged' }[]
+}
+
+export interface ImportRequest {
+  preset: ImportPreset
+  file: Blob
+  fileName?: string
+  /** Generic preset only: field → column header. */
+  mapping?: Partial<Record<ImportField, string>>
 }
 
 export interface GuestInput {
@@ -156,4 +219,6 @@ export interface OverviewRow {
   pending: number
   used: number
   quota: number
+  /** Valid imported tickets. */
+  tickets: number
 }

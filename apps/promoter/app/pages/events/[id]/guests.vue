@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Download, ListPlus, MailCheck, UserPlus } from 'lucide-vue-next'
+import { Download, FileUp, ListPlus, MailCheck, UserPlus } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useEventStore } from '~/stores/event'
 import { useGuestStore } from '~/stores/guest'
@@ -9,12 +9,12 @@ import { guestErrorText } from '~/utils/guests'
 
 const { current } = storeToRefs(useEventStore())
 const store = useGuestStore()
-const { lists, guests, counts, loading, error } = storeToRefs(store)
+const { lists, guests, tickets, counts, loading, error } = storeToRefs(store)
 
 const id = computed(() => current.value?.id ?? '')
 await useAsyncData(() => `guests-${id.value}`, () => (id.value ? store.load(id.value).then(() => true) : Promise.resolve(null)), { watch: [id] })
 
-const panel = ref<'add' | 'bulk' | 'list' | null>(null)
+const panel = ref<'add' | 'bulk' | 'list' | 'import' | null>(null)
 const listFilter = ref('')
 const notice = ref('')
 const listError = ref<ApiError | null>(null)
@@ -61,7 +61,7 @@ async function exportCsv() {
   }
 }
 
-function openPanel(p: 'add' | 'bulk' | 'list') {
+function openPanel(p: 'add' | 'bulk' | 'list' | 'import') {
   notice.value = ''
   listError.value = null
   panel.value = panel.value === p ? null : p
@@ -73,7 +73,7 @@ function openPanel(p: 'add' | 'bulk' | 'list') {
     <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">
       <p class="data-frag" style="font-size:9px;margin:0;" aria-label="Guest summary">
         GOING {{ counts.going }} · {{ counts.going_heads }} HEADS<template v-if="current.capacity"> OF {{ current.capacity }} CAP.</template>
-        · PENDING {{ counts.pending }} · LISTS {{ lists.length }}
+        · TICKETS {{ counts.tickets }} · PENDING {{ counts.pending }} · LISTS {{ lists.length }}
       </p>
       <div style="display:flex;flex-wrap:wrap;gap:6px;">
         <button type="button" class="btn-hud btn-hud-cta" style="min-height:44px;" :aria-expanded="panel === 'add'" :disabled="!lists.length" @click="openPanel('add')">
@@ -81,6 +81,9 @@ function openPanel(p: 'add' | 'bulk' | 'list') {
         </button>
         <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" :aria-expanded="panel === 'bulk'" :disabled="!guests.length" @click="openPanel('bulk')">
           <MailCheck style="width:14px;height:14px;" aria-hidden="true" /> STATUS BY EMAIL
+        </button>
+        <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" :aria-expanded="panel === 'import'" @click="openPanel('import')">
+          <FileUp style="width:14px;height:14px;" aria-hidden="true" /> IMPORT ATTENDEES
         </button>
         <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" :disabled="!guests.length || exporting" @click="exportCsv">
           <Download style="width:14px;height:14px;" aria-hidden="true" /> {{ exporting ? 'EXPORTING…' : 'EXPORT CSV' }}
@@ -97,6 +100,7 @@ function openPanel(p: 'add' | 'bulk' | 'list') {
 
     <GuestAddPanel v-if="panel === 'add'" :lists="lists" :default-list-id="listFilter || null" @done="done" @cancel="panel = null" />
     <GuestBulkStatus v-if="panel === 'bulk'" @done="done" @cancel="panel = null" />
+    <GuestImportPanel v-if="panel === 'import'" @done="done" @cancel="panel = null" />
 
     <div class="guests-grid">
       <section class="space-y-3" style="min-width:0;" aria-labelledby="lists-h">
@@ -116,7 +120,7 @@ function openPanel(p: 'add' | 'bulk' | 'list') {
         <GuestListCard v-for="l in lists" :key="l.id" :list="l" :event="eventWindow!" @filter="listFilter = $event" />
       </section>
 
-      <GuestTable v-model:list="listFilter" :guests="guests" :lists="lists" />
+      <GuestTable v-model:list="listFilter" :guests="guests" :lists="lists" :tickets="tickets" />
     </div>
   </div>
 </template>

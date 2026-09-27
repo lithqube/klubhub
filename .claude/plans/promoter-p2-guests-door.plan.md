@@ -113,12 +113,12 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 - **P2-D3** Retention default 30 days after the event end, configurable per org (min 1, max 365).
 - **P2-D4** The sealed tier ships in P2.6 with the ban list, as ADR 0001 planned.
 
-## Status (2026-09-26)
+## Status (2026-09-27)
 
 | Slice | State | Commits |
 |---|---|---|
 | P2.1 Guest lists & guest table | Done | `3b8b018` (API, migration 00008), `b0aa9e2` (guest table, /guests, mocks, e2e) |
-| P2.2 Attendee import | Not started | — |
+| P2.2 Attendee import | Done | `67acbac` (API, migration 00009, presets), next commit (import panel, ticket badges, mocks, e2e) |
 | P2.3 Offline door | Not started | — |
 | P2.4 Post-event report | Not started | — |
 | P2.5 Privacy & retention | Not started | — |

@@ -4,13 +4,14 @@
 import type { EventDetail, EventSummary, Venue } from '~/types/event'
 import type {
   AddGuestsInput, AddResult, Allocation, AllocationInput, BulkResult, BulkStatusInput, EntryTerms, Guest, GuestInput, GuestList, GuestPage,
-  GuestStatus, ListInput, OverviewRow, StandingList,
+  GuestStatus, ImportField, ImportPreset, ImportResult, ListInput, OverviewRow, StandingList, Ticket, TicketStatus,
 } from '~/types/guest'
 import type { Organization, OrgProfile } from '~/types/org'
 import {
   allocationState, countByStatus, cutoffInstant, fold, headsHeld, holdsQuota, LIST_TYPES, STATUSES,
 } from '~/utils/guests'
 import { validateTimetable } from '~/utils/timetable'
+import { type CsvTable, type ImportProblem, type ImportRow, mapRow, maskEmail, maskName, resolveMapping } from '~/utils/attendeeImport'
 
 const DAY = 86_400_000
 const base = new Date()
@@ -344,7 +345,12 @@ export function guestPage(eventId: string, filter: { status?: string, list_id?: 
   findEvent(eventId)
   if (filter.status && !STATUSES.includes(filter.status as GuestStatus)) throw invalidField('status', STATUSES.join(', '))
   const inList = guests.filter(g => g.event_id === eventId && (!filter.list_id || g.list_id === filter.list_id))
-  return { guests: inList.filter(g => !filter.status || g.status === filter.status).map(strip), counts: countByStatus(inList) }
+  const counts = { ...countByStatus(inList), tickets: filter.list_id ? 0 : validTickets(eventId) }
+  return {
+    guests: inList.filter(g => !filter.status || g.status === filter.status).map(strip),
+    tickets: filter.status || filter.list_id ? [] : ticketViews(eventId),
+    counts,
+  }
 }
 
 export function overviewRows(): OverviewRow[] {
@@ -358,6 +364,216 @@ export function overviewRows(): OverviewRow[] {
         going_heads: mine.filter(g => g.status === 'going').reduce((n, g) => n + 1 + g.plus_n, 0),
         pending: mine.filter(g => g.status === 'pending').length,
         used: headsHeld(mine.filter(g => allocs.some(a => a.id === g.allocation_id))), quota: allocs.reduce((n, a) => n + a.quota, 0),
+        tickets: validTickets(e.id),
       }
     })
+}
+
+// ---------------------------------------------------------------- attendees (P2.2)
+// Mirrors api/internal/promoter/guest/import_service.go: orders keyed by
+// (event, source, order ref), tickets by ticket id, then barcode, then the
+// n-th ticket of the order. The mock keeps barcodes in the clear; the
+// server stores only ciphertext and a blind index.
+
+interface TicketTypeRow { id: string, event_id: string, name: string, key: string, ref: string | null }
+interface OrderRow { id: string, event_id: string, source: ImportPreset, ref: string, buyer_name: string, buyer_email: string }
+interface PositionRow {
+  id: string, event_id: string, order_id: string, ticket_type_id: string, ref: string, name: string, email: string, secret: string,
+  status: TicketStatus, imported_at: string
+}
+
+export const ticketTypes: TicketTypeRow[] = [
+  { id: 'tt-early', event_id: 'e-klubnacht', name: 'Early bird', key: 'early bird', ref: null },
+  { id: 'tt-regular', event_id: 'e-klubnacht', name: 'Regular', key: 'regular', ref: null },
+]
+export const orders: OrderRow[] = [
+  { id: 'o-1', event_id: 'e-klubnacht', source: 'dice', ref: 'D-7001', buyer_name: 'Hana Kim', buyer_email: 'hana@example.org' },
+  { id: 'o-2', event_id: 'e-klubnacht', source: 'dice', ref: 'D-7002', buyer_name: 'Theo Brandt', buyer_email: 'theo@example.org' },
+]
+export const positions: PositionRow[] = [
+  { id: 'p-1', event_id: 'e-klubnacht', order_id: 'o-1', ticket_type_id: 'tt-early', ref: 'TK-1', name: 'Hana Kim', email: 'hana@example.org', secret: 'DICE-0001', status: 'valid', imported_at: iso(-2) },
+  { id: 'p-2', event_id: 'e-klubnacht', order_id: 'o-1', ticket_type_id: 'tt-early', ref: 'TK-2', name: 'Mika Kim', email: 'hana@example.org', secret: 'DICE-0002', status: 'valid', imported_at: iso(-2) },
+  { id: 'p-3', event_id: 'e-klubnacht', order_id: 'o-2', ticket_type_id: 'tt-regular', ref: 'TK-3', name: 'Theo Brandt', email: 'theo@example.org', secret: 'DICE-0003', status: 'refunded', imported_at: iso(-2) },
+]
+
+const validTickets = (eventId: string) => positions.filter(p => p.event_id === eventId && p.status === 'valid').length
+
+function ticketViews(eventId: string): Ticket[] {
+  return positions.filter(p => p.event_id === eventId).map((p) => {
+    const o = orders.find(x => x.id === p.order_id)!
+    return {
+      id: p.id, order_id: o.id, source: o.source, order_ref: o.ref, ticket_type_id: p.ticket_type_id,
+      ticket_type: ticketTypes.find(t => t.id === p.ticket_type_id)?.name ?? '', name: p.name, email: p.email, status: p.status,
+      imported_at: p.imported_at,
+    }
+  }).sort((a, b) => a.order_ref.localeCompare(b.order_ref))
+}
+
+interface PlannedPos { id: string, ref: string, row: ImportRow, existing: PositionRow | null, type?: TicketTypeRow & { isNew?: boolean }, changed: boolean }
+
+export function importAttendees(eventId: string, preset: ImportPreset, explicit: Partial<Record<ImportField, string>>, table: CsvTable, dryRun: boolean): ImportResult {
+  findEvent(eventId)
+  let m: ReturnType<typeof resolveMapping>
+  try {
+    m = resolveMapping(preset, table.headers, explicit)
+  } catch (p) {
+    throw guestErr(422, p as ImportProblem as unknown as Record<string, unknown>)
+  }
+  const res: ImportResult = {
+    dry_run: dryRun, import_id: null, preset, encoding: table.encoding, mapping: m.header,
+    counts: { rows: table.rows.length, orders_new: 0, orders_updated: 0, positions_new: 0, positions_updated: 0, positions_unchanged: 0, rejected: 0, not_in_file: 0, on_guest_list: 0 },
+    ticket_types: [], rejected: [], preview: [],
+  }
+  const reject = (line: number, reason: string) => {
+    res.counts.rejected++
+    if (res.rejected.length < 200) res.rejected.push({ line, reason })
+  }
+  const rows: ImportRow[] = []
+  for (const tr of table.rows) {
+    const r = mapRow(m, tr)
+    if (r.reason !== undefined) reject(tr.line, r.reason)
+    else rows.push(r.row)
+  }
+
+  const existingOrders = new Map(orders.filter(o => o.event_id === eventId && o.source === preset).map(o => [o.ref, o]))
+  const secretOwner = new Map(positions.filter(p => p.event_id === eventId && p.secret).map(p => [p.secret, p.id]))
+  const groups = new Map<string, number[]>()
+  rows.forEach((r, i) => {
+    const ref = r.order_ref || r.ticket_ref || `~${r.secret}`
+    groups.set(ref, [...(groups.get(ref) ?? []), i])
+  })
+  const accepted: (PlannedPos | null)[] = rows.map(() => null)
+  const why: string[] = []
+  const matched = new Set<string>()
+  const seenSecret = new Map<string, number>()
+  for (const [ref, idx] of groups) {
+    const ex = existingOrders.get(ref)
+    const mine = ex ? positions.filter(p => p.order_id === ex.id) : []
+    const seenRef = new Map<string, number>()
+    for (const i of idx) {
+      const r = rows[i]!
+      if (r.secret) {
+        if (seenSecret.has(r.secret)) { why[i] = `same barcode as line ${seenSecret.get(r.secret)}`; continue }
+        seenSecret.set(r.secret, r.line)
+      }
+      const p: PlannedPos = { id: '', ref: '', row: r, existing: null, changed: false }
+      if (r.ticket_ref) {
+        if (seenRef.has(r.ticket_ref)) { why[i] = `same ticket as line ${seenRef.get(r.ticket_ref)}`; continue }
+        seenRef.set(r.ticket_ref, r.line)
+        p.ref = r.ticket_ref
+        p.existing = mine.find(x => x.ref === r.ticket_ref) ?? null
+      } else if (r.secret) {
+        const x = mine.find(y => y.secret === r.secret && !matched.has(y.id))
+        if (x) { p.existing = x; p.ref = x.ref }
+      }
+      if (p.existing) matched.add(p.existing.id)
+      accepted[i] = p
+    }
+    let n = 0
+    for (const i of idx) {
+      const p = accepted[i]
+      if (!p || p.row.ticket_ref) continue
+      n++
+      if (p.existing) continue
+      let key = `#${n}`
+      const x = mine.find(y => y.ref === key && !matched.has(y.id) && (!y.secret || !p.row.secret))
+      if (x) { p.existing = x; p.ref = key; matched.add(x.id); continue }
+      for (let k = n; ; k++) {
+        key = `#${k}`
+        if (!mine.some(y => y.ref === key) && !seenRef.has(key)) break
+      }
+      seenRef.set(key, p.row.line)
+      p.ref = key
+    }
+    for (const i of idx) {
+      const p = accepted[i]
+      if (!p?.row.secret) continue
+      const owner = secretOwner.get(p.row.secret)
+      if (owner && owner !== p.existing?.id) {
+        why[i] = 'barcode already belongs to another ticket of this event'
+        if (p.existing) matched.delete(p.existing.id)
+        accepted[i] = null
+      }
+    }
+  }
+
+  const typesUsed: (TicketTypeRow & { isNew?: boolean, tickets: number, valid: number })[] = []
+  const pending: (TicketTypeRow & { isNew?: boolean })[] = []
+  const eventTypes = () => [...ticketTypes.filter(t => t.event_id === eventId), ...pending]
+  accepted.forEach((p, i) => {
+    const r = rows[i]!
+    if (!p) { reject(r.line, why[i]!); return }
+    const key = fold(r.ticket_type)
+    type Planned = TicketTypeRow & { isNew?: boolean }
+    let t: Planned | undefined = r.ticket_type_ref ? eventTypes().find(x => x.ref === r.ticket_type_ref) : undefined
+    t ??= eventTypes().find(x => x.key === key)
+    if (!t) {
+      t = { id: newId('tt'), event_id: eventId, name: r.ticket_type, key, ref: r.ticket_type_ref || null, isNew: true }
+      pending.push(t)
+    }
+    const typeId = t.id
+    let used = typesUsed.find(x => x.id === typeId)
+    if (!used) {
+      used = { ...t, tickets: 0, valid: 0 }
+      typesUsed.push(used)
+    }
+    used.tickets++
+    if (r.status === 'valid') used.valid++
+    p.type = t
+    p.id = p.existing?.id ?? newId('p')
+    const e = p.existing
+    p.changed = !!e && (e.ticket_type_id !== t.id || e.status !== r.status || e.name !== r.name || e.email.toLowerCase() !== r.email.toLowerCase()
+      || (!!r.secret && e.secret !== r.secret))
+  })
+  const guestEmails = new Set(guests.filter(g => g.event_id === eventId && g.email).map(g => g.email.toLowerCase()))
+  res.counts.on_guest_list = accepted.filter((p, i) => p && rows[i]!.email && guestEmails.has(rows[i]!.email.toLowerCase())).length
+
+  const plannedOrders: { ref: string, existing: OrderRow | null, changed: boolean, positions: PlannedPos[] }[] = []
+  for (const [ref, idx] of groups) {
+    const ps = idx.map(i => accepted[i]).filter((p): p is PlannedPos => !!p)
+    if (!ps.length) continue
+    const ex = existingOrders.get(ref) ?? null
+    const first = ps[0]!.row
+    const changed = !!ex && (ex.buyer_name !== first.buyer_name || ex.buyer_email.toLowerCase() !== first.buyer_email.toLowerCase())
+    if (!ex) res.counts.orders_new++
+    else if (changed) res.counts.orders_updated++
+    for (const p of ps) {
+      if (!p.existing) res.counts.positions_new++
+      else if (p.changed) res.counts.positions_updated++
+      else res.counts.positions_unchanged++
+    }
+    plannedOrders.push({ ref, existing: ex, changed, positions: ps })
+  }
+  const existingCount = positions.filter(p => [...existingOrders.values()].some(o => o.id === p.order_id)).length
+  res.counts.not_in_file = existingCount - [...matched].length
+  res.rejected.sort((a, b) => a.line - b.line)
+  res.ticket_types = typesUsed.map(t => ({ name: t.name, new: !!t.isNew, tickets: t.tickets, valid: t.valid }))
+  res.preview = accepted.flatMap((p, i) => (p ? [{
+    line: rows[i]!.line, order_ref: rows[i]!.order_ref || rows[i]!.ticket_ref, name: maskName(p.row.name), email: maskEmail(p.row.email),
+    ticket_type: p.type!.name, status: p.row.status, action: (p.existing ? (p.changed ? 'update' : 'unchanged') : 'new') as 'new' | 'update' | 'unchanged',
+  }] : [])).slice(0, 10)
+  if (dryRun) return res
+
+  const now = new Date().toISOString()
+  ticketTypes.push(...pending.map(({ isNew: _n, ...t }) => t))
+  for (const o of plannedOrders) {
+    const first = o.positions[0]!.row
+    let order = o.existing
+    if (!order) {
+      order = { id: newId('o'), event_id: eventId, source: preset, ref: o.ref, buyer_name: first.buyer_name, buyer_email: first.buyer_email }
+      orders.push(order)
+    } else if (o.changed) {
+      Object.assign(order, { buyer_name: first.buyer_name, buyer_email: first.buyer_email })
+    }
+    for (const p of o.positions) {
+      const r = p.row
+      if (!p.existing) {
+        positions.push({ id: p.id, event_id: eventId, order_id: order.id, ticket_type_id: p.type!.id, ref: p.ref, name: r.name, email: r.email, secret: r.secret, status: r.status, imported_at: now })
+      } else if (p.changed) {
+        Object.assign(p.existing, { ticket_type_id: p.type!.id, name: r.name, email: r.email, secret: r.secret || p.existing.secret, status: r.status, imported_at: now })
+      }
+    }
+  }
+  res.import_id = newId('imp')
+  return res
 }

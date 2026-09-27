@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { Guest } from '~/types/guest'
+import type { Guest, Ticket } from '~/types/guest'
 import {
   allocationState, countByStatus, csvCell, cutoffInstant, fold, guestErrorText, headsHeld, parseEmails, parsePastedGuests, quotaFill,
-  searchGuests, toCsv,
+  searchGuests, searchTickets, toCsv,
 } from '../guests'
 
 const g = (over: Partial<Guest>): Guest => ({
@@ -63,7 +63,7 @@ describe('search', () => {
 describe('counts and quota', () => {
   it('counts statuses and going heads', () => {
     const c = countByStatus([g({ plus_n: 2 }), g({}), g({ status: 'pending' }), g({ status: 'declined', plus_n: 5 })])
-    expect(c).toEqual({ all: 4, going: 2, pending: 1, waitlist: 0, invited: 0, declined: 1, going_heads: 4 })
+    expect(c).toEqual({ all: 4, going: 2, pending: 1, waitlist: 0, invited: 0, declined: 1, going_heads: 4, tickets: 0 })
   })
 
   it('only going, pending and invited hold quota', () => {
@@ -132,5 +132,19 @@ describe('guestErrorText', () => {
     expect(guestErrorText({ error: 'allocation_closed' })).toMatch(/deadline/)
     expect(guestErrorText({ error: 'allocation_revoked' })).toMatch(/revoked/)
     expect(guestErrorText({ error: 'network_error' })).toMatch(/connection/)
+  })
+})
+
+describe('searchTickets', () => {
+  const t = (over: Partial<Ticket>): Ticket => ({
+    id: 't', order_id: 'o', source: 'dice', order_ref: 'D-1', ticket_type_id: 'tt', ticket_type: 'Early bird', name: 'X', email: '',
+    status: 'valid', imported_at: '', ...over,
+  })
+  it('matches holder, email, ticket type and order number, accent-insensitively', () => {
+    const list = [t({ id: '1', name: 'José Müller' }), t({ id: '2', name: 'Kim', email: 'kim@example.org', ticket_type: 'Regular', order_ref: 'D-77' })]
+    expect(searchTickets(list, 'jose').map(x => x.id)).toEqual(['1'])
+    expect(searchTickets(list, 'regular d-77').map(x => x.id)).toEqual(['2'])
+    expect(searchTickets(list, 'kim@')).toHaveLength(1)
+    expect(searchTickets(list, '  ')).toHaveLength(2)
   })
 })

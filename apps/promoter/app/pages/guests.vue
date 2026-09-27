@@ -79,7 +79,7 @@ function edit(s: StandingList | 'new') {
                 <span class="data-frag" style="font-size:9px;">{{ dayLabel(o.starts_at, o.timezone) }} · {{ timeLabel(o.starts_at, o.timezone) }}</span>
                 <span style="display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ o.title }}</span>
                 <span style="font-size:12px;color:var(--color-on-surface-variant);">
-                  {{ o.lists }} {{ o.lists === 1 ? 'list' : 'lists' }} · {{ o.guests }} guests · {{ o.going_heads }} going heads<template v-if="o.capacity"> of {{ o.capacity }}</template>
+                  {{ o.lists }} {{ o.lists === 1 ? 'list' : 'lists' }} · {{ o.guests }} guests · {{ o.going_heads }} going heads<template v-if="o.capacity"> of {{ o.capacity }}</template><template v-if="o.tickets"> · {{ o.tickets }} tickets</template>
                 </span>
               </span>
               <span style="display:grid;gap:4px;min-width:0;">

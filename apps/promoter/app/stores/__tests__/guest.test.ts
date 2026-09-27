@@ -83,4 +83,31 @@ describe('useGuestStore', () => {
     expect(fetchMock.mock.calls[1]![0]).toBe('/api/v1/standing-lists/s1')
     expect(s.standing).toEqual([{ id: 's1', name: 'Residents & friends' }])
   })
+
+  it('uploads an export as multipart: dry run by default, a real run refreshes tickets', async () => {
+    const ticket = { id: 'p1', name: 'Lena Vogt', status: 'valid' }
+    fetchMock.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (opts?.method === 'POST') return Promise.resolve({ dry_run: true, counts: { positions_new: 1 } })
+      return Promise.resolve({ ...page, tickets: [ticket] })
+    })
+    const s = useGuestStore()
+    s.eventId = 'e1'
+    const file = new Blob(['Order ID,Name\n1,Lena\n'], { type: 'text/csv' })
+    await s.importAttendees({ preset: 'generic', file, fileName: 'ra.csv', mapping: { name: 'Name', order_ref: 'Order ID' } })
+    const [url, opts] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/api/v1/events/e1/attendees/import')
+    expect(opts.query).toEqual({ dry_run: 'true' })
+    expect(opts.headers['X-KlubHub-CSRF']).toBe('1')
+    const form = opts.body as FormData
+    expect(form.get('preset')).toBe('generic')
+    expect(JSON.parse(form.get('mapping') as string)).toEqual({ name: 'Name', order_ref: 'Order ID' })
+    expect((form.get('file') as File).name).toBe('ra.csv')
+    expect(fetchMock).toHaveBeenCalledTimes(1) // a dry run changes nothing to refresh
+
+    await s.importAttendees({ preset: 'dice', file, mapping: { name: 'x' } }, false)
+    const [, real] = fetchMock.mock.calls[1]!
+    expect(real.query).toEqual({ dry_run: 'false' })
+    expect((real.body as FormData).get('mapping')).toBeNull() // only generic sends a mapping
+    expect(s.tickets).toEqual([ticket])
+  })
 })

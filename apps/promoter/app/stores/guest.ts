@@ -2,20 +2,22 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type {
   AddGuestsInput, AddResult, Allocation, AllocationInput, BulkResult, BulkStatusInput, Guest, GuestCounts, GuestFilter, GuestInput,
-  GuestList, GuestPage, ListInput, OverviewRow, StandingList,
+  GuestList, GuestPage, ImportRequest, ImportResult, ListInput, OverviewRow, StandingList, Ticket,
 } from '~/types/guest'
 import { apiFetch, toApiError } from '~/utils/api'
 
-const emptyCounts = (): GuestCounts => ({ all: 0, going: 0, pending: 0, waitlist: 0, invited: 0, declined: 0, going_heads: 0 })
+const emptyCounts = (): GuestCounts => ({ all: 0, going: 0, pending: 0, waitlist: 0, invited: 0, declined: 0, going_heads: 0, tickets: 0 })
 
 /**
- * Guest lists, allocations and the guest table of one event at a time,
- * plus standing lists and the cross-event overview (P2.1).
+ * Guest lists, allocations and the guest table of one event at a time
+ * (list guests plus imported ticket holders), standing lists and the
+ * cross-event overview (P2.1, P2.2).
  */
 export const useGuestStore = defineStore('guest', () => {
   const eventId = ref<string | null>(null)
   const lists = ref<GuestList[]>([])
   const guests = ref<Guest[]>([])
+  const tickets = ref<Ticket[]>([])
   const counts = ref<GuestCounts>(emptyCounts())
   const standing = ref<StandingList[]>([])
   const overview = ref<OverviewRow[]>([])
@@ -44,6 +46,7 @@ export const useGuestStore = defineStore('guest', () => {
       ])
       lists.value = l
       guests.value = p.guests
+      tickets.value = p.tickets ?? []
       counts.value = p.counts
     } catch (e) {
       error.value = toApiError(e)
@@ -60,6 +63,7 @@ export const useGuestStore = defineStore('guest', () => {
     if (!eventId.value) return
     const p = await call(() => apiFetch<GuestPage>(`${base(eventId.value!)}/guests`, { query: filter }))
     guests.value = p.guests
+    tickets.value = p.tickets ?? []
     counts.value = p.counts
   }
 
@@ -130,6 +134,23 @@ export const useGuestStore = defineStore('guest', () => {
     return call(() => apiFetch<string>(`${base(eventId.value!)}/guests/export.csv`, { query: filter, responseType: 'text' }))
   }
 
+  /**
+   * Upload a platform export. A dry run (the default) only reports what
+   * would change; a real run applies it in one transaction and refreshes
+   * the table.
+   */
+  async function importAttendees(req: ImportRequest, dryRun = true): Promise<ImportResult> {
+    const form = new FormData()
+    form.append('preset', req.preset)
+    if (req.preset === 'generic' && req.mapping) form.append('mapping', JSON.stringify(req.mapping))
+    form.append('file', req.file, req.fileName ?? 'export.csv')
+    const r = await call(() => apiFetch<ImportResult>(`${base(eventId.value!)}/attendees/import`, {
+      method: 'POST', body: form, query: { dry_run: dryRun ? 'true' : 'false' },
+    }))
+    if (!dryRun) await refreshGuests()
+    return r
+  }
+
   async function fetchStanding(): Promise<void> {
     standing.value = await call(() => apiFetch<StandingList[]>('/api/v1/standing-lists'))
   }
@@ -160,8 +181,8 @@ export const useGuestStore = defineStore('guest', () => {
   }
 
   return {
-    eventId, lists, guests, counts, standing, overview, loading, error,
+    eventId, lists, guests, tickets, counts, standing, overview, loading, error,
     load, refreshLists, refreshGuests, createList, updateList, deleteList, createAllocation, updateAllocation, revokeAllocation,
-    addGuests, updateGuest, deleteGuest, bulkStatus, exportCsv, fetchStanding, saveStanding, deleteStanding, fetchOverview,
+    addGuests, updateGuest, deleteGuest, bulkStatus, exportCsv, importAttendees, fetchStanding, saveStanding, deleteStanding, fetchOverview,
   }
 })

@@ -2,19 +2,27 @@
 import { Search } from 'lucide-vue-next'
 import { useGuestStore } from '~/stores/guest'
 import type { ApiError } from '~/types/event'
-import type { Guest, GuestList, GuestStatus } from '~/types/guest'
-import { countByStatus, guestErrorText, searchGuests, STATUS_LABEL, STATUSES } from '~/utils/guests'
+import type { Guest, GuestList, GuestStatus, Ticket } from '~/types/guest'
+import { IMPORT_PRESETS } from '~/utils/attendeeImport'
+import { countByStatus, guestErrorText, searchGuests, searchTickets, STATUS_LABEL, STATUSES } from '~/utils/guests'
 
 /**
  * The guest table (P2.1): status tabs with counts, search (in the browser,
  * over the decrypted page), list filter, inline status change, quick
  * approve / decline for pending names, edit and remove.
+ *
+ * Imported ticket holders (P2.2) sit in the same table: ALL shows guests
+ * and tickets together, TICKETS only tickets. They are on no list and have
+ * no guest status, so the status tabs and the list filter leave them out;
+ * they change only through a re-import of the platform's export.
  */
-const props = defineProps<{ guests: Guest[], lists: GuestList[] }>()
+const props = withDefaults(defineProps<{ guests: Guest[], lists: GuestList[], tickets?: Ticket[] }>(), { tickets: () => [] })
 const listFilter = defineModel<string>('list', { default: '' })
 const store = useGuestStore()
 
-type Tab = 'all' | GuestStatus
+type Tab = 'all' | GuestStatus | 'tickets'
+type Row = { kind: 'guest', key: string, g: Guest } | { kind: 'ticket', key: string, t: Ticket }
+const sourceLabel = (s: string) => IMPORT_PRESETS.find(p => p.id === s)?.label ?? s.toUpperCase()
 const tab = ref<Tab>('all')
 const q = ref('')
 const notice = ref('')
@@ -27,9 +35,21 @@ const allocLabel = (g: Guest) => props.lists.flatMap(l => l.allocations).find(a 
 const collects = (g: Guest) => props.lists.find(l => l.id === g.list_id)?.collect_contact ?? false
 
 const inList = computed(() => (listFilter.value ? props.guests.filter(g => g.list_id === listFilter.value) : props.guests))
+const ticketsInView = computed(() => (listFilter.value ? [] : props.tickets))
 const counts = computed(() => countByStatus(inList.value))
-const shown = computed(() => searchGuests(tab.value === 'all' ? inList.value : inList.value.filter(g => g.status === tab.value), q.value))
-const TABS = computed(() => [{ id: 'all' as Tab, label: 'ALL', n: counts.value.all }, ...STATUSES.map(s => ({ id: s as Tab, label: STATUS_LABEL[s], n: counts.value[s] }))])
+const shown = computed<Row[]>(() => {
+  const guestRows = tab.value === 'tickets' ? [] : searchGuests(tab.value === 'all' ? inList.value : inList.value.filter(g => g.status === tab.value), q.value)
+  const ticketRows = tab.value === 'all' || tab.value === 'tickets' ? searchTickets(ticketsInView.value, q.value) : []
+  return [
+    ...guestRows.map(g => ({ kind: 'guest' as const, key: `g-${g.id}`, g })),
+    ...ticketRows.map(t => ({ kind: 'ticket' as const, key: `t-${t.id}`, t })),
+  ]
+})
+const TABS = computed(() => [
+  { id: 'all' as Tab, label: 'ALL', n: counts.value.all + ticketsInView.value.length },
+  ...STATUSES.map(s => ({ id: s as Tab, label: STATUS_LABEL[s], n: counts.value[s] })),
+  ...(props.tickets.length ? [{ id: 'tickets' as Tab, label: 'TICKETS', n: ticketsInView.value.length }] : []),
+])
 
 async function setStatus(g: Guest, status: GuestStatus) {
   notice.value = ''
@@ -96,26 +116,40 @@ async function remove(g: Guest) {
     <p v-if="notice" role="alert" style="margin:0 0 8px;font-size:13px;color:var(--color-error);">{{ notice }}</p>
 
     <p v-if="!shown.length" class="glass" style="padding:14px;font-size:13px;color:var(--color-on-surface-variant);">
-      {{ q ? `No guest matches “${q}”.` : guests.length ? 'Nobody in this view.' : 'No guests yet. Add names or paste a list.' }}
+      {{ q ? `No guest matches “${q}”.` : guests.length || tickets.length ? 'Nobody in this view.' : 'No guests yet. Add names, paste a list or import attendees.' }}
     </p>
     <table v-else class="guest-table">
       <thead>
         <tr>
           <th scope="col">GUEST</th>
-          <th scope="col">LIST</th>
+          <th scope="col">LIST / TICKET</th>
           <th scope="col">STATUS</th>
           <th scope="col"><span class="sr-only">Actions</span></th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="g in shown" :key="g.id" :class="{ 'accent-bar-pending': g.status === 'pending' }">
-          <template v-if="editing === g.id">
+        <tr v-for="row in shown" :key="row.key" :class="{ 'accent-bar-pending': row.kind === 'guest' && row.g.status === 'pending' }">
+          <template v-if="row.kind === 'ticket'">
+            <td>
+              <span style="font-size:14px;">{{ row.t.name }}</span>
+              <span v-if="row.t.email" style="display:block;font-size:11px;color:var(--color-on-surface-variant);overflow:hidden;text-overflow:ellipsis;">{{ row.t.email }}</span>
+            </td>
+            <td style="font-size:12px;">
+              {{ row.t.ticket_type }}
+              <span style="display:block;font-size:11px;color:var(--color-on-surface-variant);">{{ sourceLabel(row.t.source) }} · order {{ row.t.order_ref }}</span>
+            </td>
+            <td><GuestTicketBadge :status="row.t.status" /></td>
+            <td class="actions-cell">
+              <span class="data-frag" style="font-size:8px;">TICKET</span>
+            </td>
+          </template>
+          <template v-else-if="editing === row.g.id">
             <td colspan="4">
-              <form style="display:grid;gap:8px;" @submit.prevent="saveEdit(g)">
+              <form style="display:grid;gap:8px;" @submit.prevent="saveEdit(row.g)">
                 <div class="edit-grid">
                   <label><span class="section-lbl">NAME</span><input v-model="draft.name" class="hud-input" maxlength="120"></label>
                   <label><span class="section-lbl">+N</span><input v-model.number="draft.plus_n" class="hud-input" type="number" min="0" max="10"></label>
-                  <template v-if="collects(g)">
+                  <template v-if="collects(row.g)">
                     <label><span class="section-lbl">EMAIL</span><input v-model="draft.email" class="hud-input" type="email"></label>
                     <label><span class="section-lbl">PHONE</span><input v-model="draft.phone" class="hud-input" type="tel"></label>
                   </template>
@@ -131,33 +165,33 @@ async function remove(g: Guest) {
           </template>
           <template v-else>
             <td>
-              <span style="font-size:14px;">{{ g.name }}</span>
-              <span v-if="g.plus_n" class="data-frag" style="font-size:9px;margin-left:6px;">+{{ g.plus_n }}</span>
-              <span v-if="g.email || g.note" style="display:block;font-size:11px;color:var(--color-on-surface-variant);overflow:hidden;text-overflow:ellipsis;">
-                {{ [g.email, g.note].filter(Boolean).join(' · ') }}
+              <span style="font-size:14px;">{{ row.g.name }}</span>
+              <span v-if="row.g.plus_n" class="data-frag" style="font-size:9px;margin-left:6px;">+{{ row.g.plus_n }}</span>
+              <span v-if="row.g.email || row.g.note" style="display:block;font-size:11px;color:var(--color-on-surface-variant);overflow:hidden;text-overflow:ellipsis;">
+                {{ [row.g.email, row.g.note].filter(Boolean).join(' · ') }}
               </span>
             </td>
             <td style="font-size:12px;">
-              {{ listName(g.list_id) }}
-              <span v-if="allocLabel(g)" style="display:block;font-size:11px;color:var(--color-on-surface-variant);">via {{ allocLabel(g) }}</span>
+              {{ listName(row.g.list_id) }}
+              <span v-if="allocLabel(row.g)" style="display:block;font-size:11px;color:var(--color-on-surface-variant);">via {{ allocLabel(row.g) }}</span>
             </td>
             <td>
-              <GuestStatusBadge :status="g.status" />
+              <GuestStatusBadge :status="row.g.status" />
             </td>
             <td class="actions-cell">
               <div class="actions">
-              <template v-if="g.status === 'pending'">
-                <button type="button" class="btn-hud btn-hud-cta btn-hud-xs hit-44" :aria-label="`Approve ${g.name}`" @click="setStatus(g, 'going')">APPROVE</button>
-                <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Decline ${g.name}`" @click="setStatus(g, 'declined')">DECLINE</button>
+              <template v-if="row.g.status === 'pending'">
+                <button type="button" class="btn-hud btn-hud-cta btn-hud-xs hit-44" :aria-label="`Approve ${row.g.name}`" @click="setStatus(row.g, 'going')">APPROVE</button>
+                <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Decline ${row.g.name}`" @click="setStatus(row.g, 'declined')">DECLINE</button>
               </template>
               <label>
-                <span class="sr-only">Status of {{ g.name }}</span>
-                <select class="hud-input" style="height:36px;min-width:112px;font-size:11px;" :value="g.status" @change="setStatus(g, ($event.target as HTMLSelectElement).value as GuestStatus)">
+                <span class="sr-only">Status of {{ row.g.name }}</span>
+                <select class="hud-input" style="height:36px;min-width:112px;font-size:11px;" :value="row.g.status" @change="setStatus(row.g, ($event.target as HTMLSelectElement).value as GuestStatus)">
                   <option v-for="s in STATUSES" :key="s" :value="s">{{ STATUS_LABEL[s] }}</option>
                 </select>
               </label>
-              <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Edit ${g.name}`" @click="edit(g)">EDIT</button>
-              <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Remove ${g.name}`" style="color:var(--color-error);" @click="remove(g)">✕</button>
+              <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Edit ${row.g.name}`" @click="edit(row.g)">EDIT</button>
+              <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Remove ${row.g.name}`" style="color:var(--color-error);" @click="remove(row.g)">✕</button>
               </div>
             </td>
           </template>
