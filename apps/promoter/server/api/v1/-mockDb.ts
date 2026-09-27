@@ -619,7 +619,12 @@ export function importAttendees(eventId: string, preset: ImportPreset, explicit:
 // Mirrors the P2.3 contract (api/internal/promoter/door + identity). Mock rules:
 // - Door login accepts ANY 6-digit PIN except '000000' (which fails like a
 //   wrong PIN), for any registered, unrevoked device token. The session is a
-//   cookie `klubhub_door_mock` naming the device and event.
+//   cookie `klubhub_door_mock` naming the device and event. Two more magic
+//   PINs mirror the Go API's lockout and expiry answers: '111111' → 429
+//   {error:'pin_locked', retry_after: now + 15 min} (the event's staff PIN
+//   status then shows locked_until until a new staff PIN is generated; other
+//   PINs still log in, since parallel e2e runs share this mock);
+//   '999999' → 401 {error:'pin_expired'}.
 // - Generating a staff PIN returns a random 6-digit PIN; the manager PIN is
 //   always MOCK_MANAGER_PIN ('246810'), and the bundle carries a real
 //   PBKDF2-SHA256 verifier for it (210 000 iterations) so the offline check
@@ -633,6 +638,8 @@ export function importAttendees(eventId: string, preset: ImportPreset, explicit:
 
 export const MOCK_MANAGER_PIN = '246810'
 export const MOCK_BAD_PIN = '000000'
+export const MOCK_LOCKED_PIN = '111111'
+export const MOCK_EXPIRED_PIN = '999999'
 export const DOOR_COOKIE = 'klubhub_door_mock'
 const PIN_WINDOW_MS = 36 * 3_600_000
 
@@ -641,7 +648,7 @@ export const doorDevices: DeviceRow[] = [
   { id: 'dd-front', label: 'Front door phone', token: 'mock-door-token-front', created_at: iso(-5), last_seen_at: null, revoked_at: null },
 ]
 
-interface PinRow { pin: string, valid_until: string, verifier?: ManagerPinVerifier }
+interface PinRow { pin: string, valid_until: string, verifier?: ManagerPinVerifier, locked_until?: string }
 const doorPins = new Map<string, { staff?: PinRow, manager?: PinRow }>([
   ['e-klubnacht', { manager: { pin: MOCK_MANAGER_PIN, valid_until: iso(6, 14) } }],
 ])
@@ -689,7 +696,7 @@ export function setDoorPin(eventId: string, b: { manager?: boolean, valid_until?
   let pin = MOCK_MANAGER_PIN
   if (!manager) {
     do pin = String(randomInt(0, 1_000_000)).padStart(6, '0')
-    while (pin === MOCK_BAD_PIN || pin === MOCK_MANAGER_PIN)
+    while ([MOCK_BAD_PIN, MOCK_MANAGER_PIN, MOCK_LOCKED_PIN, MOCK_EXPIRED_PIN].includes(pin))
   }
   const row: PinRow = { pin, valid_until: new Date(until).toISOString() }
   doorPins.set(eventId, { ...doorPins.get(eventId), [manager ? 'manager' : 'staff']: row })
@@ -699,7 +706,9 @@ export function setDoorPin(eventId: string, b: { manager?: boolean, valid_until?
 export function doorPinStatus(eventId: string): PinStatus {
   findEvent(eventId)
   const p = doorPins.get(eventId) ?? {}
-  const live = (r?: PinRow) => (r && Date.parse(r.valid_until) > Date.now() ? { valid_until: r.valid_until } : null)
+  const live = (r?: PinRow) => (r && Date.parse(r.valid_until) > Date.now()
+    ? { valid_until: r.valid_until, locked_until: r.locked_until && Date.parse(r.locked_until) > Date.now() ? r.locked_until : null }
+    : null)
   return { staff: live(p.staff), manager: live(p.manager) }
 }
 
@@ -709,6 +718,13 @@ export function doorLogin(b: { device_token?: string, event_id?: string, pin?: s
   const pin = String(b?.pin ?? '').trim()
   if (!d || !/^\d{6}$/.test(pin) || pin === MOCK_BAD_PIN || !events.some(e => e.id === b.event_id)) throw unauthorized()
   const staff = doorPins.get(b.event_id!)?.staff
+  if (pin === MOCK_EXPIRED_PIN) throw createError({ statusCode: 401, data: { error: 'pin_expired' } })
+  if (pin === MOCK_LOCKED_PIN) {
+    // Only this PIN answers "locked" (parallel e2e runs share the mock); the status still shows the lock.
+    const until = new Date(Date.now() + 15 * 60_000).toISOString()
+    if (staff) staff.locked_until = until
+    throw createError({ statusCode: 429, data: { error: 'pin_locked', retry_after: until } })
+  }
   const expires = staff && Date.parse(staff.valid_until) > Date.now() ? staff.valid_until : new Date(Date.now() + 12 * 3_600_000).toISOString()
   d.last_seen_at = new Date().toISOString()
   const session = randomBytes(16).toString('hex')

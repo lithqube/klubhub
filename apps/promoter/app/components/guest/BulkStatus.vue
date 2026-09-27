@@ -2,15 +2,19 @@
 import { useGuestStore } from '~/stores/guest'
 import type { ApiError } from '~/types/event'
 import type { BulkResult, GuestStatus } from '~/types/guest'
-import { guestErrorText, parseEmails, STATUS_LABEL, STATUSES } from '~/utils/guests'
+import { storeToRefs } from 'pinia'
+import { bulkPreview, guestErrorText, parseEmails, STATUS_LABEL, STATUSES } from '~/utils/guests'
 
 /**
  * Bulk status by pasting emails (e.g. "who confirmed" from a mail thread).
  * Matching is exact, through the server's email blind index; emails that
- * match nobody are listed back so nothing silently disappears.
+ * match nobody are listed back so nothing silently disappears. Before
+ * applying, a dry run over the loaded guests says what will happen
+ * ("42 guests → DECLINED").
  */
 const emit = defineEmits<{ done: [message: string], cancel: [] }>()
 const store = useGuestStore()
+const { guests } = storeToRefs(store)
 const uid = useId()
 
 const text = ref('')
@@ -19,6 +23,7 @@ const result = ref<BulkResult | null>(null)
 const error = ref<ApiError | null>(null)
 const saving = ref(false)
 const emails = computed(() => parseEmails(text.value))
+const preview = computed(() => (emails.value.length ? bulkPreview(guests.value, emails.value, status.value) : null))
 
 async function submit() {
   if (!emails.value.length) return
@@ -47,6 +52,11 @@ async function submit() {
       <span style="font-size:12px;color:var(--color-on-surface-variant);">Paste emails in any layout — a column, a mail thread, a CSV row. Only lists that collect contacts have emails.</span>
       <textarea :id="`${uid}-emails`" v-model="text" class="hud-textarea" rows="4" placeholder="aiko@label.example, rafael@press.example" />
     </label>
+    <p v-if="preview" aria-live="polite" class="preview" data-testid="bulk-preview">
+      <strong>{{ preview.change }} {{ preview.change === 1 ? 'guest' : 'guests' }} → {{ STATUS_LABEL[status] }}</strong>
+      <template v-if="preview.matched > preview.change"> · {{ preview.matched - preview.change }} already {{ STATUS_LABEL[status] }}</template>
+      <template v-if="preview.unmatched"> · {{ preview.unmatched }} {{ preview.unmatched === 1 ? 'email matches' : 'emails match' }} nobody here</template>
+    </p>
     <div style="display:flex;flex-wrap:wrap;align-items:end;gap:8px;">
       <div style="display:grid;gap:4px;">
         <label :for="`${uid}-status`" class="section-lbl">NEW STATUS</label>
@@ -71,3 +81,13 @@ async function submit() {
     <p v-if="error" role="alert" style="margin:0;font-size:13px;color:var(--color-error);">{{ guestErrorText(error) }}</p>
   </form>
 </template>
+
+<style scoped>
+.preview {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-surface-container);
+}
+</style>

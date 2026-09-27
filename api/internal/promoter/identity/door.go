@@ -23,6 +23,24 @@ const (
 	maxPINWindow   = 36 * time.Hour
 )
 
+// ErrPINExpired: the event's staff PIN window has ended. Only reported to
+// a registered, unrevoked device (an unknown device always gets
+// ErrInvalidCredentials), so it reveals nothing to a stranger.
+var ErrPINExpired = errors.New("identity: door PIN expired")
+
+// PINLockedError: too many wrong PINs; the event's staff PIN refuses logins
+// until Until. A manager unlocks it early by generating a new staff PIN.
+// Like ErrPINExpired it is only reported to a registered device.
+type PINLockedError struct {
+	Until time.Time
+	// Wait is Until minus the service clock's now (for Retry-After).
+	Wait time.Duration
+}
+
+func (e *PINLockedError) Error() string {
+	return "identity: door PIN locked until " + e.Until.UTC().Format(time.RFC3339)
+}
+
 // DoorDevice is a registered door phone/tablet. Token is shown once and
 // stored on the device; only its hash is kept.
 type DoorDevice struct {
@@ -142,7 +160,10 @@ func (s *Service) setPIN(ctx context.Context, by authz.Principal, event uuid.UUI
 }
 
 // DoorLogin exchanges a registered device token plus the event PIN for a
-// door session that ends when the PIN window ends.
+// door session that ends when the PIN window ends. Errors: an unknown or
+// revoked device, an event without a staff PIN and a wrong PIN are all
+// ErrInvalidCredentials; a registered device additionally learns
+// ErrPINExpired and *PINLockedError (the 5th wrong try locks the PIN).
 func (s *Service) DoorLogin(ctx context.Context, deviceToken string, event uuid.UUID, pin string) (LoginResult, error) {
 	tenant, deviceHash, err := auth.ParseSessionToken(deviceToken)
 	if err != nil {
@@ -174,8 +195,12 @@ func (s *Service) DoorLogin(ctx context.Context, deviceToken string, event uuid.
 		if err != nil {
 			return err
 		}
-		if !now.Before(expires) || (locked != nil && now.Before(*locked)) {
-			outcome = ErrInvalidCredentials
+		if !now.Before(expires) {
+			outcome = ErrPINExpired
+			return nil
+		}
+		if locked != nil && now.Before(*locked) {
+			outcome = &PINLockedError{Until: *locked, Wait: locked.Sub(now)}
 			return nil
 		}
 		hash, err := s.open(ctx, tx, tenant, "door_pins", pinColumn(false), event, hashEnc)
@@ -189,6 +214,8 @@ func (s *Service) DoorLogin(ctx context.Context, deviceToken string, event uuid.
 			if failed >= maxPINAttempts {
 				t := now.Add(pinLockout)
 				lockUntil, failed = &t, 0
+				// The try that locks the PIN already says so.
+				outcome = &PINLockedError{Until: t, Wait: pinLockout}
 			}
 			_, err := tx.Exec(ctx, `UPDATE door_pins SET failed_attempts = $2, locked_until = $3 WHERE event_id = $1 AND NOT manager`, event, failed, lockUntil)
 			return err

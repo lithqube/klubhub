@@ -83,16 +83,16 @@ const stateLabel = (a: Allocation) => ({ open: '', closed: 'CLOSED', revoked: 'R
         <div style="min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
           <h3 style="margin:0;font-size:14px;font-weight:600;">{{ list.name }}</h3>
           <span class="badge-hud badge-published">{{ typeLabel }}</span>
-          <span v-if="list.collect_contact" class="badge-hud badge-draft" title="Emails and phones stored encrypted"><Lock style="width:9px;height:9px;" aria-hidden="true" /> CONTACTS</span>
+          <span v-if="list.collect_contact" class="badge-hud badge-draft" title="Emails and phones stored encrypted"><Lock style="width:11px;height:11px;" aria-hidden="true" /> CONTACTS</span>
           <span v-else class="badge-hud badge-published">NAME-ONLY</span>
         </div>
-        <div style="display:flex;gap:4px;">
-          <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Show guests of ${list.name}`" @click="emit('filter', list.id)">GUESTS</button>
-          <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Edit ${list.name}`" @click="editing = true">EDIT</button>
-          <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Delete ${list.name}`" style="color:var(--color-error);" @click="remove">DELETE</button>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Show guests of ${list.name}`" @click="emit('filter', list.id)">GUESTS</button>
+          <button type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Edit ${list.name}`" @click="editing = true">EDIT</button>
+          <button type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Delete ${list.name}`" style="color:var(--color-error);" @click="remove">DELETE</button>
         </div>
       </div>
-      <p class="data-frag" style="font-size:9px;margin:6px 0 0;">
+      <p class="data-frag" style="font-size:11px;margin:6px 0 0;">
         {{ terms }}<template v-if="list.entry_terms.perks.length"> · {{ list.entry_terms.perks.join(', ').toUpperCase() }}</template>
       </p>
       <p style="margin:4px 0 0;font-size:12px;color:var(--color-on-surface-variant);">
@@ -117,13 +117,13 @@ const stateLabel = (a: Allocation) => ({ open: '', closed: 'CLOSED', revoked: 'R
               <span v-if="stateLabel(a)" class="badge-hud" :class="allocationState(a) === 'revoked' ? 'badge-failed' : 'badge-archived'">{{ stateLabel(a) }}</span>
               <span v-if="a.requires_approval" class="badge-hud badge-draft">APPROVAL</span>
             </span>
-            <span v-if="!a.revoked_at" style="display:flex;gap:4px;">
-              <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Edit allocation ${a.label}`" @click="allocEdit = a">EDIT</button>
-              <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Revoke allocation ${a.label}`" @click="revoke(a)">REVOKE</button>
+            <span v-if="!a.revoked_at" style="display:flex;gap:8px;">
+              <button type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Edit allocation ${a.label}`" @click="allocEdit = a">EDIT</button>
+              <button type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Revoke allocation ${a.label}`" @click="revoke(a)">REVOKE</button>
             </span>
           </div>
           <GuestQuotaBar :used="a.used" :quota="a.quota" :label="`${a.label} allocation`" style="margin-top:4px;" />
-          <p class="data-frag" style="font-size:8px;margin:4px 0 0;">
+          <p class="data-frag" style="font-size:11px;margin:4px 0 0;">
             +{{ a.plus_n_max }} EACH<template v-if="a.deadline"> · DEADLINE {{ dayLabel(a.deadline, event.timezone) }} {{ timeLabel(a.deadline, event.timezone) }}</template>
             <template v-if="a.pending"> · {{ a.pending }} PENDING</template>
           </p>
@@ -140,3 +140,14 @@ const stateLabel = (a: Allocation) => ({ open: '', closed: 'CLOSED', revoked: 'R
     <p v-if="notice" role="alert" style="margin:8px 0 0;font-size:13px;color:var(--color-error);">{{ notice }}</p>
   </section>
 </template>
+
+<style scoped>
+/* Real 44 px targets with 8 px between them (no overlapping pseudo hit areas). */
+.act {
+  min-height: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  font-size: 11px;
+}
+</style>

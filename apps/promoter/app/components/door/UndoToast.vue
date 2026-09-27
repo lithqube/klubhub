@@ -2,7 +2,12 @@
 import { Undo2 } from 'lucide-vue-next'
 import type { DoorToast } from '~/types/door'
 
-/** "Checked in — UNDO" for ~6 s after every door action. */
+/**
+ * "Checked in — UNDO" for ~6 s after a door action. It sits at the top,
+ * under the sticky header, away from the thumb zone, and the page hides it
+ * as soon as a card opens, so UNDO is never under the next guest's ADMIT.
+ * Older actions stay undoable from the RECENT list.
+ */
 const props = defineProps<{ toast: DoorToast | null }>()
 const emit = defineEmits<{ undo: [nonce: string], expire: [] }>()
 const UNDO_MS = 6000
@@ -16,7 +21,7 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <template>
-  <div v-if="toast" class="toast glass" :class="toast.tone === 'warn' ? 'accent-bar-archived' : 'accent-bar-ready'" data-testid="door-toast">
+  <div v-if="toast" class="toast" :class="toast.tone === 'warn' ? 'accent-bar-archived' : 'accent-bar-ready'" data-testid="door-toast">
     <span class="txt">{{ toast.text }}</span>
     <button v-if="toast.nonce" type="button" class="btn-hud btn-hud-ghost undo" @click="emit('undo', toast.nonce)">
       <Undo2 style="width:18px;height:18px;" aria-hidden="true" /> UNDO
@@ -26,18 +31,12 @@ onBeforeUnmount(() => clearTimeout(timer))
 
 <style scoped>
 .toast {
-  position: fixed;
-  left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  z-index: 40;
-  width: calc(100% - 32px);
-  max-width: 520px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 6px 6px 6px 14px;
+  min-height: 56px;
+  padding: 0 0 0 12px;
   background: var(--color-surface-container-high);
 }
 .txt {

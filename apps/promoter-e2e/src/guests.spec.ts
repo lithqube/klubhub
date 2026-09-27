@@ -90,10 +90,47 @@ test.describe('guest lists and guest table (mock API)', () => {
     const form = page.getByRole('form', { name: 'SET STATUS BY EMAIL' });
     await form.getByRole('textbox').fill(`Aiko <aiko@label.example>, ghost-${t}@example.org`);
     await form.getByLabel('NEW STATUS').selectOption('going');
+    // Dry run over the loaded guests before anything changes.
+    const preview = form.getByTestId('bulk-preview');
+    await expect(preview).toContainText(/\d+ guests? → GOING/);
+    await expect(preview).toContainText('1 email matches nobody here');
     await form.getByRole('button', { name: 'APPLY TO 2 EMAILS' }).click();
     const result = form.getByRole('status');
     await expect(result).toContainText('1 matched');
     await expect(result).toContainText(`ghost-${t}@example.org`);
+  });
+
+  test('a status change can be undone, DECLINED asks first, and tickets have no action chip', async ({ page }) => {
+    const t = tag();
+    await openGuests(page);
+    await page.getByRole('button', { name: 'ADD GUESTS' }).click();
+    const form = page.getByRole('form', { name: 'ADD GUESTS' });
+    await form.getByLabel('LIST', { exact: true }).selectOption({ label: 'Comp' });
+    await form.getByLabel('NAMES · ONE PER LINE').fill(`Una Status ${t}`);
+    await form.getByRole('button', { name: 'ADD 1' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Added 1 to Comp.' })).toBeVisible();
+
+    await page.getByLabel('Search guests').fill(`una status ${t}`);
+    const select = page.getByLabel(`Status of Una Status ${t}`);
+    await expect(select).toHaveValue('going');
+    const box = await select.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    // DECLINED asks first; saying no keeps the old status.
+    page.once('dialog', d => void d.dismiss());
+    await select.selectOption('declined');
+    await expect(select).toHaveValue('going');
+    await expect(page.getByTestId('status-changed')).toHaveCount(0);
+
+    await select.selectOption('waitlist');
+    const changed = page.getByTestId('status-changed');
+    await expect(changed).toContainText(`Status of Una Status ${t} → WAITLIST`);
+    await changed.getByRole('button', { name: 'UNDO' }).click();
+    await expect(select).toHaveValue('going');
+    await expect(changed).toHaveCount(0);
+
+    await page.getByLabel('Search guests').fill('theo brandt');
+    await expect(page.getByRole('row').filter({ hasText: 'Theo Brandt' })).not.toContainText('TICKET ');
   });
 
   test('the CSV export downloads and neutralises formulas', async ({ page }) => {

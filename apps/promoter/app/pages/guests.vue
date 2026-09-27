@@ -67,7 +67,7 @@ function edit(s: StandingList | 'new') {
           COULD NOT LOAD GUEST LISTS.
           <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" @click="store.fetchOverview()">RETRY</button>
         </p>
-        <p v-else-if="loading && !overview.length" role="status" class="data-frag" style="font-size:9px;">LOADING…</p>
+        <p v-else-if="loading && !overview.length" role="status" class="data-frag" style="font-size:11px;">LOADING…</p>
         <KhEmptyState v-else-if="!overview.length" title="NO UPCOMING EVENTS" hint="Guest lists live on each event." action-label="NEW EVENT" action-to="/events/new" />
         <ul v-else style="list-style:none;margin:0;padding:0;display:grid;gap:6px;">
           <li v-for="o in overview" :key="o.event_id">
@@ -76,7 +76,7 @@ function edit(s: StandingList | 'new') {
               :aria-label="`${o.title}: ${o.going_heads} going heads, ${o.pending} to approve`"
             >
               <span style="min-width:0;">
-                <span class="data-frag" style="font-size:9px;">{{ dayLabel(o.starts_at, o.timezone) }} · {{ timeLabel(o.starts_at, o.timezone) }}</span>
+                <span class="data-frag" style="font-size:11px;">{{ dayLabel(o.starts_at, o.timezone) }} · {{ timeLabel(o.starts_at, o.timezone) }}</span>
                 <span style="display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ o.title }}</span>
                 <span style="font-size:12px;color:var(--color-on-surface-variant);">
                   {{ o.lists }} {{ o.lists === 1 ? 'list' : 'lists' }} · {{ o.guests }} guests · {{ o.going_heads }} going heads<template v-if="o.capacity"> of {{ o.capacity }}</template><template v-if="o.tickets"> · {{ o.tickets }} tickets</template>
@@ -84,7 +84,7 @@ function edit(s: StandingList | 'new') {
               </span>
               <span style="display:grid;gap:4px;min-width:0;">
                 <GuestQuotaBar v-if="o.quota" :used="o.used" :quota="o.quota" :label="`${o.title} allocations`" />
-                <span v-else class="data-frag" style="font-size:8px;">NO ALLOCATIONS</span>
+                <span v-else class="data-frag" style="font-size:11px;">NO ALLOCATIONS</span>
                 <span v-if="o.pending" class="badge-hud badge-draft" style="justify-self:start;">{{ o.pending }} TO APPROVE</span>
               </span>
             </NuxtLink>
@@ -104,7 +104,7 @@ function edit(s: StandingList | 'new') {
             <ListPlus style="width:14px;height:14px;" aria-hidden="true" /> NEW STANDING LIST
           </button>
         </div>
-        <p v-if="notice" role="status" class="data-frag" style="font-size:9px;">{{ notice }}</p>
+        <p v-if="notice" role="status" class="data-frag" style="font-size:11px;">{{ notice }}</p>
         <GuestListForm v-if="editing === 'new'" template :error="formError" :saving="saving" submit-label="CREATE STANDING LIST" @save="save" @cancel="editing = null" />
         <p v-if="!standing.length && editing !== 'new'" class="glass" style="padding:14px;font-size:13px;">
           None yet. Residents, crew or a regular comp list are good candidates.
@@ -116,7 +116,7 @@ function edit(s: StandingList | 'new') {
               <strong style="font-size:14px;">{{ s.name }}</strong>
               <span class="badge-hud badge-published">{{ typeLabel(s.type) }}</span>
               <span class="badge-hud badge-published">{{ s.collect_contact ? 'CONTACTS' : 'NAME-ONLY' }}</span>
-              <span class="data-frag" style="font-size:9px;">
+              <span class="data-frag" style="font-size:11px;">
                 {{ s.entry_terms.price_mode === 'reduced' ? `REDUCED · ${s.entry_terms.reduced_price_text}` : 'FREE' }}<template v-if="s.entry_terms.cutoff_local"> · CUTOFF {{ s.entry_terms.cutoff_local }}</template>
               </span>
             </span>

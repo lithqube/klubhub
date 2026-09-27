@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { DoorCheckin, DoorGuest, DoorList, DoorOp, DoorTicket, JournalEntry } from '~/types/door'
 import {
-  allowance, conflictedSubjects, defaultPinValidUntil, effectiveCheckins, effectiveCounters, expiryReason, headsBySubject, mergeCheckins, occupancy,
-  pastCutoff, queueUndo, rejectionText, settle, subjectKey, subjectView,
+  admitReasons, allowance, ARM_GUARD_MS, confirmAllowed, conflictedSubjects, defaultPinValidUntil, deviceTag, effectiveCheckins, effectiveCounters,
+  expiryReason, headsBySubject, mergeCheckins, occupancy, pastCutoff, queueUndo, recentEntries, rejectionText, sessionEndingSoon, settle, subjectKey,
+  subjectView,
 } from '../doorState'
 
 const NOW = Date.parse('2026-10-03T23:30:00Z')
@@ -195,5 +196,58 @@ describe('rejectionText', () => {
     expect(rejectionText('invalid_op: count 1 to 50')).toBe('not valid (count 1 to 50)')
     expect(rejectionText('invalid_add:')).toBe('not valid')
     expect(rejectionText('something_new')).toBe('something new')
+  })
+})
+
+describe('card checks (UX review P1-1, P1-2)', () => {
+  it('names the latest live `in` (time and device) for "ALREADY IN"', () => {
+    const v = subjectView(bundle, [
+      row('a', 't1', 1, { at: at(-20), device_id: 'd-a' }),
+      row('b', 't1', 1, { at: at(-5), device_id: 'd-b', undone: true }),
+    ], { kind: 'ticket', id: 't1' }, NOW)!
+    expect(v.lastIn).toEqual({ at: at(-20), device_id: 'd-a' })
+    expect(admitReasons(v).map(r => r.code)).toEqual(['already_in'])
+    expect(subjectView(bundle, [], { kind: 'ticket', id: 't1' }, NOW)!.lastIn).toBeNull()
+  })
+
+  it('orders reasons with the most important first and words an unpaid ticket like the table', () => {
+    const v = subjectView(bundle, [row('a', 'g2', 1, { conflict: true })], { kind: 'guest', id: 'g2' }, NOW)!
+    expect(admitReasons(v).map(r => r.text)).toEqual(['ALREADY IN', 'DOUBLE ENTRY FLAGGED', 'ON THE LIST AS INVITED'])
+    const pending = subjectView({ ...bundle, tickets: [{ ...tickets[0]!, status: 'pending' }] }, [], { kind: 'ticket', id: 't1' }, NOW)!
+    expect(pending.warning).toBe('TICKET UNPAID')
+  })
+
+  it('ignores a confirming tap within 700 ms of arming', () => {
+    expect(confirmAllowed(null, 5000)).toBe(false)
+    expect(confirmAllowed(1000, 1000 + ARM_GUARD_MS - 1)).toBe(false)
+    expect(confirmAllowed(1000, 1000 + ARM_GUARD_MS)).toBe(true)
+  })
+
+  it('labels devices briefly', () => {
+    expect(deviceTag('d-1', 'd-1')).toBe('THIS DOOR')
+    expect(deviceTag('0192f0aa-1111-7000-8000-00000000beef', 'd-1')).toBe('DOOR BEEF')
+  })
+})
+
+describe('recent actions and session warning (UX review P1-5, P1-8)', () => {
+  it('lists the last own actions newest first, without undone ones, capped', () => {
+    const journal: JournalEntry[] = [
+      { ...op('a', 'g1', 2), synced: true } as JournalEntry,
+      { nonce: 'b', type: 'counter', kind: 'walkup', delta: 1, at: at(2), synced: false },
+      { ...op('c', 't1'), synced: false, undone: true } as JournalEntry,
+      { nonce: 'd', type: 'counter', kind: 'out', delta: 1, at: at(3), synced: false },
+    ]
+    expect(recentEntries(journal, bundle)).toEqual([
+      { nonce: 'd', name: 'OUT', what: '−1', at: at(3), synced: false },
+      { nonce: 'b', name: 'WALK-UP', what: '+1', at: at(2), synced: false },
+      { nonce: 'a', name: 'Mara Weiss', what: '2 IN', at: at(1), synced: true },
+    ])
+    expect(recentEntries(journal, bundle, 1).map(r => r.nonce)).toEqual(['d'])
+  })
+
+  it('warns in the last 30 minutes of the door session only', () => {
+    expect(sessionEndingSoon({ session_expires_at: at(31) }, NOW)).toBe(false)
+    expect(sessionEndingSoon({ session_expires_at: at(30) }, NOW)).toBe(true)
+    expect(sessionEndingSoon({ session_expires_at: at(0) }, NOW)).toBe(false)
   })
 })

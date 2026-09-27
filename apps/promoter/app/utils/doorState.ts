@@ -94,8 +94,19 @@ export interface SubjectView {
   pastCutoff: boolean
   /** A ticket that cannot enter, with why. */
   blocked: Block | null
-  /** Not blocking, but worth a second look (guest not "going", ticket pending). */
+  /** Not blocking, but worth a second look (guest not "going", ticket unpaid). */
   warning: string | null
+  /** The latest live `in` for this subject (any device), for "ALREADY IN · 23:12 · DOOR 2". */
+  lastIn: { at: string, device_id: string } | null
+}
+
+function latestIn(checkins: DoorCheckin[], key: string): { at: string, device_id: string } | null {
+  let best: DoorCheckin | null = null
+  for (const c of checkins) {
+    if (c.undone || c.direction !== 'in' || subjectKey(c.subject) !== key) continue
+    if (!best || c.at > best.at) best = c
+  }
+  return best ? { at: best.at, device_id: best.device_id } : null
 }
 
 type BundleLike = Pick<DoorBundle, 'guests' | 'tickets' | 'lists'>
@@ -104,6 +115,7 @@ export function subjectView(b: BundleLike, checkins: DoorCheckin[], subject: Doo
   const key = subjectKey(subject)
   const heads = Math.max(0, headsBySubject(checkins.filter(c => subjectKey(c.subject) === key)).get(key) ?? 0)
   const conflict = conflictedSubjects(checkins).has(key)
+  const lastIn = heads > 0 ? latestIn(checkins, key) : null
   if (subject.kind === 'guest') {
     const g = b.guests.find(x => x.id === subject.id)
     if (!g) return null
@@ -112,7 +124,7 @@ export function subjectView(b: BundleLike, checkins: DoorCheckin[], subject: Doo
     return {
       key, subject, name: g.name, guest: g, ticket: null, list, allowance: allow, heads, remaining: Math.max(0, allow - heads),
       over: heads > allow, conflict, pastCutoff: pastCutoff(list, now), blocked: null,
-      warning: g.status === 'going' ? null : `ON THE LIST AS ${g.status.toUpperCase()}`,
+      warning: g.status === 'going' ? null : `ON THE LIST AS ${g.status.toUpperCase()}`, lastIn,
     }
   }
   const t = b.tickets.find(x => x.id === subject.id)
@@ -121,7 +133,7 @@ export function subjectView(b: BundleLike, checkins: DoorCheckin[], subject: Doo
   return {
     key, subject, name: t.name || `Order ${t.order_ref}`, guest: null, ticket: t, list: null, allowance: 1, heads,
     remaining: Math.max(0, 1 - heads), over: heads > 1, conflict, pastCutoff: false, blocked,
-    warning: t.status === 'pending' ? 'TICKET PAYMENT PENDING' : null,
+    warning: t.status === 'pending' ? 'TICKET UNPAID' : null, lastIn,
   }
 }
 
@@ -197,6 +209,68 @@ export function settle(queue: DoorOp[], results: OpResult[]): Settled {
     acked,
     rejected: results.filter(r => r.status === 'rejected'),
   }
+}
+
+export type ReasonCode = 'already_in' | 'no_heads' | 'conflict' | 'warning' | 'cutoff'
+
+/** Why a card needs a second look before ADMIT, most important first. */
+export function admitReasons(v: Pick<SubjectView, 'remaining' | 'heads' | 'conflict' | 'warning' | 'pastCutoff'>): { code: ReasonCode, text: string }[] {
+  const r: { code: ReasonCode, text: string }[] = []
+  if (v.remaining === 0) r.push(v.heads ? { code: 'already_in', text: 'ALREADY IN' } : { code: 'no_heads', text: 'NO HEADS LEFT' })
+  if (v.conflict) r.push({ code: 'conflict', text: 'DOUBLE ENTRY FLAGGED' })
+  if (v.warning) r.push({ code: 'warning', text: v.warning })
+  if (v.pastCutoff) r.push({ code: 'cutoff', text: 'PAST CUTOFF' })
+  return r
+}
+
+/** A confirming tap this soon after arming is a double tap, not a decision. */
+export const ARM_GUARD_MS = 700
+
+/** The armed ADMIT may fire: armed, and not within ARM_GUARD_MS of arming. */
+export function confirmAllowed(armedAt: number | null, now: number, guard = ARM_GUARD_MS): boolean {
+  return armedAt !== null && now - armedAt >= guard
+}
+
+/** Short device label from a device id: this device, else the id's last 4 characters. */
+export function deviceTag(deviceId: string, self: string): string {
+  return deviceId === self ? 'THIS DOOR' : `DOOR ${deviceId.replace(/-/g, '').slice(-4).toUpperCase()}`
+}
+
+export interface RecentEntry {
+  nonce: string
+  /** Guest or ticket name, or WALK-UP / OUT / IN for counters. */
+  name: string
+  /** "2 IN" for a check-in, "+1" / "−1" for a counter. */
+  what: string
+  at: string
+  synced: boolean
+}
+
+/** The last own door actions (newest first) that can still be undone. */
+export function recentEntries(journal: JournalEntry[], b: Pick<DoorBundle, 'guests' | 'tickets'> | null, limit = 10): RecentEntry[] {
+  const out: RecentEntry[] = []
+  for (let i = journal.length - 1; i >= 0 && out.length < limit; i--) {
+    const j = journal[i]!
+    if (j.undone) continue
+    if (j.type === 'counter') {
+      const name = j.kind === 'walkup' ? 'WALK-UP' : j.kind === 'out' ? 'OUT' : 'IN'
+      out.push({ nonce: j.nonce, name, what: `${j.kind === 'out' ? '−' : '+'}${j.delta}`, at: j.at, synced: j.synced })
+      continue
+    }
+    const s = j.subject
+    const name = (s.kind === 'guest' ? b?.guests.find(g => g.id === s.id)?.name : b?.tickets.find(t => t.id === s.id)?.name) || 'Guest'
+    out.push({ nonce: j.nonce, name, what: `${j.count} ${j.direction === 'in' ? 'IN' : 'OUT'}`, at: j.at, synced: j.synced })
+  }
+  return out
+}
+
+/** Minutes before the door session ends that the door starts warning. */
+export const SESSION_WARN_MIN = 30
+
+/** The door session ends within SESSION_WARN_MIN minutes (and has not ended yet). */
+export function sessionEndingSoon(b: Pick<DoorBundle, 'session_expires_at'>, now: number, warnMin = SESSION_WARN_MIN): boolean {
+  const left = Date.parse(b.session_expires_at) - now
+  return left > 0 && left <= warnMin * 60_000
 }
 
 /** Hours after the event end until the door cache is wiped. */

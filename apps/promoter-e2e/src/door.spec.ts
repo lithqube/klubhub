@@ -103,6 +103,12 @@ test.describe('offline door (mock API)', () => {
     await search.fill(`zoe ${t}`);
     await expect(results.getByRole('button')).toContainText('1/3 IN');
 
+    // RECENT offers the same undo as the toast (only while the search is empty).
+    await search.fill('');
+    const recent = page.getByRole('list', { name: 'RECENT' });
+    await expect(recent.getByRole('listitem').first()).toContainText(`Zoë Lindqvist ${t}`);
+    await expect(recent.getByRole('listitem').first()).toContainText('1 IN');
+
     // Another door device sees the check-in in its bundle.
     const devices = await (await page.request.get('/api/v1/door/devices')).json() as { label: string }[];
     expect(devices.some(d => d.label === `Door ${t}`)).toBe(true);
@@ -130,29 +136,130 @@ test.describe('offline door (mock API)', () => {
     await expect(page.getByRole('article', { name: 'Theo Brandt' })).toBeVisible();
     await page.getByRole('button', { name: 'BACK TO SEARCH' }).click();
 
+    // An unknown code sends staff to the name search.
+    await page.getByRole('button', { name: 'Scan a QR code' }).click();
+    await page.getByRole('dialog').getByLabel('OR TYPE THE CODE').fill('NOPE-0000');
+    await page.getByRole('dialog').getByRole('button', { name: 'CHECK' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByText('Code not found — search the name.')).toBeVisible();
+    await expect(search).toBeFocused();
+
+    // EXPRESS keeps the scanner open between codes and shows each result over the camera.
+    await page.getByRole('button', { name: 'Scan a QR code' }).click();
+    const scan = page.getByRole('dialog');
+    await scan.getByRole('radio', { name: 'STANDARD' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(scan.getByRole('radio', { name: 'EXPRESS' })).toHaveAttribute('aria-checked', 'true');
+    await expect(scan.getByRole('radio', { name: 'EXPRESS' })).toBeFocused();
+    await scan.getByLabel('OR TYPE THE CODE').fill('NOPE-0001');
+    await scan.getByRole('button', { name: 'CHECK' }).click();
+    await expect(scan.getByTestId('scan-result')).toContainText('CODE NOT FOUND');
+    await expect(scan).toBeVisible();
+    // A refunded ticket must be looked at: the card opens and the scanner closes.
+    await scan.getByLabel('OR TYPE THE CODE').fill('DICE-0003');
+    await scan.getByRole('button', { name: 'CHECK' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('article', { name: 'Theo Brandt' })).toBeVisible();
+    await page.getByRole('button', { name: 'BACK TO SEARCH' }).click();
+    // Back to STANDARD for the rest of the run (the mode is remembered on the device).
+    await page.getByRole('button', { name: 'Scan a QR code' }).click();
+    await page.getByRole('dialog').getByRole('radio', { name: 'STANDARD' }).click();
+    await page.getByRole('button', { name: 'Close scanner' }).click();
+
     // On-the-spot add.
     await page.getByRole('button', { name: 'ADD GUEST' }).click();
     const sheet = page.getByRole('dialog', { name: 'ADD AT THE DOOR' });
+    await expect(sheet.getByLabel('NAME')).toBeFocused();
+    await expect(sheet.getByLabel('LIST')).toHaveValue(''); // no default list
     await sheet.getByLabel('NAME').fill(`Ola Door ${t}`);
     await sheet.getByRole('button', { name: 'One more plus' }).click();
     await sheet.getByLabel('LIST').selectOption({ label: 'Comp' });
     await sheet.getByLabel('MANAGER PIN').fill('111111');
-    await sheet.getByRole('button', { name: 'ADD & ADMIT 2' }).click();
+    await sheet.getByRole('button', { name: 'ADD & ADMIT 2 NOW' }).click();
     await expect(sheet.getByRole('alert')).toHaveText('Wrong manager PIN. Ask the manager on shift.');
     await sheet.getByLabel('MANAGER PIN').fill(managerPin);
-    await sheet.getByRole('button', { name: 'ADD & ADMIT 2' }).click();
+    await sheet.getByRole('button', { name: 'ADD & ADMIT 2 NOW' }).click();
     await expect(sheet).toHaveCount(0);
     await expect(page.getByTestId('door-toast')).toContainText(`Ola Door ${t} ADDED · 2 IN`);
     await expect(page.getByTestId('door-sync')).toContainText('SYNCED', { timeout: 20_000 });
 
     await search.fill(`ola door ${t}`);
-    await expect(page.getByRole('list', { name: 'Search results' }).getByRole('button')).toContainText('2/2 IN');
+    await expect(page.getByRole('list', { name: 'Search results' }).getByRole('button')).toContainText('ALL IN');
     const page2 = await (await page.request.get('/api/v1/events/e-klubnacht/guests')).json() as { guests: { name: string, source: string }[] };
     expect(page2.guests.find(g => g.name === `Ola Door ${t}`)?.source).toBe('door');
 
-    // Logging out wipes the device; the PIN pad comes back.
+    // Logging out (from the header menu, after a confirm) wipes the device; the PIN pad comes back.
+    await page.getByRole('button', { name: 'Door menu' }).click();
     await page.getByRole('button', { name: 'LOG OUT' }).click();
     await expect(page.getByText('Logged out. Nothing from the guest list is left on this device.')).toBeVisible();
     await expect(page.getByRole('group', { name: 'DOOR PIN' })).toBeVisible();
+  });
+
+  test('a second card hides the undo toast, and an armed ADMIT ignores a double tap', async ({ page }) => {
+    const t = tag();
+    const { staffPin } = await prepare(page, t);
+    const res = await page.request.post('/api/v1/events/e-klubnacht/guests', {
+      headers: CSRF, data: { list_id: 'gl-comp', allocation_id: null, source: 'manual', guests: [{ name: `Ada Toast ${t}`, plus_n: 0, status: 'going' }, { name: `Bo Toast ${t}`, plus_n: 0, status: 'going' }] },
+    });
+    expect(res.status()).toBe(201);
+    await openDoor(page, staffPin);
+    const search = page.getByLabel('Search guests and tickets');
+    const results = page.getByRole('list', { name: 'Search results' });
+
+    await search.fill(`ada toast ${t}`);
+    await results.getByRole('button').first().click();
+    await page.getByRole('article', { name: `Ada Toast ${t}` }).getByTestId('door-admit').click();
+    await expect(page.getByTestId('door-toast')).toContainText(`Ada Toast ${t} · 1 IN`);
+
+    await search.fill(`bo toast ${t}`);
+    await results.getByRole('button').first().click();
+    const card = page.getByRole('article', { name: `Bo Toast ${t}` });
+    await expect(card.getByRole('heading', { name: `Bo Toast ${t}` })).toBeFocused();
+    await expect(page.getByTestId('door-toast')).toHaveCount(0);
+    await card.getByRole('button', { name: 'BACK TO SEARCH' }).click();
+
+    // Ada again: already in. The warning names when; a double tap only arms.
+    await search.fill(`ada toast ${t}`);
+    await results.getByRole('button').first().click();
+    const again = page.getByRole('article', { name: `Ada Toast ${t}` });
+    await expect(again.getByTestId('door-warning')).toContainText(/ALREADY IN · \d{2}:\d{2} · THIS DOOR/);
+    const admit = again.getByTestId('door-admit');
+    await expect(admit).toHaveText('CHECK: ALREADY IN');
+    await admit.dblclick();
+    await expect(admit).toContainText('TAP AGAIN · ADMIT 1');
+    await expect(again).toBeVisible();
+    // A deliberate second tap (held past the 700 ms guard) admits.
+    await admit.click({ delay: 750 });
+    await expect(page.getByTestId('door-toast')).toContainText(`Ada Toast ${t} · 1 IN`);
+  });
+
+  test('LOG OUT asks first, and a locked or expired PIN says so', async ({ page }) => {
+    const t = tag();
+    const { staffPin } = await prepare(page, t);
+    page.removeAllListeners('dialog');
+    const asked: string[] = [];
+    let accept = false;
+    page.on('dialog', (d) => {
+      asked.push(d.message());
+      void (accept ? d.accept() : d.dismiss());
+    });
+    await openDoor(page, staffPin);
+
+    await page.getByRole('button', { name: 'Door menu' }).click();
+    await page.getByRole('button', { name: 'LOG OUT' }).click();
+    expect(asked.at(-1)).toContain('Log out? You need the door PIN and a connection to log in again.');
+    await expect(page.getByLabel('Search guests and tickets')).toBeVisible(); // dismissed: still open
+
+    accept = true;
+    await page.getByRole('button', { name: 'LOG OUT' }).click();
+    await expect(page.getByRole('group', { name: 'DOOR PIN' })).toBeVisible();
+
+    // The mock answers '999999' like an expired PIN and '111111' like a locked one.
+    await enterPin(page, '999999');
+    await expect(page.getByRole('alert')).toContainText('This door PIN has expired');
+    await enterPin(page, '111111');
+    await expect(page.getByTestId('door-pin-locked')).toContainText(/PIN LOCKED · TRY AGAIN AT \d{2}:\d{2}/);
+    await expect(page.getByTestId('door-pin-locked')).toContainText('A manager can unlock it now by generating a new PIN in the event’s DOOR tab.');
+    await expect(page.getByRole('group', { name: 'DOOR PIN' }).getByRole('button', { name: '1', exact: true })).toBeDisabled();
   });
 });

@@ -185,6 +185,61 @@ describe('useDoorStore (door device)', () => {
     expect(s.queued).toBe(0)
   })
 
+  it('keeps unsynced actions when the door session expires, and asks for a new PIN instead of wiping', async () => {
+    const s = await ready()
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    await s.checkIn({ kind: 'guest', id: 'g1' }, 1)
+    expect(await s.checkExpiry(Date.now() + 11 * 3_600_000)).toBe(true)
+    expect(s.sessionEnded).toBe(true)
+    expect(s.phase).toBe('ready')
+    expect(s.queued).toBe(1)
+    expect(await kv.get('slot:bundle')).toBeDefined()
+
+    // A reload after the window keeps the queue too.
+    s.stopLoop()
+    const realNow = Date.now
+    vi.spyOn(Date, 'now').mockReturnValue(realNow() + 11 * 3_600_000)
+    setActivePinia(createPinia())
+    const again = useDoorStore()
+    await again.init()
+    expect(again.phase).toBe('ready')
+    expect(again.sessionEnded).toBe(true)
+    expect(again.queued).toBe(1)
+    vi.restoreAllMocks()
+
+    // Logging in again carries the queue into the new session.
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+    fetchMock.mockReset()
+    fetchMock.mockImplementation((url: string, o?: { body?: { ops: { nonce: string }[] } }) => Promise.resolve(
+      url === '/api/v1/door/bundle' ? bundle() : url === '/api/v1/door/checkins' ? syncOk(o!.body!) : null))
+    await again.login('654321')
+    expect(again.sessionEnded).toBe(false)
+    await vi.waitFor(() => expect(again.queued).toBe(0))
+    expect(fetchMock.mock.calls.some(c => c[0] === '/api/v1/door/checkins')).toBe(true)
+    again.stopLoop()
+  })
+
+  it('passes a PIN lockout on with its retry time', async () => {
+    localStorage.setItem(DEVICE_KEY, JSON.stringify(device))
+    const s = useDoorStore()
+    await s.init()
+    fetchMock.mockRejectedValue({ statusCode: 429, data: { error: 'pin_locked', retry_after: '2026-10-03T23:47:00Z' } })
+    await expect(s.login('111111')).rejects.toMatchObject({ error: 'pin_locked', status: 429, detail: { retry_after: '2026-10-03T23:47:00Z' } })
+    fetchMock.mockRejectedValue({ statusCode: 401, data: { error: 'pin_expired' } })
+    await expect(s.login('999999')).rejects.toMatchObject({ error: 'pin_expired', status: 401 })
+    expect(s.phase).toBe('locked')
+  })
+
+  it('offers own actions in RECENT until they are undone', async () => {
+    const s = await ready()
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    const a = await s.checkIn({ kind: 'guest', id: 'g1' }, 2)
+    const b = await s.counter('walkup')
+    expect(s.recent.map(r => r.nonce)).toEqual([b, a])
+    await s.undo(a)
+    expect(s.recent.map(r => r.nonce)).toEqual([b])
+  })
+
   it('wipes the cache on logout and when the session expires', async () => {
     const s = await ready()
     fetchMock.mockResolvedValue(null)

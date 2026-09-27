@@ -4,14 +4,14 @@ import { storeToRefs } from 'pinia'
 import { useDoorStore } from '~/stores/door'
 import { useEventStore } from '~/stores/event'
 import type { ApiError } from '~/types/event'
-import type { PinResult } from '~/types/door'
+import type { PinResult, PinWindow } from '~/types/door'
 import { dayLabel, instantToZoned, timeLabel, zonedToInstant } from '~/utils/datetime'
 import { defaultPinValidUntil, MAX_PIN_WINDOW_HOURS } from '~/utils/doorState'
 
 /**
  * Event DOOR tab (P2.3): prepare this browser as a door device, generate
- * the staff and manager PINs (each shown once), list and revoke devices,
- * and open the door.
+ * the staff and manager PINs (each shown once; both stay visible until
+ * hidden), see a PIN lockout, list and revoke devices, and open the door.
  */
 const { current } = storeToRefs(useEventStore())
 const store = useDoorStore()
@@ -20,12 +20,15 @@ const uid = useId()
 
 const id = computed(() => current.value?.id ?? '')
 const loadError = ref(false)
-await useAsyncData(() => `door-${id.value}`, () => (id.value
-  ? Promise.all([store.fetchDevices(), store.fetchPinStatus(id.value)]).then(() => true).catch(() => {
-      loadError.value = true
-      return false
-    })
-  : Promise.resolve(null)), { watch: [id] })
+function load() {
+  if (!id.value) return Promise.resolve(null)
+  loadError.value = false
+  return Promise.all([store.fetchDevices(), store.fetchPinStatus(id.value)]).then(() => true).catch(() => {
+    loadError.value = true
+    return false
+  })
+}
+const { refresh } = await useAsyncData(() => `door-${id.value}`, load, { watch: [id] })
 
 onMounted(() => store.loadDevice())
 
@@ -34,7 +37,12 @@ const eventRef = computed(() => (current.value ? { id: current.value.id, title: 
 const deviceState = computed(() => (!device.value ? 'none' : device.value.event.id === id.value ? 'this' : 'other'))
 
 // ---------------------------------------------------------------- this browser
-const label = ref('Door phone')
+const label = ref('')
+const labelTouched = ref(false)
+const suggestedLabel = computed(() => `Door ${devices.value.filter(d => !d.revoked_at).length + 1}`)
+watch(suggestedLabel, (l) => {
+  if (!labelTouched.value) label.value = l
+}, { immediate: true })
 const busy = ref<string | null>(null)
 const notice = ref('')
 const error = ref('')
@@ -74,7 +82,8 @@ function resetUntil() {
 onMounted(resetUntil)
 watch(id, resetUntil)
 
-const shown = ref<(PinResult & { manager: boolean }) | null>(null)
+// Both PINs stay on screen once generated (the manager one does not hide the staff one).
+const shown = reactive<{ staff: PinResult | null, manager: PinResult | null }>({ staff: null, manager: null })
 const pinError = ref('')
 
 async function generate(manager: boolean) {
@@ -84,11 +93,10 @@ async function generate(manager: boolean) {
   if (existing && !window.confirm(`Replace the ${kind} PIN? The current one stops working.`)) return
   busy.value = kind
   pinError.value = ''
-  shown.value = null
+  shown[kind] = null
   try {
     const valid = zonedToInstant(until.date, until.time, tz.value).toISOString()
-    const r = await store.setPin(current.value.id, { manager, valid_until: valid })
-    shown.value = { ...r, manager }
+    shown[kind] = await store.setPin(current.value.id, { manager, valid_until: valid })
   } catch (e) {
     const err = e as ApiError
     pinError.value = err.error === 'invalid_input'
@@ -99,8 +107,11 @@ async function generate(manager: boolean) {
   }
 }
 
-const statusLine = (s: { valid_until: string } | null | undefined) =>
-  (s ? `VALID UNTIL ${dayLabel(s.valid_until, tz.value).toUpperCase()} ${timeLabel(s.valid_until, tz.value)}` : 'NOT SET')
+const at = (iso: string) => `${dayLabel(iso, tz.value).toUpperCase()} ${timeLabel(iso, tz.value)}`
+const statusLine = (s: PinWindow | null | undefined) =>
+  (s ? `VALID UNTIL ${at(s.valid_until)}` : 'NOT SET')
+const lockLine = (s: PinWindow | null | undefined) =>
+  (s?.locked_until && Date.parse(s.locked_until) > Date.now() ? `LOCKED UNTIL ${timeLabel(s.locked_until, tz.value)} · A NEW PIN UNLOCKS IT` : '')
 
 // ---------------------------------------------------------------- devices
 async function revoke(d: { id: string, label: string }) {
@@ -122,8 +133,9 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
   <div v-if="current" class="door-tab space-y-3">
     <p v-if="notice" role="status" class="glass" style="padding:10px 14px;border-left:3px solid var(--color-primary);font-size:13px;margin:0;">{{ notice }}</p>
     <p v-if="error" role="alert" class="glass" style="padding:10px 14px;border-left:3px solid var(--color-error);font-size:13px;margin:0;">{{ error }}</p>
-    <p v-if="loadError" role="alert" class="glass" style="padding:10px 14px;border-left:3px solid var(--color-error);font-size:13px;margin:0;">
+    <p v-if="loadError" role="alert" class="glass" style="padding:10px 14px;border-left:3px solid var(--color-error);font-size:13px;margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
       COULD NOT LOAD DOOR DEVICES AND PINS.
+      <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" @click="refresh()">RETRY</button>
     </p>
 
     <div class="grid">
@@ -132,10 +144,13 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
         <ClientOnly>
           <template v-if="deviceState === 'none'">
             <p class="txt">Use this phone or tablet at the door. It downloads the guest list for the night, keeps it encrypted, and works without signal.</p>
+            <p class="warn" data-testid="door-admin-warning">
+              Logging in at the door signs this browser out of the admin. Use a separate phone, or a separate browser profile.
+            </p>
             <form class="row" @submit.prevent="register">
               <div style="display:grid;gap:4px;min-width:0;flex:1;">
                 <label :for="`${uid}-label`" class="section-lbl">DEVICE NAME</label>
-                <input :id="`${uid}-label`" v-model="label" class="hud-input" maxlength="80" required>
+                <input :id="`${uid}-label`" v-model="label" class="hud-input" maxlength="80" required @input="labelTouched = true">
               </div>
               <button type="submit" class="btn-hud btn-hud-cta" style="min-height:44px;align-self:end;" :disabled="!label.trim() || busy === 'register'">
                 {{ busy === 'register' ? 'REGISTERING…' : 'USE THIS BROWSER AS A DOOR DEVICE' }}
@@ -157,7 +172,7 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
               <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" @click="forget">FORGET ON THIS BROWSER</button>
             </div>
           </template>
-          <p class="hint">
+          <p v-if="deviceState !== 'none'" class="hint">
             The door uses its own session: logging in at /door signs this browser out of the admin. Prefer a separate phone, or a separate browser profile.
           </p>
         </ClientOnly>
@@ -170,8 +185,16 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
           Each PIN is shown once; generating a new one replaces the old.
         </p>
         <dl class="status" aria-label="PIN status">
-          <div><dt class="section-lbl">STAFF PIN</dt><dd data-testid="pin-status-staff">{{ statusLine(pinStatus?.staff) }}</dd></div>
-          <div><dt class="section-lbl">MANAGER PIN</dt><dd data-testid="pin-status-manager">{{ statusLine(pinStatus?.manager) }}</dd></div>
+          <div>
+            <dt class="section-lbl">STAFF PIN</dt>
+            <dd data-testid="pin-status-staff">{{ statusLine(pinStatus?.staff) }}</dd>
+            <dd v-if="lockLine(pinStatus?.staff)" class="locked" data-testid="pin-status-staff-locked">{{ lockLine(pinStatus?.staff) }}</dd>
+          </div>
+          <div>
+            <dt class="section-lbl">MANAGER PIN</dt>
+            <dd data-testid="pin-status-manager">{{ statusLine(pinStatus?.manager) }}</dd>
+            <dd v-if="lockLine(pinStatus?.manager)" class="locked">{{ lockLine(pinStatus?.manager) }}</dd>
+          </div>
         </dl>
         <fieldset class="row" style="border:0;padding:0;margin:0;">
           <legend class="section-lbl" style="margin-bottom:4px;">VALID UNTIL ({{ tz.toUpperCase() }}, AT MOST {{ MAX_PIN_WINDOW_HOURS }} H AHEAD)</legend>
@@ -189,15 +212,17 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
           </button>
         </div>
         <p v-if="pinError" role="alert" style="margin:0;font-size:13px;color:var(--color-error);">{{ pinError }}</p>
-        <div v-if="shown" class="shown" role="status" aria-live="polite">
-          <span class="section-lbl">{{ shown.manager ? 'MANAGER PIN' : 'STAFF PIN' }} · SHOWN ONCE</span>
-          <div class="row" style="align-items:center;">
-            <span class="pin" :data-testid="shown.manager ? 'door-manager-pin' : 'door-staff-pin'">{{ shown.pin }}</span>
-            <ExportCopyButton :text="shown.pin" :label="`Copy the ${shown.manager ? 'manager' : 'staff'} PIN`" />
-            <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" @click="shown = null">HIDE</button>
+        <template v-for="kind in (['staff', 'manager'] as const)" :key="kind">
+          <div v-if="shown[kind]" class="shown" role="status" aria-live="polite">
+            <span class="section-lbl">{{ kind === 'manager' ? 'MANAGER PIN' : 'STAFF PIN' }} · SHOWN ONCE</span>
+            <div class="row" style="align-items:center;">
+              <span class="pin" :data-testid="kind === 'manager' ? 'door-manager-pin' : 'door-staff-pin'">{{ shown[kind]!.pin }}</span>
+              <ExportCopyButton :text="shown[kind]!.pin" :label="`Copy the ${kind} PIN`" />
+              <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" :aria-label="`Hide the ${kind} PIN`" @click="shown[kind] = null">HIDE</button>
+            </div>
+            <span class="hint">Valid until {{ when(shown[kind]!.valid_until) }}. Tell it to the door staff in person; do not post it in a group chat.</span>
           </div>
-          <span class="hint">Valid until {{ when(shown.valid_until) }}. Tell it to the door staff in person; do not post it in a group chat.</span>
-        </div>
+        </template>
       </section>
     </div>
 
@@ -271,6 +296,18 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
   font-family: var(--font-terminal);
   font-size: 12px;
   letter-spacing: .04em;
+}
+.status dd.locked {
+  color: var(--color-status-archived);
+  font-weight: 600;
+}
+.warn {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--color-on-surface);
+  border-left: 3px solid var(--color-status-archived);
+  background: var(--color-surface-container);
 }
 .shown {
   display: grid;

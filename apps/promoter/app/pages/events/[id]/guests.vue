@@ -16,6 +16,13 @@ await useAsyncData(() => `guests-${id.value}`, () => (id.value ? store.load(id.v
 
 const panel = ref<'add' | 'bulk' | 'list' | 'import' | null>(null)
 const listFilter = ref('')
+const table = ref<{ focusHeading: () => void } | null>(null)
+
+/** A list's GUESTS: filter the table; where the table sits below the lists (phones, tablets), go to it. */
+function showList(listId: string) {
+  listFilter.value = listId
+  if (window.matchMedia('(max-width: 1199px)').matches) nextTick(() => table.value?.focusHeading())
+}
 const notice = ref('')
 const listError = ref<ApiError | null>(null)
 const saving = ref(false)
@@ -71,7 +78,7 @@ function openPanel(p: 'add' | 'bulk' | 'list' | 'import') {
 <template>
   <div v-if="current" class="space-y-3">
     <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">
-      <p class="data-frag" style="font-size:9px;margin:0;" aria-label="Guest summary">
+      <p class="data-frag" style="font-size:11px;margin:0;" aria-label="Guest summary">
         GOING {{ counts.going }} · {{ counts.going_heads }} HEADS<template v-if="current.capacity"> OF {{ current.capacity }} CAP.</template>
         · TICKETS {{ counts.tickets }} · PENDING {{ counts.pending }} · LISTS {{ lists.length }}
       </p>
@@ -96,7 +103,7 @@ function openPanel(p: 'add' | 'bulk' | 'list' | 'import') {
       COULD NOT LOAD THE GUEST LIST.
       <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" @click="store.load(current.id)">RETRY</button>
     </p>
-    <p v-else-if="loading && !lists.length" role="status" class="data-frag" style="font-size:9px;">LOADING GUESTS…</p>
+    <p v-else-if="loading && !lists.length" role="status" class="data-frag" style="font-size:11px;">LOADING GUESTS…</p>
 
     <GuestAddPanel v-if="panel === 'add'" :lists="lists" :default-list-id="listFilter || null" @done="done" @cancel="panel = null" />
     <GuestBulkStatus v-if="panel === 'bulk'" @done="done" @cancel="panel = null" />
@@ -117,10 +124,10 @@ function openPanel(p: 'add' | 'bulk' | 'list' | 'import') {
         <p v-if="!lists.length && panel !== 'list'" class="glass" style="padding:14px;font-size:13px;">
           No lists yet. Create one, or set up <NuxtLink to="/guests" style="color:var(--color-primary);">standing lists</NuxtLink> so every new event starts with them.
         </p>
-        <GuestListCard v-for="l in lists" :key="l.id" :list="l" :event="eventWindow!" @filter="listFilter = $event" />
+        <GuestListCard v-for="l in lists" :key="l.id" :list="l" :event="eventWindow!" @filter="showList" />
       </section>
 
-      <GuestTable v-model:list="listFilter" :guests="guests" :lists="lists" :tickets="tickets" />
+      <GuestTable ref="table" v-model:list="listFilter" :guests="guests" :lists="lists" :tickets="tickets" />
     </div>
   </div>
 </template>

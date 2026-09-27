@@ -3,35 +3,49 @@ import { AlertTriangle, ArrowLeft, Ban, Check, Minus, Plus } from 'lucide-vue-ne
 import type { SubjectView } from '~/utils/doorState'
 import { IMPORT_PRESETS } from '~/utils/attendeeImport'
 import { timeLabel } from '~/utils/datetime'
+import { admitReasons, confirmAllowed, deviceTag } from '~/utils/doorState'
 
 /**
  * One guest or ticket at the door: list and entry terms, perks, heads in
  * and remaining, the +N stepper for partial arrivals, and ADMIT. Anything
- * unusual (past the list cutoff, allowance used up, not marked going, a
- * double entry from another device) arms the button first: a second tap
- * admits anyway. Cancelled and refunded tickets cannot be admitted.
+ * unusual (already in, past the list cutoff, not marked going, a double
+ * entry from another device) is shown as a full-width amber block and
+ * arms the button first: a second tap admits anyway — but not a double tap
+ * (a confirming tap within 700 ms of arming is ignored). Cancelled and
+ * refunded tickets cannot be admitted.
+ *
+ * `admit` says whether it came from the keyboard, so the page only moves
+ * focus back to the search field for keyboard users (a touch refocus pops
+ * the phone keyboard over the next card).
  */
-const props = defineProps<{ view: SubjectView, timezone: string }>()
-const emit = defineEmits<{ admit: [count: number], back: [] }>()
+const props = defineProps<{ view: SubjectView, timezone: string, selfDevice: string }>()
+const emit = defineEmits<{ admit: [count: number, keyboard: boolean], back: [] }>()
 
 const v = computed(() => props.view)
 const maxCount = computed(() => (v.value.remaining > 0 ? v.value.remaining : v.value.allowance))
 const count = ref(1)
-const armed = ref(false)
+const armedAt = ref<number | null>(null)
+const armed = computed(() => armedAt.value !== null)
+const heading = ref<HTMLElement | null>(null)
 watch(() => [v.value.key, v.value.remaining] as const, () => {
   count.value = Math.max(1, maxCount.value)
-  armed.value = false
+  armedAt.value = null
 }, { immediate: true })
 
-const reasons = computed(() => {
-  const r: string[] = []
-  if (v.value.pastCutoff) r.push('PAST CUTOFF')
-  if (v.value.remaining === 0) r.push(v.value.heads ? 'ALREADY IN' : 'NO HEADS LEFT')
-  if (v.value.warning) r.push(v.value.warning)
-  if (v.value.conflict) r.push('DOUBLE ENTRY FLAGGED')
-  return r
-})
+// A new card takes focus on its name, so screen readers start there.
+watch(() => v.value.key, () => nextTick(() => heading.value?.focus({ preventScroll: false })))
+onMounted(() => heading.value?.focus())
+
+const reasons = computed(() => admitReasons(v.value))
 const needsSecondTap = computed(() => reasons.value.length > 0)
+const primary = computed(() => {
+  const r = reasons.value[0]
+  if (!r) return ''
+  const last = v.value.lastIn
+  if (r.code === 'already_in' && last) return `ALREADY IN · ${timeLabel(last.at, props.timezone)} · ${deviceTag(last.device_id, props.selfDevice)}`
+  return r.text
+})
+const more = computed(() => reasons.value.length - 1)
 
 const terms = computed(() => v.value.list?.entry_terms ?? null)
 const priceText = computed(() => {
@@ -40,14 +54,22 @@ const priceText = computed(() => {
 })
 const sourceLabel = (s: string) => IMPORT_PRESETS.find(p => p.id === s)?.label ?? s.toUpperCase()
 
-function admit() {
+function step(d: 1 | -1) {
+  count.value += d
+  armedAt.value = null
+}
+
+function admit(e: MouseEvent) {
   if (v.value.blocked) return
-  if (needsSecondTap.value && !armed.value) {
-    armed.value = true
-    return
+  if (needsSecondTap.value) {
+    if (armedAt.value === null) {
+      armedAt.value = Date.now()
+      return
+    }
+    if (!confirmAllowed(armedAt.value, Date.now())) return
   }
-  armed.value = false
-  emit('admit', count.value)
+  armedAt.value = null
+  emit('admit', count.value, e.detail === 0)
 }
 </script>
 
@@ -57,7 +79,7 @@ function admit() {
       <ArrowLeft style="width:16px;height:16px;" aria-hidden="true" /> BACK TO SEARCH
     </button>
 
-    <h2 :id="`card-${v.key}`" class="name">{{ v.name }}</h2>
+    <h2 :id="`card-${v.key}`" ref="heading" class="name" tabindex="-1">{{ v.name }}</h2>
     <p class="meta">
       <template v-if="v.guest">
         GUEST · {{ v.list?.name ?? 'LIST' }}<template v-if="v.guest.plus_n"> · +{{ v.guest.plus_n }}</template>
@@ -71,6 +93,14 @@ function admit() {
       <Ban style="width:18px;height:18px;flex-shrink:0;" aria-hidden="true" />
       DO NOT ADMIT · TICKET {{ v.blocked.toUpperCase() }}. {{ v.blocked === 'refunded' ? 'The buyer got their money back.' : 'The order was cancelled.' }}
     </p>
+    <div v-else-if="primary" class="warnblock" data-testid="door-warning">
+      <p class="primary">
+        <AlertTriangle style="width:20px;height:20px;flex-shrink:0;" aria-hidden="true" /> {{ primary }}
+      </p>
+      <ul v-if="more" class="flags" aria-label="Also check">
+        <li v-for="r in reasons.slice(1)" :key="r.code">{{ r.text }}</li>
+      </ul>
+    </div>
 
     <div v-if="terms" class="terms">
       <span class="data-frag">{{ priceText }}</span>
@@ -81,31 +111,29 @@ function admit() {
     </div>
     <p v-if="v.guest?.note" class="note">{{ v.guest.note }}</p>
 
-    <ul v-if="reasons.length && !v.blocked" class="flags" aria-label="Check before admitting">
-      <li v-for="r in reasons" :key="r"><AlertTriangle style="width:14px;height:14px;" aria-hidden="true" /> {{ r }}</li>
-    </ul>
-
     <p class="heads" data-testid="door-heads">
       IN {{ v.heads }} OF {{ v.allowance }} · <strong>{{ v.remaining }} REMAINING</strong>
     </p>
 
     <div v-if="!v.blocked" class="stepper" role="group" aria-label="Heads arriving now">
-      <button type="button" class="btn-hud btn-hud-ghost step" :disabled="count <= 1" aria-label="One fewer" @click="count--; armed = false">
+      <button type="button" class="btn-hud btn-hud-ghost step" :disabled="count <= 1" aria-label="One fewer" @click="step(-1)">
         <Minus style="width:20px;height:20px;" aria-hidden="true" />
       </button>
       <output class="n" aria-live="polite" :aria-label="`${count} arriving now`">{{ count }}</output>
-      <button type="button" class="btn-hud btn-hud-ghost step" :disabled="count >= maxCount" aria-label="One more" @click="count++; armed = false">
+      <button type="button" class="btn-hud btn-hud-ghost step" :disabled="count >= maxCount" aria-label="One more" @click="step(1)">
         <Plus style="width:20px;height:20px;" aria-hidden="true" />
       </button>
     </div>
 
     <button
-      type="button" class="btn-hud admit" :class="v.blocked ? 'btn-hud-ghost' : armed ? 'btn-hud-error' : 'btn-hud-cta'"
+      type="button" class="btn-hud admit"
+      :class="v.blocked ? 'btn-hud-ghost' : armed ? 'btn-hud-error' : needsSecondTap ? 'btn-hud-ghost check' : 'btn-hud-cta'"
       :disabled="!!v.blocked" data-testid="door-admit" @click="admit"
     >
-      <Check v-if="!armed && !v.blocked" style="width:20px;height:20px;" aria-hidden="true" />
+      <Check v-if="!needsSecondTap && !v.blocked" style="width:20px;height:20px;" aria-hidden="true" />
       <template v-if="v.blocked">CANNOT ADMIT</template>
-      <template v-else-if="armed">{{ reasons[0] }} — TAP AGAIN TO ADMIT {{ count }}</template>
+      <template v-else-if="armed">TAP AGAIN · ADMIT {{ count }}<span v-if="more" class="more">+{{ more }} MORE</span></template>
+      <template v-else-if="needsSecondTap">CHECK: {{ reasons[0]!.text }}</template>
       <template v-else>ADMIT {{ count }}</template>
     </button>
   </article>
@@ -166,22 +194,42 @@ function admit() {
   font-size: 14px;
   color: var(--color-on-surface-variant);
 }
+.name:focus {
+  outline: none;
+}
+.name:focus-visible {
+  outline: 1px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.warnblock {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-status-archived);
+  background: color-mix(in srgb, var(--color-status-archived) 16%, transparent);
+  color: var(--color-status-archived);
+}
+.primary {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-command);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  overflow-wrap: anywhere;
+}
 .flags {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 28px;
   display: grid;
-  gap: 4px;
-  color: var(--color-status-archived);
+  gap: 2px;
   font-family: var(--font-terminal);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: .05em;
-}
-.flags li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 .heads {
   margin: 0;
@@ -214,5 +262,15 @@ function admit() {
   font-size: 14px;
   white-space: normal;
   text-align: center;
+  flex-wrap: wrap;
+}
+.admit.check {
+  border: 2px solid var(--color-status-archived);
+  color: var(--color-status-archived);
+}
+.more {
+  flex-basis: 100%;
+  font-size: 11px;
+  opacity: .85;
 }
 </style>

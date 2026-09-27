@@ -16,7 +16,11 @@ test.use({ viewport: { width: 375, height: 812 } });
 
 test.describe('door (phone)', () => {
   test('fits 375 px with 56 px targets from PIN pad to check-in', async ({ page }) => {
-    page.on('dialog', d => void d.accept());
+    const asked: string[] = [];
+    page.on('dialog', (d) => {
+      asked.push(d.message());
+      void d.accept();
+    });
     const t = tag();
     // Prepare the device the way the DOOR tab does: register, keep the token in localStorage.
     await page.goto('/door');
@@ -41,12 +45,21 @@ test.describe('door (phone)', () => {
     const search = page.getByLabel('Search guests and tickets');
     await expect(search).toBeVisible();
     await tall(search);
-    for (const name of ['Scan a QR code', 'WALK-UP +1', 'OUT −1', 'ADD GUEST', 'LOG OUT']) {
+    // Search sits right under the sticky header, so its results stay above the phone keyboard.
+    const top = await search.evaluate(el => el.getBoundingClientRect().top);
+    expect(top, 'search field top within the first 180 px').toBeLessThanOrEqual(180);
+    await expect(page.getByTestId('door-inside')).toBeVisible(); // INSIDE n/cap lives in the header
+    for (const name of ['Scan a QR code', 'WALK-UP +1', 'OUT −1', 'ADD GUEST', 'Door menu']) {
       await tall(page.getByRole('button', { name }));
     }
-    for (const name of ['STANDARD', 'EXPRESS']) await tall(page.getByRole('radio', { name }));
     await tall(page.getByTestId('door-sync'));
     expect(await overflow(page)).toBeLessThanOrEqual(0);
+
+    // The scan mode switch lives in the scanner header.
+    await page.getByRole('button', { name: 'Scan a QR code' }).click();
+    for (const name of ['STANDARD', 'EXPRESS']) await tall(page.getByRole('dialog').getByRole('radio', { name }));
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await page.getByRole('button', { name: 'Close scanner' }).click();
 
     await search.fill('mara');
     const hit = page.getByRole('list', { name: 'Search results' }).getByRole('button').first();
@@ -57,6 +70,23 @@ test.describe('door (phone)', () => {
     for (const l of [card.getByTestId('door-admit'), card.getByRole('button', { name: 'One more' }), card.getByRole('button', { name: 'BACK TO SEARCH' })]) await tall(l);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
 
+    // Walk-up: the undo toast shows under the header; opening a card hides it, so it can never cover ADMIT.
+    await card.getByRole('button', { name: 'BACK TO SEARCH' }).click();
+    await page.getByRole('button', { name: 'WALK-UP +1' }).click();
+    const toast = page.getByTestId('door-toast');
+    await expect(toast).toContainText('WALK-UP +1');
+    await tall(toast.getByRole('button', { name: 'UNDO' }));
+    await search.fill('mara');
+    await page.getByRole('list', { name: 'Search results' }).getByRole('button').first().click();
+    await expect(card.getByTestId('door-admit')).toBeVisible();
+    const overlap = await page.evaluate(() => {
+      const t = document.querySelector('[data-testid=door-toast]')?.getBoundingClientRect();
+      const a = document.querySelector('[data-testid=door-admit]')?.getBoundingClientRect();
+      return !!t && !!a && t.top < a.bottom && a.top < t.bottom && t.left < a.right && a.left < t.right;
+    });
+    expect(overlap, 'the toast does not overlap ADMIT').toBe(false);
+    await expect(toast).toHaveCount(0);
+
     // The ADD sheet fits too.
     await card.getByRole('button', { name: 'BACK TO SEARCH' }).click();
     await page.getByRole('button', { name: 'ADD GUEST' }).click();
@@ -64,9 +94,14 @@ test.describe('door (phone)', () => {
     await tall(sheet.getByLabel('NAME'));
     await tall(sheet.getByRole('button', { name: /ADD & ADMIT/ }));
     expect(await overflow(page)).toBeLessThanOrEqual(0);
-    await sheet.getByRole('button', { name: 'Close' }).click();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
 
+    // LOG OUT is in the header menu and always asks first.
+    await page.getByRole('button', { name: 'Door menu' }).click();
+    await tall(page.getByRole('button', { name: 'LOG OUT' }));
     await page.getByRole('button', { name: 'LOG OUT' }).click();
+    expect(asked.at(-1)).toMatch(/^Log out\? You need the door PIN and a connection to log in again\./);
     await expect(page.getByRole('group', { name: 'DOOR PIN' })).toBeVisible();
   });
 });

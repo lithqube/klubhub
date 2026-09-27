@@ -118,9 +118,11 @@ func (s *Service) ManagerPINCheck(ctx context.Context, tx pgx.Tx, tenant, event 
 	return &c, nil
 }
 
-// PINWindow is when a door PIN stops working.
+// PINWindow is when a door PIN stops working, and until when it refuses
+// logins after too many wrong tries (null when not locked).
 type PINWindow struct {
-	ValidUntil time.Time `json:"valid_until"`
+	ValidUntil  time.Time  `json:"valid_until"`
+	LockedUntil *time.Time `json:"locked_until"`
 }
 
 // PINStatus says which door PINs of an event are live; never the PINs.
@@ -129,7 +131,8 @@ type PINStatus struct {
 	Manager *PINWindow `json:"manager"`
 }
 
-// DoorPINStatus reports the event's unexpired staff and manager PINs.
+// DoorPINStatus reports the event's unexpired staff and manager PINs and
+// any running lockout.
 func (s *Service) DoorPINStatus(ctx context.Context, by authz.Principal, event uuid.UUID) (PINStatus, error) {
 	tenant, err := uuid.Parse(by.OrgID)
 	if err != nil {
@@ -137,7 +140,9 @@ func (s *Service) DoorPINStatus(ctx context.Context, by authz.Principal, event u
 	}
 	var out PINStatus
 	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT manager, expires_at FROM door_pins WHERE event_id = $1 AND expires_at > $2`, event, s.now())
+		now := s.now()
+		rows, err := tx.Query(ctx, `SELECT manager, expires_at, CASE WHEN locked_until > $2 THEN locked_until END
+		  FROM door_pins WHERE event_id = $1 AND expires_at > $2`, event, now)
 		if err != nil {
 			return err
 		}
@@ -145,7 +150,7 @@ func (s *Service) DoorPINStatus(ctx context.Context, by authz.Principal, event u
 		for rows.Next() {
 			var manager bool
 			var w PINWindow
-			if err := rows.Scan(&manager, &w.ValidUntil); err != nil {
+			if err := rows.Scan(&manager, &w.ValidUntil, &w.LockedUntil); err != nil {
 				return err
 			}
 			if manager {

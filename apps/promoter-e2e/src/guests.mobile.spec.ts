@@ -13,9 +13,27 @@ test.describe('guest table (mobile)', () => {
     const approve = page.getByRole('button', { name: /^Approve / }).first();
     await approve.scrollIntoViewIfNeeded();
     await expect(approve).toBeInViewport();
-    await expect(approve).toHaveClass(/hit-44/); // 44 px tap target (libs/ui kinetic.css)
+    // A real 44 px target (no overlapping pseudo hit areas).
+    const box = await approve.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test('a list\'s GUESTS filters the table, brings it into view and shows a removable chip', async ({ page }) => {
+    await page.goto('/events/e-klubnacht/guests');
+    await hydrated(page);
+    await page.getByRole('button', { name: 'Show guests of Industry' }).click();
+    const heading = page.getByRole('heading', { name: 'GUEST TABLE' });
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport();
+    const chip = page.getByRole('button', { name: 'Remove the list filter Industry' });
+    await expect(chip).toContainText('LIST: Industry');
+    await expect(page.getByRole('table')).toContainText('Aiko Tanaka');
+    await chip.click();
+    await expect(chip).toHaveCount(0);
+    await expect(page.getByLabel('Filter by list')).toHaveValue('');
   });
 
   test('MORE reaches the guests overview', async ({ page }) => {

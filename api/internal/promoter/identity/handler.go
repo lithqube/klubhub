@@ -3,8 +3,10 @@ package identity
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -68,7 +70,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func fail(w http.ResponseWriter, err error) {
 	var perr *ProfileError
+	var locked *PINLockedError
 	switch {
+	case errors.As(err, &locked):
+		// 429 (not 423): the lock is a rate limit on PIN guessing and lifts by
+		// itself; Retry-After (seconds) and retry_after (RFC 3339) say when.
+		secs := int(math.Ceil(locked.Wait.Seconds()))
+		w.Header().Set("Retry-After", strconv.Itoa(max(secs, 1)))
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "pin_locked", "retry_after": locked.Until.UTC().Format(time.RFC3339)})
+	case errors.Is(err, ErrPINExpired):
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "pin_expired"})
 	case errors.As(err, &perr):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid", "field": perr.Field, "problem": perr.Problem})
 	case errors.Is(err, ErrTOTPRequired):

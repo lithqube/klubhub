@@ -7,7 +7,9 @@ import type { ApiError } from '~/types/event'
 /**
  * On-the-spot add: name, +N, list and a manager PIN. The PIN is checked on
  * the device (it works offline); the add and the check-in are queued and
- * the server checks the PIN again when they sync.
+ * the server checks the PIN again when they sync. No list is preselected
+ * (a wrong default would put the guest on the wrong terms). A modal:
+ * focus starts on NAME, stays inside the sheet, and Escape closes it.
  */
 const emit = defineEmits<{ added: [r: { id: string, nonce: string, name: string, count: number }], close: [] }>()
 const store = useDoorStore()
@@ -16,7 +18,32 @@ const uid = useId()
 
 const name = ref('')
 const plus = ref(0)
-const listId = ref(bundle.value?.lists[0]?.id ?? '')
+const listId = ref('')
+const form = ref<HTMLFormElement | null>(null)
+const nameInput = ref<HTMLInputElement | null>(null)
+onMounted(() => nameInput.value?.focus())
+
+/** Escape closes; Tab cycles inside the sheet. */
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    emit('close')
+    return
+  }
+  if (e.key !== 'Tab' || !form.value) return
+  const els = [...form.value.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter(el => !(el as HTMLButtonElement).disabled)
+  const first = els[0]
+  const last = els.at(-1)
+  if (!first || !last) return
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
 const pin = ref('')
 const busy = ref(false)
 const error = ref('')
@@ -26,6 +53,10 @@ async function submit() {
   error.value = ''
   if (!name.value.trim()) {
     error.value = 'Enter a name.'
+    return
+  }
+  if (!listId.value) {
+    error.value = 'Pick a list.'
     return
   }
   busy.value = true
@@ -47,8 +78,8 @@ async function submit() {
 </script>
 
 <template>
-  <div class="sheet" role="dialog" aria-modal="true" :aria-labelledby="`${uid}-h`">
-    <form class="glass body" novalidate @submit.prevent="submit">
+  <div class="sheet" role="dialog" aria-modal="true" :aria-labelledby="`${uid}-h`" @keydown="onKey">
+    <form ref="form" class="glass body" novalidate @submit.prevent="submit">
       <div class="head">
         <h2 :id="`${uid}-h`" class="section-lbl" style="margin:0;font-size:11px;">ADD AT THE DOOR</h2>
         <button type="button" class="btn-hud btn-hud-ghost close" aria-label="Close" @click="emit('close')">
@@ -60,7 +91,10 @@ async function submit() {
       </p>
       <div class="f">
         <label :for="`${uid}-name`" class="section-lbl">NAME</label>
-        <input :id="`${uid}-name`" v-model="name" class="hud-input big" autocomplete="off" maxlength="120" required>
+        <input
+          :id="`${uid}-name`" ref="nameInput" v-model="name" class="hud-input big" autocomplete="off" autocapitalize="words" maxlength="120"
+          required
+        >
       </div>
       <div class="f">
         <span :id="`${uid}-plus`" class="section-lbl">PLUS</span>
@@ -76,7 +110,8 @@ async function submit() {
       </div>
       <div class="f">
         <label :for="`${uid}-list`" class="section-lbl">LIST</label>
-        <select :id="`${uid}-list`" v-model="listId" class="hud-input big">
+        <select :id="`${uid}-list`" v-model="listId" class="hud-input big" required>
+          <option value="" disabled>Pick a list</option>
           <option v-for="l in bundle?.lists ?? []" :key="l.id" :value="l.id">{{ l.name }}</option>
         </select>
       </div>
@@ -89,7 +124,7 @@ async function submit() {
       </div>
       <p v-if="error" role="alert" class="err">{{ error }}</p>
       <button type="submit" class="btn-hud btn-hud-cta go" :disabled="busy || noManagerPin || pin.length !== 6 || !listId">
-        {{ busy ? 'CHECKING PIN…' : `ADD & ADMIT ${1 + plus}` }}
+        {{ busy ? 'CHECKING PIN…' : `ADD & ADMIT ${1 + plus} NOW` }}
       </button>
     </form>
   </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Search } from 'lucide-vue-next'
+import { Search, Undo2, X } from 'lucide-vue-next'
 import { useGuestStore } from '~/stores/guest'
 import type { ApiError } from '~/types/event'
 import type { Guest, GuestList, GuestStatus, Ticket } from '~/types/guest'
@@ -15,6 +15,10 @@ import { countByStatus, guestErrorText, searchGuests, searchTickets, STATUS_LABE
  * and tickets together, TICKETS only tickets. They are on no list and have
  * no guest status, so the status tabs and the list filter leave them out;
  * they change only through a re-import of the platform's export.
+ *
+ * A status change says what it did with an UNDO (back to the previous
+ * status); DECLINED from the dropdown asks first. Errors show on the row.
+ * A list filter shows as a removable "LIST: name ✕" chip.
  */
 const props = withDefaults(defineProps<{ guests: Guest[], lists: GuestList[], tickets?: Ticket[] }>(), { tickets: () => [] })
 const listFilter = defineModel<string>('list', { default: '' })
@@ -26,6 +30,18 @@ const sourceLabel = (s: string) => IMPORT_PRESETS.find(p => p.id === s)?.label ?
 const tab = ref<Tab>('all')
 const q = ref('')
 const notice = ref('')
+const rowError = ref<Record<string, string>>({})
+const changed = ref<{ id: string, name: string, from: GuestStatus, to: GuestStatus } | null>(null)
+const heading = ref<HTMLElement | null>(null)
+const section = ref<HTMLElement | null>(null)
+const filteredList = computed(() => props.lists.find(l => l.id === listFilter.value) ?? null)
+
+/** Bring the table into view and focus its heading (after picking a list's GUESTS on a phone). */
+function focusHeading() {
+  section.value?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  heading.value?.focus({ preventScroll: true })
+}
+defineExpose({ focusHeading })
 const editing = ref<string | null>(null)
 const draft = reactive({ name: '', plus_n: 0, note: '', email: '', phone: '' })
 const editError = ref<ApiError | null>(null)
@@ -51,13 +67,36 @@ const TABS = computed(() => [
   ...(props.tickets.length ? [{ id: 'tickets' as Tab, label: 'TICKETS', n: ticketsInView.value.length }] : []),
 ])
 
-async function setStatus(g: Guest, status: GuestStatus) {
-  notice.value = ''
+async function setStatus(g: Guest, status: GuestStatus, opts: { undoable?: boolean } = {}): Promise<boolean> {
+  if (status === g.status) return true
+  const { [g.id]: _drop, ...rest } = rowError.value
+  rowError.value = rest
+  const from = g.status
   try {
     await store.updateGuest(g.id, { name: g.name, plus_n: g.plus_n, note: g.note, email: g.email, phone: g.phone, status })
+    changed.value = opts.undoable === false ? null : { id: g.id, name: g.name, from, to: status }
+    return true
   } catch (e) {
-    notice.value = guestErrorText(e as ApiError)
+    rowError.value = { ...rowError.value, [g.id]: guestErrorText(e as ApiError) }
+    return false
   }
+}
+
+/** The status dropdown: DECLINED asks first; a refusal puts the old value back. */
+async function pickStatus(g: Guest, el: HTMLSelectElement) {
+  const status = el.value as GuestStatus
+  if (status === 'declined' && !window.confirm(`Set ${g.name} to DECLINED? They will not be let in from this list.`)) {
+    el.value = g.status
+    return
+  }
+  if (!(await setStatus(g, status))) el.value = g.status
+}
+
+async function undoStatus() {
+  const c = changed.value
+  const g = c && props.guests.find(x => x.id === c.id)
+  if (!c || !g) return
+  if (await setStatus(g, c.from, { undoable: false })) changed.value = null
 }
 
 function edit(g: Guest) {
@@ -87,14 +126,14 @@ async function remove(g: Guest) {
 </script>
 
 <template>
-  <section aria-labelledby="guest-table-h" style="min-width:0;">
-    <h2 id="guest-table-h" class="sr-only">Guest table</h2>
+  <section ref="section" aria-labelledby="guest-table-h" style="min-width:0;scroll-margin-top:72px;">
+    <h2 id="guest-table-h" ref="heading" class="table-h" tabindex="-1">GUEST TABLE</h2>
     <nav class="tabs-bar" aria-label="Guest status" style="overflow-x:auto;">
       <button
         v-for="t in TABS" :key="t.id" type="button" class="tab-item" :class="{ active: tab === t.id }" :aria-pressed="tab === t.id"
         style="min-height:44px;background:none;border-top:0;border-left:0;border-right:0;cursor:pointer;white-space:nowrap;" @click="tab = t.id"
       >
-        {{ t.label }} <span class="data-frag" style="font-size:8px;margin-left:2px;">{{ t.n }}</span>
+        {{ t.label }} <span class="data-frag" style="font-size:11px;margin-left:2px;">{{ t.n }}</span>
       </button>
     </nav>
 
@@ -113,7 +152,22 @@ async function remove(g: Guest) {
       </label>
     </div>
 
+    <div v-if="filteredList" class="chip-row">
+      <button type="button" class="chip" :aria-label="`Remove the list filter ${filteredList.name}`" @click="listFilter = ''">
+        LIST: {{ filteredList.name }} <X style="width:14px;height:14px;" aria-hidden="true" />
+      </button>
+    </div>
+
     <p v-if="notice" role="alert" style="margin:0 0 8px;font-size:13px;color:var(--color-error);">{{ notice }}</p>
+    <p v-if="changed" role="status" class="changed" data-testid="status-changed">
+      <span>Status of {{ changed.name }} → {{ STATUS_LABEL[changed.to] }}</span>
+      <button type="button" class="btn-hud btn-hud-ghost act" @click="undoStatus">
+        <Undo2 style="width:14px;height:14px;" aria-hidden="true" /> UNDO
+      </button>
+      <button type="button" class="btn-hud btn-hud-ghost act" aria-label="Dismiss" @click="changed = null">
+        <X style="width:14px;height:14px;" aria-hidden="true" />
+      </button>
+    </p>
 
     <p v-if="!shown.length" class="glass" style="padding:14px;font-size:13px;color:var(--color-on-surface-variant);">
       {{ q ? `No guest matches “${q}”.` : guests.length || tickets.length ? 'Nobody in this view.' : 'No guests yet. Add names, paste a list or import attendees.' }}
@@ -139,9 +193,7 @@ async function remove(g: Guest) {
               <span style="display:block;font-size:11px;color:var(--color-on-surface-variant);">{{ sourceLabel(row.t.source) }} · order {{ row.t.order_ref }}</span>
             </td>
             <td><GuestTicketBadge :status="row.t.status" /></td>
-            <td class="actions-cell">
-              <span class="data-frag" style="font-size:8px;">TICKET</span>
-            </td>
+            <td class="actions-cell" />
           </template>
           <template v-else-if="editing === row.g.id">
             <td colspan="4">
@@ -166,7 +218,7 @@ async function remove(g: Guest) {
           <template v-else>
             <td>
               <span style="font-size:14px;">{{ row.g.name }}</span>
-              <span v-if="row.g.plus_n" class="data-frag" style="font-size:9px;margin-left:6px;">+{{ row.g.plus_n }}</span>
+              <span v-if="row.g.plus_n" class="data-frag" style="font-size:11px;margin-left:6px;">+{{ row.g.plus_n }}</span>
               <span v-if="row.g.email || row.g.note" style="display:block;font-size:11px;color:var(--color-on-surface-variant);overflow:hidden;text-overflow:ellipsis;">
                 {{ [row.g.email, row.g.note].filter(Boolean).join(' · ') }}
               </span>
@@ -181,18 +233,19 @@ async function remove(g: Guest) {
             <td class="actions-cell">
               <div class="actions">
               <template v-if="row.g.status === 'pending'">
-                <button type="button" class="btn-hud btn-hud-cta btn-hud-xs hit-44" :aria-label="`Approve ${row.g.name}`" @click="setStatus(row.g, 'going')">APPROVE</button>
-                <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Decline ${row.g.name}`" @click="setStatus(row.g, 'declined')">DECLINE</button>
+                <button type="button" class="btn-hud btn-hud-cta act" :aria-label="`Approve ${row.g.name}`" @click="setStatus(row.g, 'going')">APPROVE</button>
+                <button type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Decline ${row.g.name}`" @click="setStatus(row.g, 'declined')">DECLINE</button>
               </template>
               <label>
                 <span class="sr-only">Status of {{ row.g.name }}</span>
-                <select class="hud-input" style="height:36px;min-width:112px;font-size:11px;" :value="row.g.status" @change="setStatus(row.g, ($event.target as HTMLSelectElement).value as GuestStatus)">
+                <select class="hud-input" style="height:44px;min-width:120px;font-size:12px;" :value="row.g.status" @change="pickStatus(row.g, $event.target as HTMLSelectElement)">
                   <option v-for="s in STATUSES" :key="s" :value="s">{{ STATUS_LABEL[s] }}</option>
                 </select>
               </label>
-              <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Edit ${row.g.name}`" @click="edit(row.g)">EDIT</button>
-              <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Remove ${row.g.name}`" style="color:var(--color-error);" @click="remove(row.g)">✕</button>
+              <button type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Edit ${row.g.name}`" @click="edit(row.g)">EDIT</button>
+              <button type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Remove ${row.g.name}`" style="color:var(--color-error);" @click="remove(row.g)">✕</button>
               </div>
+              <p v-if="rowError[row.g.id]" role="alert" class="row-err">{{ rowError[row.g.id] }}</p>
             </td>
           </template>
         </tr>
@@ -209,7 +262,7 @@ async function remove(g: Guest) {
 .guest-table th {
   text-align: left;
   font-family: var(--font-terminal);
-  font-size: 8px;
+  font-size: 11px;
   letter-spacing: .07em;
   color: var(--color-tertiary);
   padding: 6px 8px;
@@ -226,7 +279,62 @@ async function remove(g: Guest) {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+}
+/* Real 44 px targets (no pseudo hit area), so neighbours never overlap. */
+.act {
+  min-height: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  font-size: 11px;
+}
+.row-err {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--color-error);
+  text-align: right;
+}
+.table-h {
+  margin: 0 0 6px;
+  font-family: var(--font-terminal);
+  font-size: 11px;
+  letter-spacing: .07em;
+  color: var(--color-tertiary);
+}
+.table-h:focus {
+  outline: none;
+}
+.table-h:focus-visible {
+  outline: 1px solid var(--color-primary);
+}
+.chip-row {
+  margin: 0 0 8px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  font-family: var(--font-terminal);
+  font-size: 12px;
+  letter-spacing: .05em;
+  color: var(--color-primary);
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-primary-dim);
+  cursor: pointer;
+}
+.changed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 0 0 0 12px;
+  font-size: 13px;
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-surface-container);
 }
 .edit-grid {
   display: grid;
@@ -245,5 +353,6 @@ async function remove(g: Guest) {
   .guest-table td[colspan] { grid-column: 1 / -1; }
   .guest-table td.actions-cell { grid-column: 1 / -1; }
   .actions { justify-content: flex-start; }
+  .row-err { text-align: left; }
 }
 </style>

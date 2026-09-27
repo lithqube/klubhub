@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Guest, Ticket } from '~/types/guest'
 import {
-  allocationState, countByStatus, csvCell, cutoffInstant, fold, guestErrorText, headsHeld, parseEmails, parsePastedGuests, quotaFill,
+  allocationState, bulkPreview, countByStatus, csvCell, cutoffInstant, fold, guestErrorText, headsHeld, parseEmails, parsePastedGuests, quotaFill,
   searchGuests, searchTickets, toCsv,
 } from '../guests'
 
@@ -146,5 +146,18 @@ describe('searchTickets', () => {
     expect(searchTickets(list, 'regular d-77').map(x => x.id)).toEqual(['2'])
     expect(searchTickets(list, 'kim@')).toHaveLength(1)
     expect(searchTickets(list, '  ')).toHaveLength(2)
+  })
+})
+
+describe('bulkPreview', () => {
+  it('counts the guests a status-by-email would change, case-insensitively, before applying', () => {
+    const gs = [
+      { email: 'Aiko@Label.example', status: 'invited' as const },
+      { email: 'rafael@press.example', status: 'declined' as const },
+      { email: '', status: 'pending' as const },
+    ]
+    expect(bulkPreview(gs, ['aiko@label.example', 'RAFAEL@press.example', 'ghost@x.org'], 'declined'))
+      .toEqual({ matched: 2, change: 1, unmatched: 1 })
+    expect(bulkPreview(gs, [], 'going')).toEqual({ matched: 0, change: 0, unmatched: 0 })
   })
 })

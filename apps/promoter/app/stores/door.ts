@@ -10,7 +10,7 @@ import { DoorVault, idbKV, type KV, memoryKV } from '~/utils/doorDb'
 import { verifyManagerPin } from '~/utils/doorPin'
 import { buildIndex, type SearchEntry } from '~/utils/doorSearch'
 import {
-  effectiveCheckins, effectiveCounters, expiryReason, mergeCheckins, occupancy, queueUndo, settle,
+  effectiveCheckins, effectiveCounters, expiryReason, mergeCheckins, occupancy, queueUndo, recentEntries, settle,
 } from '~/utils/doorState'
 
 /** localStorage key of this browser's door device (id, label, token, event). */
@@ -96,6 +96,8 @@ export const useDoorStore = defineStore('door', () => {
   const counters = computed(() => (bundle.value ? effectiveCounters(bundle.value.counters, queue.value, journal.value) : { walkups: 0, manual_in: 0, manual_out: 0 }))
   const occ = computed(() => occupancy(checkins.value, counters.value, bundle.value?.event.capacity ?? null))
   const queued = computed(() => queue.value.length + adds.value.length)
+  /** The last 10 own door actions that can still be undone (RECENT list, newest first). */
+  const recent = computed(() => recentEntries(journal.value, bundle.value, 10))
   const index = computed(() => {
     const b = bundle.value
     if (!b) return []
@@ -146,7 +148,9 @@ export const useDoorStore = defineStore('door', () => {
       const q = await v.get<QueueSlot>('queue')
       if (b && b.event.id === device.value.event.id) {
         const why = expiryReason(b, Date.now())
-        if (why) {
+        const pending = (q?.ops.length ?? 0) + (q?.adds.length ?? 0)
+        // A PIN window that ended with unsynced actions keeps them for a re-login.
+        if (why && !(why === 'session' && pending)) {
           await wipe(why)
           return
         }
@@ -156,6 +160,7 @@ export const useDoorStore = defineStore('door', () => {
         journal.value = q?.journal ?? []
         rejections.value = q?.rejections ?? []
         lastSyncAt.value = b.generated_at
+        sessionEnded.value = why === 'session'
         phase.value = 'ready'
         startLoop()
         return
@@ -228,9 +233,18 @@ export const useDoorStore = defineStore('door', () => {
     await wipe('logout')
   }
 
-  /** Wipe when the session or the event (+ grace) has ended. */
+  /**
+   * Wipe when the session or the event (+ grace) has ended. A session that
+   * ends with unsynced actions is not wiped: the queue is kept and the door
+   * asks for a new PIN (sessionEnded), so nothing admitted is lost.
+   * Returns true when the door can no longer sync.
+   */
   async function checkExpiry(now = Date.now()): Promise<boolean> {
     const why = bundle.value ? expiryReason(bundle.value, now) : null
+    if (why === 'session' && queued.value) {
+      sessionEnded.value = true
+      return true
+    }
     if (why) await wipe(why)
     return !!why
   }
@@ -261,10 +275,12 @@ export const useDoorStore = defineStore('door', () => {
 
   async function undo(target: string): Promise<void> {
     queue.value = queueUndo(queue.value, target, inflight, uuid(), nowIso())
-    if (!queue.value.some(o => o.nonce === target)) {
-      // Dropped before it left the device, or taken back by a queued undo.
-      journal.value = journal.value.filter(j => j.nonce !== target || j.synced)
-    }
+    // Dropped before it left the device (gone from the journal), or taken
+    // back by a queued undo (kept, marked undone so RECENT stops offering it).
+    const dropped = !queue.value.some(o => o.nonce === target || (o.type === 'undo' && o.target === target))
+    journal.value = journal.value
+      .filter(j => j.nonce !== target || j.synced || !dropped)
+      .map(j => (j.nonce === target ? { ...j, undone: true } : j))
     await persistQueue()
     void sync()
   }
@@ -473,7 +489,7 @@ export const useDoorStore = defineStore('door', () => {
 
   return {
     device, phase, bundle, queue, adds, journal, rejections, syncing, lastSyncAt, offline, syncError, sessionEnded, wipedBecause,
-    devices, pinStatus, checkins, counters, occ, queued, index,
+    devices, pinStatus, checkins, counters, occ, queued, recent, index,
     init, login, downloadBundle, wipe, logout, checkExpiry, checkIn, counter, undo, addGuest, dismissRejections, sync, startLoop, stopLoop,
     loadDevice, registerDevice, assignEvent, forgetDevice, fetchDevices, revokeDevice, setPin, fetchPinStatus,
   }

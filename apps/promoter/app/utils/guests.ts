@@ -68,6 +68,35 @@ export function parseEmails(text: string): string[] {
   return out
 }
 
+export interface BulkPreview {
+  /** Guests whose email is in the paste. */
+  matched: number
+  /** Of those, guests whose status would change. */
+  change: number
+  /** Pasted emails that match no loaded guest. */
+  unmatched: number
+}
+
+/**
+ * Dry run of "status by email" over the guests already loaded (exact,
+ * case-insensitive email match, like the server's blind index): how many
+ * guests would move to `status`, before anything is applied.
+ */
+export function bulkPreview(guests: Pick<Guest, 'email' | 'status'>[], emails: string[], status: GuestStatus): BulkPreview {
+  const want = new Set(emails.map(e => e.trim().toLowerCase()))
+  const found = new Set<string>()
+  let matched = 0
+  let change = 0
+  for (const g of guests) {
+    const e = g.email?.trim().toLowerCase()
+    if (!e || !want.has(e)) continue
+    found.add(e)
+    matched++
+    if (g.status !== status) change++
+  }
+  return { matched, change, unmatched: want.size - found.size }
+}
+
 const FOLD: Record<string, string> = { ł: 'l', đ: 'd', ø: 'o', æ: 'ae', œ: 'oe', ß: 'ss', þ: 'th', ı: 'i' }
 
 /** Case-, accent- and whitespace-insensitive form (mirrors envelope.NormalizeName). */

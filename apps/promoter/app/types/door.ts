@@ -203,9 +203,15 @@ export interface PinResult {
   manager?: boolean
 }
 
+/** A live PIN window; locked_until is set while too many wrong tries lock it. */
+export interface PinWindow {
+  valid_until: string
+  locked_until?: string | null
+}
+
 export interface PinStatus {
-  staff: { valid_until: string } | null
-  manager: { valid_until: string } | null
+  staff: PinWindow | null
+  manager: PinWindow | null
 }
 
 // ---------------------------------------------------------------- device-side state
@@ -219,7 +225,7 @@ export interface DoorRejection {
 }
 
 /** Own ops (synced or not), so an undo knows what it takes back. */
-export type JournalEntry = (CheckinOp | CounterOp) & { synced: boolean }
+export type JournalEntry = (CheckinOp | CounterOp) & { synced: boolean, undone?: boolean }
 
 /** The undo toast after a door action. */
 export interface DoorToast {

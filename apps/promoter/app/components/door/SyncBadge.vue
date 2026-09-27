@@ -3,7 +3,11 @@ import { storeToRefs } from 'pinia'
 import { useDoorStore } from '~/stores/door'
 import { timeLabel } from '~/utils/datetime'
 
-/** Sync state at a glance: offline, queued count, last sync. Tap to sync now. */
+/**
+ * Sync state at a glance: offline, queued count, last sync. Tap to sync
+ * now. Not a live region: the page announces only the transitions into and
+ * out of OFFLINE, SIGNED OUT and SYNC ERROR.
+ */
 const store = useDoorStore()
 const { queued, offline, syncing, lastSyncAt, syncError, sessionEnded, bundle } = storeToRefs(store)
 
@@ -23,7 +27,7 @@ const state = computed(() => {
     type="button" class="sync btn-hud btn-hud-ghost" :class="`accent-bar-${state.tone}`" data-testid="door-sync"
     :aria-label="`Sync status: ${state.text}. Sync now`" @click="store.sync()"
   >
-    <span role="status">{{ state.text }}</span>
+    <span>{{ state.text }}</span>
   </button>
 </template>
 
@@ -31,8 +35,11 @@ const state = computed(() => {
 .sync {
   min-height: 56px;
   height: auto;
-  padding: 0 12px;
-  font-size: 10px;
-  white-space: nowrap;
+  max-width: 132px;
+  padding: 4px 10px;
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: normal;
+  text-align: center;
 }
 </style>
