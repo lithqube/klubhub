@@ -20,6 +20,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/authz"
 	platformhttp "github.com/klubhub/dj/api/internal/platform/http"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/audience"
 	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
@@ -43,6 +44,7 @@ type Deps struct {
 	Identity      *identity.Handler // nil when the provider is not local
 	Events        *event.Handler
 	Guests        *guest.Handler
+	Audience      *audience.Handler
 	Door          *door.Handler
 	Reports       *report.Handler
 	Retention     *retention.Handler
@@ -95,6 +97,9 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 	}
 	if d.Guests != nil {
 		d.Guests.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Audience != nil {
+		d.Audience.Mount(r, d.Authz, reg, onDeny)
 	}
 	if d.Door != nil {
 		d.Door.Mount(r, d.Authz, reg, onDeny)

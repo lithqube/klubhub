@@ -36,6 +36,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/config"
 	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
+	"github.com/klubhub/dj/api/internal/promoter/audience"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/migrations"
@@ -134,10 +135,12 @@ func serve() error {
 	events := event.NewService(rt.db, rt.keys, nil)
 	guests := guest.NewService(rt.db, rt.keys, nil)
 	events.OnCreate(guests.CopyStandingLists) // standing lists join each new event atomically
+	aud := audience.NewService(rt.db, rt.keys, nil)
 	deps := server.Deps{
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),
 		Events:        event.NewHandler(events),
 		Guests:        guest.NewHandler(guests),
+		Audience:      audience.NewHandler(aud),
 		Reports:       report.NewHandler(report.NewService(rt.db, rt.keys, nil)),
 		Retention:     retention.NewHandler(retention.NewService(rt.db, nil)),
 		Sealed:        sealed.NewHandler(sealed.NewService(rt.db, rt.keys, nil)),
