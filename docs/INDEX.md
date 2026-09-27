@@ -12,12 +12,16 @@ matches your role.
 | [`PRODUCTION.md`](./PRODUCTION.md) | Operator runbook focused on agents (verify, upgrade, rotate, troubleshoot) with a short "For humans" section for the small set of decisions only a human can make |
 | [`CONFIGURATION.md`](./CONFIGURATION.md) | Every env var, type, default, and example. Required vs. optional. |
 | [`EDITIONS.md`](./EDITIONS.md) | Open-source, licensed, and SaaS editions; which features are licensed and the flags that switch them on (e.g. Resident Advisor import) |
+| [`container-images.md`](./container-images.md) | GHCR image tags for both products, how to verify a published manifest, and the current default-tag caveats |
 | [`OPERATIONS.md`](./OPERATIONS.md) | Day-to-day operations: health, log shipping, key rotation, restore drills, container resource limits |
-| [`../CHANGELOG.md`](../CHANGELOG.md) | What changed between the last feature branch and v1.0.0; what's shipping in this release |
+| [`INVOICING.md`](./INVOICING.md) | The invoicing contract: JSON shapes, endpoints, VAT rules, extension points (Phase 5) |
+| [`../CHANGELOG.md`](../CHANGELOG.md) | Release history and what's changed since the last tagged release |
 || [`release-notes/v1.0.1.md`](./release-notes/v1.0.1.md) | Runtime, CI, and onboarding hardening (PRs #5, #7, #9, #10, #11, #12); operator follow-up steps for GHCR publish and Plunk workflow rename |
 || [`release-notes/v1.1.0-phase5.md`](./release-notes/v1.1.0-phase5.md) | **Phase 5** — Finance Tracker module: invoices, payments, agreements, PDF rendering, self-hostable Plunk email |
-| [`../SECURITY.md`](../SECURITY.md) | Threat model, supported versions, vulnerability reporting |
+| [`../SECURITY.md`](../SECURITY.md) | Threat model, supported versions, vulnerability reporting — including [KlubHub Promoter's security model](../SECURITY.md#klubhub-promoter-security-model) |
 | [`../.env.example`](../.env.example) | Annotated template for the env vars |
+
+**KlubHub Promoter self-hosters:** start with [`SELF-HOSTING.md`'s Promoter section](./SELF-HOSTING.md#klubhub-promoter--self-hosting-preview) — a separate Compose project, own database, and no public surface (admin-only, private tool; see `.claude/plans/promoter-app.plan.md` §12).
 
 ## Visitors — "what is this?"
 
@@ -36,6 +40,8 @@ matches your role.
 | | [`../AGENTS.md`](../AGENTS.md) | Nx-specific guidance (always run tasks through `pnpm nx …`) |
 | | [`../CLAUDE.md`](../CLAUDE.md) | Conventions specifically for Claude / AI coding assistants |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | System architecture: services, module boundaries, data flow, deployment topology |
+| [`../DESIGN.md`](../DESIGN.md) | The Kinetic HUD design system: tokens, typography, spacing, components — extracted from `libs/ui` |
+| [`github-pages.md`](./github-pages.md) | The klubhub.io static site: local preview, deployment, DNS |
 | [`../scripts/backup.sh`](../scripts/backup.sh) / [`../scripts/restore.sh`](../scripts/restore.sh) | Database + storage backup / restore (Postgres + Garage S3) |
 
 ## Maintainers / spec authors

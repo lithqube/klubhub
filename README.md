@@ -13,7 +13,7 @@ Self-hosted. Open-source. Built for DJs who want to own their workflow.
 [![pnpm](https://img.shields.io/badge/pnpm-9-F69220.svg)](https://pnpm.io)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
 
-[Features](#features) · [Quick start](#quick-start) · [Roadmap](#roadmap) · [Docs](./docs/INDEX.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [klubhub.io](https://klubhub.io)
+[Features](#features) · [Quick start](#quick-start) · [Try the demo ↗](https://klubhub.io/demo/) · [Roadmap](#roadmap) · [Docs](./docs/INDEX.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [klubhub.io](https://klubhub.io)
 
 </div>
 
@@ -59,9 +59,12 @@ You get:
 | 8 | **Unified Dashboard** | 🔜 Planned | Cross-module overview, career analytics |
 | 9 | **Production Hardening** | ✅ Complete (this release) | arm64 images on GHCR, hardened compose, OAuth state, body caps, secrets via Docker `secrets:` block, restore drill |
 
-> **Note — architecture:** v1.0.0 images are `linux/arm64` only. amd64 is
-> deferred to a later point release. See
-> [SELF-HOSTING.md](./docs/SELF-HOSTING.md#system-requirements).
+> **Note — architecture:** the KlubHub DJ image is `linux/arm64` only, by
+> design (Apple Silicon, Raspberry Pi 5, Graviton/Ampere) — not a
+> temporary gap; the installer offers amd64 emulation as a fallback. See
+> [SELF-HOSTING.md](./docs/SELF-HOSTING.md#system-requirements). KlubHub
+> Promoter's image is built natively for both `linux/amd64` and
+> `linux/arm64`.
 
 See [`docs/v1-release-plan.md`](./docs/v1-release-plan.md) for full module scope and v1 acceptance criteria.
 See [`CHANGELOG.md`](./CHANGELOG.md) for what hardened between the last feature branch and the v1.0.0 tag.
@@ -69,6 +72,8 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for what hardened between the last feature 
 ---
 
 ## Quick start
+
+Not ready to install anything? **[Try the browser-only demo](https://klubhub.io/demo/)** — the real app with fictional sample data, running entirely client-side. Nothing you enter leaves your browser. See [`docs/DEMO.md`](./docs/DEMO.md).
 
 Choose a mode. The [canonical setup guide](./docs/SELF-HOSTING.md) covers prerequisites, first startup, networking, and safe upgrades. The [production runbook](./docs/PRODUCTION.md) is the agent-focused operator reference for verify, upgrade, rotate, and troubleshoot.
 
@@ -98,7 +103,7 @@ The API calls the host Nuxt server at `http://host.docker.internal:4200` for ima
 
 Setup defaults to `dev`, preserves existing credentials, creates private file secrets and Garage configuration under `.local/dev` or `.local/prod`, bootstraps Garage, and starts the selected stack. Development and production use separate Compose projects and volumes, but their default host ports overlap: stop one before starting the other, or configure distinct ports.
 
-**Publication caveat:** the production file defaults to `IMAGE_TAG=v1.0.1`. This default does not mean the existing tag contains the fixes in `v1.0.1`; v1.0.1 must be published to GHCR before production pull succeeds. See [container images](./docs/container-images.md) for tag verification, and [release notes](./docs/release-notes/v1.0.1.md) for the operator follow-up steps (Plunk workflow rename, GHCR publish trigger).
+**Publication caveat:** the production file defaults to `IMAGE_TAG=v1.0.1`, which **was never published** — only `1.0.1` (no `v`) is, and it predates the v1.1.0 invoicing work. Export `IMAGE_TAG=1.0.1` explicitly, or the newest `sha-<commit>` tag, until a v1.2.0 release publishes matching tags. See [container images](./docs/container-images.md) for tag verification, and [release notes](./docs/release-notes/v1.0.1.md) for background on the earlier v1.0.0/v1.0.1 hardening.
 
 **Existing installation?** Do not start a new project over an old deployment without a migration plan. The old `klubhub-dj` project's volumes need explicit reuse or migration; see [safe upgrades](./docs/SELF-HOSTING.md#upgrades-and-existing-installations).
 
@@ -128,7 +133,7 @@ Setup defaults to `dev`, preserves existing credentials, creates private file se
 
 ```
 klubhub/
-├── apps/                            # KlubHub product family workspace — future products land here as apps/<product>
+├── apps/                            # KlubHub product family workspace
 │   ├── dj/                          # KlubHub DJ — Nuxt 4 frontend (first product in the family)
 │   │   ├── app/
 │   │   │   ├── pages/               # index, tracklist, social, epk, gigs, finance
@@ -136,37 +141,53 @@ klubhub/
 │   │   │   ├── composables/         # useTheme (3-way), useTracklist, useEpkAutosave
 │   │   │   ├── stores/              # Pinia stores (tracklist, social, epk, settings, ui)
 │   │   │   ├── types/               # TypeScript interfaces
-│   │   │   └── assets/css/          # Tailwind @theme + Kinetic HUD component classes
+│   │   │   └── assets/css/          # DJ-specific Kinetic HUD classes (tokens live in libs/ui)
 │   │   └── server/
 │   │       ├── api/v1/              # Mock data handlers (when NUXT_PUBLIC_API_BASE unset)
 │   │       └── plugins/             # Playwright singleton (graceful fallback)
 │   ├── dj-e2e/                      # Playwright end-to-end tests for KlubHub DJ
+│   ├── promoter/                    # KlubHub Promoter — Nuxt 4 frontend (self-hosting preview)
+│   ├── promoter-e2e/                # Playwright end-to-end tests for KlubHub Promoter
 │   └── site/                        # klubhub.io — public brand site for the whole family
 │
-├── api/                             # Go backend for KlubHub DJ (future products bring their own)
-│   ├── cmd/api/main.go              # Entry point (chi router, worker goroutine, SIGTERM)
+├── libs/
+│   └── ui/                          # Shared Kinetic HUD design system, as a Nuxt layer (`#kui`)
+│
+├── api/                             # Go module shared by both product binaries
+│   ├── cmd/
+│   │   ├── api/main.go              # KlubHub DJ entry point (chi router, worker goroutine, SIGTERM)
+│   │   └── promoter/main.go         # KlubHub Promoter entry point
 │   ├── internal/
-│   │   ├── platform/                # config, db, storage, crypto, http, migrations
-│   │   │   └── migrations/          # goose SQL migrations (001–005f)
-│   │   ├── tracklist/               # parser, repo, service, handler
-│   │   ├── social/                  # repo, service, handler, worker, instagram client
-│   │   ├── epk/                     # repo, service, handler, pdf generator
-│   │   ├── settings/                # user settings CRUD
-│   │   ├── gig/                     # gig CRUD, iCal feed, booking PDF
-│   │   ├── venue/  contact/         # venue & contact databases
-│   │   └── artwork/                 # cover art lookup (Spotify, Discogs)
+│   │   ├── platform/                # config, db, storage, crypto, http, auth, authz, migrations — shared by both products
+│   │   │   └── migrations/          # goose SQL migrations for KlubHub DJ (numbered 001, 002, ...)
+│   │   ├── tracklist/               # parser, repo, service, handler (DJ)
+│   │   ├── social/                  # repo, service, handler, worker, instagram client (DJ)
+│   │   ├── epk/                     # repo, service, handler, pdf generator (DJ)
+│   │   ├── finance/                 # invoicing, payments, agreements, email (DJ)
+│   │   ├── settings/                # user settings CRUD (DJ)
+│   │   ├── gig/                     # gig CRUD, iCal feed, booking PDF (DJ)
+│   │   ├── venue/  contact/         # venue & contact databases (DJ)
+│   │   ├── artwork/                 # cover art lookup (Spotify, Discogs) (DJ)
+│   │   ├── ra/                      # Resident Advisor import client (DJ, licensed feature)
+│   │   └── promoter/                # org, event, lineup, guestlist, door, retention, sealed ban list (Promoter)
+│   │       └── migrations/          # goose SQL migrations for KlubHub Promoter
 │   └── testdata/                    # integration test fixtures
 │
 ├── docs/                            # BRD, NFR, architecture, release plans  → see docs/INDEX.md
-├── scripts/                         # backup.sh, restore.sh
+├── .claude/plans/                   # Design docs for larger features (Promoter phases, licensed-integration research)
+├── scripts/                         # setup.sh, backup.sh, restore.sh, install.sh
 ├── .github/                         # issue & PR templates
+│   └── workflows/                   # dj-ci.yml, promoter-ci.yml, containers-ci.yml, pages.yml
 ├── CLAUDE.md                        # Claude AI assistant guidelines
 ├── AGENTS.md                        # Nx workspace guidelines
 ├── CONTRIBUTING.md                  # contribution guide
 ├── SECURITY.md                      # vulnerability disclosure policy
 ├── CODE_OF_CONDUCT.md               # Contributor Covenant v2.1
 ├── CHANGELOG.md                     # release history
-└── docker-compose.yml
+├── docker-compose.yml               # base service definitions
+├── docker-compose.dev.yml           # DJ backend development overlay
+├── docker-compose.prod.yml          # DJ production deployment (image-only)
+└── docker-compose.promoter.yml      # Promoter deployment (separate Compose project)
 ```
 
 ---
@@ -177,7 +198,7 @@ klubhub/
 
 | Tool | Version |
 |------|---------|
-| Node | 20.x LTS |
+| Node | 22.x (matches CI) |
 | pnpm | 9.x |
 | Go | 1.26+ |
 | Docker | 24+ with Compose v2 |
@@ -288,6 +309,8 @@ The frontend can run in two modes:
 ## License
 
 [MIT](./LICENSE) — © 2026 lithqube.
+
+KlubHub is a project by EUN Records, Berlin.
 
 ---
 
