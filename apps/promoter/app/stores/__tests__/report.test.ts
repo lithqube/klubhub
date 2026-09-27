@@ -55,4 +55,23 @@ describe('useReportStore', () => {
     fetchMock.mockRejectedValue({ statusCode: 404, data: { error: 'not_found' } })
     await expect(s.listBackCsv('e1', 'nope')).rejects.toMatchObject({ error: 'not_found', status: 404 })
   })
+
+  it('tracks every list-back in flight in a busy set', async () => {
+    const s = useReportStore()
+    let resolveA!: (v: string) => void
+    let rejectB!: (e: unknown) => void
+    fetchMock
+      .mockReturnValueOnce(new Promise<string>((r) => { resolveA = r }))
+      .mockReturnValueOnce(new Promise<string>((_, j) => { rejectB = j }))
+    const a = s.listBackCsv('e1', 'al-a')
+    const b = s.listBackCsv('e1', 'al-b')
+    expect([...s.busy]).toEqual(['al-a', 'al-b'])
+    resolveA('name\n')
+    await a
+    expect(s.busy.has('al-a')).toBe(false)
+    expect(s.busy.has('al-b')).toBe(true)
+    rejectB({ statusCode: 500 })
+    await expect(b).rejects.toMatchObject({ error: 'network_error' })
+    expect(s.busy.size).toBe(0)
+  })
 })

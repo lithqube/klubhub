@@ -1,40 +1,23 @@
 <script setup lang="ts">
 import { TriangleAlert } from 'lucide-vue-next'
-import type { ReportTotals } from '~/types/report'
-import { timeLabel } from '~/utils/datetime'
-import { formatCount, formatPercent } from '~/utils/report'
+import type { CurvePoint, ReportTotals } from '~/types/report'
+import { kpiTiles } from '~/utils/report'
 
 /**
- * The report's headline numbers (P2.4). Each tile: label, one value, one
- * line of context. Counts only, never names.
+ * The report's headline numbers (P2.4). THROUGH THE DOOR leads (the only
+ * total that includes walk-ups and manual counts); each tile then counts one
+ * thing: label, one value, one sentence of context. Counts only, never names.
  */
-const props = defineProps<{ totals: ReportTotals, capacity: number | null, tz: string }>()
+const props = defineProps<{ totals: ReportTotals, curve: CurvePoint[], capacity: number | null, tz: string, eventId: string }>()
 
-const tiles = computed(() => {
-  const t = props.totals
-  return [
-    { id: 'arrived', label: 'ARRIVED', value: formatCount(t.guests_arrived), of: formatCount(t.guests_going), sub: 'guests arrived · going' },
-    { id: 'no-show', label: 'NO-SHOW', value: formatPercent(t.no_show_rate), of: null, sub: t.guests_going ? `of ${formatCount(t.guests_going)} going guests` : 'nobody was going' },
-    {
-      id: 'heads', label: 'HEADS IN', value: formatCount(t.heads_admitted), of: formatCount(t.heads_expected),
-      sub: `admitted · expected${props.capacity ? ` · cap. ${formatCount(props.capacity)}` : ''}`,
-    },
-    { id: 'plus-ones', label: '+1s USED', value: formatCount(t.plus_ones_used), of: formatCount(t.plus_ones_allowed), sub: 'used · allowed' },
-    { id: 'tickets', label: 'TICKETS SCANNED', value: formatCount(t.tickets_scanned), of: formatCount(t.tickets_valid), sub: 'scanned · valid tickets' },
-    { id: 'walkups', label: 'WALK-UPS', value: formatCount(t.walkups), of: null, sub: 'paid at the door' },
-    {
-      id: 'peak', label: 'PEAK INSIDE', value: formatCount(t.peak_occupancy), of: null,
-      sub: t.peak_at ? `at ${timeLabel(t.peak_at, props.tz)}` : 'no one inside yet',
-    },
-  ]
-})
+const tiles = computed(() => kpiTiles(props.totals, props.curve, props.capacity, props.tz))
 </script>
 
 <template>
   <section aria-labelledby="report-kpi-h">
     <h2 id="report-kpi-h" class="sr-only">Key numbers</h2>
     <dl class="kpis">
-      <div v-for="k in tiles" :key="k.id" class="kpi glass" :data-testid="`kpi-${k.id}`">
+      <div v-for="k in tiles" :key="k.id" class="kpi glass" :class="{ hero: k.hero }" :data-testid="`kpi-${k.id}`">
         <dt class="section-lbl">{{ k.label }}</dt>
         <dd class="value">
           {{ k.value }}<span v-if="k.of !== null" class="of"> / {{ k.of }}</span>
@@ -42,9 +25,31 @@ const tiles = computed(() => {
         <dd class="sub">{{ k.sub }}</dd>
       </div>
     </dl>
+    <details class="how" data-testid="kpi-definitions">
+      <summary class="section-lbl">HOW THESE ARE COUNTED</summary>
+      <dl>
+        <dt>THROUGH THE DOOR</dt>
+        <dd>Every head that came in: list guests and tickets checked in (re-entry counts again), manual counts and walk-ups.</dd>
+        <dt>ARRIVED</dt>
+        <dd>A guest arrived when the door checked them in at least once. Guests who were pending or declined but let in anyway count too.</dd>
+        <dt>NO-SHOW</dt>
+        <dd>Guests marked going who never arrived, out of all going guests.</dd>
+        <dt>LIST &amp; TICKET HEADS</dt>
+        <dd>Heads checked in from guest lists and scanned tickets, including re-entry. Walk-ups and manual counts are not in it.</dd>
+        <dt>+1s USED</dt>
+        <dd>Extra heads a guest brought, never more than the +1s they were allowed.</dd>
+        <dt>WALK-UPS</dt>
+        <dd>People with no list spot or ticket who paid at the door.</dd>
+        <dt>PEAK INSIDE</dt>
+        <dd>People inside at the end of the busiest 15 minutes: everyone in minus everyone who left.</dd>
+      </dl>
+    </details>
     <p v-if="totals.conflicts" class="glass conflicts" data-testid="kpi-conflicts">
       <TriangleAlert style="width:14px;height:14px;flex:none;color:var(--color-status-archived);" aria-hidden="true" />
-      <span><strong>{{ totals.conflicts }}</strong> {{ totals.conflicts === 1 ? 'check-in was' : 'check-ins were' }} flagged as a conflict (more heads than allowed across doors).</span>
+      <span>
+        <strong>{{ totals.conflicts }}</strong> {{ totals.conflicts === 1 ? 'check-in was' : 'check-ins were' }} flagged as a conflict (more heads than allowed across doors).
+        <NuxtLink :to="`/events/${eventId}/door`" class="link">Review them on the DOOR tab</NuxtLink>.
+      </span>
     </p>
   </section>
 </template>
@@ -52,7 +57,7 @@ const tiles = computed(() => {
 <style scoped>
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
   margin: 0;
 }
@@ -63,6 +68,10 @@ const tiles = computed(() => {
   align-content: start;
   min-width: 0;
 }
+.kpi.hero {
+  grid-column: span 2;
+  border-left: 3px solid var(--color-primary);
+}
 .kpi dd { margin: 0; }
 .value {
   font-family: var(--font-command);
@@ -70,7 +79,9 @@ const tiles = computed(() => {
   font-weight: 700;
   line-height: 1.1;
   color: var(--color-on-surface);
+  font-variant-numeric: tabular-nums;
 }
+.hero .value { font-size: 40px; }
 .of {
   font-size: 15px;
   font-weight: 500;
@@ -79,8 +90,51 @@ const tiles = computed(() => {
 .sub {
   font-family: var(--font-data);
   font-size: 11px;
+  line-height: 1.35;
   color: var(--color-on-surface-variant);
 }
+.how {
+  margin-top: 8px;
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+}
+.how summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+}
+.how summary { list-style: none; gap: 6px; }
+.how summary::-webkit-details-marker { display: none; }
+.how summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin: 0 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform .15s;
+}
+.how[open] summary::before { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) { .how summary::before { transition: none; } }
+.how summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.how dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0 0 4px;
+}
+.how dt {
+  font-family: var(--font-terminal);
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--color-tertiary);
+  padding-top: 2px;
+}
+.how dd { margin: 0; max-width: 70ch; }
 .conflicts {
   display: flex;
   align-items: center;
@@ -90,8 +144,14 @@ const tiles = computed(() => {
   font-size: 13px;
   border-left: 3px solid var(--color-status-archived);
 }
+.link { color: var(--color-primary); text-decoration: underline; }
+@media (max-width: 480px) {
+  .how dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .how dd { margin-bottom: 6px; }
+}
 @media (max-width: 380px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .value { font-size: 22px; }
+  .hero .value { font-size: 32px; }
 }
 </style>

@@ -1,17 +1,18 @@
 <script setup lang="ts">
+import { onClickOutside } from '@vueuse/core'
 import type { CurvePoint } from '~/types/report'
 import { timeLabel } from '~/utils/datetime'
 import {
-  barPath, bucketAt, bucketLabel, bucketRange, curveGeometry, defaultLayout, formatCount, layoutHeight,
+  barPath, bucketAt, bucketLabel, bucketRange, curveGeometry, defaultLayout, formatCount, layoutHeight, peakIndex, peakLabelPos,
 } from '~/utils/report'
 
 /**
  * Check-in curve (P2.4) as inline SVG, no chart library. Two panels share
  * one time axis: people inside (line + wash) above, heads per 15 minutes
- * below (arrivals above the baseline, exits below). A crosshair readout
- * follows the pointer and the arrow keys; the same numbers are always in
- * the data table (visually hidden until shown, never hidden from screen
- * readers).
+ * below (arrived above the baseline, left below). A crosshair readout
+ * follows the pointer and the arrow keys (only keyboard moves are announced);
+ * the same numbers are always in the data table (visually hidden until
+ * shown, never hidden from screen readers).
  */
 const props = defineProps<{ curve: CurvePoint[], tz: string }>()
 const uid = useId()
@@ -35,13 +36,7 @@ const height = computed(() => layoutHeight(layout.value))
 const geo = computed(() => curveGeometry(props.curve, props.tz, layout.value))
 const n = computed(() => props.curve.length)
 
-const peak = computed(() => {
-  let best = -1
-  props.curve.forEach((c, i) => {
-    if (best < 0 || c.occupancy > props.curve[best]!.occupancy) best = i
-  })
-  return best
-})
+const peak = computed(() => peakIndex(props.curve))
 
 const summary = computed(() => {
   if (!n.value) return 'Check-in curve: no activity.'
@@ -51,11 +46,13 @@ const summary = computed(() => {
   const arrivals = props.curve.reduce((s, c) => s + c.in + c.walkups, 0)
   const exits = props.curve.reduce((s, c) => s + c.out, 0)
   return `Check-in curve in 15-minute steps from ${bucketLabel(first.bucket_start, props.tz)} to ${timeLabel(new Date(Date.parse(last.bucket_start) + 900_000).toISOString(), props.tz)}: `
-    + `${arrivals} arrivals, ${exits} exits, peak of ${p.occupancy} inside at ${bucketLabel(p.bucket_start, props.tz)}. The data table below has every step.`
+    + `${arrivals} arrived, ${exits} left, peak of ${p.occupancy} inside at ${bucketRange(p.bucket_start, props.tz)}. The data table below has every step.`
 })
 
 // ---------------------------------------------------------------- crosshair
 const active = ref<number | null>(null)
+/** Screen-reader line; set by keyboard moves only, never by pointer moves. */
+const announce = ref('')
 
 function onPointer(e: PointerEvent) {
   const svg = e.currentTarget as SVGSVGElement
@@ -71,28 +68,38 @@ function onKey(e: KeyboardEvent) {
   if (next === undefined) return
   e.preventDefault()
   active.value = Math.min(n.value - 1, Math.max(0, next))
+  const c = props.curve[active.value]!
+  announce.value = `${bucketRange(c.bucket_start, props.tz)}: ${c.occupancy} inside, ${c.in} checked in, ${c.walkups} walk-ups, ${c.out} left`
 }
+
+// Touch has no pointerleave after a tap: a mouse leaving or a tap elsewhere clears the readout.
+function onLeave(e: PointerEvent) {
+  if (e.pointerType === 'mouse') active.value = null
+}
+onClickOutside(wrap, () => {
+  active.value = null
+})
 
 const readout = computed(() => {
   if (active.value === null) return null
   const c = props.curve[active.value]
-  const bar = geo.value.bars[active.value]
-  if (!c || !bar) return null
-  const center = bar.bandX + bar.bandW / 2
+  const point = geo.value.points[active.value]
+  if (!c || !point) return null
+  // The crosshair sits on the occupancy point (the value at the bucket's end);
+  // the readout is anchored there, flipped left of it past the middle. The
+  // SVG scales down with its box, so place it in rendered pixels.
+  const scale = width.value && layout.value.width ? Math.min(1, width.value / layout.value.width) : 1
+  const x = point.x * scale
+  const w = layout.value.width * scale
   return {
-    c, center, range: bucketRange(c.bucket_start, props.tz),
-    // Keep the readout inside the chart; flip it left of the crosshair past the middle.
-    style: center > layout.value.width / 2
-      ? { right: `${Math.max(0, layout.value.width - center + 10)}px` }
-      : { left: `${center + 10}px` },
+    c, x: point.x, y: point.y, range: bucketRange(c.bucket_start, props.tz),
+    style: x > w / 2 ? { right: `${Math.max(0, w - x + 10)}px` } : { left: `${x + 10}px` },
   }
 })
-const announce = computed(() => (readout.value
-  ? `${readout.value.range}: ${readout.value.c.occupancy} inside, ${readout.value.c.in} in, ${readout.value.c.walkups} walk-ups, ${readout.value.c.out} out`
-  : ''))
 
 const showTable = ref(false)
 const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value] : null))
+const peakLabel = computed(() => (peakPoint.value ? peakLabelPos(peakPoint.value, layout.value) : null))
 </script>
 
 <template>
@@ -101,7 +108,7 @@ const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value]
       <h2 id="curve-h" class="section-lbl" style="margin:0;">CHECK-IN CURVE · 15 MIN</h2>
       <ul class="legend" aria-label="Legend">
         <li><svg width="14" height="8" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" class="k-line" /></svg> INSIDE</li>
-        <li><svg width="10" height="10" aria-hidden="true"><rect width="10" height="10" rx="2" class="k-in" /></svg> ARRIVALS (CHECK-INS + WALK-UPS)</li>
+        <li><svg width="10" height="10" aria-hidden="true"><rect width="10" height="10" rx="2" class="k-in" /></svg> ARRIVED (CHECK-INS + WALK-UPS)</li>
         <li><svg width="10" height="10" aria-hidden="true"><rect width="10" height="10" rx="2" class="k-out" /></svg> LEFT</li>
       </ul>
     </div>
@@ -109,8 +116,8 @@ const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value]
     <div ref="wrap" class="plot">
       <svg
         :viewBox="`0 0 ${layout.width} ${height}`" :width="layout.width" :height="height" role="img" :aria-label="summary"
-        :aria-describedby="tableId" tabindex="0" class="svg" data-testid="checkin-curve"
-        @pointermove="onPointer" @pointerdown="onPointer" @pointerleave="active = null" @keydown="onKey"
+        tabindex="0" class="svg" data-testid="checkin-curve"
+        @pointermove="onPointer" @pointerdown="onPointer" @pointerleave="onLeave" @keydown="onKey"
         @focus="active = active ?? peak" @blur="active = null"
       >
         <!-- occupancy panel -->
@@ -122,9 +129,9 @@ const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value]
           </g>
           <path :d="geo.area" class="area" />
           <path :d="geo.line" class="line" />
-          <g v-if="peakPoint">
+          <g v-if="peakPoint && peakLabel">
             <circle :cx="peakPoint.x" :cy="peakPoint.y" r="4" class="dot" />
-            <text :x="peakPoint.x" :y="peakPoint.y - 9" class="direct" text-anchor="middle">{{ curve[peak]!.occupancy }}</text>
+            <text :x="peakLabel.x" :y="peakLabel.y" class="direct" :text-anchor="peakLabel.anchor" data-testid="curve-peak-label">{{ curve[peak]!.occupancy }}</text>
           </g>
         </g>
 
@@ -144,22 +151,23 @@ const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value]
 
         <!-- crosshair -->
         <g v-if="readout" aria-hidden="true">
-          <line :x1="readout.center" :x2="readout.center" :y1="layout.occTop" :y2="layout.flowTop + layout.flowHeight" class="cross" />
-          <circle :cx="geo.points[active!]!.x" :cy="geo.points[active!]!.y" r="4" class="dot" />
+          <line :x1="readout.x" :x2="readout.x" :y1="layout.occTop" :y2="layout.flowTop + layout.flowHeight" class="cross" data-testid="curve-crosshair" />
+          <circle :cx="readout.x" :cy="readout.y" r="4" class="dot" data-testid="curve-crosshair-dot" />
         </g>
       </svg>
 
       <div v-if="readout" class="tip" :style="readout.style" aria-hidden="true">
         <div class="tip-time">{{ readout.range }}</div>
         <div class="tip-row"><svg width="12" height="4"><line x1="0" y1="2" x2="12" y2="2" class="k-line" /></svg><strong>{{ readout.c.occupancy }}</strong> inside</div>
-        <div class="tip-row"><svg width="12" height="4"><line x1="0" y1="2" x2="12" y2="2" class="k-in-line" /></svg><strong>{{ readout.c.in + readout.c.walkups }}</strong> arrived <span class="muted">({{ readout.c.in }} in · {{ readout.c.walkups }} walk-up)</span></div>
+        <div class="tip-row"><svg width="12" height="4"><line x1="0" y1="2" x2="12" y2="2" class="k-in-line" /></svg><strong>{{ readout.c.in + readout.c.walkups }}</strong> arrived</div>
+        <div class="tip-sub muted">{{ readout.c.in }} checked in · {{ readout.c.walkups }} {{ readout.c.walkups === 1 ? 'walk-up' : 'walk-ups' }}</div>
         <div class="tip-row"><svg width="12" height="4"><line x1="0" y1="2" x2="12" y2="2" class="k-out-line" /></svg><strong>{{ readout.c.out }}</strong> left</div>
       </div>
-      <p class="sr-only" aria-live="polite">{{ announce }}</p>
+      <p class="sr-only" aria-live="polite" data-testid="curve-announce">{{ announce }}</p>
     </div>
 
     <div class="foot">
-      <p class="hint">Hover or use ← → on the chart for each 15 minutes.</p>
+      <p class="hint">Tap or drag on the chart, or use ← → when it's focused.</p>
       <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" :aria-expanded="showTable" :aria-controls="tableId" @click="showTable = !showTable">
         {{ showTable ? 'HIDE TABLE' : 'SHOW AS TABLE' }}
       </button>
@@ -170,9 +178,9 @@ const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value]
         <thead>
           <tr>
             <th scope="col">TIME</th>
-            <th scope="col" class="num">IN</th>
+            <th scope="col" class="num">CHECKED IN</th>
             <th scope="col" class="num">WALK-UPS</th>
-            <th scope="col" class="num">OUT</th>
+            <th scope="col" class="num">LEFT</th>
             <th scope="col" class="num">INSIDE</th>
           </tr>
         </thead>
@@ -212,25 +220,25 @@ const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value]
   padding: 0;
   list-style: none;
   font-family: var(--font-terminal);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: .06em;
   color: var(--color-on-surface-variant);
 }
 .legend li { display: inline-flex; align-items: center; gap: 5px; }
 .plot { position: relative; min-width: 0; overflow: hidden; }
 .svg { display: block; max-width: 100%; height: auto; touch-action: pan-y; }
-.svg:focus-visible { outline: 1px dashed var(--color-primary); outline-offset: 3px; }
+.svg:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 .grid { stroke: var(--color-outline-variant); stroke-width: 1; }
 .base { stroke: var(--color-outline); stroke-width: 1; }
 .tick {
   font-family: var(--font-terminal);
-  font-size: 9px;
+  font-size: 10px;
   fill: var(--color-tertiary);
   font-variant-numeric: tabular-nums;
 }
 .panel-lbl {
   font-family: var(--font-terminal);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: .06em;
   fill: var(--color-tertiary);
 }
@@ -239,6 +247,11 @@ const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value]
   font-size: 11px;
   font-weight: 600;
   fill: var(--color-on-surface);
+  /* a surface halo keeps the label legible where it sits beside the line */
+  paint-order: stroke;
+  stroke: var(--color-surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 .line, .k-line { fill: none; stroke: var(--color-primary); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .area { fill: var(--color-primary); opacity: .1; }
@@ -265,9 +278,10 @@ const peakPoint = computed(() => (peak.value >= 0 ? geo.value.points[peak.value]
   z-index: 1;
 }
 .tip strong { color: var(--color-on-surface); font-variant-numeric: tabular-nums; margin-right: 3px; }
-.tip-time { font-family: var(--font-terminal); font-size: 9px; letter-spacing: .06em; color: var(--color-tertiary); }
+.tip-time { font-family: var(--font-terminal); font-size: 10px; letter-spacing: .06em; color: var(--color-tertiary); }
 .tip-row { display: flex; align-items: center; gap: 6px; }
 .muted { font-size: 11px; }
+.tip-sub { padding-left: 18px; margin-top: -2px; }
 .foot {
   display: flex;
   flex-wrap: wrap;

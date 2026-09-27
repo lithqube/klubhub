@@ -13,6 +13,9 @@ test.describe('post-event report (mobile)', () => {
     await hydrated(page);
     await expect(page.getByTestId('kpi-arrived')).toContainText('6 / 8');
     await expect(page.getByTestId('checkin-curve')).toBeVisible();
+    await expect(page.getByTestId('kpi-door')).toBeVisible();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await page.getByText('HOW THESE ARE COUNTED').click();
     expect(await overflow(page)).toBeLessThanOrEqual(0);
 
     await page.getByRole('button', { name: 'SHOW AS TABLE' }).click();

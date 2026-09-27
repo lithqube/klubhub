@@ -10,6 +10,8 @@ export const useReportStore = defineStore('report', () => {
   const report = ref<EventReport | null>(null)
   const loading = ref(false)
   const error = ref<ApiError | null>(null)
+  /** Allocations whose list-back CSV is being prepared (several may run at once). */
+  const busy = ref(new Set<string>())
 
   const base = (id: string) => `/api/v1/events/${id}/report`
 
@@ -30,12 +32,15 @@ export const useReportStore = defineStore('report', () => {
 
   /** CSV text of one allocation's guests (server-hardened, audited). No email or phone. */
   async function listBackCsv(id: string, allocationId: string): Promise<string> {
+    busy.value.add(allocationId)
     try {
       return await apiFetch<string>(`${base(id)}/list-back.csv`, { query: { allocation_id: allocationId }, responseType: 'text' })
     } catch (e) {
       throw toApiError(e)
+    } finally {
+      busy.value.delete(allocationId)
     }
   }
 
-  return { eventId, report, loading, error, load, listBackCsv }
+  return { eventId, report, loading, error, busy, load, listBackCsv }
 })

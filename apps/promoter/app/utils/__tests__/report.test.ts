@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { CurvePoint, ReportListRow, ReportSubmitterRow } from '~/types/report'
+import type { CurvePoint, ReportListRow, ReportSubmitterRow, ReportTotals } from '~/types/report'
 import {
-  barPath, bucketAt, bucketLabel, bucketRange, bucketStart, curveGeometry, defaultLayout, formatCount, formatPercent, hasActivity, listBackFilename,
-  niceMax, reportPhase, share, sortLists, sortSubmitters,
+  barPath, bucketAt, bucketLabel, bucketRange, bucketStart, countOf, countPair, curveGeometry, defaultLayout, formatCount, formatPercent, hasActivity,
+  kpiTiles, listBackCounts, listBackFilename, loadErrorMessage, niceMax, parseCsvRecords, peakIndex, peakLabelPos, reportPhase, share, sortLists,
+  sortSubmitters, throughTheDoor, updatedAgo,
 } from '../report'
 
 const at = (iso: string) => Date.parse(iso)
@@ -148,5 +149,107 @@ describe('barPath', () => {
     expect(barPath(10, 50, 12, 30, 'down')).toBe('M10,50 V76 Q10,80 14,80 H18 Q22,80 22,76 V50 Z')
     expect(barPath(10, 20, 12, 2, 'up')).toContain('Q10,20 12,20')
     expect(barPath(10, 20, 12, 0, 'up')).toBe('')
+  })
+})
+
+describe('headline tiles', () => {
+  const tz = 'Europe/Berlin'
+  const pt = (bucket_start: string, i: number, o: number, walkups: number, occupancy: number): CurvePoint => ({ bucket_start, in: i, out: o, walkups, occupancy })
+  // `in` already holds check-ins plus manual ins; walk-ups are separate.
+  const curve = [
+    pt('2026-01-10T23:00:00Z', 5, 0, 2, 7),
+    pt('2026-01-10T23:15:00Z', 6, 1, 4, 16),
+    pt('2026-01-10T23:30:00Z', 0, 3, 0, 13),
+  ]
+  const totals: ReportTotals = {
+    guests_going: 8, guests_arrived: 6, no_show_rate: 0.25, heads_expected: 16, heads_admitted: 9, plus_ones_allowed: 5, plus_ones_used: 3,
+    tickets_valid: 3, tickets_scanned: 2, walkups: 6, peak_occupancy: 16, peak_at: '2026-01-10T23:15:00Z', conflicts: 0,
+  }
+  const tile = (tiles: ReturnType<typeof kpiTiles>, id: string) => tiles.find(t => t.id === id)
+
+  it('counts everyone through the door once: in (with manual ins) plus walk-ups', () => {
+    expect(throughTheDoor(curve)).toBe(17)
+    expect(throughTheDoor([])).toBe(0)
+    const tiles = kpiTiles(totals, curve, 400, tz)
+    expect(tiles[0]).toMatchObject({ id: 'door', value: '17', of: null, hero: true, sub: 'of 400 capacity · peak 16 inside' })
+    expect(Number(tiles[0]!.value)).toBeGreaterThanOrEqual(totals.peak_occupancy)
+    expect(kpiTiles(totals, curve, null, tz)[0]!.sub).toBe('peak 16 inside')
+  })
+
+  it('names list & ticket heads without capacity and writes subs as sentences', () => {
+    const tiles = kpiTiles(totals, curve, 400, tz)
+    expect(tile(tiles, 'heads')).toMatchObject({ label: 'LIST & TICKET HEADS', value: '9', of: '16', sub: 'checked in of 16 expected' })
+    expect(tile(tiles, 'arrived')).toMatchObject({ value: '6', of: '8', sub: 'of 8 going guests showed up' })
+    expect(tile(tiles, 'no-show')!.sub).toBe("2 of 8 going guests didn't come")
+    expect(tile(tiles, 'plus-ones')!.sub).toBe('of 5 +1s allowed were used')
+  })
+
+  it('never shows a ratio above 100 %', () => {
+    expect(countOf(3, 4)).toEqual({ of: '4', over: false })
+    expect(countOf(4, 4)).toEqual({ of: '4', over: false })
+    expect(countOf(5, 4)).toEqual({ of: null, over: true })
+    expect(countPair(6, 8, 'going')).toBe('6 / 8')
+    expect(countPair(9, 8, 'going')).toBe('9 (8 going)')
+    const tiles = kpiTiles({ ...totals, guests_arrived: 9, tickets_scanned: 4, heads_admitted: 20 }, curve, null, tz)
+    expect(tile(tiles, 'arrived')).toMatchObject({ of: null, sub: '8 going; includes pending or declined guests admitted at the door' })
+    expect(tile(tiles, 'tickets')).toMatchObject({ of: null, sub: '3 valid; includes refunded or void tickets scanned at the door' })
+    expect(tile(tiles, 'heads')!.of).toBeNull()
+  })
+
+  it('shows the peak as a 15-minute range', () => {
+    expect(tile(kpiTiles(totals, curve, null, tz), 'peak')!.sub).toBe('busiest 15 min: 00:15–00:30')
+    expect(tile(kpiTiles({ ...totals, peak_at: null, peak_occupancy: 0 }, [], null, tz), 'peak')!.sub).toBe('no one inside yet')
+    expect(peakIndex(curve)).toBe(1)
+    expect(peakIndex([])).toBe(-1)
+  })
+
+  it('hides TICKETS without tickets and +1s when none were allowed', () => {
+    const ids = kpiTiles({ ...totals, tickets_valid: 0, tickets_scanned: 0, plus_ones_allowed: 0, plus_ones_used: 0 }, curve, null, tz).map(t => t.id)
+    expect(ids).toEqual(['door', 'arrived', 'no-show', 'heads', 'walkups', 'peak'])
+    // A scanned ticket of another status still shows the tile.
+    expect(kpiTiles({ ...totals, tickets_valid: 0, tickets_scanned: 1 }, curve, null, tz).map(t => t.id)).toContain('tickets')
+  })
+})
+
+describe('peak label placement', () => {
+  const l = defaultLayout(400)
+  it('sits above the dot, or beside it when it would clip at the top', () => {
+    expect(peakLabelPos({ x: 100, y: 80 }, l)).toEqual({ x: 100, y: 71, anchor: 'middle' })
+    // Near the top: pushed down inside the panel while it still clears the dot.
+    expect(peakLabelPos({ x: 100, y: l.occTop + 18 }, l)).toEqual({ x: 100, y: l.occTop + 11, anchor: 'middle' })
+    const top = peakLabelPos({ x: 100, y: l.occTop }, l)
+    expect(top.anchor).toBe('start')
+    expect(top.x).toBe(108)
+    expect(top.y).toBeGreaterThanOrEqual(l.occTop + 11)
+    expect(peakLabelPos({ x: l.width - l.right, y: l.occTop }, l).anchor).toBe('end')
+  })
+})
+
+describe('status line, errors and list-back', () => {
+  const now = Date.parse('2026-01-10T23:10:00Z')
+  it('says how long ago the report was generated', () => {
+    expect(updatedAgo('2026-01-10T23:09:40Z', now)).toBe('JUST NOW')
+    expect(updatedAgo('2026-01-10T23:11:00Z', now)).toBe('JUST NOW')
+    expect(updatedAgo('2026-01-10T23:08:00Z', now)).toBe('2 MIN AGO')
+    expect(updatedAgo('2026-01-10T21:00:00Z', now)).toBe('2 H AGO')
+  })
+
+  it('branches load errors on the code', () => {
+    expect(loadErrorMessage({ error: 'forbidden' }, false)).toMatchObject({ retry: false })
+    expect(loadErrorMessage({ error: 'no_role_grant' }, true).text).toMatch(/role/)
+    expect(loadErrorMessage({ error: 'not_found' }, false)).toEqual({ text: 'This event no longer exists.', retry: false })
+    expect(loadErrorMessage({ error: 'network_error' }, false)).toEqual({ text: 'COULD NOT LOAD THE REPORT. Check your connection.', retry: true })
+    expect(loadErrorMessage({ error: 'unavailable' }, true).text).toMatch(/^COULD NOT REFRESH/)
+  })
+
+  it('counts guests and arrivals in a list-back CSV, quoted fields included', () => {
+    const csv = '\uFEFFname,plus_n,status,arrived,heads_admitted,first_in_local\r\n'
+      + '"Lorenz, Pia",1,going,yes,2,2026-01-10 23:05\r\n'
+      + '"Say ""hi""\nthere",0,pending,no,0,\r\n'
+      + 'Ben,0,declined,yes,1,2026-01-11 00:10\r\n'
+    expect(parseCsvRecords(csv)[1]![0]).toBe('Lorenz, Pia')
+    expect(parseCsvRecords(csv)[2]![0]).toBe('Say "hi"\nthere')
+    expect(listBackCounts(csv)).toEqual({ guests: 3, arrived: 2 })
+    expect(listBackCounts('name,arrived\n')).toEqual({ guests: 0, arrived: 0 })
   })
 })
