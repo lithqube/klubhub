@@ -6,7 +6,7 @@ import type {
 } from '~/types/guest'
 import { apiFetch, toApiError } from '~/utils/api'
 
-const emptyCounts = (): GuestCounts => ({ all: 0, going: 0, pending: 0, waitlist: 0, invited: 0, declined: 0, going_heads: 0, tickets: 0 })
+const emptyCounts = (): GuestCounts => ({ all: 0, going: 0, pending: 0, waitlist: 0, invited: 0, declined: 0, going_heads: 0, tickets: 0, checked_in: 0 })
 
 /**
  * Guest lists, allocations and the guest table of one event at a time

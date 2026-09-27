@@ -1,0 +1,28 @@
+meta {
+  name: PIN status shows locked_until
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/events/{{lockEventId}}/pin
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.staff.valid_until: isString
+  res.body.staff.locked_until: isString
+}
+
+tests {
+  test("locked for the future, no PIN in the response", function () {
+    expect(Date.parse(res.getBody().staff.locked_until)).to.be.above(Date.now());
+    expect(JSON.stringify(res.getBody())).to.not.contain(bru.getVar("lockPin"));
+  });
+}

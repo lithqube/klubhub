@@ -1,0 +1,21 @@
+meta {
+  name: PIN status no longer locked
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/events/{{lockEventId}}/pin
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.staff.valid_until: isString
+  res.body.staff.locked_until: isNull
+}

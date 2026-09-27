@@ -1,0 +1,21 @@
+meta {
+  name: List-back CSV without allocation_id is 422
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/report/list-back.csv
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq allocation_id
+}

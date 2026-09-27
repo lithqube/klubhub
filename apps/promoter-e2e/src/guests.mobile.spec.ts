@@ -44,4 +44,17 @@ test.describe('guest table (mobile)', () => {
     await expect(page.locator('.page-title')).toHaveText('GUESTS');
     await expect(page.getByRole('heading', { name: 'STANDING LISTS' })).toBeVisible();
   });
+  test('check-in state fits the phone card and CHECKED IN is reachable', async ({ page }) => {
+    await page.goto('/events/e-klubnacht-02/guests');
+    await hydrated(page);
+    const tab = page.getByRole('navigation', { name: 'Guest status' }).getByRole('button', { name: /^CHECKED IN/ });
+    await tab.scrollIntoViewIfNeeded();
+    await tab.click();
+    const tag = page.getByRole('row').filter({ hasText: 'Carla Mendes' }).getByTestId('checkin-tag');
+    await tag.scrollIntoViewIfNeeded();
+    await expect(tag).toBeInViewport();
+    await expect(tag).toHaveText(/^IN 2\/3 · \d\d:\d\d$/);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
 });

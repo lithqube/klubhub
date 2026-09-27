@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Guest, Ticket } from '~/types/guest'
 import {
-  allocationState, bulkPreview, countByStatus, csvCell, cutoffInstant, fold, guestErrorText, headsHeld, parseEmails, parsePastedGuests, quotaFill,
+  allocationState, arrivalsFrom, arrivalTag, bulkPreview, countByStatus, csvCell, cutoffInstant, fold, guestErrorText, headsHeld, parseEmails, parsePastedGuests, quotaFill,
   searchGuests, searchTickets, toCsv,
 } from '../guests'
 
 const g = (over: Partial<Guest>): Guest => ({
   id: 'g', list_id: 'l', allocation_id: null, name: 'X', email: '', phone: '', note: '', plus_n: 0, status: 'going',
-  source: 'manual', created_at: '', updated_at: '', ...over,
+  source: 'manual', created_at: '', updated_at: '', heads_in: 0, first_in_at: null, ...over,
 })
 
 describe('parsePastedGuests', () => {
@@ -62,8 +62,8 @@ describe('search', () => {
 
 describe('counts and quota', () => {
   it('counts statuses and going heads', () => {
-    const c = countByStatus([g({ plus_n: 2 }), g({}), g({ status: 'pending' }), g({ status: 'declined', plus_n: 5 })])
-    expect(c).toEqual({ all: 4, going: 2, pending: 1, waitlist: 0, invited: 0, declined: 1, going_heads: 4, tickets: 0 })
+    const c = countByStatus([g({ plus_n: 2, heads_in: 2 }), g({}), g({ status: 'pending', heads_in: 1 }), g({ status: 'declined', plus_n: 5, first_in_at: '2026-10-03T21:40:00Z' })])
+    expect(c).toEqual({ all: 4, going: 2, pending: 1, waitlist: 0, invited: 0, declined: 1, going_heads: 4, tickets: 0, checked_in: 2 })
   })
 
   it('only going, pending and invited hold quota', () => {
@@ -138,7 +138,7 @@ describe('guestErrorText', () => {
 describe('searchTickets', () => {
   const t = (over: Partial<Ticket>): Ticket => ({
     id: 't', order_id: 'o', source: 'dice', order_ref: 'D-1', ticket_type_id: 'tt', ticket_type: 'Early bird', name: 'X', email: '',
-    status: 'valid', imported_at: '', ...over,
+    status: 'valid', imported_at: '', checked_in: false, first_in_at: null, ...over,
   })
   it('matches holder, email, ticket type and order number, accent-insensitively', () => {
     const list = [t({ id: '1', name: 'José Müller' }), t({ id: '2', name: 'Kim', email: 'kim@example.org', ticket_type: 'Regular', order_ref: 'D-77' })]
@@ -159,5 +159,42 @@ describe('bulkPreview', () => {
     expect(bulkPreview(gs, ['aiko@label.example', 'RAFAEL@press.example', 'ghost@x.org'], 'declined'))
       .toEqual({ matched: 2, change: 1, unmatched: 1 })
     expect(bulkPreview(gs, [], 'going')).toEqual({ matched: 0, change: 0, unmatched: 0 })
+  })
+})
+
+describe('check-in state', () => {
+  const row = (kind: 'guest' | 'ticket', id: string, count: number, direction: 'in' | 'out', at: string, undone = false) =>
+    ({ subject: { kind, id }, count, direction, at, undone })
+
+  it('derives heads in and first in from live rows only', () => {
+    const a = arrivalsFrom([
+      row('guest', 'a', 1, 'in', '2026-10-03T22:05:00Z'),
+      row('guest', 'a', 2, 'in', '2026-10-03T21:40:00Z'),
+      row('guest', 'a', 1, 'out', '2026-10-03T23:00:00Z'),
+      row('guest', 'a', 3, 'in', '2026-10-03T20:00:00Z', true),
+      row('guest', 'b', 1, 'in', '2026-10-03T21:40:00Z', true),
+      row('guest', 'c', 1, 'in', '2026-10-03T21:40:00Z'),
+      row('guest', 'c', 2, 'out', '2026-10-03T21:50:00Z'),
+      row('ticket', 'a', 1, 'in', '2026-10-03T21:45:00Z'),
+    ])
+    expect(a.get('guest:a')).toEqual({ heads_in: 2, first_in_at: '2026-10-03T21:40:00Z' })
+    expect(a.get('guest:b')).toBeUndefined()
+    expect(a.get('guest:c')).toEqual({ heads_in: 0, first_in_at: '2026-10-03T21:40:00Z' })
+    expect(a.get('ticket:a')).toEqual({ heads_in: 1, first_in_at: '2026-10-03T21:45:00Z' })
+  })
+
+  it('an out without an in leaves no first in', () => {
+    expect(arrivalsFrom([row('guest', 'x', 1, 'out', '2026-10-03T21:40:00Z')]).get('guest:x')).toEqual({ heads_in: 0, first_in_at: null })
+  })
+
+  it('tags inside, over the allowance and left again', () => {
+    const at = '2026-10-03T21:40:00Z'
+    expect(arrivalTag({ heads_in: 0, first_in_at: null, plus_n: 2 })).toBeNull()
+    expect(arrivalTag({ heads_in: 2, first_in_at: at, plus_n: 2 }, '23:40'))
+      .toEqual({ text: 'IN 2/3', tone: 'in', label: 'Checked in: 2 of 3 heads inside, first in at 23:40' })
+    expect(arrivalTag({ heads_in: 1, first_in_at: at, plus_n: 0 })).toEqual({ text: 'IN 1/1', tone: 'in', label: 'Checked in: 1 of 1 head inside' })
+    expect(arrivalTag({ heads_in: 3, first_in_at: at, plus_n: 1 })?.tone).toBe('over')
+    expect(arrivalTag({ heads_in: 0, first_in_at: at, plus_n: 1 }, '23:40'))
+      .toEqual({ text: 'OUT 0/2', tone: 'left', label: 'Checked in, first in at 23:40, left again' })
   })
 })

@@ -87,6 +87,10 @@ export interface Guest {
   source: GuestSource
   created_at: string
   updated_at: string
+  /** Heads inside now: non-undone door `in` counts minus `out` counts, floored at 0 (P2.3 check-ins). */
+  heads_in: number
+  /** Earliest non-undone `in` (device clock); kept after the guest leaves again. */
+  first_in_at: string | null
 }
 
 export interface GuestCounts {
@@ -99,6 +103,8 @@ export interface GuestCounts {
   going_heads: number
   /** Valid imported tickets (0 when a list filter is set: tickets are on no list). */
   tickets: number
+  /** Guests with heads_in ≥ 1, any status (tickets not included). */
+  checked_in: number
 }
 
 export interface GuestPage {
@@ -128,6 +134,9 @@ export interface Ticket {
   email: string
   status: TicketStatus
   imported_at: string
+  /** Has a non-undone door `in`. */
+  checked_in: boolean
+  first_in_at: string | null
 }
 
 export interface ImportCounts {
@@ -202,7 +211,8 @@ export interface BulkResult {
 }
 
 export interface GuestFilter {
-  status?: GuestStatus
+  /** 'checked_in' (heads_in ≥ 1, any status) works for the guest table, not the CSV export. */
+  status?: GuestStatus | 'checked_in'
   list_id?: string
 }
 

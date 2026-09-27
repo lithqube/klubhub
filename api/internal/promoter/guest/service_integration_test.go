@@ -311,7 +311,7 @@ func TestBulkStatusByEmailAndCounts(t *testing.T) {
 		t.Fatalf("filtered page / counts: %+v %v", page, err)
 	}
 	var inv *guest.InvalidError
-	if _, err := f.svc.ListGuests(f.ctx, d.ID, guest.GuestFilter{Status: "checked_in"}); !errors.As(err, &inv) {
+	if _, err := f.svc.ListGuests(f.ctx, d.ID, guest.GuestFilter{Status: "arrived"}); !errors.As(err, &inv) {
 		t.Fatalf("unknown status filter: %v", err)
 	}
 

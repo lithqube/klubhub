@@ -127,7 +127,7 @@ function openPanel(p: 'add' | 'bulk' | 'list' | 'import') {
         <GuestListCard v-for="l in lists" :key="l.id" :list="l" :event="eventWindow!" @filter="showList" />
       </section>
 
-      <GuestTable ref="table" v-model:list="listFilter" :guests="guests" :lists="lists" :tickets="tickets" />
+      <GuestTable ref="table" v-model:list="listFilter" :guests="guests" :lists="lists" :tickets="tickets" :timezone="current.timezone" />
     </div>
   </div>
 </template>

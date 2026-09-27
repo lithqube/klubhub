@@ -175,4 +175,48 @@ test.describe('guest lists and guest table (mock API)', () => {
     const copied = page.getByRole('region', { name: `List Residents ${t}` });
     await expect(copied).toContainText('CUTOFF 01:00');
   });
+  // e-klubnacht-02 is last week's mock night with seeded door check-ins
+  // (one undone, one guest who left again); no test writes to it.
+  test('CHECKED IN shows who arrived and each row shows its heads inside', async ({ page }) => {
+    await page.goto('/events/e-klubnacht-02/guests');
+    await hydrated(page);
+    const table = page.getByRole('table');
+    const tabs = page.getByRole('navigation', { name: 'Guest status' });
+    // 5 guests with heads inside + 2 scanned tickets.
+    await expect(tabs.getByRole('button', { name: /^CHECKED IN\s*7$/ })).toBeVisible();
+
+    const carla = table.getByRole('row').filter({ hasText: 'Carla Mendes' });
+    await expect(carla.getByTestId('checkin-tag')).toHaveText(/^IN 2\/3 · \d\d:\d\d$/);
+    await expect(carla.getByTestId('checkin-tag')).toHaveAttribute('aria-label', /^Checked in: 2 of 3 heads inside, first in at \d\d:\d\d$/);
+    // An undone check-in does not count; the live one does.
+    await expect(table.getByRole('row').filter({ hasText: 'Otto Brandl' }).getByTestId('checkin-tag')).toHaveText(/^IN 1\/1 /);
+    // Came and went: OUT, not in the CHECKED IN tab.
+    await expect(table.getByRole('row').filter({ hasText: 'Mei Chen' }).getByTestId('checkin-tag')).toHaveText(/^OUT 0\/1 /);
+    await expect(table.getByRole('row').filter({ hasText: 'Yusuf Demir' }).getByTestId('checkin-tag')).toHaveCount(0);
+    await expect(table.getByRole('row').filter({ hasText: 'Nils Berg' }).getByTestId('checkin-tag')).toHaveText(/^IN · \d\d:\d\d$/);
+
+    await tabs.getByRole('button', { name: /^CHECKED IN/ }).click();
+    await expect(tabs.getByRole('button', { name: /^CHECKED IN/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(table.getByRole('row')).toHaveCount(8); // header + 5 guests + 2 tickets
+    await expect(table).toContainText('Carla Mendes');
+    await expect(table).toContainText('Jonas Wolf');
+    await expect(table).not.toContainText('Mei Chen');
+    await expect(table).not.toContainText('Yusuf Demir');
+    await expect(table).not.toContainText('Ada Berg');
+    await page.getByLabel('Filter by list').selectOption({ label: 'Comp' });
+    await expect(table.getByRole('row')).toHaveCount(3); // header + Greta Holm, Ravi Nair (tickets are on no list)
+    await expect(table).toContainText('Greta Holm');
+    await expect(tabs.getByRole('button', { name: /^CHECKED IN/ })).toHaveText(/CHECKED IN\s*2$/);
+  });
+
+  test('the guest API filters by status=checked_in; the CSV export refuses it', async ({ request }) => {
+    const res = await request.get('/api/v1/events/e-klubnacht-02/guests?status=checked_in');
+    expect(res.status()).toBe(200);
+    const body = await res.json() as { guests: { name: string, heads_in: number, first_in_at: string | null }[], tickets: unknown[], counts: { checked_in: number, all: number } };
+    expect(body.guests.map(g => g.name).sort()).toEqual(['Carla Mendes', 'Greta Holm', 'Otto Brandl', 'Pia Lorenz', 'Ravi Nair']);
+    expect(body.guests.every(g => g.heads_in >= 1 && g.first_in_at)).toBe(true);
+    expect(body.counts.checked_in).toBe(5);
+    expect(body.tickets).toEqual([]);
+    expect((await request.get('/api/v1/events/e-klubnacht-02/guests/export.csv?status=checked_in')).status()).toBe(422);
+  });
 });

@@ -23,7 +23,8 @@ import (
 // List types (plan P2.1).
 var ListTypes = []string{"artist", "promoter", "comp", "industry", "vip", "reduced", "crew"}
 
-// Guest statuses. "checked_in" is derived from check-ins in P2.3.
+// Guest statuses. "checked_in" is derived from check-ins (P2.3): it is a
+// guest-table filter (StatusCheckedIn), never a stored status.
 const (
 	StatusGoing    = "going"
 	StatusPending  = "pending"
@@ -31,6 +32,10 @@ const (
 	StatusInvited  = "invited"
 	StatusDeclined = "declined"
 )
+
+// StatusCheckedIn filters the guest table to guests with live heads in
+// (HeadsIn >= 1), whatever their status.
+const StatusCheckedIn = "checked_in"
 
 // Statuses in tab order.
 var Statuses = []string{StatusGoing, StatusPending, StatusWaitlist, StatusInvited, StatusDeclined}
@@ -299,6 +304,11 @@ type Guest struct {
 	Source       string     `json:"source"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+	// HeadsIn is who is inside now: non-undone `in` counts minus non-undone
+	// `out` counts, floored at 0. FirstInAt is the earliest non-undone `in`
+	// (device clock), kept after the guest leaves again.
+	HeadsIn   int        `json:"heads_in"`
+	FirstInAt *time.Time `json:"first_in_at"`
 }
 
 // Counts are the status-tab counts of an event (or one list of it).
@@ -314,6 +324,9 @@ type Counts struct {
 	// Tickets counts valid imported tickets (not on any list, so 0 when
 	// the list filter is set).
 	Tickets int `json:"tickets"`
+	// CheckedIn counts guests with HeadsIn >= 1 (any status; respects the
+	// list filter, not the status filter). Tickets are not included.
+	CheckedIn int `json:"checked_in"`
 }
 
 func (c *Counts) add(status string, n, heads int) {
@@ -355,9 +368,13 @@ type Ticket struct {
 	Email        string    `json:"email"`
 	Status       string    `json:"status"`
 	ImportedAt   time.Time `json:"imported_at"`
+	// CheckedIn: the ticket has a non-undone `in`; FirstInAt is the earliest.
+	CheckedIn bool       `json:"checked_in"`
+	FirstInAt *time.Time `json:"first_in_at"`
 }
 
-// GuestFilter narrows the guest table. Q is an exact lookup through the
+// GuestFilter narrows the guest table. Status is a guest status or
+// StatusCheckedIn (guest table only, not the CSV export). Q is an exact lookup through the
 // blind indexes (an email, or a full name); fuzzy search runs in the
 // browser over the decrypted page.
 type GuestFilter struct {

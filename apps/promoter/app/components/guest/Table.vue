@@ -4,7 +4,8 @@ import { useGuestStore } from '~/stores/guest'
 import type { ApiError } from '~/types/event'
 import type { Guest, GuestList, GuestStatus, Ticket } from '~/types/guest'
 import { IMPORT_PRESETS } from '~/utils/attendeeImport'
-import { countByStatus, guestErrorText, searchGuests, searchTickets, STATUS_LABEL, STATUSES } from '~/utils/guests'
+import { timeLabel } from '~/utils/datetime'
+import { arrivalTag, countByStatus, guestErrorText, isCheckedIn, searchGuests, searchTickets, STATUS_LABEL, STATUSES } from '~/utils/guests'
 
 /**
  * The guest table (P2.1): status tabs with counts, search (in the browser,
@@ -16,15 +17,21 @@ import { countByStatus, guestErrorText, searchGuests, searchTickets, STATUS_LABE
  * no guest status, so the status tabs and the list filter leave them out;
  * they change only through a re-import of the platform's export.
  *
+ * Check-in state (P2.3): each guest shows "IN 2/3" (heads inside / heads
+ * allowed) next to its status, with the first-in time in the event's
+ * timezone, or "OUT 0/3" once everyone left again; a ticket shows "IN".
+ * CHECKED IN lists guests with heads inside (any status) and scanned
+ * tickets. The state is a snapshot from the last load.
+ *
  * A status change says what it did with an UNDO (back to the previous
  * status); DECLINED from the dropdown asks first. Errors show on the row.
  * A list filter shows as a removable "LIST: name ✕" chip.
  */
-const props = withDefaults(defineProps<{ guests: Guest[], lists: GuestList[], tickets?: Ticket[] }>(), { tickets: () => [] })
+const props = withDefaults(defineProps<{ guests: Guest[], lists: GuestList[], tickets?: Ticket[], timezone?: string }>(), { tickets: () => [], timezone: 'UTC' })
 const listFilter = defineModel<string>('list', { default: '' })
 const store = useGuestStore()
 
-type Tab = 'all' | GuestStatus | 'tickets'
+type Tab = 'all' | GuestStatus | 'checked_in' | 'tickets'
 type Row = { kind: 'guest', key: string, g: Guest } | { kind: 'ticket', key: string, t: Ticket }
 const sourceLabel = (s: string) => IMPORT_PRESETS.find(p => p.id === s)?.label ?? s.toUpperCase()
 const tab = ref<Tab>('all')
@@ -46,6 +53,8 @@ const editing = ref<string | null>(null)
 const draft = reactive({ name: '', plus_n: 0, note: '', email: '', phone: '' })
 const editError = ref<ApiError | null>(null)
 
+const firstIn = (iso: string | null) => (iso ? timeLabel(iso, props.timezone) : '')
+const tagOf = (g: Guest) => arrivalTag(g, firstIn(g.first_in_at))
 const listName = (id: string) => props.lists.find(l => l.id === id)?.name ?? '—'
 const allocLabel = (g: Guest) => props.lists.flatMap(l => l.allocations).find(a => a.id === g.allocation_id)?.label ?? ''
 const collects = (g: Guest) => props.lists.find(l => l.id === g.list_id)?.collect_contact ?? false
@@ -53,9 +62,20 @@ const collects = (g: Guest) => props.lists.find(l => l.id === g.list_id)?.collec
 const inList = computed(() => (listFilter.value ? props.guests.filter(g => g.list_id === listFilter.value) : props.guests))
 const ticketsInView = computed(() => (listFilter.value ? [] : props.tickets))
 const counts = computed(() => countByStatus(inList.value))
+const ticketsIn = computed(() => ticketsInView.value.filter(t => t.checked_in))
+function guestsInTab(t: Tab): Guest[] {
+  if (t === 'tickets') return []
+  if (t === 'all') return inList.value
+  if (t === 'checked_in') return inList.value.filter(isCheckedIn)
+  return inList.value.filter(g => g.status === t)
+}
+function ticketsInTab(t: Tab): Ticket[] {
+  if (t === 'all' || t === 'tickets') return ticketsInView.value
+  return t === 'checked_in' ? ticketsIn.value : []
+}
 const shown = computed<Row[]>(() => {
-  const guestRows = tab.value === 'tickets' ? [] : searchGuests(tab.value === 'all' ? inList.value : inList.value.filter(g => g.status === tab.value), q.value)
-  const ticketRows = tab.value === 'all' || tab.value === 'tickets' ? searchTickets(ticketsInView.value, q.value) : []
+  const guestRows = searchGuests(guestsInTab(tab.value), q.value)
+  const ticketRows = searchTickets(ticketsInTab(tab.value), q.value)
   return [
     ...guestRows.map(g => ({ kind: 'guest' as const, key: `g-${g.id}`, g })),
     ...ticketRows.map(t => ({ kind: 'ticket' as const, key: `t-${t.id}`, t })),
@@ -64,6 +84,7 @@ const shown = computed<Row[]>(() => {
 const TABS = computed(() => [
   { id: 'all' as Tab, label: 'ALL', n: counts.value.all + ticketsInView.value.length },
   ...STATUSES.map(s => ({ id: s as Tab, label: STATUS_LABEL[s], n: counts.value[s] })),
+  { id: 'checked_in' as Tab, label: 'CHECKED IN', n: counts.value.checked_in + ticketsIn.value.length },
   ...(props.tickets.length ? [{ id: 'tickets' as Tab, label: 'TICKETS', n: ticketsInView.value.length }] : []),
 ])
 
@@ -192,7 +213,15 @@ async function remove(g: Guest) {
               {{ row.t.ticket_type }}
               <span style="display:block;font-size:11px;color:var(--color-on-surface-variant);">{{ sourceLabel(row.t.source) }} · order {{ row.t.order_ref }}</span>
             </td>
-            <td><GuestTicketBadge :status="row.t.status" /></td>
+            <td>
+              <span class="state-cell">
+                <GuestTicketBadge :status="row.t.status" />
+                <span
+                  v-if="row.t.checked_in" class="in-tag in-tag-in" data-testid="checkin-tag"
+                  :aria-label="`Checked in${row.t.first_in_at ? ` at ${firstIn(row.t.first_in_at)}` : ''}`"
+                ><span aria-hidden="true">IN<template v-if="row.t.first_in_at"> · {{ firstIn(row.t.first_in_at) }}</template></span></span>
+              </span>
+            </td>
             <td class="actions-cell" />
           </template>
           <template v-else-if="editing === row.g.id">
@@ -228,7 +257,13 @@ async function remove(g: Guest) {
               <span v-if="allocLabel(row.g)" style="display:block;font-size:11px;color:var(--color-on-surface-variant);">via {{ allocLabel(row.g) }}</span>
             </td>
             <td>
-              <GuestStatusBadge :status="row.g.status" />
+              <span class="state-cell">
+                <GuestStatusBadge :status="row.g.status" />
+                <span
+                  v-if="tagOf(row.g)" class="in-tag" :class="`in-tag-${tagOf(row.g)!.tone}`" data-testid="checkin-tag"
+                  :aria-label="tagOf(row.g)!.label"
+                ><span aria-hidden="true">{{ tagOf(row.g)!.text }}<template v-if="row.g.first_in_at"> · {{ firstIn(row.g.first_in_at) }}</template></span></span>
+              </span>
             </td>
             <td class="actions-cell">
               <div class="actions">
@@ -289,6 +324,26 @@ async function remove(g: Guest) {
   padding: 0 12px;
   font-size: 11px;
 }
+.state-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+/* Check-in indicator: word + numbers, never colour alone. */
+.in-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-family: var(--font-terminal);
+  font-size: 11px;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.in-tag-in { color: var(--color-primary); }
+.in-tag-over { color: var(--color-error); }
+.in-tag-left { color: var(--color-on-surface-variant); border-style: dashed; }
 .row-err {
   margin: 4px 0 0;
   font-size: 13px;

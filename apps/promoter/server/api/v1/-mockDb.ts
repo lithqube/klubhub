@@ -14,7 +14,7 @@ import type {
 } from '~/types/guest'
 import type { Organization, OrgProfile } from '~/types/org'
 import {
-  allocationState, countByStatus, cutoffInstant, fold, headsHeld, holdsQuota, LIST_TYPES, STATUSES,
+  allocationState, arrivalsFrom, countByStatus, cutoffInstant, fold, headsHeld, holdsQuota, LIST_TYPES, STATUSES,
 } from '~/utils/guests'
 import { validateTimetable } from '~/utils/timetable'
 import { BUCKET_MS, bucketStart } from '~/utils/report'
@@ -139,7 +139,7 @@ export const standingLists: StandingList[] = [
 
 type ListRow = Omit<GuestList, 'allocations' | 'guests' | 'heads' | 'pending' | 'quota'>
 type AllocRow = Omit<Allocation, 'used' | 'guests' | 'pending'> & { event_id: string }
-type GuestRow = Guest & { event_id: string }
+type GuestRow = Omit<Guest, 'heads_in' | 'first_in_at'> & { event_id: string }
 
 const terms = (t: Partial<EntryTerms> = {}): EntryTerms => ({ price_mode: 'free', reduced_price_text: '', perks: [], ...t })
 
@@ -327,7 +327,7 @@ export function addGuests(eventId: string, b: AddGuestsInput): AddResult {
     phone: g.phone ?? '', note: g.note ?? '', plus_n: g.plus_n, status: g.status, source: b.source ?? 'manual', created_at: now, updated_at: now,
   }))
   guests.push(...added)
-  return { added: added.map(strip), duplicates }
+  return { added: added.map(g => guestView(g)), duplicates }
 }
 
 export function updateGuest(eventId: string, id: string, b: GuestInput): Guest {
@@ -344,7 +344,7 @@ export function updateGuest(eventId: string, id: string, b: GuestInput): Guest {
     if (after > before) quotaCheck(alloc, after, g.id)
   }
   Object.assign(g, { name: next.name, email: next.email, phone: next.phone, note: next.note, plus_n: next.plus_n, status, updated_at: new Date().toISOString() })
-  return strip(g)
+  return guestView(g)
 }
 
 export function deleteGuest(eventId: string, id: string) {
@@ -371,13 +371,29 @@ export function bulkStatus(eventId: string, b: BulkStatusInput): BulkResult {
   return { matched: targets.length, updated: changed.length, unmatched }
 }
 
-export function guestPage(eventId: string, filter: { status?: string, list_id?: string }): GuestPage {
+/** Check-in state of an event's guests and tickets, derived from the door rows (undone rows never count). */
+const eventArrivals = (eventId: string) => arrivalsFrom(checkinRows.filter(c => c.event_id === eventId))
+
+/** A guest as the API shows it: with its live check-in state. */
+function guestView(g: GuestRow, arrivals = eventArrivals(g.event_id)): Guest {
+  const a = arrivals.get(`guest:${g.id}`)
+  return { ...strip(g), heads_in: a?.heads_in ?? 0, first_in_at: a?.first_in_at ?? null }
+}
+
+/**
+ * The guest table. status is a guest status or 'checked_in' (heads in ≥ 1,
+ * any status); the CSV export refuses 'checked_in' (checkedIn = false).
+ */
+export function guestPage(eventId: string, filter: { status?: string, list_id?: string }, checkedIn = true): GuestPage {
   findEvent(eventId)
-  if (filter.status && !STATUSES.includes(filter.status as GuestStatus)) throw invalidField('status', STATUSES.join(', '))
-  const inList = guests.filter(g => g.event_id === eventId && (!filter.list_id || g.list_id === filter.list_id))
+  const allowed: string[] = checkedIn ? [...STATUSES, 'checked_in'] : STATUSES
+  if (filter.status && !allowed.includes(filter.status)) throw invalidField('status', allowed.join(', '))
+  const arrivals = eventArrivals(eventId)
+  const inList = guests.filter(g => g.event_id === eventId && (!filter.list_id || g.list_id === filter.list_id)).map(g => guestView(g, arrivals))
   const counts = { ...countByStatus(inList), tickets: filter.list_id ? 0 : validTickets(eventId) }
+  const match = (g: Guest) => !filter.status || (filter.status === 'checked_in' ? g.heads_in >= 1 : g.status === filter.status)
   return {
-    guests: inList.filter(g => !filter.status || g.status === filter.status).map(strip),
+    guests: inList.filter(match),
     tickets: filter.status || filter.list_id ? [] : ticketViews(eventId),
     counts,
   }
@@ -436,12 +452,14 @@ export const positions: PositionRow[] = [
 const validTickets = (eventId: string) => positions.filter(p => p.event_id === eventId && p.status === 'valid').length
 
 function ticketViews(eventId: string): Ticket[] {
+  const arrivals = eventArrivals(eventId)
   return positions.filter(p => p.event_id === eventId).map((p) => {
     const o = orders.find(x => x.id === p.order_id)!
+    const firstIn = arrivals.get(`ticket:${p.id}`)?.first_in_at ?? null
     return {
       id: p.id, order_id: o.id, source: o.source, order_ref: o.ref, ticket_type_id: p.ticket_type_id,
       ticket_type: ticketTypes.find(t => t.id === p.ticket_type_id)?.name ?? '', name: p.name, email: p.email, status: p.status,
-      imported_at: p.imported_at,
+      imported_at: p.imported_at, checked_in: firstIn !== null, first_in_at: firstIn,
     }
   }).sort((a, b) => a.order_ref.localeCompare(b.order_ref))
 }

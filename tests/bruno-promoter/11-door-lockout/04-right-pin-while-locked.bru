@@ -1,0 +1,34 @@
+meta {
+  name: The right PIN is refused while locked (429)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "device_token": "{{deviceToken}}",
+    "event_id": "{{lockEventId}}",
+    "pin": "{{lockPin}}"
+  }
+}
+
+assert {
+  res.status: eq 429
+  res.body.error: eq pin_locked
+}
+
+tests {
+  test("says when to retry", function () {
+    expect(Number(res.getHeader("retry-after"))).to.be.within(1, 900);
+  });
+}

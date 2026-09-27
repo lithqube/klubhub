@@ -1,0 +1,47 @@
+meta {
+  name: List-back CSV for an allocation (no email column)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/report/list-back.csv?allocation_id={{allocationId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Accept: text/csv
+}
+
+params:query {
+  allocation_id: {{allocationId}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  const raw = res.getBody();
+  const text = typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw);
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(Boolean);
+
+  test("is a CSV attachment, not cached", function () {
+    expect(res.getHeader("content-type")).to.match(/^text\/csv/);
+    expect(res.getHeader("content-disposition")).to.match(/^attachment; filename=".+\.csv"$/);
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+  });
+
+  test("header row, no email or phone column", function () {
+    expect(lines[0]).to.equal("name,plus_n,status,arrived,heads_admitted,first_in_local");
+    expect(lines[0]).to.not.match(/email|phone/i);
+  });
+
+  test("the allocation's guest with its door outcome, no email", function () {
+    expect(lines.find((l) => l.startsWith("Kai Test,"))).to.equal("Kai Test,1,going,no,0,");
+    expect(text).to.not.contain("@");
+    expect(text).to.not.contain("Mara Test"); // not on this allocation
+  });
+}

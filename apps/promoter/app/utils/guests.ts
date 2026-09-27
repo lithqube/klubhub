@@ -127,13 +127,67 @@ export function searchTickets(tickets: Ticket[], q: string): Ticket[] {
 
 /** Tab counts for a set of guests (what the server returns, computed locally). */
 export function countByStatus(guests: Guest[]): GuestCounts {
-  const c: GuestCounts = { all: 0, going: 0, pending: 0, waitlist: 0, invited: 0, declined: 0, going_heads: 0, tickets: 0 }
+  const c: GuestCounts = { all: 0, going: 0, pending: 0, waitlist: 0, invited: 0, declined: 0, going_heads: 0, tickets: 0, checked_in: 0 }
   for (const g of guests) {
     c.all++
     c[g.status]++
     if (g.status === 'going') c.going_heads += 1 + g.plus_n
+    if (isCheckedIn(g)) c.checked_in++
   }
   return c
+}
+
+// ---------------------------------------------------------------- check-in state (P2.3 in the guest table)
+
+/** A guest is checked in while at least one of its heads is inside (any status). */
+export const isCheckedIn = (g: Pick<Guest, 'heads_in'>) => (g.heads_in ?? 0) >= 1
+
+export interface Arrival {
+  /** Σ live `in` − Σ live `out`, floored at 0. */
+  heads_in: number
+  /** Earliest live `in`, or null. */
+  first_in_at: string | null
+}
+
+/**
+ * Check-in state per subject ("guest:<id>" / "ticket:<id>") from door
+ * check-in rows, as the server derives it: undone rows never count, heads
+ * in are ins minus outs (never below 0), first in is the earliest live `in`.
+ */
+export function arrivalsFrom(rows: { subject: { kind: string, id: string }, count: number, direction: 'in' | 'out', at: string, undone: boolean }[]): Map<string, Arrival> {
+  const out = new Map<string, Arrival>()
+  const net = new Map<string, number>()
+  for (const c of rows) {
+    if (c.undone) continue
+    const key = `${c.subject.kind}:${c.subject.id}`
+    net.set(key, (net.get(key) ?? 0) + (c.direction === 'in' ? c.count : -c.count))
+    const a = out.get(key) ?? { heads_in: 0, first_in_at: null }
+    if (c.direction === 'in' && (!a.first_in_at || Date.parse(c.at) < Date.parse(a.first_in_at))) a.first_in_at = c.at
+    out.set(key, a)
+  }
+  for (const [key, a] of out) a.heads_in = Math.max(0, net.get(key) ?? 0)
+  return out
+}
+
+export interface ArrivalTag {
+  /** "IN 2/3" (heads inside / heads allowed), or "OUT 0/3" once everyone left again. */
+  text: string
+  /** in: inside within the allowance; over: more heads inside than allowed; left: came and went. */
+  tone: 'in' | 'over' | 'left'
+  /** Screen-reader sentence, with the first-in time when given. */
+  label: string
+}
+
+/** The guest-table indicator for a guest's check-in state; null before the first live `in`. */
+export function arrivalTag(g: Pick<Guest, 'heads_in' | 'first_in_at' | 'plus_n'>, firstInTime = ''): ArrivalTag | null {
+  if (!g.first_in_at) return null
+  const allowed = 1 + g.plus_n
+  const at = firstInTime ? `, first in at ${firstInTime}` : ''
+  if (g.heads_in < 1) return { text: `OUT 0/${allowed}`, tone: 'left', label: `Checked in${at}, left again` }
+  return {
+    text: `IN ${g.heads_in}/${allowed}`, tone: g.heads_in > allowed ? 'over' : 'in',
+    label: `Checked in: ${g.heads_in} of ${allowed} ${allowed === 1 ? 'head' : 'heads'} inside${at}`,
+  }
 }
 
 /** Statuses that hold allocation quota. */

@@ -270,13 +270,38 @@ type guestRow struct {
 
 const guestCols = `g.id, g.list_id, g.allocation_id, g.name_enc, g.email_enc, g.phone_enc, g.note_enc, g.plus_n, g.status, g.source, g.created_at, g.updated_at`
 
-func scanGuest(r pgx.Row) (guestRow, error) {
+// scanGuest scans guestCols; with arrivals it also scans the heads_in and
+// first_in_at columns that follow them.
+func scanGuest(r pgx.Row, arrivals ...bool) (guestRow, error) {
 	var x guestRow
 	var plus int16
-	err := r.Scan(&x.ID, &x.ListID, &x.AllocationID, &x.sealed[0], &x.sealed[1], &x.sealed[2], &x.sealed[3], &plus,
-		&x.Status, &x.Source, &x.CreatedAt, &x.UpdatedAt)
+	dst := []any{&x.ID, &x.ListID, &x.AllocationID, &x.sealed[0], &x.sealed[1], &x.sealed[2], &x.sealed[3], &plus,
+		&x.Status, &x.Source, &x.CreatedAt, &x.UpdatedAt}
+	if len(arrivals) > 0 && arrivals[0] {
+		dst = append(dst, &x.HeadsIn, &x.FirstInAt)
+	}
+	err := r.Scan(dst...)
 	x.PlusN = int(plus)
 	return x, err
+}
+
+// guestArrivals aggregates an event's live check-ins ($1) per guest:
+// heads_in = Σ in − Σ out (floored at 0) and the earliest `in`. Undone rows
+// never count.
+const guestArrivals = `SELECT guest_id,
+    GREATEST(COALESCE(sum(count) FILTER (WHERE direction = 'in'), 0) - COALESCE(sum(count) FILTER (WHERE direction = 'out'), 0), 0)::int AS heads_in,
+    min(at) FILTER (WHERE direction = 'in') AS first_in_at
+  FROM checkins WHERE event_id = $1 AND guest_id IS NOT NULL AND undone_at IS NULL GROUP BY guest_id`
+
+// arrivalOf is guestArrivals for one guest.
+func arrivalOf(ctx context.Context, tx pgx.Tx, guestID uuid.UUID) (int, *time.Time, error) {
+	var heads int
+	var first *time.Time
+	err := tx.QueryRow(ctx, `SELECT
+	    GREATEST(COALESCE(sum(count) FILTER (WHERE direction = 'in'), 0) - COALESCE(sum(count) FILTER (WHERE direction = 'out'), 0), 0)::int,
+	    min(at) FILTER (WHERE direction = 'in')
+	  FROM checkins WHERE guest_id = $1 AND undone_at IS NULL`, guestID).Scan(&heads, &first)
+	return heads, first, err
 }
 
 func (s *Service) decrypt(ctx context.Context, tx pgx.Tx, x guestRow) (Guest, error) {
@@ -292,9 +317,15 @@ func (s *Service) decrypt(ctx context.Context, tx pgx.Tx, x guestRow) (Guest, er
 	return g, nil
 }
 
-func (f *GuestFilter) validate() error {
-	if f.Status != "" && !slices.Contains(Statuses, f.Status) {
-		return invalid("status", strings.Join(Statuses, ", "))
+// validate checks the filter; checkedIn allows the derived StatusCheckedIn
+// (the guest table does, the CSV export does not).
+func (f *GuestFilter) validate(checkedIn bool) error {
+	if f.Status != "" && !slices.Contains(Statuses, f.Status) && (!checkedIn || f.Status != StatusCheckedIn) {
+		allowed := Statuses
+		if checkedIn {
+			allowed = append(slices.Clone(Statuses), StatusCheckedIn)
+		}
+		return invalid("status", strings.Join(allowed, ", "))
 	}
 	f.Q = strings.TrimSpace(f.Q)
 	if len(f.Q) > maxEmailLen {
@@ -305,10 +336,11 @@ func (f *GuestFilter) validate() error {
 
 // ListGuests returns the guest table for an event and the tab counts. The
 // counts respect the list filter but not the status filter, so every tab
-// shows its own number.
+// shows its own number. Guests and tickets carry their live check-in state;
+// status=checked_in lists guests with heads in (any status).
 func (s *Service) ListGuests(ctx context.Context, eventID uuid.UUID, f GuestFilter) (GuestPage, error) {
 	page := GuestPage{Guests: []Guest{}, Tickets: []Ticket{}}
-	if err := f.validate(); err != nil {
+	if err := f.validate(true); err != nil {
 		return page, err
 	}
 	err := s.db.Run(ctx, func(tx pgx.Tx) error {
@@ -350,17 +382,20 @@ func (s *Service) query(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, f Gue
 		}
 	}
 	var status *string
-	if f.Status != "" {
+	arrived := f.Status == StatusCheckedIn
+	if f.Status != "" && !arrived {
 		status = &f.Status
 	}
-	rows, err := tx.Query(ctx, `SELECT `+guestCols+` FROM guests g
+	rows, err := tx.Query(ctx, `WITH a AS (`+guestArrivals+`)
+	  SELECT `+guestCols+`, COALESCE(a.heads_in, 0), a.first_in_at FROM guests g LEFT JOIN a ON a.guest_id = g.id
 	  WHERE g.event_id = $1 AND ($2::text IS NULL OR g.status = $2) AND ($3::uuid IS NULL OR g.list_id = $3)
 	    AND ($4::bytea IS NULL OR g.email_bidx = $4) AND ($5::bytea IS NULL OR g.name_bidx = $5)
-	  ORDER BY g.created_at, g.id LIMIT $6`, eventID, status, f.ListID, emailBidx, nameBidx, MaxPerEvent)
+	    AND (NOT $7::bool OR COALESCE(a.heads_in, 0) >= 1)
+	  ORDER BY g.created_at, g.id LIMIT $6`, eventID, status, f.ListID, emailBidx, nameBidx, MaxPerEvent, arrived)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (guestRow, error) { return scanGuest(r) })
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (guestRow, error) { return scanGuest(r, true) })
 }
 
 func counts(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, listID *uuid.UUID) (Counts, error) {
@@ -379,7 +414,12 @@ func counts(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, listID *uuid.UUID
 		}
 		c.add(st, n, heads)
 	}
-	if err := rows.Err(); err != nil || listID != nil {
+	if err := rows.Err(); err != nil {
+		return c, err
+	}
+	if err := tx.QueryRow(ctx, `WITH a AS (`+guestArrivals+`)
+	  SELECT count(*) FROM guests g JOIN a ON a.guest_id = g.id
+	  WHERE g.event_id = $1 AND ($2::uuid IS NULL OR g.list_id = $2) AND a.heads_in >= 1`, eventID, listID).Scan(&c.CheckedIn); err != nil || listID != nil {
 		return c, err
 	}
 	err = tx.QueryRow(ctx, `SELECT count(*) FROM order_positions WHERE event_id = $1 AND status = 'valid'`, eventID).Scan(&c.Tickets)
@@ -450,6 +490,9 @@ func (s *Service) UpdateGuest(ctx context.Context, eventID, guestID uuid.UUID, i
 			}
 		}
 		if err := s.listUpdated(ctx, tx, eventID, cur.ListID); err != nil {
+			return err
+		}
+		if x.HeadsIn, x.FirstInAt, err = arrivalOf(ctx, tx, guestID); err != nil {
 			return err
 		}
 		out, err = s.decrypt(ctx, tx, x)
@@ -596,7 +639,7 @@ func (s *Service) BulkStatus(ctx context.Context, eventID uuid.UUID, in BulkStat
 // filters) and records the export in the audit log: it hands personal data
 // to a file outside the system.
 func (s *Service) Export(ctx context.Context, eventID uuid.UUID, f GuestFilter, actor string) (string, []ExportRow, error) {
-	if err := f.validate(); err != nil {
+	if err := f.validate(false); err != nil {
 		return "", nil, err
 	}
 	var slug string

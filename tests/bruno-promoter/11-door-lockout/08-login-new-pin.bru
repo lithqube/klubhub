@@ -1,0 +1,27 @@
+meta {
+  name: Door login with the new PIN works (204)
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "device_token": "{{deviceToken}}",
+    "event_id": "{{lockEventId}}",
+    "pin": "{{lockPin}}"
+  }
+}
+
+assert {
+  res.status: eq 204
+}

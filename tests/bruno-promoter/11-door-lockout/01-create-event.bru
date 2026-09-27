@@ -1,0 +1,39 @@
+meta {
+  name: Create a second event for the lockout test
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "Bruno Lockout Night",
+    "starts_at": "{{eventStartsAt}}",
+    "ends_at": "{{eventEndsAt}}",
+    "timezone": "Europe/Berlin",
+    "city": "Berlin"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+tests {
+  test("save the lockout event id", function () {
+    const id = res.getBody().id;
+    expect(id).to.match(/^[0-9a-f-]{36}$/);
+    expect(id).to.not.equal(bru.getVar("eventId"));
+    bru.setVar("lockEventId", id);
+  });
+}
