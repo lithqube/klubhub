@@ -247,8 +247,8 @@ Back up both Postgres and Garage, along with the private configuration needed to
 The full v1 release plan lives in [`docs/v1-release-plan.md`](./docs/v1-release-plan.md).
 At a glance:
 
-- **Now:** Phase 5 — Finance Tracker (invoices, payments, agreements, PDF, Plunk email)
-- **Next:** Phases 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard) → 9 (Production Hardening)
+- **Now:** finishing Phase 5 — invoices, payments, agreements and PDF/Plunk email shipped in v1.1.0; income/expense tracking (earnings) is the remaining piece
+- **Next:** Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard)
 
 Per-phase status is tracked in [`CHANGELOG.md`](./CHANGELOG.md) and the
 roadmap doc. Releases follow [semver](https://semver.org) once v1.0.0 ships.
@@ -276,12 +276,12 @@ The frontend can run in two modes:
 
 | Page | UI | Mock data | Go backend |
 |------|----|-----------|------------|
-| `/` Dashboard | ✅ | Static | — (Phase 8 wiring) |
+| `/` Dashboard | ✅ | Live gig, social & tracklist data | ✅ (full cross-module aggregation is Phase 8) |
 | `/tracklist` Tracklist | ✅ | ✅ GET | ✅ CRUD, parse, generate-image |
 | `/social` Scheduler | ✅ | ✅ GET | ✅ CRUD, schedule, publish, worker |
 | `/epk` Press Kit | ✅ | ✅ GET/PUT | ✅ CRUD, photo upload, PDF export |
 | `/gigs` Gig Tracker | ✅ | Static | ✅ CRUD, iCal feed, booking confirmation PDF |
-| `/finance` Finance | 🚧 | 🚧 | ✅ invoicing, payments, agreements, email outbox (Phase 5 — UI wiring in progress) |
+| `/finance` Finance | ✅ | ✅ | ✅ invoicing, payments, agreements, email outbox (shipped in v1.1.0); the Earnings panel (income/expense log) is not yet wired |
 
 ---
 

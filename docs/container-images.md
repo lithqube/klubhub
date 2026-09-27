@@ -6,7 +6,7 @@ The production deployment uses one app package, `ghcr.io/lithqube/klubhub-dj-api
 
 The combined app image built from `apps/dj/Dockerfile` runs **Go + Nuxt/Node + Playwright under supervision**. It is not a distroless Go-only image serving a static Nuxt directory. Go owns the public listener on port 8080, serves API routes, and proxies frontend traffic to Nuxt on internal port 3000. That internal port is not published. `SERVE_FRONTEND=true` enables this production behavior; development uses an API-only image and host Nuxt instead.
 
-**Local changes are not a released image.** Fixes in this checkout require a new version publication before production operators can pull them. `docker-compose.prod.yml` defaults to `IMAGE_TAG=v1.0.0`, but this does not assert that the existing tag contains the runtime fixes. Anonymous requests for the existing v1.0.0 package returned 403. Resolve GHCR access and verify the selected release before using it; do not report a local build as a successful registry deployment.
+**Local changes are not a released image.** Fixes in this checkout require a new version publication before production operators can pull them. `docker-compose.prod.yml` defaults to `IMAGE_TAG=v1.0.1`, but that tag **was never published** — only `1.0.1` (no `v`) is, and it predates the v1.1.0 invoicing work. Export `IMAGE_TAG` to `1.0.1` or the newest `sha-<commit>` tag before deploying; do not report a local build as a successful registry deployment. This is expected to be resolved by a v1.2.0 release with matching `v1.2.0`/`1.2.0` tags.
 
 ## Production image references
 
@@ -14,7 +14,7 @@ The combined app image built from `apps/dj/Dockerfile` runs **Go + Nuxt/Node + P
 |---|---|
 | `db` | `postgres:16-alpine` |
 | `storage` | `dxflrs/garage:v2.2.0` |
-| `app` (combined) | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.0.0}` |
+| `app` (combined) | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.0.1}` |
 
 The production Compose file is standalone and image-only. Do not merge it with the default development Compose file, which builds the API from local source. Override `IMAGE_REPOSITORY` only when intentionally using a different app registry package. There are no separate `/api` and `/frontend` production packages in this deployment contract.
 

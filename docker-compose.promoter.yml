@@ -11,7 +11,11 @@
 # .local/promoter/secrets (gitignored) and are mounted as Docker secrets.
 name: klubhub-promoter
 
-x-promoter-image: &promoter-image ${PROMOTER_IMAGE:-ghcr.io/lithqube/klubhub-promoter-api}:${PROMOTER_TAG:-v0.1.0}
+# No versioned Promoter release exists yet (only sha-<commit> tags are
+# published; see docs/SELF-HOSTING.md#klubhub-promoter--self-hosting-preview).
+# PROMOTER_TAG has no default so an unset tag fails loudly here instead of
+# silently trying to pull one that was never published.
+x-promoter-image: &promoter-image ${PROMOTER_IMAGE:-ghcr.io/lithqube/klubhub-promoter-api}:${PROMOTER_TAG:?Set PROMOTER_TAG to a published ghcr.io/lithqube/klubhub-promoter-api tag — see docs/SELF-HOSTING.md#klubhub-promoter--self-hosting-preview}
 
 services:
   promoter-db:

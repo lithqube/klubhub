@@ -8,6 +8,28 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`PROMOTER_TAG` is now required** in `docker-compose.promoter.yml` (no
+  default). It previously defaulted to `v0.1.0`, which was never
+  published — only `sha-<commit>` tags exist — so a manual
+  `docker compose -f docker-compose.promoter.yml up` without an explicit
+  tag failed to pull with no clear reason. It now fails immediately with
+  a message pointing at [`docs/SELF-HOSTING.md`](docs/SELF-HOSTING.md#klubhub-promoter--self-hosting-preview).
+  The one-line installer already resolved this correctly and is
+  unaffected.
+- klubhub.io's KlubHub Promoter badge changed from "COMING SOON" to
+  "SELF-HOSTING PREVIEW": Promoter has been installable via the one-line
+  installer since 2026-09-27.
+- Corrected several places where the README, `.planning/ROADMAP.md` and
+  the self-hosting docs had fallen behind the shipped code: the
+  dashboard and Finance per-page status table, the Roadmap's "Now:
+  Phase 5" line, `.planning/ROADMAP.md`'s Phase 0.5/4/9 status markers
+  (each contradicted their own detail sections), and `IMAGE_TAG`
+  guidance in `docs/SELF-HOSTING.md`, `docs/container-images.md` and
+  `docs/PRODUCTION.md`, which named the wrong default (`v1.0.0`,
+  no-longer-published) and the wrong reason (a 403 access issue) for
+  the current one (`docker-compose.prod.yml` defaults to `v1.0.1`,
+  which was never published; `1.0.1`, no `v`, is the real tag).
+
 - **Resident Advisor (RA) import is now a licensed feature and is off by
   default.** This affects existing self-hosters: after upgrading, the RA
   import panels on the EPK and Gigs pages and the RA link field in the EPK
