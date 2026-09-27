@@ -1,0 +1,29 @@
+meta {
+  name: Booker creates a member key
+  type: http
+  seq: 10
+}
+
+put {
+  url: {{baseUrl}}/api/v1/keys/me
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{bookerCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "public_key": "{{bookerPub}}",
+    "private_sealed": "{{bookerPriv}}",
+    "kdf": { "alg": "argon2id", "m": 65536, "t": 3, "p": 1, "salt": "{{kdfSalt}}" }
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.public_key: eq {{bookerPub}}
+}

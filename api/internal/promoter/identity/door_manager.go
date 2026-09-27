@@ -15,6 +15,7 @@ import (
 
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 )
 
 // Offline manager-PIN verifier (P2.3 contract): PBKDF2-SHA256 with a random
@@ -171,6 +172,11 @@ type DoorDeviceInfo struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	LastSeenAt *time.Time `json:"last_seen_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
+	// PublicKey (base64url X25519, null when the device sent none) and
+	// HasWrap (holds the active org key version) drive the Door tab's
+	// sealed status (P2.6; additive to the P2.3 shape).
+	PublicKey *string `json:"public_key"`
+	HasWrap   bool    `json:"has_wrap"`
 }
 
 // DoorDevices lists the organisation's door devices, active first.
@@ -181,14 +187,21 @@ func (s *Service) DoorDevices(ctx context.Context, by authz.Principal) ([]DoorDe
 	}
 	out := []DoorDeviceInfo{}
 	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT id, label, created_at, last_seen_at, revoked_at FROM door_devices
-		  ORDER BY revoked_at NULLS FIRST, created_at`)
+		rows, err := tx.Query(ctx, `SELECT d.id, d.label, d.created_at, d.last_seen_at, d.revoked_at, d.public_key,
+		    EXISTS (SELECT 1 FROM org_key_wraps w JOIN org_sealed_keys k ON k.version = w.version AND k.status = 'active'
+		            WHERE w.recipient_kind = 'device' AND w.recipient_id = d.id)
+		  FROM door_devices d ORDER BY d.revoked_at NULLS FIRST, d.created_at`)
 		if err != nil {
 			return err
 		}
 		out, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (DoorDeviceInfo, error) {
 			var d DoorDeviceInfo
-			err := r.Scan(&d.ID, &d.Label, &d.CreatedAt, &d.LastSeenAt, &d.RevokedAt)
+			var pub []byte
+			err := r.Scan(&d.ID, &d.Label, &d.CreatedAt, &d.LastSeenAt, &d.RevokedAt, &pub, &d.HasWrap)
+			if pub != nil {
+				k := sealed.Encode(pub)
+				d.PublicKey = &k
+			}
 			return d, err
 		})
 		return err

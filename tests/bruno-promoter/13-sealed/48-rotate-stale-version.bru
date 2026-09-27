@@ -1,0 +1,35 @@
+meta {
+  name: Rotation from a stale version is 409
+  type: http
+  seq: 48
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/org/rotate
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "from_version": 2,
+    "to_version": 3,
+    "recovery": { "public_key": "{{recoveryPub2}}", "fingerprint": "{{recoveryFp2}}", "wrap": "{{recoveryWrap2}}" },
+    "wraps": [
+      { "recipient_kind": "member", "recipient_id": "{{ownerUserId}}", "wrap": "{{ownerWrap2}}" }
+    ],
+    "ban_entries": [
+      { "id": "{{banId1}}", "entry_sealed": "{{entry1r}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq version_conflict
+}

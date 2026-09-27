@@ -1,0 +1,33 @@
+meta {
+  name: Booker adds a second entry (guestlist.write)
+  type: http
+  seq: 34
+}
+
+post {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{bookerCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "id": "{{banId2}}",
+    "key_version": 1,
+    "entry_sealed": "{{entry2}}",
+    "expires_at": "{{banExpires}}"
+  }
+}
+
+script:pre-request {
+  bru.setVar("banId2", require("crypto").randomUUID());
+}
+
+assert {
+  res.status: eq 201
+}

@@ -2,7 +2,8 @@
 
 [Bruno](https://www.usebruno.com/) collection that exercises the Promoter Go
 API (`api/cmd/promoter`) over HTTP: auth, org, venues/events, guest lists,
-attendee import, the offline door, the post-event report and retention. It checks status codes, key JSON fields
+attendee import, the offline door, the post-event report, retention and the
+sealed tier (keys and ban list). It checks status codes, key JSON fields
 and security behaviour (401/403/CSRF/MFA, name-only door data, CSV hardening).
 
 ## Run
@@ -33,7 +34,7 @@ per run and never written into the repo. Extra arguments go to `bru run`
 Requirements: Docker, Go, OpenSSL, Python 3 (free-port lookup) and the
 `bru` CLI (`npm i -g @usebruno/cli`, v2.x).
 
-The collection is **stateful and ordered** (folders `01-` … `13-`, `seq` per
+The collection is **stateful and ordered** (folders `01-` … `14-`, `seq` per
 request, ids chained with `bru.setVar`). It needs a fresh instance: the setup
 link works once and TOTP is enabled at the end. Run the whole collection, not
 single requests.
@@ -53,7 +54,7 @@ single requests.
 - Runtime secrets (`deviceToken`, PINs, TOTP secret, cookies) live only in
   runtime variables and are never asserted by value or logged.
 
-## Coverage map (131 requests)
+## Coverage map (188 requests)
 
 | Folder | Endpoints | Checks |
 |---|---|---|
@@ -69,7 +70,8 @@ single requests.
 | `10-report/` | `GET /events/{id}/report`, `GET …/report/list-back.csv` | report shape (event, totals keys, by list / submitter / ticket type, curve buckets); arrived 1, heads admitted 2, scanned 0 (undone), walk-ups 1; **no guest or ticket-holder name or email anywhere** (every name/email from the guest table, plus an email pattern); list-back: `text/csv` attachment, `no-store`, header `name,plus_n,status,arrived,heads_admitted,first_in_local` (**no email/phone column**), the allocation's guest with its door outcome, no `@`; without `allocation_id` → 422 `field: allocation_id`; random uuid → 404 |
 | `11-door-lockout/` | `POST /events`, `POST/GET /door/events/{id}/pin`, `POST /door/login` | on a **separate event** (the main event's door tests keep working): wrong staff PIN tries 1–4 → 401, **5th → 429 `pin_locked` with `Retry-After` (~15 min) and `retry_after`**, no cookie; the right PIN while locked → 429; PIN status shows `staff.locked_until`; a new staff PIN → 201 clears it (`locked_until: null`) and login works → 204 |
 | `12-retention/` | `GET/PUT /org/retention`, `GET /org/retention/preview`, `GET /events/{id}/privacy`, `POST /events/{id}/purge`, `POST /events`, `POST …/lists`, `POST/GET …/guests`, `GET …/guests/export.csv` | default 30 days, `upcoming`/`recent` arrays; 0 and 366 → 422 `field: retention_days`; 60 → 200; privacy of the main event: `purge_after` = end + 60 days, `purged_at: null`, `personal_rows` > 0; erase now for a running event → 409 `event_not_ended`; on a **separate event that ended three days ago**: misspelt title → 422 `field: confirm`; typed title in another case and spacing → 200 `trigger: manual`, counts; guests come back with `purged: true` and empty name/email/phone/note, list/status/+N kept, no trace of names or contacts; CSV export, new guests and a second erase → 409 `event_purged`; privacy `personal_rows: 0`; settings `recent` lists it (with `timezone`); on **another event that ended three days ago**: preview `days=1` → `count: 1` with that event only, `days=0` → 422 `field: days`; PUT 1 day → 409 `retention_would_purge` with `would_purge`/`count`; `confirm_purge: 2` → 409 again; `confirm_purge: 1` → 200 (fresh sign-in); retention set back to 30 |
-| `13-sessions/` | `DELETE /door/devices/{id}`, `GET /door/bundle`, `POST /door/login`, `POST /auth/logout`, `GET /org` | revoke → 204; revoked device's session → 401 and its login → 401; logout → 204 + expired cookie; old cookie → 401 |
+| `13-sealed/` | `GET/PUT /keys/me`, `GET /keys/org`, `GET /keys/org/recipients`, `POST /keys/org/setup`, `POST /keys/org/wraps`, `POST /keys/org/rotate`, `GET /keys/org/recovery`, `PUT /keys/devices/{id}/wrap`, `GET/POST /ban-list`, `PUT/DELETE /ban-list/{id}`, `POST /members/invites`, `POST /auth/invites/accept`, `DELETE /members/{id}`, `POST /door/devices` (with `public_key`), `GET /door/bundle`, `DELETE /door/devices/{id}` | Fixed test vectors (the server does no crypto: 32-byte keys, `0x01`-prefixed base64url blobs); status `not_setup`; no key → 404 `no_member_key`; create key → 201, re-wrap (same public key) → 200, 31-byte key → 422 `field: public_key`; **invite + accept + login of a booker**, booker key; device with a public key, bad key → 422; setup as booker → 403 `no_role_grant`, without own wrap → 422 `field: wraps`, unknown recipient → 422, setup → 201 `ready` (own wrap, fingerprint), twice → 409 `already_setup`; recipients (names, roles, keys, `has_wrap`), as booker → 403; grant with stale `version` → 409 `version_conflict`, grant → `added: 1`, booker sees its wrap; wrap for a keyless device → 422, provision → 200; recovery wrap; ban list CRUD (stale `key_version` → 409 `key_version_stale`, expiry < 1 day or > 3 years → 422 `field: expires_at`, delete twice → 404); **door bundle `sealed` block** with this device's wrap and the entry, `null` for an unprovisioned device; door session → 403 on `/ban-list`; remove yourself → 409 `cannot_remove_self`; remove the booker → 204, **`rotation_pending`**, booker session 401, gone from recipients; rotate missing an entry → 422 and stale `from_version` → 409 with nothing changed, rotate → version 2, list re-encrypted, old device wrap gone (`sealed: null`), re-provision; revoking a provisioned device → `rotation_pending`; device list shows `public_key`/`has_wrap`, never tokens |
+| `14-sessions/` | `DELETE /door/devices/{id}`, `GET /door/bundle`, `POST /door/login`, `POST /auth/logout`, `GET /org` | revoke → 204; revoked device's session → 401 and its login → 401; logout → 204 + expired cookie; old cookie → 401 |
 
 ## Not covered
 
@@ -80,9 +82,14 @@ single requests.
 - **`audience.export` / `member.manage` / `security.manage` step-up
   (15-minute re-authentication)** and finance routes: no routes for most of
   them yet, and step-up expiry needs a clock the HTTP test cannot move.
-- **Invites and a second member with a lesser role** (e.g. `booker`, `door`
-  user): invite needs MFA and the token is only shown to the inviter; kept out
-  to keep the flow short. Role denials are covered with the door principal.
+- **Invites** are exercised once, in `13-sealed/` (a booker who is later
+  removed); other lesser roles (`door` user, `marketing`) are not.
+- **Sealed tier**: removing the last owner (`last_owner`), an admin removing
+  an owner (`owner_required`), key replacement by recovery, expired ban
+  entries being hidden and purged by the retention job, and "server never
+  logs/audits ciphertext" need extra principals, a movable clock or database
+  access; they are covered by `api/internal/promoter/sealed`'s integration
+  tests.
 - **Cross-device conflicts** (`conflict: true`) need two door devices with
   separate sessions; covered by `door_integration_test.go`.
 - **Retention job and step-up for erase now**: the hourly job and

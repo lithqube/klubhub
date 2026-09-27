@@ -1,0 +1,20 @@
+meta {
+  name: Removing yourself is 409
+  type: http
+  seq: 42
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/members/{{ownerUserId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq cannot_remove_self
+}

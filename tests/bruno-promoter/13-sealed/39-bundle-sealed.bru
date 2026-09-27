@@ -1,0 +1,24 @@
+meta {
+  name: Bundle carries this device's wrap and the sealed ban list
+  type: http
+  seq: 39
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/bundle
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{sealedDoorCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.sealed.key_version: eq 1
+  res.body.sealed.wrap: eq {{deviceWrap1}}
+  res.body.sealed.ban_entries: length 1
+  res.body.sealed.ban_entries[0].id: eq {{banId1}}
+  res.body.sealed.ban_entries[0].entry_sealed: eq {{entry1b}}
+}

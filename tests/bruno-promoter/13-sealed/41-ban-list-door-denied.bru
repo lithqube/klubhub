@@ -1,0 +1,19 @@
+meta {
+  name: Door session cannot read the ban list route
+  type: http
+  seq: 41
+}
+
+get {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+}
+
+assert {
+  res.status: eq 403
+}

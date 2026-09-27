@@ -1,0 +1,22 @@
+meta {
+  name: Bundle carries the version 2 wrap and entry
+  type: http
+  seq: 54
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/bundle
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{sealedDoorCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.sealed.key_version: eq 2
+  res.body.sealed.wrap: eq {{deviceWrap2}}
+  res.body.sealed.ban_entries[0].entry_sealed: eq {{entry1r}}
+}

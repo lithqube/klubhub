@@ -38,7 +38,8 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
-// RunOnce runs the job and logs the outcome (identifiers and counts only).
+// RunOnce runs the job (due event purges, then expired ban entries) and
+// logs the outcome (identifiers and counts only).
 func (w *Worker) RunOnce(ctx context.Context) {
 	res, err := w.Service.RunDue(ctx)
 	for _, r := range res {
@@ -47,5 +48,12 @@ func (w *Worker) RunOnce(ctx context.Context) {
 	}
 	if err != nil && ctx.Err() == nil {
 		w.Log.Error().Err(err).Msg("retention job failed")
+	}
+	bans, err := w.Service.PurgeExpiredBans(ctx)
+	for _, b := range bans {
+		w.Log.Info().Str("event", "banlist.expired_purged").Str("org", b.TenantID.String()).Int("deleted", b.Deleted).Msg("expired ban entries deleted")
+	}
+	if err != nil && ctx.Err() == nil {
+		w.Log.Error().Err(err).Msg("ban list expiry job failed")
 	}
 }

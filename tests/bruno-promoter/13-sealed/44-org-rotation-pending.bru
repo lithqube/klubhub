@@ -1,0 +1,21 @@
+meta {
+  name: Removing a key holder sets rotation_pending
+  type: http
+  seq: 44
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq rotation_pending
+  res.body.version: eq 1
+}

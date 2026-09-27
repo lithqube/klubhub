@@ -1,0 +1,28 @@
+meta {
+  name: Device public key that is not 32 bytes is 422
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/devices
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "label": "Bad key",
+    "public_key": "AQID"
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.field: eq public_key
+}

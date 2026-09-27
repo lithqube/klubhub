@@ -17,6 +17,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/retention"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 )
 
 // ManagerPINs verifies the event's manager PIN and hands out its offline
@@ -54,15 +55,15 @@ func lockEvent(ctx context.Context, tx pgx.Tx, s Session) (time.Time, error) {
 	return stamp.UTC(), err
 }
 
-func (s *Service) open(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, table, col string, row uuid.UUID, sealed []byte) (string, error) {
-	if sealed == nil {
+func (s *Service) open(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, table, col string, row uuid.UUID, blob []byte) (string, error) {
+	if blob == nil {
 		return "", nil
 	}
-	dek, err := s.keys.ForSealed(ctx, tx, tenant, sealed)
+	dek, err := s.keys.ForSealed(ctx, tx, tenant, blob)
 	if err != nil {
 		return "", err
 	}
-	plain, err := dek.Open(tenant, envelope.Field{Table: table, Column: col, RowID: row}, sealed)
+	plain, err := dek.Open(tenant, envelope.Field{Table: table, Column: col, RowID: row}, blob)
 	return string(plain), err
 }
 
@@ -144,6 +145,10 @@ type Bundle struct {
 	Counters         Counters           `json:"counters"`
 	Cursor           string             `json:"cursor"`
 	ManagerPIN       *identity.PINCheck `json:"manager_pin"`
+	// Sealed is this device's wrap of the active org sealed key and the
+	// unexpired ban entries (ciphertext only), or null when the org is not
+	// set up or the device holds no wrap for the active version (P2.6).
+	Sealed *sealed.DoorSealed `json:"sealed"`
 }
 
 // Bundle builds the session's event bundle and audits the download.
@@ -201,12 +206,19 @@ func (s *Service) Bundle(ctx context.Context, sess Session) (Bundle, error) {
 				return err
 			}
 		}
+		if b.Sealed, err = sealed.ForDevice(ctx, tx, sess.Device, s.now()); err != nil {
+			return err
+		}
+		reason := fmt.Sprintf("%d lists, %d guests, %d tickets, %d check-ins", len(b.Lists), len(b.Guests), len(b.Tickets), len(b.Checkins))
+		if b.Sealed != nil {
+			reason += fmt.Sprintf(", %d sealed ban entries", len(b.Sealed.BanEntries))
+		}
 		if err := touchDevice(ctx, tx, sess, s.now()); err != nil {
 			return err
 		}
 		if err := audit.Record(ctx, tx, sess.Tenant, audit.Entry{
 			ActorID: sess.Sub, Action: "door.bundle_downloaded", Resource: "event:" + sess.Event.String(), Allowed: true,
-			Reason: fmt.Sprintf("%d lists, %d guests, %d tickets, %d check-ins", len(b.Lists), len(b.Guests), len(b.Tickets), len(b.Checkins)),
+			Reason: reason,
 		}); err != nil {
 			return err
 		}

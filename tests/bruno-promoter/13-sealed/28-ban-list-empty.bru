@@ -1,0 +1,21 @@
+meta {
+  name: Ban list is empty
+  type: http
+  seq: 28
+}
+
+get {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.key_version: eq 1
+  res.body.entries: length 0
+}

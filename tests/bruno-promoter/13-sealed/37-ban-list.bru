@@ -1,0 +1,22 @@
+meta {
+  name: Ban list has the updated entry
+  type: http
+  seq: 37
+}
+
+get {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.entries: length 1
+  res.body.entries[0].id: eq {{banId1}}
+  res.body.entries[0].entry_sealed: eq {{entry1b}}
+}

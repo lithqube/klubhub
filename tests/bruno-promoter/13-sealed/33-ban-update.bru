@@ -1,0 +1,29 @@
+meta {
+  name: Update the ban entry
+  type: http
+  seq: 33
+}
+
+put {
+  url: {{baseUrl}}/api/v1/ban-list/{{banId1}}
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "key_version": 1,
+    "entry_sealed": "{{entry1b}}",
+    "expires_at": "{{banExpiresLater}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.entry_sealed: eq {{entry1b}}
+}

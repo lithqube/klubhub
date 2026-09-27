@@ -1,0 +1,30 @@
+meta {
+  name: Create the owner member key
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/v1/keys/me
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "public_key": "{{ownerPub}}",
+    "private_sealed": "{{ownerPrivA}}",
+    "kdf": { "alg": "argon2id", "m": 65536, "t": 3, "p": 1, "salt": "{{kdfSalt}}" }
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.public_key: eq {{ownerPub}}
+  res.body.kdf.alg: eq argon2id
+}

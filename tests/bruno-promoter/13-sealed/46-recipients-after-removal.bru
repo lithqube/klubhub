@@ -1,0 +1,25 @@
+meta {
+  name: Removed member is gone from recipients
+  type: http
+  seq: 46
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org/recipients
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("booker not listed", function () {
+    expect(res.getBody().members.map((m) => m.user_id)).to.not.include(bru.getVar("bookerUserId"));
+  });
+}

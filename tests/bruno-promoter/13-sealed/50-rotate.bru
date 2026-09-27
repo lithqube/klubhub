@@ -1,0 +1,38 @@
+meta {
+  name: Rotate the org key
+  type: http
+  seq: 50
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/org/rotate
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "from_version": 1,
+    "to_version": 2,
+    "recovery": { "public_key": "{{recoveryPub2}}", "fingerprint": "{{recoveryFp2}}", "wrap": "{{recoveryWrap2}}" },
+    "wraps": [
+      { "recipient_kind": "member", "recipient_id": "{{ownerUserId}}", "wrap": "{{ownerWrap2}}" }
+    ],
+    "ban_entries": [
+      { "id": "{{banId1}}", "entry_sealed": "{{entry1r}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ready
+  res.body.version: eq 2
+  res.body.my_wrap: eq {{ownerWrap2}}
+  res.body.recovery_fingerprint: eq {{recoveryFp2}}
+}

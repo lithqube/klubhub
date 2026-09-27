@@ -1,0 +1,19 @@
+meta {
+  name: Delete the second entry
+  type: http
+  seq: 35
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/ban-list/{{banId2}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 204
+}

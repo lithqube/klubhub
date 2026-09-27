@@ -1,0 +1,65 @@
+meta {
+  name: Org key is not set up yet
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+script:pre-request {
+  // Fixed test vectors. The server does no cryptography on sealed data, so
+  // these are syntactically valid only: 32-byte public keys and blobs that
+  // start with the version byte 0x01 followed by random bytes (base64url).
+  // Wraps are 93 bytes, private keys 61, ban entries 90-140. The recovery
+  // fingerprints are the first 8 bytes of SHA-256(public key), hex.
+  bru.setVar("ownerPub", "tn55m4aPIb9gjZCpGVFlspIoRffswC0IuDTm23ygkjU");
+  bru.setVar("bookerPub", "cQ3cpb-x1x747xsV0PZ3oXIvlFmJaatOuxFRu_ygSHY");
+  bru.setVar("devicePub", "Jpwv9rg9DaYuoJLVS-btFp9FohISOi04MerUJ2W2_38");
+  bru.setVar("recoveryPub1", "K2Ktb5XQxkCF3i0U9qj0VI1N0V2RIoiDagnzFdkmWNg");
+  bru.setVar("recoveryFp1", "d560aa3843bf07b0");
+  bru.setVar("recoveryWrap1", "AZVjHp5BvbBHA1VCXT2a8DnLJ12IzJ9zU1fM8P-IOPueIg-aYo9ZydrsmAQOO7TbmBVnjg6ynA3IZ8IA4WzQEtUImBtk8RcHuH-w9vGdZ1-wqREvKgi5_29TkXLR");
+  bru.setVar("recoveryPub2", "7QuDR2qz0EsftOlJQfQsMj555756gkbb4S1Q4z7b-xs");
+  bru.setVar("recoveryFp2", "5152f8dd133c8d18");
+  bru.setVar("recoveryWrap2", "AbtKQaQ0gMAdwPCCVEbktgRE14-_dWWZ3mWDc_zsEbfXlGN0jYw-0Y8kT5eAfZuyQtDWuyoeu7ug-P6FrVX_EJ48tdH37ZA3QS1IFl2cwmOuB8ytgoXar4QPx9uh");
+  bru.setVar("ownerPrivA", "AUGVPPWsGfGgpWm2yiK4GKXWBbxx5eWLG2AmoMaAKhtDDgYQ0nyQsYlQaL5vt0gpwGqrH6oEltiOcK2n7A");
+  bru.setVar("ownerPrivB", "AWDJce8K2DqUyqn_bT097X7DBPp-y-O9qtNF4WzRQlOLRbG-Cq6kwXxMoJiFEEwsubeLwtEri98Bne-BgQ");
+  bru.setVar("bookerPriv", "Ad9S5g5NDhGPYQ-ORdcL46hWWtXqueYQqd80teZKsEb8iiS0yRRXvVA2bzRu-u9m-e1K6Mjntoc5JKdE2w");
+  bru.setVar("kdfSalt", "VwiU0PgCkTRPU-0FiWph7g");
+  bru.setVar("ownerWrap1", "AS18d-bhAo-74fUvoZT2_T-9Nh4hi0-L--AT7fWAItxatOeaQNpdvF4mA4LItaaB8cqsLiN93wrzHGKgHG5TEZVNgVeYjVl7rKtB5OpQDO0V-w-idxUp2OlQrL_D");
+  bru.setVar("bookerWrap1", "Ab6qVMmiOAtE5Ijk0cp3BkOrh8vBfYlGWAajKatGK6FpMia8zGmv0ChGchZolbtIYF7a3UtiDbEMSGaVLMEtu8mHIP1aWdxD_v0q212_XR_MdpWuizxFyRjxxdxI");
+  bru.setVar("deviceWrap1", "AfGERunomRfoODmT7kKcFldERcyIRVv0FxdhRGyynHLzUxNAkl0S7wWPg6fblLnIWJhzODbStjrBnQhhVC8oU6K2WM6AknxvwZvd0Vi8Ow3a-q8XL47H2hq65Gjr");
+  bru.setVar("ownerWrap2", "AY0PU0IZIm0N3Kgvrg44xhyV97rKnm7q2XQ5vW9-Kxyt-6U5eM9FW8azd8EdRr6R8mJSqpiazENyO_2b-uw-Y4xTB0w9llFUcHRvdjSH1kHg5pEf2jaezUAXfxDv");
+  bru.setVar("deviceWrap2", "AevHEmxFlbyjyLz7UK-fKvZx8ybAaBKcHZKHOSu0yTonLj9busMMyt6Asr9eEMNANSYrAQqRLJJ9mxslR3hJyiyN4floIjcoT8Szv9EVpzbaTOzLmrBsQm_VrRQa");
+  bru.setVar("strangerWrap", "AVgwdoK10KXEf15UB_XiUaJElMQWmTm3hf_b0YyRmLo2WwWcfxVJXaXXzMrDPqErzr_orGYrTlcoDhMcAwpG6s0bHxsee8Er5AgB0RKsjyr3Km450fnk9BS_OzV3");
+  bru.setVar("entry1", "AWbXP6RpZbZkmALDAkbqfGddG9dJVMdhaMCE-A5g8HDJ2tv-J1wCGWdBnJTh0m4eE-M8Uwt4Q0HA2fp2JvcNfjQlnAys_z0VA8c-Z_BSmr6HiHvfxTsqxQppFAIoJ94mqkgs8fHJVaHOhmGHksOW46rAvQeQvhD8");
+  bru.setVar("entry1b", "AUud35PJMQz86t6tcXKMcZawMUpQLxVuu8BIQpYEf4xspyPjhzWFyBmglRZAfPtkM1z3tu-Kcb1ikoMH06-Tff4m3B9kh9ssm5tFSmiG3IN6tBUEe1xnSYwukdDOyQymQX-zKV197MW9IVw8k28blPDoSZg1rboaeeg1413RRubAmo5BDUjrgikXvtM");
+  bru.setVar("entry1r", "AUTkbD5BWoHevDOmpWOL0Fx40nt76058tx_ljuCU866GzEy8_iMt1ZbtpgjwgkfG2qCmj7E9nxdC2T4w7CfW0Ih7JTWYBTXeB15u85uGjjzKRiz9L3N0CwAtixQ9rfjTJDXDXZYdxXzZLiUHSo-AoBZZTvZAHR9F90wwDp4ki6iOC6LLHLKrH2tPNyc");
+  bru.setVar("entry2", "AapOcAEUXpkUHfxT9aEeTHXoPsbUscFo_hS3R9Bc-1BLmLRMo2Cl4jFAobmkH7GtaUAFKkJFuCIRq8vWQGnnJmnhOl2pquQjo54Wr9oJp2pW3HmBN_Ggjc3P");
+  const day = 24 * 3600 * 1000;
+  bru.setVar("banExpires", new Date(Date.now() + 30 * day).toISOString());
+  bru.setVar("banExpiresLater", new Date(Date.now() + 180 * day).toISOString());
+  bru.setVar("banExpiresTooSoon", new Date(Date.now() + 3600 * 1000).toISOString());
+  bru.setVar("banExpiresTooLate", new Date(Date.now() + (3 * 365 + 10) * day).toISOString());
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq not_setup
+}
+
+tests {
+  test("no version, wrap or fingerprint", function () {
+    const b = res.getBody();
+    expect(b.version).to.equal(null);
+    expect(b.my_wrap).to.equal(null);
+    expect(b.recovery_fingerprint).to.equal(null);
+  });
+}

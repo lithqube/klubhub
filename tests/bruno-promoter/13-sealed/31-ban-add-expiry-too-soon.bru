@@ -1,0 +1,34 @@
+meta {
+  name: Expiry under one day is 422
+  type: http
+  seq: 31
+}
+
+post {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "id": "{{banIdSoon}}",
+    "key_version": 1,
+    "entry_sealed": "{{entry2}}",
+    "expires_at": "{{banExpiresTooSoon}}"
+  }
+}
+
+script:pre-request {
+  bru.setVar("banIdSoon", require("crypto").randomUUID());
+}
+
+assert {
+  res.status: eq 422
+  res.body.field: eq expires_at
+}

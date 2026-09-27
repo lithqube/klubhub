@@ -16,6 +16,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
 	"github.com/klubhub/dj/api/internal/promoter/retention"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 )
 
 const (
@@ -52,9 +53,16 @@ type DoorDevice struct {
 
 // RegisterDoorDevice registers a device for the caller's organisation.
 func (s *Service) RegisterDoorDevice(ctx context.Context, by authz.Principal, label string) (DoorDevice, error) {
+	return s.RegisterDoorDeviceWithKey(ctx, by, label, nil)
+}
+
+// RegisterDoorDeviceWithKey registers a device together with the X25519
+// public key it generated for the sealed tier (P2.6); publicKey may be nil
+// and is exactly 32 bytes otherwise.
+func (s *Service) RegisterDoorDeviceWithKey(ctx context.Context, by authz.Principal, label string, publicKey []byte) (DoorDevice, error) {
 	tenant, err := uuid.Parse(by.OrgID)
 	label = strings.TrimSpace(label)
-	if err != nil || label == "" || len(label) > 80 {
+	if err != nil || label == "" || len(label) > 80 || (publicKey != nil && len(publicKey) != sealed.PublicKeyLen) {
 		return DoorDevice{}, ErrInvalidInput
 	}
 	tok, err := auth.NewSessionToken(tenant)
@@ -63,21 +71,26 @@ func (s *Service) RegisterDoorDevice(ctx context.Context, by authz.Principal, la
 	}
 	d := DoorDevice{ID: uuid.Must(uuid.NewV7()), Label: label, Token: tok.Cookie}
 	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO door_devices (id, tenant_id, label, token_hash, created_by) VALUES ($1, $2, $3, $4, $5)`,
-			d.ID, tenant, label, tok.Hash, userIDFromSub(by.Sub))
+		_, err := tx.Exec(ctx, `INSERT INTO door_devices (id, tenant_id, label, token_hash, created_by, public_key) VALUES ($1, $2, $3, $4, $5, $6)`,
+			d.ID, tenant, label, tok.Hash, userIDFromSub(by.Sub), publicKey)
 		return err
 	})
 	return d, err
 }
 
 // RevokeDoorDevice revokes a device; its open door sessions stop working.
+// Its wraps of the organisation's sealed key are deleted, and if it held
+// one the org key is marked for rotation (P2.6, reason device_revoked).
 func (s *Service) RevokeDoorDevice(ctx context.Context, by authz.Principal, deviceID uuid.UUID) error {
 	tenant, err := uuid.Parse(by.OrgID)
 	if err != nil {
 		return ErrInvalidInput
 	}
 	return s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE door_devices SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL`, deviceID, s.now())
+		if _, err := tx.Exec(ctx, `UPDATE door_devices SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL`, deviceID, s.now()); err != nil {
+			return err
+		}
+		_, err := sealed.ForgetDevice(ctx, tx, tenant, deviceID, by.Sub, s.now())
 		return err
 	})
 }

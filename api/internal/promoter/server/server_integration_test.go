@@ -31,6 +31,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/report"
 	"github.com/klubhub/dj/api/internal/promoter/retention"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
 
@@ -112,6 +113,7 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 		Door:      door.NewHandler(door.NewService(db, keys, svc, nil)),
 		Reports:   report.NewHandler(report.NewService(db, keys, nil)),
 		Retention: retention.NewHandler(retention.NewService(db, nil)),
+		Sealed:    sealed.NewHandler(sealed.NewService(db, keys, nil)),
 	})
 	lastRegistry = reg
 	return mux, svc, func() []error { return authz.VerifyCoverage(context.Background(), mux, reg) }
@@ -132,6 +134,21 @@ func TestEveryRouteHasAPolicyDecision(t *testing.T) {
 		{Method: http.MethodPut, Pattern: "/api/v1/org/retention", Action: "org.update"},
 		{Method: http.MethodPost, Pattern: "/api/v1/events/{eventID}/purge", Action: "event.purge"},
 		{Method: http.MethodGet, Pattern: "/api/v1/events/{eventID}/privacy", Action: "event.read"},
+		// P2.6 sealed tier and ban list.
+		{Method: http.MethodGet, Pattern: "/api/v1/keys/me", Action: "account.self"},
+		{Method: http.MethodPut, Pattern: "/api/v1/keys/me", Action: "account.self"},
+		{Method: http.MethodGet, Pattern: "/api/v1/keys/org", Action: "account.self"},
+		{Method: http.MethodGet, Pattern: "/api/v1/keys/org/recipients", Action: "security.manage"},
+		{Method: http.MethodPost, Pattern: "/api/v1/keys/org/setup", Action: "security.manage"},
+		{Method: http.MethodPost, Pattern: "/api/v1/keys/org/wraps", Action: "security.manage"},
+		{Method: http.MethodPost, Pattern: "/api/v1/keys/org/rotate", Action: "security.manage"},
+		{Method: http.MethodGet, Pattern: "/api/v1/keys/org/recovery", Action: "security.manage"},
+		{Method: http.MethodPut, Pattern: "/api/v1/keys/devices/{deviceID}/wrap", Action: "door.device.manage"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/members/{userID}", Action: "member.manage"},
+		{Method: http.MethodGet, Pattern: "/api/v1/ban-list", Action: "guestlist.read"},
+		{Method: http.MethodPost, Pattern: "/api/v1/ban-list", Action: "guestlist.write"},
+		{Method: http.MethodPut, Pattern: "/api/v1/ban-list/{entryID}", Action: "guestlist.write"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/ban-list/{entryID}", Action: "guestlist.write"},
 	} {
 		got, ok := lastRegistry.Lookup(want.Method, want.Pattern)
 		if !ok || got.Public || got.Action != want.Action {

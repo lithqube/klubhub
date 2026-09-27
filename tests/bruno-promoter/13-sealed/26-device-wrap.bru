@@ -1,0 +1,28 @@
+meta {
+  name: Provision the sealed door device
+  type: http
+  seq: 26
+}
+
+put {
+  url: {{baseUrl}}/api/v1/keys/devices/{{sealedDeviceId}}/wrap
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "wrap": "{{deviceWrap1}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.version: eq 1
+  res.body.device_id: eq {{sealedDeviceId}}
+}

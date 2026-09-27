@@ -1,0 +1,19 @@
+meta {
+  name: Remove the booker
+  type: http
+  seq: 43
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/members/{{bookerUserId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 204
+}

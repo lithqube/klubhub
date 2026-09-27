@@ -1,0 +1,22 @@
+meta {
+  name: 13-sealed
+  seq: 13
+}
+
+docs {
+  P2.6 sealed tier and ban list. The server does no cryptography on sealed
+  data: requests carry fixed, syntactically valid test vectors (32-byte
+  public keys, 0x01-prefixed blobs, base64url) set by the first request.
+  Owner member key (create, re-wrap, invalid key 422); a booker is invited,
+  accepts, logs in and creates a key; a door device registers with a public
+  key. Setup is owner + MFA + step-up only (booker 403), needs the caller's
+  own wrap (422), refuses unknown recipients (422) and runs once (409).
+  Recipients, grants (stale version 409), device provisioning (device
+  without a key 422), recovery wrap. Ban list CRUD with key_version 409 and
+  expiry bounds 422; the door bundle carries this device's wrap and the
+  sealed entries (null for an unprovisioned device). Removing the booker
+  (and refusing to remove yourself) sets rotation_pending and revokes the
+  booker's session; rotation refuses a missing entry (422) and a stale
+  from_version (409), then re-encrypts the list under version 2 and drops
+  old wraps. Revoking a provisioned device sets rotation_pending again.
+}

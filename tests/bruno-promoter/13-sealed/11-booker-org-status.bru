@@ -1,0 +1,20 @@
+meta {
+  name: Booker sees the org key status (account.self)
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{bookerCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq not_setup
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Setup by a booker is 403 no_role_grant
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/org/setup
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{bookerCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "version": 1,
+    "recovery": { "public_key": "{{recoveryPub1}}", "fingerprint": "{{recoveryFp1}}", "wrap": "{{recoveryWrap1}}" },
+    "wraps": [
+      { "recipient_kind": "member", "recipient_id": "{{ownerUserId}}", "wrap": "{{ownerWrap1}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: eq no_role_grant
+}

@@ -3,7 +3,7 @@
 //	promoter [serve]      run the HTTP API (default)
 //	promoter migrate      apply schema migrations (schema-owner connection)
 //	promoter bootstrap    create the instance organisation and first owner
-//	promoter purge        run the retention job once (--dry-run: list only)
+//	promoter purge        run the retention job once, incl. expired ban entries (--dry-run: list only)
 //	promoter healthcheck  probe the local /api/v1/health (container HEALTHCHECK)
 package main
 
@@ -41,6 +41,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/migrations"
 	"github.com/klubhub/dj/api/internal/promoter/report"
 	"github.com/klubhub/dj/api/internal/promoter/retention"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
 
@@ -139,6 +140,7 @@ func serve() error {
 		Guests:        guest.NewHandler(guests),
 		Reports:       report.NewHandler(report.NewService(rt.db, rt.keys, nil)),
 		Retention:     retention.NewHandler(retention.NewService(rt.db, nil)),
+		Sealed:        sealed.NewHandler(sealed.NewService(rt.db, rt.keys, nil)),
 		ServeFrontend: rt.cfg.ServeFrontend, NuxtURL: rt.cfg.NuxtInternalURL,
 	}
 	var managerPINs door.ManagerPINs // door sessions and PINs exist with local identity only
@@ -279,6 +281,11 @@ func purge(args []string) error {
 				d.EndsAt.Format(time.RFC3339), d.PurgeAfter.Format(time.RFC3339), d.Title)
 		}
 		fmt.Printf("promoter: %d event(s) due (dry run, nothing purged)\n", len(due))
+		if err != nil {
+			return err
+		}
+		n, err := svc.ExpiredBans(ctx)
+		fmt.Printf("promoter: %d expired ban entr(ies) due (dry run, nothing deleted)\n", n)
 		return err
 	}
 	res, err := svc.RunDue(ctx)
@@ -288,7 +295,14 @@ func purge(args []string) error {
 			r.TenantID, r.EventID, c.Guests, c.Orders, c.OrderPositions, c.GuestAllocations, c.DoorPins)
 	}
 	fmt.Printf("promoter: %d event(s) purged\n", len(res))
-	return err
+	bans, banErr := svc.PurgeExpiredBans(ctx)
+	deleted := 0
+	for _, b := range bans {
+		fmt.Printf("bans    org=%s expired_deleted=%d\n", b.TenantID, b.Deleted)
+		deleted += b.Deleted
+	}
+	fmt.Printf("promoter: %d expired ban entr(ies) deleted\n", deleted)
+	return errors.Join(err, banErr)
 }
 
 // migrate needs only the schema-owner connection (and optional role

@@ -1,0 +1,29 @@
+meta {
+  name: Setup without the caller's wrap is 422
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/org/setup
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "version": 1,
+    "recovery": { "public_key": "{{recoveryPub1}}", "fingerprint": "{{recoveryFp1}}", "wrap": "{{recoveryWrap1}}" },
+    "wraps": []
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.field: eq wraps
+}

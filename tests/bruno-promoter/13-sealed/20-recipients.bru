@@ -1,0 +1,45 @@
+meta {
+  name: Recipients list members and devices
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org/recipients
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("members with keys and wraps", function () {
+    const b = res.getBody();
+    const owner = b.members.find((m) => m.user_id === bru.getVar("ownerUserId"));
+    expect(owner.role).to.equal("owner");
+    expect(owner.email).to.equal(String(bru.getEnvVar("ownerEmail")).trim().toLowerCase());
+    expect(owner.public_key).to.equal(bru.getVar("ownerPub"));
+    expect(owner.has_wrap).to.equal(true);
+    const booker = b.members.find((m) => m.email === "booker@example.org");
+    expect(booker.role).to.equal("booker");
+    expect(booker.name).to.equal("Bruno Booker");
+    expect(booker.public_key).to.equal(bru.getVar("bookerPub"));
+    expect(booker.has_wrap).to.equal(false);
+    bru.setVar("bookerUserId", booker.user_id);
+  });
+  test("devices with public keys", function () {
+    const b = res.getBody();
+    const sealed = b.devices.find((d) => d.device_id === bru.getVar("sealedDeviceId"));
+    expect(sealed.public_key).to.equal(bru.getVar("devicePub"));
+    expect(sealed.has_wrap).to.equal(false);
+    expect(sealed.revoked).to.equal(false);
+    const old = b.devices.find((d) => d.device_id === bru.getVar("deviceId"));
+    expect(old.public_key).to.equal(null);
+  });
+}

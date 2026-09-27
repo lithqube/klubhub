@@ -1,0 +1,19 @@
+meta {
+  name: Removed member's session is 401
+  type: http
+  seq: 45
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{bookerCookie}}
+}
+
+assert {
+  res.status: eq 401
+}

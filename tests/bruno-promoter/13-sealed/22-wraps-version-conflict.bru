@@ -1,0 +1,30 @@
+meta {
+  name: Wraps for a stale version are 409
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/org/wraps
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "version": 2,
+    "wraps": [
+      { "recipient_kind": "member", "recipient_id": "{{bookerUserId}}", "wrap": "{{bookerWrap1}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq version_conflict
+}

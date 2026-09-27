@@ -1,0 +1,22 @@
+meta {
+  name: Org key status is ready
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ready
+  res.body.version: eq 1
+  res.body.my_wrap: eq {{ownerWrap1}}
+}
