@@ -1,5 +1,5 @@
 meta {
-  name: Erase the past event now (typed title)
+  name: Erase the past event now (typed title, case and spacing ignored)
   type: http
   seq: 11
 }
@@ -16,7 +16,7 @@ headers {
 }
 
 body:json {
-  { "confirm": "Bruno Past Night" }
+  { "confirm": "  bruno   PAST night " }
 }
 
 assert {

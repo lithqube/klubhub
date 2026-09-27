@@ -25,7 +25,7 @@ tests {
     expect(b.upcoming).to.be.an("array");
     expect(b.recent).to.be.an("array").that.is.empty;
     b.upcoming.forEach((u) => {
-      expect(u).to.have.all.keys("event_id", "title", "ends_at", "purge_after");
+      expect(u).to.have.all.keys("event_id", "title", "timezone", "ends_at", "purge_after");
     });
   });
 }

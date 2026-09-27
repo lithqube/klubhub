@@ -7,7 +7,10 @@ docs {
   P2.5 privacy and retention: org retention settings (validation 1..365),
   the privacy view of the main event, "erase now" refused for an event
   that has not ended, and a full manual purge of a separate event that
-  ended three days ago (typed-title confirm): guests come back as erased
-  rows and the CSV export and new guests answer 409 event_purged.
-  Retention is set back to 30 days at the end.
+  ended three days ago (typed-title confirm, case and spacing ignored):
+  guests come back as erased rows and the CSV export and new guests answer
+  409 event_purged. Then shortening retention to 1 day on another ended
+  event: the preview lists it, the PUT answers 409 retention_would_purge
+  until it carries "confirm_purge" with the exact count (and a recent
+  sign-in). Retention is set back to 30 days at the end.
 }

@@ -1,7 +1,7 @@
 meta {
-  name: Set retention back to 30 days
+  name: Shortening with the wrong count is refused again
   type: http
-  seq: 18
+  seq: 22
 }
 
 put {
@@ -16,10 +16,11 @@ headers {
 }
 
 body:json {
-  { "retention_days": 30 }
+  { "retention_days": 1, "confirm_purge": 2 }
 }
 
 assert {
-  res.status: eq 200
-  res.body.retention_days: eq 30
+  res.status: eq 409
+  res.body.error: eq retention_would_purge
+  res.body.count: eq 1
 }

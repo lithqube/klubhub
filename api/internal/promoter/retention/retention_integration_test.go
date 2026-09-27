@@ -527,7 +527,8 @@ func TestManualPurgeRules(t *testing.T) {
 		err     string
 	}{
 		{"not ended", a.owner(), running.ID, "Running Night", http.StatusConflict, "event_not_ended"},
-		{"title mismatch", a.owner(), ended.ID, "ended night", http.StatusUnprocessableEntity, "invalid"},
+		{"title mismatch", a.owner(), ended.ID, "Ended Nite", http.StatusUnprocessableEntity, "invalid"},
+		{"title missing a word", a.owner(), ended.ID, "Ended", http.StatusUnprocessableEntity, "invalid"},
 		{"empty confirm", a.owner(), ended.ID, "", http.StatusUnprocessableEntity, "invalid"},
 		{"unknown event", a.owner(), uuid.Must(uuid.NewV7()), "x", http.StatusNotFound, "not_found"},
 		{"stale sign-in needs step-up", authz.Principal{Sub: staffSub, OrgID: a.id.String(), Roles: []string{"owner"}, AMR: []string{"pwd", "otp"},
@@ -546,8 +547,9 @@ func TestManualPurgeRules(t *testing.T) {
 	if n := count(t, `SELECT count(*) FROM guests WHERE event_id = $1 AND purged_at IS NULL`, ended.ID); n != 1 {
 		t.Fatalf("refused purges must not erase anything")
 	}
-	if rec := a.purge(a.owner(), ended.ID, "Ended Night"); rec.Code != http.StatusOK {
-		t.Fatalf("an admin with a fresh sign-in erases: %d %s", rec.Code, rec.Body)
+	// Case, dashes, quotes and spacing are normalised on both sides.
+	if rec := a.purge(a.owner(), ended.ID, "  ended   NIGHT "); rec.Code != http.StatusOK {
+		t.Fatalf("an owner with a fresh sign-in erases (normalised title): %d %s", rec.Code, rec.Body)
 	}
 	// Door staff never reach it.
 	doorP := authz.Principal{Sub: "device:x", OrgID: a.id.String(), Roles: []string{"door"}, EventScope: ended.ID.String(), AuthTime: time.Now()}
@@ -571,6 +573,9 @@ func TestRetentionSettings(t *testing.T) {
 		!strings.Contains(rec.Body.String(), `"recent":[]`) {
 		t.Fatalf("default settings: %d %s", rec.Code, rec.Body)
 	}
+	if !strings.Contains(rec.Body.String(), `"timezone":"Europe/Berlin"`) || st.Upcoming[0].Timezone != "Europe/Berlin" {
+		t.Fatalf("upcoming rows carry the event timezone: %s", rec.Body)
+	}
 	if len(st.Upcoming) != 2 || st.Upcoming[0].EventID != past.ID || st.Upcoming[1].EventID != live.ID ||
 		!st.Upcoming[0].PurgeAfter.Equal(past.EndsAt.Add(30*24*time.Hour)) || !st.Upcoming[0].EndsAt.Equal(past.EndsAt) {
 		t.Fatalf("upcoming (started events by purge_after): %+v", st.Upcoming)
@@ -585,7 +590,7 @@ func TestRetentionSettings(t *testing.T) {
 	if rec := a.call(a.owner(), http.MethodPut, path, map[string]any{"retention_days": 7, "extra": 1}); rec.Code != http.StatusBadRequest {
 		t.Errorf("unknown field: %d", rec.Code)
 	}
-	for _, days := range []int{1, 365, 7} {
+	for _, days := range []int{365, 7} {
 		rec := a.call(a.owner(), http.MethodPut, path, map[string]any{"retention_days": days})
 		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &st) != nil || st.RetentionDays != days {
 			t.Fatalf("retention %d: %d %s", days, rec.Code, rec.Body)
@@ -621,6 +626,103 @@ func TestRetentionSettings(t *testing.T) {
 	}
 }
 
+func TestShortenRetentionNeedsConfirmAndStepUp(t *testing.T) {
+	s := newStack(t)
+	a := s.newOrg(t)
+	now := time.Now().UTC()
+	s.clock.t = now
+	recent := a.night("Recent Night", now.Add(-3*24*time.Hour)) // ended ~2.7 days ago
+	a.night("Old Night", now.Add(-40*24*time.Hour))             // already due at 30 days
+	a.night("Next Night", now.Add(5*24*time.Hour))              // not ended
+	l := must(s.guests.CreateList(a.ctx, recent.ID, guest.ListInput{Name: "Comp", Type: "comp"}))
+	must(s.guests.AddGuests(a.ctx, recent.ID, guest.AddInput{ListID: l.ID, Guests: []guest.GuestInput{{Name: "Ana"}}}, staffSub))
+	path := "/api/v1/org/retention"
+	stale := a.owner()
+	stale.AuthTime = time.Now().Add(-16 * time.Minute)
+	marketing := authz.Principal{Sub: staffSub, OrgID: a.id.String(), Roles: []string{"marketing"}, AuthTime: time.Now()}
+	days := func() int {
+		var st retention.Settings
+		rec := a.call(a.owner(), http.MethodGet, path, nil)
+		if json.Unmarshal(rec.Body.Bytes(), &st) != nil {
+			t.Fatal(rec.Body)
+		}
+		return st.RetentionDays
+	}
+
+	// Preview (org.read): only events the shorter period makes due at once.
+	var pv retention.Preview
+	rec := a.call(marketing, http.MethodGet, path+"/preview?days=1", nil)
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &pv) != nil || pv.Count != 1 || len(pv.WouldPurge) != 1 ||
+		pv.WouldPurge[0].EventID != recent.ID || pv.WouldPurge[0].Title != "Recent Night" || !pv.WouldPurge[0].EndsAt.Equal(recent.EndsAt) {
+		t.Fatalf("preview 1 day: %d %s", rec.Code, rec.Body)
+	}
+	for _, q := range []string{"30", "90", "5"} {
+		rec := a.call(a.owner(), http.MethodGet, path+"/preview?days="+q, nil)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"would_purge":[]`) || !strings.Contains(rec.Body.String(), `"count":0`) {
+			t.Errorf("preview %s days: %d %s", q, rec.Code, rec.Body)
+		}
+	}
+	for _, q := range []string{"0", "366", "x", ""} {
+		rec := a.call(a.owner(), http.MethodGet, path+"/preview?days="+q, nil)
+		if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `"field":"days"`) {
+			t.Errorf("preview %q: %d %s", q, rec.Code, rec.Body)
+		}
+	}
+
+	refused := func(p authz.Principal, body map[string]any, status int, code string) {
+		t.Helper()
+		rec := a.call(p, http.MethodPut, path, body)
+		if rec.Code != status || errorOf(rec) != code {
+			t.Fatalf("%v: got %d %s", body, rec.Code, rec.Body)
+		}
+		if code == "retention_would_purge" {
+			var got struct {
+				retention.Preview
+				Error string `json:"error"`
+			}
+			if json.Unmarshal(rec.Body.Bytes(), &got) != nil || got.Count != 1 || len(got.WouldPurge) != 1 || got.WouldPurge[0].EventID != recent.ID {
+				t.Fatalf("409 body: %s", rec.Body)
+			}
+		}
+		if d := days(); d != 30 {
+			t.Fatalf("a refused change must not save: %d days", d)
+		}
+	}
+	refused(a.owner(), map[string]any{"retention_days": 1}, http.StatusConflict, "retention_would_purge")
+	refused(a.owner(), map[string]any{"retention_days": 1, "confirm_purge": 2}, http.StatusConflict, "retention_would_purge")
+	refused(a.owner(), map[string]any{"retention_days": 1, "confirm_purge": 0}, http.StatusConflict, "retention_would_purge")
+	refused(stale, map[string]any{"retention_days": 1, "confirm_purge": 1}, http.StatusForbidden, "reauthentication_required")
+	refused(marketing, map[string]any{"retention_days": 1, "confirm_purge": 1}, http.StatusForbidden, "no_role_grant")
+	if n := count(t, `SELECT count(*) FROM guests WHERE event_id = $1 AND purged_at IS NULL`, recent.ID); n != 1 {
+		t.Fatal("nothing is erased by a refused change")
+	}
+
+	// Confirmed with the exact count and a fresh sign-in: saved and audited with the count.
+	rec = a.call(a.owner(), http.MethodPut, path, map[string]any{"retention_days": 1, "confirm_purge": 1})
+	if rec.Code != http.StatusOK || days() != 1 {
+		t.Fatalf("confirmed shortening: %d %s", rec.Code, rec.Body)
+	}
+	if n := count(t, `SELECT count(*) FROM audit_log WHERE tenant_id = $1 AND action = 'org.retention_updated'
+	  AND reason = 'retention 30 → 1 days; confirmed erasing 1 ended events now'`, a.id); n != 1 {
+		t.Fatalf("confirmed shortening audit: %d", n)
+	}
+	// The job erases it on its next run.
+	if _, err := s.retention.RunDue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, `SELECT count(*) FROM guests WHERE event_id = $1 AND purged_at IS NOT NULL`, recent.ID); n != 1 {
+		t.Fatal("the confirmed event is erased by the job")
+	}
+
+	// Lengthening (or shortening without anything due) needs neither a count nor a recent sign-in.
+	if rec := a.call(stale, http.MethodPut, path, map[string]any{"retention_days": 90}); rec.Code != http.StatusOK || days() != 90 {
+		t.Fatalf("lengthening: %d %s", rec.Code, rec.Body)
+	}
+	if rec := a.call(stale, http.MethodPut, path, map[string]any{"retention_days": 60, "confirm_purge": 3}); rec.Code != http.StatusOK || days() != 60 {
+		t.Fatalf("shortening with nothing due: %d %s", rec.Code, rec.Body)
+	}
+}
+
 func TestWorkerPurgesDueEventsOnceAcrossTenants(t *testing.T) {
 	s := newStack(t)
 	a, b := s.newOrg(t), s.newOrg(t)
@@ -643,7 +745,8 @@ func TestWorkerPurgesDueEventsOnceAcrossTenants(t *testing.T) {
 	}{{a, dueA}, {a, notDueA}, {a, edgeA}, {a, futureA}, {b, dueB}, {b, shortB}} {
 		addGuest(x.o, x.ev)
 	}
-	if rec := b.call(b.owner(), http.MethodPut, "/api/v1/org/retention", map[string]any{"retention_days": 1}); rec.Code != http.StatusOK {
+	// Short B becomes due at once (Due B already is): confirmed with its count.
+	if rec := b.call(b.owner(), http.MethodPut, "/api/v1/org/retention", map[string]any{"retention_days": 1, "confirm_purge": 1}); rec.Code != http.StatusOK {
 		t.Fatal(rec.Body)
 	}
 	// Edge A: purge_after is exactly now.

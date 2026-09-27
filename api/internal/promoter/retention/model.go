@@ -17,9 +17,12 @@ package retention
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -100,10 +103,12 @@ type Counts struct {
 	DoorPins         int `json:"door_pins"`
 }
 
-// Upcoming is an ended or running event not purged yet.
+// Upcoming is an ended or running event not purged yet. Timezone is the
+// event's IANA zone, for showing its dates the way the event does.
 type Upcoming struct {
 	EventID    uuid.UUID `json:"event_id"`
 	Title      string    `json:"title"`
+	Timezone   string    `json:"timezone"`
 	EndsAt     time.Time `json:"ends_at"`
 	PurgeAfter time.Time `json:"purge_after"`
 }
@@ -112,10 +117,68 @@ type Upcoming struct {
 type Recent struct {
 	EventID  uuid.UUID `json:"event_id"`
 	Title    string    `json:"title"`
+	Timezone string    `json:"timezone"`
 	PurgedAt time.Time `json:"purged_at"`
 	Trigger  string    `json:"trigger"`
 	Counts   Counts    `json:"counts"`
 }
+
+// WouldPurge is an unpurged event that a shorter retention period makes
+// due at once (the job erases it within the hour).
+type WouldPurge struct {
+	EventID uuid.UUID `json:"event_id"`
+	Title   string    `json:"title"`
+	EndsAt  time.Time `json:"ends_at"`
+}
+
+// Preview is GET /api/v1/org/retention/preview and the body of the 409
+// retention_would_purge refusal: what saving that period would erase now.
+type Preview struct {
+	WouldPurge []WouldPurge `json:"would_purge"`
+	Count      int          `json:"count"`
+}
+
+// WouldPurgeError refuses a shorter retention period that would erase
+// ended events at once, unless the request confirms their exact count
+// (409 retention_would_purge).
+type WouldPurgeError struct{ Preview Preview }
+
+func (e *WouldPurgeError) Error() string {
+	return fmt.Sprintf("retention: shortening would purge %d events", e.Preview.Count)
+}
+
+// DeniedError is a policy refusal raised inside the service (the step-up
+// of a confirmed shortening): 403 with the policy reason.
+type DeniedError struct{ Reason string }
+
+func (e *DeniedError) Error() string { return "retention: denied: " + e.Reason }
+
+// NormalizeTitle is how a typed confirmation is compared with the event
+// title: NFKC, dashes to '-', curly quotes to straight ones, lower case,
+// runs of whitespace to one space, trimmed. The web client applies the
+// same rules (utils/privacy.ts normalizeTitle).
+func NormalizeTitle(s string) string {
+	s = norm.NFKC.String(s)
+	s = titleReplacer.Replace(s)
+	s = strings.ToLower(s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// TitleMatches reports whether typed confirms title (after NormalizeTitle;
+// an empty title never matches).
+func TitleMatches(typed, title string) bool {
+	want := NormalizeTitle(title)
+	return want != "" && NormalizeTitle(typed) == want
+}
+
+var titleReplacer = strings.NewReplacer(
+	// Hyphens, dashes and minus signs.
+	"\u2010", "-", "\u2011", "-", "\u2012", "-", "\u2013", "-", "\u2014", "-", "\u2015", "-",
+	"\u2212", "-", "\ufe58", "-", "\ufe63", "-", "\uff0d", "-",
+	// Curly and low quotes.
+	"\u2018", "'", "\u2019", "'", "\u201a", "'", "\u201b", "'", "\u2032", "'",
+	"\u201c", `"`, "\u201d", `"`, "\u201e", `"`, "\u201f", `"`, "\u2033", `"`,
+)
 
 // Settings is GET/PUT /api/v1/org/retention.
 type Settings struct {

@@ -10,9 +10,15 @@ async function hydrated(page: Page) {
 // ERASE NOW only runs on an event each test creates for itself.
 const tag = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
-/** A fresh event that ended three days ago, with one list, one allocation and two guests. */
-async function endedEvent(request: APIRequestContext, title: string) {
-  const start = new Date(Date.now() - 3 * 86_400_000);
+/** A fresh sign-in for this browser (the mock's step-up clock is a per-browser cookie). */
+async function freshSignIn(page: Page) {
+  const r = await page.request.post('/api/v1/auth/login', { data: { email: 'owner@example.org', password: 'x', totp: '' } });
+  expect(r.ok()).toBe(true);
+}
+
+/** A fresh event that ended `daysAgo` days ago, with one list, one allocation and two guests. */
+async function endedEvent(request: APIRequestContext, title: string, daysAgo = 3) {
+  const start = new Date(Date.now() - daysAgo * 86_400_000);
   const ev = await (await request.post('/api/v1/events', { data: {
     title, starts_at: start.toISOString(), ends_at: new Date(start.getTime() + 6 * 3_600_000).toISOString(),
     doors_at: null, timezone: 'Europe/Berlin', venue_id: null, city: 'Berlin', location_mode: 'city_only', location_reveal_at: null,
@@ -31,7 +37,8 @@ async function endedEvent(request: APIRequestContext, title: string) {
   return ev.id;
 }
 
-test.describe('privacy and retention (mock API)', () => {
+// Both change the org retention period, so they never run at the same time.
+test.describe.serial('retention settings (mock API)', () => {
   test('settings: retention presets, custom days with validation, save feedback and the purge lists', async ({ page }) => {
     await page.goto('/settings');
     await hydrated(page);
@@ -62,20 +69,76 @@ test.describe('privacy and retention (mock API)', () => {
     await days.fill('45');
     await expect(section.getByTestId('retention-error')).toHaveCount(0);
     await save.click();
-    await expect(section.getByTestId('retention-saved')).toContainText('KEPT 45 DAYS AFTER EACH EVENT');
+    await expect(section.getByTestId('retention-saved')).toContainText('SAVED');
+    await expect(section.getByTestId('retention-saved')).toContainText('Guest data is now kept 45 days after each event.');
+    await expect(section.getByTestId('retention-saved')).toBeFocused();
     await expect(section.getByTestId('retention-upcoming').getByRole('listitem').filter({ hasText: 'Klubnacht 02' })).toContainText('45 days after it ended');
     await expect(save).toBeDisabled();
 
     // Back to the default so parallel specs see the usual 30 days.
     await group.getByText('30 DAYS · DEFAULT').click();
     await save.click();
-    await expect(section.getByTestId('retention-saved')).toContainText('KEPT 30 DAYS');
+    await expect(section.getByTestId('retention-saved')).toContainText('kept 30 days');
     await page.reload();
     await hydrated(page);
     await expect(page.locator('#retention').getByRole('radio', { name: /30 DAYS/ })).toBeChecked();
   });
 
+  test('shortening retention warns which ended events it erases and needs an acknowledged SAVE AND ERASE', async ({ page }) => {
+    // A dedicated event that ended 20 days ago: with 15 days it becomes due at once, with 30 it does not.
+    const title = `Shorten ${tag()}`;
+    await endedEvent(page.request, title, 20);
+    await freshSignIn(page);
+
+    // The API refuses the save without the count (409) and with a wrong one.
+    const refused = await page.request.put('/api/v1/org/retention', { data: { retention_days: 15 } });
+    expect(refused.status()).toBe(409);
+    expect(await refused.json()).toMatchObject({ data: { error: 'retention_would_purge', count: 1 } });
+    expect((await page.request.put('/api/v1/org/retention', { data: { retention_days: 15, confirm_purge: 2 } })).status()).toBe(409);
+    const preview = await (await page.request.get('/api/v1/org/retention/preview?days=15')).json() as { count: number, would_purge: { title: string }[] };
+    expect(preview.count).toBe(1);
+    expect(preview.would_purge[0]?.title).toBe(title);
+
+    await page.goto('/settings#retention');
+    await hydrated(page);
+    const section = page.locator('#retention');
+    const group = section.getByRole('group', { name: 'KEEP GUEST NAMES AND CONTACTS FOR' });
+    await group.getByText('CUSTOM').click();
+    await section.getByTestId('retention-custom').fill('15');
+    const warning = section.getByRole('alert').filter({ hasText: 'erased within the hour' });
+    await expect(warning).toHaveText(new RegExp(`With 15 days, guest names and contacts of 1 ended event \\(${title}\\) are erased within the hour\\. This can't be undone\\.`));
+    const save = section.getByTestId('retention-save');
+    await expect(save).toHaveText('SAVE AND ERASE 1');
+    await expect(save).toBeDisabled();
+    await warning.getByLabel('I understand').check();
+    await expect(save).toBeEnabled();
+
+    // Lengthening instead clears the warning and the danger button.
+    await group.getByText('90 DAYS').click();
+    await expect(section.getByTestId('retention-warning')).toHaveCount(0);
+    await expect(save).toHaveText('SAVE RETENTION');
+
+    await group.getByText('CUSTOM').click();
+    await section.getByTestId('retention-custom').fill('15');
+    await expect(save).toHaveText('SAVE AND ERASE 1');
+    await expect(save).toBeDisabled();
+    await section.getByTestId('retention-ack').check();
+    await save.click();
+    await expect(section.getByTestId('retention-saved')).toContainText('Guest data is now kept 15 days after each event. 1 ended event is erased within the hour.');
+    await expect(section.getByTestId('retention-warning')).toHaveCount(0);
+
+    // Back to 30 days: lengthening needs no confirmation.
+    await group.getByText('30 DAYS · DEFAULT').click();
+    await expect(save).toHaveText('SAVE RETENTION');
+    await save.click();
+    await expect(section.getByTestId('retention-saved')).toContainText('kept 30 days');
+  });
+});
+
+test.describe('privacy and retention (mock API)', () => {
+
   test('an ended event shows when guest data is erased; an upcoming one shows nothing', async ({ page }) => {
+    await freshSignIn(page);
     await page.goto('/events/e-klubnacht-02/guests');
     await hydrated(page);
     const banner = page.getByTestId('privacy-banner');
@@ -87,14 +150,24 @@ test.describe('privacy and retention (mock API)', () => {
     await banner.getByRole('button', { name: 'ERASE NOW' }).click();
     const dialog = page.getByRole('dialog', { name: 'ERASE GUEST DATA NOW?' });
     await expect(dialog).toContainText("Klubnacht 02: this can't be undone.");
+    await expect(dialog.getByTestId('erase-when')).toHaveText(/^This happens automatically on \d{1,2} [A-Z][a-z]{2,3}( \d{4})?\. Erasing now only brings it forward\.$/);
+    await expect(dialog.getByTestId('erase-door-warning')).toHaveCount(0);
     await expect(dialog).toContainText('ERASED FOR GOOD');
     await expect(dialog).toContainText('KEPT');
     const input = dialog.getByLabel('Type the event title Klubnacht 02 to confirm');
     await expect(input).toBeFocused();
     const erase = dialog.getByRole('button', { name: 'ERASE NOW' });
     await expect(erase).toBeDisabled();
-    await input.fill('klubnacht 02');
+    await expect(input).not.toHaveAttribute('aria-invalid', 'true');
+    await input.fill('klubnacht 2');
     await expect(erase).toBeDisabled();
+    await expect(dialog.getByTestId('erase-match')).toHaveText('Not matching yet — check spelling and spaces.');
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    // Case and spacing do not matter (normalised like the server).
+    await input.fill('  KLUBNACHT   02 ');
+    await expect(dialog.getByTestId('erase-match')).toHaveText('Title matches.');
+    await expect(input).toHaveAttribute('aria-invalid', 'false');
+    await expect(erase).toBeEnabled();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(page.getByTestId('privacy-banner-text')).toContainText('are erased on');
@@ -112,7 +185,7 @@ test.describe('privacy and retention (mock API)', () => {
     const t = tag();
     const title = `Erase ${t}`;
     const id = await endedEvent(request, title);
-    await request.post('/api/v1/auth/login', { data: { email: 'owner@example.org', password: 'x', totp: '' } }); // fresh sign-in (step-up)
+    await freshSignIn(page);
 
     await page.goto(`/events/${id}/guests`);
     await hydrated(page);
@@ -121,7 +194,8 @@ test.describe('privacy and retention (mock API)', () => {
     await page.getByTestId('erase-now').click();
     const dialog = page.getByRole('dialog', { name: 'ERASE GUEST DATA NOW?' });
     await expect(dialog).toContainText('It erases the names and contacts of 2 guests and ticket holders.');
-    await dialog.getByLabel(`Type the event title ${title} to confirm`).fill(title);
+    // Typed in lower case: normalised on both sides.
+    await dialog.getByLabel(`Type the event title ${title} to confirm`).fill(title.toLowerCase());
     await dialog.getByRole('button', { name: 'ERASE NOW' }).click();
     await expect(dialog).toHaveCount(0);
 
@@ -134,11 +208,16 @@ test.describe('privacy and retention (mock API)', () => {
     const row = table.getByRole('row').filter({ hasText: 'Erased guest' }).first();
     await expect(row).toContainText('Artist guests');
     await expect(row).toContainText('GOING');
-    await expect(row).toContainText('ERASED · NO CHANGES');
+    // No per-row noise: an empty actions cell and one hint above the table.
+    await expect(table).not.toContainText('ERASED · NO CHANGES');
+    await expect(row.getByRole('button')).toHaveCount(0);
+    await expect(page.getByTestId('erased-hint')).toHaveText("Erased rows keep their list, +N, status and check-ins. They can't be changed.");
     await expect(page.getByTestId('guest-export')).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'ADD GUESTS' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'IMPORT ATTENDEES' })).toBeDisabled();
-    await expect(page.getByTestId('purged-reason')).toContainText('adding guests, importing attendees, status by email and the CSV export are off');
+    await expect(page.getByTestId('guest-export')).toHaveAttribute('aria-describedby', 'purged-consequence');
+    await expect(page.getByRole('button', { name: 'ADD GUESTS' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'IMPORT ATTENDEES' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'STATUS BY EMAIL' })).toHaveCount(0);
+    await expect(page.locator('#purged-consequence')).toHaveText('Adding guests, importing attendees, status by email and the CSV export are off.');
     expect((await request.get(`/api/v1/events/${id}/guests/export.csv`)).status()).toBe(409);
 
     // The report keeps its numbers; list-backs are off with the reason.
@@ -147,29 +226,43 @@ test.describe('privacy and retention (mock API)', () => {
     await expect(page.getByTestId('report-heading')).toHaveText('POST-EVENT REPORT');
   });
 
-  test('a stale sign-in asks to sign in again before erasing', async ({ page, request }) => {
-    const t = tag();
-    const title = `Step-up ${t}`;
-    const id = await endedEvent(request, title);
-    await page.route(`**/api/v1/events/${id}/purge`, route => route.fulfill({
-      status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'reauthentication_required' }),
-    }));
+  test('a stale sign-in asks to sign in again first, then comes back with the dialog open', async ({ page, context, baseURL }) => {
+    const title = `Step-up ${tag()}`;
+    const id = await endedEvent(page.request, title);
+    // This browser signed in 20 minutes ago (the mock reads its step-up clock from this cookie).
+    await context.addCookies([{ name: 'kh_mock_auth_at', value: String(Date.now() - 20 * 60_000), url: baseURL ?? 'http://localhost:4400' }]);
+
     await page.goto(`/events/${id}/guests`);
     await hydrated(page);
     await page.getByTestId('erase-now').click();
     const dialog = page.getByRole('dialog', { name: 'ERASE GUEST DATA NOW?' });
-    await dialog.getByLabel(`Type the event title ${title} to confirm`).fill(title);
-    await dialog.getByRole('button', { name: 'ERASE NOW' }).click();
-    await expect(dialog.getByTestId('erase-error')).toContainText('erasing needs a recent sign-in');
-    const again = dialog.getByRole('link', { name: 'SIGN IN AGAIN →' });
-    await expect(again).toHaveAttribute('href', `/login?next=/events/${id}/guests`);
-    await again.click();
-    await expect(page).toHaveURL(/\/login\?next=/);
+    await expect(dialog.getByTestId('erase-sign-in-first')).toHaveText("For safety, erasing needs a recent sign-in. Sign in again and you'll come straight back here.");
+    await expect(dialog.getByTestId('erase-confirm-input')).toHaveCount(0);
+    await dialog.getByRole('link', { name: 'SIGN IN AGAIN' }).click();
+
+    await expect(page).toHaveURL(/\/login\?/);
+    const url = new URL(page.url());
+    expect(url.searchParams.get('next')).toBe(`/events/${id}/guests?erase=1`);
+    expect(url.searchParams.get('why')).toBe('erase');
+    await expect(page.getByTestId('login-why')).toHaveText("Confirm it's you to erase guest data.");
     await page.getByLabel('EMAIL').fill('owner@example.org');
     await page.getByLabel('PASSWORD').fill('x');
     await page.getByRole('button', { name: 'SIGN IN' }).click();
+
+    // Straight back, the query dropped, the dialog open on the typed-title step.
     await expect(page).toHaveURL(new RegExp(`/events/${id}/guests$`));
-    await expect(page.getByTestId('erase-now')).toBeVisible();
+    await expect(dialog).toBeVisible();
+    const input = dialog.getByLabel(`Type the event title ${title} to confirm`);
+    await expect(input).toBeFocused();
+
+    // Should the server still want a fresh sign-in, the error links there too.
+    await page.route(`**/api/v1/events/${id}/purge`, route => route.fulfill({
+      status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'reauthentication_required' }),
+    }));
+    await input.fill(title);
+    await dialog.getByRole('button', { name: 'ERASE NOW' }).click();
+    await expect(dialog.getByTestId('erase-error')).toContainText('erasing needs a recent sign-in');
+    await expect(dialog.getByTestId('erase-error').getByRole('link', { name: 'SIGN IN AGAIN →' })).toHaveAttribute('href', /why=erase/);
   });
 
   test('an event erased by the schedule: erased rows with check-ins, no exports, list-backs or PINs', async ({ page, request }) => {
@@ -181,14 +274,16 @@ test.describe('privacy and retention (mock API)', () => {
     await expect(table.getByTestId('erased-name')).toHaveCount(6); // 4 guests + 2 tickets
     await expect(table).toContainText('Erased ticket holder');
     await expect(table.getByRole('row').filter({ hasText: 'Erased guest' }).first().getByTestId('checkin-tag')).toHaveText(/^IN 2\/2 · \d\d:\d\d$/);
+    await expect(table).not.toContainText('ERASED · NO CHANGES');
     await expect(page.getByTestId('guest-export')).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'STATUS BY EMAIL' })).toBeDisabled();
-    await expect(page.getByTestId('purged-reason')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'STATUS BY EMAIL' })).toHaveCount(0);
+    await expect(page.getByTestId('privacy-consequence')).toBeVisible();
     await expect(page.getByLabel('Search guests')).toHaveAttribute('placeholder', 'Names were erased');
+    await expect(page.getByLabel('Search guests')).toBeDisabled();
 
     // The collect-contact toggle says what turning it on means.
     await page.getByRole('button', { name: 'NEW LIST' }).click();
-    await expect(page.getByText('Off: names only (default). On: also email and phone, erased with the rest after the retention period')).toBeVisible();
+    await expect(page.getByText(/Off: names only \(default\)\. On: also email and phone, erased with the rest \d+ days? after the event ends/)).toBeVisible();
 
     expect((await request.get('/api/v1/events/e-klubnacht-01/guests/export.csv')).status()).toBe(409);
     const add = await request.post('/api/v1/events/e-klubnacht-01/guests', { data: { list_id: 'gl-01-artist', allocation_id: null, source: 'manual', guests: [{ name: 'New Name', plus_n: 0 }] } });
@@ -199,15 +294,17 @@ test.describe('privacy and retention (mock API)', () => {
     await page.goto('/events/e-klubnacht-01/report');
     await hydrated(page);
     await expect(page.getByTestId('kpi-arrived')).toBeVisible();
-    await expect(page.getByTestId('list-back-purged')).toContainText('nothing to list back');
-    const listBack = page.getByRole('button', { name: 'List back for Kaiser unavailable: guest names were erased' });
-    await expect(listBack).toBeDisabled();
-    await expect(listBack).toHaveText('NAMES ERASED');
+    await expect(page.getByTestId('list-back-purged')).toHaveText('List-backs are off because guest names were erased.');
+    await expect(page.getByTestId('report-submitters')).toContainText('Kaiser');
+    await expect(page.getByRole('button', { name: /List back/ })).toHaveCount(0);
     await expect(page.getByTestId('report-list-backs-link')).toHaveCount(0);
 
     await page.goto('/events/e-klubnacht-01/door');
     await hydrated(page);
     await expect(page.getByTestId('door-purged')).toContainText("new PINs can't be generated");
+    await expect(page.getByTestId('door-device-purged')).toHaveText("This event's guest list was erased, so it can't be used at the door.");
+    await expect(page.getByRole('button', { name: 'USE THIS BROWSER AS A DOOR DEVICE' })).toHaveCount(0);
+    await expect(page.locator('fieldset').filter({ hasText: 'VALID UNTIL' }).locator('input[type="date"]')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'GENERATE STAFF PIN' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'GENERATE MANAGER PIN' })).toBeDisabled();
   });

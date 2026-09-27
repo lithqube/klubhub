@@ -28,7 +28,8 @@ import { arrivalTag, countByStatus, guestErrorText, isCheckedIn, searchGuests, s
  * A list filter shows as a removable "LIST: name ✕" chip.
  *
  * Erased rows (P2.5 retention): "Erased guest" / "Erased ticket holder",
- * still with list, +N, status and check-in state, and no row actions.
+ * still with list, +N, status and check-in state, and no row actions (one
+ * hint above the table says so). Search is off: there are no names left.
  */
 const props = withDefaults(defineProps<{ guests: Guest[], lists: GuestList[], tickets?: Ticket[], timezone?: string, purged?: boolean }>(), { tickets: () => [], timezone: 'UTC', purged: false })
 const listFilter = defineModel<string>('list', { default: '' })
@@ -84,6 +85,16 @@ const shown = computed<Row[]>(() => {
     ...ticketRows.map(t => ({ kind: 'ticket' as const, key: `t-${t.id}`, t })),
   ]
 })
+const emptyText = computed(() => {
+  if (props.purged && !props.guests.length && !props.tickets.length) return 'Nobody was on this event\'s lists when its guest data was erased.'
+  if (props.purged) return 'Nobody in this view.'
+  if (q.value) return `No guest matches “${q.value}”.`
+  return props.guests.length || props.tickets.length ? 'Nobody in this view.' : 'No guests yet. Add names, paste a list or import attendees.'
+})
+// Search is off on an erased event; a query typed before the erase must not hide rows.
+watch(() => props.purged, (p) => {
+  if (p) q.value = ''
+}, { immediate: true })
 const TABS = computed(() => [
   { id: 'all' as Tab, label: 'ALL', n: counts.value.all + ticketsInView.value.length },
   ...STATUSES.map(s => ({ id: s as Tab, label: STATUS_LABEL[s], n: counts.value[s] })),
@@ -165,7 +176,10 @@ async function remove(g: Guest) {
       <label style="position:relative;flex:1;min-width:180px;">
         <span class="sr-only">Search guests</span>
         <Search style="position:absolute;left:10px;top:13px;width:14px;height:14px;color:var(--color-tertiary);" aria-hidden="true" />
-        <input v-model="q" class="hud-input" type="search" :placeholder="purged ? 'Names were erased' : 'Search names, emails, notes'" style="padding-left:30px;" autocomplete="off">
+        <input
+          v-model="q" class="hud-input" type="search" :placeholder="purged ? 'Names were erased' : 'Search names, emails, notes'" style="padding-left:30px;"
+          autocomplete="off" :disabled="purged"
+        >
       </label>
       <label style="min-width:160px;">
         <span class="sr-only">Filter by list</span>
@@ -193,8 +207,11 @@ async function remove(g: Guest) {
       </button>
     </p>
 
-    <p v-if="!shown.length" class="glass" style="padding:14px;font-size:13px;color:var(--color-on-surface-variant);">
-      {{ q ? `No guest matches “${q}”.` : guests.length || tickets.length ? 'Nobody in this view.' : 'No guests yet. Add names, paste a list or import attendees.' }}
+    <p v-if="purged && shown.length" class="erased-hint" data-testid="erased-hint">
+      Erased rows keep their list, +N, status and check-ins. They can't be changed.
+    </p>
+    <p v-if="!shown.length" class="glass" style="padding:14px;font-size:13px;color:var(--color-on-surface-variant);" data-testid="guest-table-empty">
+      {{ emptyText }}
     </p>
     <table v-else class="guest-table">
       <thead>
@@ -206,7 +223,7 @@ async function remove(g: Guest) {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in shown" :key="row.key" :class="{ 'accent-bar-pending': row.kind === 'guest' && row.g.status === 'pending' }">
+        <tr v-for="row in shown" :key="row.key" :class="{ 'accent-bar-pending': row.kind === 'guest' && row.g.status === 'pending' && !row.g.purged }">
           <template v-if="row.kind === 'ticket'">
             <td>
               <span v-if="row.t.purged" class="erased" data-testid="erased-name">Erased ticket holder</span>
@@ -270,9 +287,7 @@ async function remove(g: Guest) {
                 ><span aria-hidden="true">{{ tagOf(row.g)!.text }}<template v-if="row.g.first_in_at"> · {{ firstIn(row.g.first_in_at) }}</template></span></span>
               </span>
             </td>
-            <td v-if="row.g.purged" class="actions-cell">
-              <span class="erased-note">ERASED · NO CHANGES</span>
-            </td>
+            <td v-if="row.g.purged" class="actions-cell" />
             <td v-else class="actions-cell">
               <div class="actions">
               <template v-if="row.g.status === 'pending'">
@@ -357,12 +372,9 @@ async function remove(g: Guest) {
   font-style: italic;
   color: var(--color-on-surface-variant);
 }
-.erased-note {
-  display: block;
-  text-align: right;
-  font-family: var(--font-terminal);
-  font-size: 11px;
-  letter-spacing: .05em;
+.erased-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
 }
 .row-err {
@@ -429,7 +441,6 @@ async function remove(g: Guest) {
   .guest-table td[colspan] { grid-column: 1 / -1; }
   .guest-table td.actions-cell { grid-column: 1 / -1; }
   .actions { justify-content: flex-start; }
-  .erased-note { text-align: left; }
   .row-err { text-align: left; }
 }
 </style>

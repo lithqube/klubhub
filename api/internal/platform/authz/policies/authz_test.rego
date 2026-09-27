@@ -114,3 +114,17 @@ test_event_purge_is_not_for_planners_or_door if {
 	d := authz.decision with input as json.patch(base(["door"], "event.purge"), [{"op": "add", "path": "/principal/event_scope", "value": "e1"}, {"op": "add", "path": "/resource/event_id", "value": "e1"}])
 	d.deny_reason == "no_role_grant"
 }
+
+# A confirmed retention change that erases ended events at once (P2.5) is
+# authorised again as event.purge on the org: same roles, same step-up.
+org_purge(roles) := json.patch(base(roles, "event.purge"), [{"op": "replace", "path": "/resource/type", "value": "org"}])
+
+test_retention_shortening_erase_uses_event_purge if {
+	authz.decision.allow with input as org_purge(["owner"])
+	authz.decision.allow with input as org_purge(["admin"])
+	stale := json.patch(org_purge(["admin"]), [{"op": "replace", "path": "/context/now", "value": 1000 + 901}])
+	s := authz.decision with input as stale
+	s.deny_reason == "reauthentication_required"
+	b := authz.decision with input as org_purge(["booker"])
+	b.deny_reason == "no_role_grant"
+}

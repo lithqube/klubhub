@@ -19,6 +19,7 @@ assert {
   res.body.recent.length: eq 1
   res.body.recent[0].event_id: eq {{pastEventId}}
   res.body.recent[0].title: eq Bruno Past Night
+  res.body.recent[0].timezone: eq Europe/Berlin
   res.body.recent[0].trigger: eq manual
   res.body.recent[0].counts.guests: eq 2
 }

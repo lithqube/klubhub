@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -134,25 +133,30 @@ func (s *Service) settings(ctx context.Context, tx pgx.Tx) (Settings, error) {
 	out.RetentionDays = days
 	// purge_after is the end plus a constant, so ordering by the end is
 	// ordering by purge_after.
-	rows, err := tx.Query(ctx, `SELECT e.id, e.title, e.starts_at, e.ends_at FROM events e
+	rows, err := tx.Query(ctx, `SELECT e.id, e.title, e.timezone, e.starts_at, e.ends_at FROM events e
 	  WHERE e.starts_at <= $1
 	    AND NOT EXISTS (SELECT 1 FROM event_purges p WHERE p.event_id = e.id AND p.purged_at IS NOT NULL)
 	  ORDER BY COALESCE(e.ends_at, e.starts_at + interval '24 hours'), e.id LIMIT $2`, s.clock(), listLimit)
 	if err != nil {
 		return out, err
 	}
-	evs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (eventRow, error) {
-		var e eventRow
-		err := r.Scan(&e.ID, &e.Title, &e.StartsAt, &e.EndsAt)
+	type upcomingRow struct {
+		eventRow
+		tz string
+	}
+	evs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (upcomingRow, error) {
+		var e upcomingRow
+		err := r.Scan(&e.ID, &e.Title, &e.tz, &e.StartsAt, &e.EndsAt)
 		return e, err
 	})
 	if err != nil {
 		return out, err
 	}
 	for _, e := range evs {
-		out.Upcoming = append(out.Upcoming, Upcoming{EventID: e.ID, Title: e.Title, EndsAt: e.end(), PurgeAfter: PurgeAfter(e.StartsAt, e.EndsAt, days)})
+		out.Upcoming = append(out.Upcoming, Upcoming{EventID: e.ID, Title: e.Title, Timezone: e.tz, EndsAt: e.end(),
+			PurgeAfter: PurgeAfter(e.StartsAt, e.EndsAt, days)})
 	}
-	rows, err = tx.Query(ctx, `SELECT p.event_id, e.title, p.purged_at, p.trigger, p.counts FROM event_purges p
+	rows, err = tx.Query(ctx, `SELECT p.event_id, e.title, e.timezone, p.purged_at, p.trigger, p.counts FROM event_purges p
 	  JOIN events e ON e.id = p.event_id
 	  WHERE p.purged_at IS NOT NULL ORDER BY p.purged_at DESC, p.event_id LIMIT $1`, listLimit)
 	if err != nil {
@@ -161,7 +165,7 @@ func (s *Service) settings(ctx context.Context, tx pgx.Tx) (Settings, error) {
 	recent, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Recent, error) {
 		var x Recent
 		var counts []byte
-		if err := r.Scan(&x.EventID, &x.Title, &x.PurgedAt, &x.Trigger, &counts); err != nil {
+		if err := r.Scan(&x.EventID, &x.Title, &x.Timezone, &x.PurgedAt, &x.Trigger, &counts); err != nil {
 			return x, err
 		}
 		x.PurgedAt = x.PurgedAt.UTC()
@@ -174,10 +178,29 @@ func (s *Service) settings(ctx context.Context, tx pgx.Tx) (Settings, error) {
 	return out, nil
 }
 
-// UpdateRetention sets the tenant's retention period (1..365 days), audits
-// the change and recomputes purge_after of every unpurged event.
-func (s *Service) UpdateRetention(ctx context.Context, days int, actor string) (Settings, error) {
-	var out Settings
+// wouldPurge lists the unpurged events that retention `days` makes due at
+// now but the current period `current` does not (only a shorter period
+// can). Events already due are erased by the job either way.
+func wouldPurge(ctx context.Context, tx pgx.Tx, current, days int, now time.Time) ([]WouldPurge, error) {
+	out := []WouldPurge{}
+	if days >= current {
+		return out, nil
+	}
+	evs, err := unpurgedEvents(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range evs {
+		if Due(PurgeAfter(e.StartsAt, e.EndsAt, days), now) && !Due(PurgeAfter(e.StartsAt, e.EndsAt, current), now) {
+			out = append(out, WouldPurge{EventID: e.ID, Title: e.Title, EndsAt: e.end()})
+		}
+	}
+	return out, nil
+}
+
+// PreviewRetention answers what saving `days` would erase at once.
+func (s *Service) PreviewRetention(ctx context.Context, days int) (Preview, error) {
+	var out Preview
 	if err := ValidateDays(days); err != nil {
 		return out, err
 	}
@@ -186,21 +209,81 @@ func (s *Service) UpdateRetention(ctx context.Context, days int, actor string) (
 		return out, err
 	}
 	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
+		current, err := retentionDays(ctx, tx)
+		if err != nil {
+			return err
+		}
+		list, err := wouldPurge(ctx, tx, current, days, s.clock())
+		out = Preview{WouldPurge: list, Count: len(list)}
+		return err
+	})
+	return out, err
+}
+
+// UpdateInput is one change of the retention period. ConfirmPurge must be
+// the exact number of events the change would erase at once (see
+// PreviewRetention); StepUp authorises that erasure (the event.purge
+// policy: a recent sign-in) and runs only when it is confirmed.
+type UpdateInput struct {
+	Days         int
+	ConfirmPurge *int
+	Actor        string
+	StepUp       func() error
+}
+
+// UpdateRetention sets the tenant's retention period (1..365 days), audits
+// the change and recomputes purge_after of every unpurged event. A shorter
+// period that makes ended events due at once is refused with
+// *WouldPurgeError unless in.ConfirmPurge is their count and in.StepUp
+// allows it; the audit entry then records the count.
+func (s *Service) UpdateRetention(ctx context.Context, in UpdateInput) (Settings, error) {
+	var out Settings
+	if err := ValidateDays(in.Days); err != nil {
+		return out, err
+	}
+	tenant, err := tenantOf(ctx)
+	if err != nil {
+		return out, err
+	}
+	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
+		// One change at a time per tenant, so the confirmed count cannot go
+		// stale under a concurrent save.
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('org_privacy:' || $1::text, 0))`, tenant.String()); err != nil {
+			return err
+		}
 		before, err := retentionDays(ctx, tx)
 		if err != nil {
 			return err
 		}
+		due, err := wouldPurge(ctx, tx, before, in.Days, s.clock())
+		if err != nil {
+			return err
+		}
+		if len(due) > 0 {
+			if in.ConfirmPurge == nil || *in.ConfirmPurge != len(due) {
+				return &WouldPurgeError{Preview: Preview{WouldPurge: due, Count: len(due)}}
+			}
+			if in.StepUp == nil {
+				return &DeniedError{Reason: "reauthentication_required"}
+			}
+			if err := in.StepUp(); err != nil {
+				return err
+			}
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO org_privacy (tenant_id, retention_days, updated_at, updated_by) VALUES ($1, $2, $3, $4)
 		  ON CONFLICT (tenant_id) DO UPDATE SET retention_days = EXCLUDED.retention_days, updated_at = EXCLUDED.updated_at,
-		    updated_by = EXCLUDED.updated_by`, tenant, days, s.clock(), actor); err != nil {
+		    updated_by = EXCLUDED.updated_by`, tenant, in.Days, s.clock(), in.Actor); err != nil {
 			return err
 		}
-		if _, err := schedule(ctx, tx, tenant, days); err != nil {
+		if _, err := schedule(ctx, tx, tenant, in.Days); err != nil {
 			return err
+		}
+		reason := fmt.Sprintf("retention %d → %d days", before, in.Days)
+		if len(due) > 0 {
+			reason += fmt.Sprintf("; confirmed erasing %d ended events now", len(due))
 		}
 		if err := audit.Record(ctx, tx, tenant, audit.Entry{
-			ActorID: actor, Action: "org.retention_updated", Resource: "org:" + tenant.String(), Allowed: true,
-			Reason: fmt.Sprintf("retention %d → %d days", before, days),
+			ActorID: in.Actor, Action: "org.retention_updated", Resource: "org:" + tenant.String(), Allowed: true, Reason: reason,
 		}); err != nil {
 			return err
 		}
@@ -254,7 +337,8 @@ func ptr[T any](v T) *T { return &v }
 // ------------------------------------------------------------- purges ---
 
 // Purge erases one event now ("erase now"). The event must have ended and
-// confirm must be its exact title (surrounding spaces ignored).
+// confirm must be its title (compared after NormalizeTitle: case, dashes,
+// quotes and spacing do not matter).
 func (s *Service) Purge(ctx context.Context, eventID uuid.UUID, confirm, actor string) (PurgeResult, error) {
 	var out PurgeResult
 	tenant, err := tenantOf(ctx)
@@ -272,8 +356,8 @@ func (s *Service) Purge(ctx context.Context, eventID uuid.UUID, confirm, actor s
 			return ErrEventPurged
 		case !Ended(e.StartsAt, e.EndsAt, now):
 			return ErrNotEnded
-		case strings.TrimSpace(confirm) != e.Title:
-			return &InvalidError{Field: "confirm", Problem: "type the event title exactly"}
+		case !TitleMatches(confirm, e.Title):
+			return &InvalidError{Field: "confirm", Problem: "type the event title"}
 		}
 		days, err := retentionDays(ctx, tx)
 		if err != nil {

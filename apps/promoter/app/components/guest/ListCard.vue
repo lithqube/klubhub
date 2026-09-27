@@ -6,8 +6,12 @@ import type { Allocation, AllocationInput, GuestList, ListInput } from '~/types/
 import { dayLabel, timeLabel } from '~/utils/datetime'
 import { allocationState, guestErrorText, LIST_TYPES } from '~/utils/guests'
 
-/** One list with its entry terms and allocations (quota bars, revoke). */
-const props = defineProps<{ list: GuestList, event: { starts_at: string, timezone: string } }>()
+/**
+ * One list with its entry terms and allocations (quota bars, revoke).
+ * purged: the event's guest data was erased, so allocations take no
+ * submitter contact. retentionDays feeds the collect-contact hint.
+ */
+const props = defineProps<{ list: GuestList, event: { starts_at: string, timezone: string }, purged?: boolean, retentionDays?: number | null }>()
 const emit = defineEmits<{ filter: [listId: string] }>()
 const store = useGuestStore()
 
@@ -75,7 +79,7 @@ const stateLabel = (a: Allocation) => ({ open: '', closed: 'CLOSED', revoked: 'R
 <template>
   <section class="hud-card" style="padding:12px 14px;" :aria-label="`List ${list.name}`">
     <GuestListForm
-      v-if="editing" :initial="list" :event="event" :error="error" :saving="saving"
+      v-if="editing" :initial="list" :event="event" :error="error" :saving="saving" :retention-days="retentionDays"
       @save="saveList" @cancel="editing = false; error = null"
     />
     <template v-else>
@@ -106,7 +110,7 @@ const stateLabel = (a: Allocation) => ({ open: '', closed: 'CLOSED', revoked: 'R
         :class="allocationState(a) === 'open' ? 'accent-bar-ready' : 'accent-bar-published'" style="padding:6px 8px;"
       >
         <GuestAllocationForm
-          v-if="allocEdit !== 'new' && allocEdit?.id === a.id" :initial="a" :timezone="event.timezone" :error="error" :saving="saving"
+          v-if="allocEdit !== 'new' && allocEdit?.id === a.id" :initial="a" :timezone="event.timezone" :error="error" :saving="saving" :purged="purged"
           @save="saveAlloc" @cancel="allocEdit = null; error = null"
         />
         <template v-else>
@@ -130,7 +134,7 @@ const stateLabel = (a: Allocation) => ({ open: '', closed: 'CLOSED', revoked: 'R
         </template>
       </div>
       <GuestAllocationForm
-        v-if="allocEdit === 'new'" :timezone="event.timezone" :error="error" :saving="saving"
+        v-if="allocEdit === 'new'" :timezone="event.timezone" :error="error" :saving="saving" :purged="purged"
         @save="saveAlloc" @cancel="allocEdit = null; error = null"
       />
       <button v-else-if="!editing" type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;justify-self:start;" @click="allocEdit = 'new'">

@@ -128,6 +128,7 @@ func TestEveryRouteHasAPolicyDecision(t *testing.T) {
 	// P2.5 routes are mounted with their contract actions.
 	for _, want := range []authz.Route{
 		{Method: http.MethodGet, Pattern: "/api/v1/org/retention", Action: "org.read"},
+		{Method: http.MethodGet, Pattern: "/api/v1/org/retention/preview", Action: "org.read"},
 		{Method: http.MethodPut, Pattern: "/api/v1/org/retention", Action: "org.update"},
 		{Method: http.MethodPost, Pattern: "/api/v1/events/{eventID}/purge", Action: "event.purge"},
 		{Method: http.MethodGet, Pattern: "/api/v1/events/{eventID}/privacy", Action: "event.read"},

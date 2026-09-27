@@ -16,6 +16,8 @@ const props = defineProps<{
   error?: ApiError | null
   saving?: boolean
   submitLabel?: string
+  /** The org's retention period, when known (the collect-contact hint says it). */
+  retentionDays?: number | null
 }>()
 const emit = defineEmits<{ save: [ListInput], cancel: [] }>()
 
@@ -33,6 +35,9 @@ const f = reactive({
 const wasCollecting = props.initial?.collect_contact ?? false
 
 const errorText = computed(() => (props.error ? guestErrorText(props.error) : ''))
+const erasedWhen = computed(() => (props.retentionDays
+  ? `${props.retentionDays} ${props.retentionDays === 1 ? 'day' : 'days'} after the event ends`
+  : 'after the retention period'))
 
 function submit() {
   if (wasCollecting && !f.contact && !window.confirm('Turning contact details off erases the emails and phone numbers already on this list. Continue?')) return
@@ -98,7 +103,7 @@ function submit() {
       <span>
         COLLECT EMAIL &amp; PHONE
         <span style="display:block;font-size:11px;color:var(--color-on-surface-variant);">
-          Off: names only (default). On: also email and phone, erased with the rest after the retention period (Settings → Data retention).
+          Off: names only (default). On: also email and phone, erased with the rest {{ erasedWhen }} (Settings → Data retention).
         </span>
       </span>
     </label>

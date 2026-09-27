@@ -1,0 +1,41 @@
+meta {
+  name: Preview which ended events 1 day would erase at once
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/api/v1/org/retention/preview?days=1
+  body: none
+  auth: none
+}
+
+params:query {
+  days: 1
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.count: eq 1
+  res.body.would_purge.length: eq 1
+  res.body.would_purge[0].event_id: eq {{shortEventId}}
+  res.body.would_purge[0].title: eq Bruno Short Night
+}
+
+tests {
+  test("each entry names the event and when it ended", function () {
+    const w = res.getBody().would_purge[0];
+    expect(w).to.have.all.keys("event_id", "title", "ends_at");
+    expect(Date.parse(w.ends_at)).to.equal(Date.parse(bru.getVar("shortEndsAt")));
+  });
+
+  test("the erased event and events that have not ended are not listed", function () {
+    const ids = res.getBody().would_purge.map((w) => w.event_id);
+    expect(ids).to.not.include(bru.getVar("pastEventId"));
+    expect(ids).to.not.include(bru.getVar("eventId"));
+  });
+}

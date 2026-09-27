@@ -90,4 +90,30 @@ func TestValidateDays(t *testing.T) {
 	}
 }
 
+func TestTitleMatchesNormalises(t *testing.T) {
+	title := "Klubnacht 03 – Tresor’s “Late” Edition"
+	for _, typed := range []string{
+		"Klubnacht 03 – Tresor’s “Late” Edition",
+		"klubnacht 03 - tresor's \"late\" edition",
+		"  KLUBNACHT   03 — Tresor's \"Late\"\tEdition  ",
+		"Ｋｌｕｂｎａｃｈｔ ０３ - tresor's \"late\" edition",    // full-width (NFKC)
+		"klubnacht\u00a003 ‐ tresor‘s „late“ edition", // no-break space, hyphen, low quotes
+	} {
+		if !retention.TitleMatches(typed, title) {
+			t.Errorf("%q should match %q (normalised %q vs %q)", typed, title, retention.NormalizeTitle(typed), retention.NormalizeTitle(title))
+		}
+	}
+	for _, typed := range []string{"", "Klubnacht 03", "Klubnacht 03 Tresors Late Edition", "Klubnacht 3 – Tresor’s “Late” Edition"} {
+		if retention.TitleMatches(typed, title) {
+			t.Errorf("%q must not match", typed)
+		}
+	}
+	if retention.TitleMatches("", "") || retention.TitleMatches(" ", "  ") {
+		t.Error("an empty title never matches")
+	}
+	if got := retention.NormalizeTitle("  A\u2013B  “C”  "); got != `a-b "c"` {
+		t.Errorf("NormalizeTitle: %q", got)
+	}
+}
+
 func ptr[T any](v T) *T { return &v }

@@ -319,6 +319,10 @@ const WIPED: Record<string, string> = {
   event: 'The night is over, so this device forgot the guest list.',
 }
 const REJECTION_HELP = 'These were not saved. Check with a manager before letting these guests in again.'
+/** Every rejection is an erased event (P2.5): nothing the door can fix. */
+const rejectionHelp = computed(() => (rejections.value.length && rejections.value.every(r => r.error === 'event_purged')
+  ? 'The event\'s guest data was erased, so these door adds weren\'t saved. Nothing to do at the door.'
+  : REJECTION_HELP))
 </script>
 
 <template>
@@ -420,7 +424,7 @@ const REJECTION_HELP = 'These were not saved. Check with a manager before lettin
 
         <section v-if="rejections.length" class="glass panel accent-bar-archived" aria-labelledby="rej-h">
           <h2 id="rej-h" class="section-lbl" style="margin:0 0 6px;">NOT ACCEPTED BY THE SERVER</h2>
-          <p style="margin:0 0 6px;font-size:13px;color:var(--color-on-surface-variant);">{{ REJECTION_HELP }}</p>
+          <p style="margin:0 0 6px;font-size:13px;color:var(--color-on-surface-variant);" data-testid="door-rejection-help">{{ rejectionHelp }}</p>
           <ul style="margin:0 0 8px;padding-left:18px;font-size:14px;">
             <li v-for="r in rejections" :key="`${r.what}|${r.at}`">{{ timeLabel(r.at, tz) }} · {{ r.what }}: {{ rejectionText(r.error) }}</li>
           </ul>

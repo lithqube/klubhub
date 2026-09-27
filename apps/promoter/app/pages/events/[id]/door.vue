@@ -152,7 +152,8 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
     <div class="grid">
       <section class="hud-card glass panel" aria-labelledby="this-h">
         <h2 id="this-h" class="section-lbl" style="margin:0;"><MonitorSmartphone class="ic" aria-hidden="true" /> THIS BROWSER</h2>
-        <ClientOnly>
+        <p v-if="purgedAt" class="txt" data-testid="door-device-purged">This event's guest list was erased, so it can't be used at the door.</p>
+        <ClientOnly v-else>
           <template v-if="deviceState === 'none'">
             <p class="txt">Use this phone or tablet at the door. It downloads the guest list for the night, keeps it encrypted, and works without signal.</p>
             <p class="warn" data-testid="door-admin-warning">
@@ -210,7 +211,7 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
             <dd v-if="lockLine(pinStatus?.manager)" class="locked">{{ lockLine(pinStatus?.manager) }}</dd>
           </div>
         </dl>
-        <fieldset class="row" style="border:0;padding:0;margin:0;">
+        <fieldset class="row" style="border:0;padding:0;margin:0;" :disabled="!!purgedAt">
           <legend class="section-lbl" style="margin-bottom:4px;">VALID UNTIL ({{ tz.toUpperCase() }}, AT MOST {{ MAX_PIN_WINDOW_HOURS }} H AHEAD)</legend>
           <label :for="`${uid}-d`" class="sr-only">Date</label>
           <input :id="`${uid}-d`" v-model="until.date" class="hud-input" type="date" style="flex:1;min-width:140px;">

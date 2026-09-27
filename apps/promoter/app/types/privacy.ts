@@ -6,6 +6,8 @@ export type PurgeTrigger = 'schedule' | 'manual'
 export interface RetentionUpcoming {
   event_id: string
   title: string
+  /** The event's IANA timezone (dates show the way the event does). */
+  timezone?: string
   ends_at: string
   /** ends_at + retention at scheduling time (recomputed until purged). */
   purge_after: string
@@ -15,6 +17,8 @@ export interface RetentionUpcoming {
 export interface RetentionRecent {
   event_id: string
   title: string
+  /** The event's IANA timezone. */
+  timezone?: string
   purged_at: string
   trigger: PurgeTrigger
   /** Rows anonymised per table (guests, orders, order_positions, …). */
@@ -29,6 +33,22 @@ export interface RetentionOverview {
   upcoming: RetentionUpcoming[]
   /** Last 20. */
   recent: RetentionRecent[]
+}
+
+/** An ended event a shorter retention period erases at once. */
+export interface RetentionWouldPurge {
+  event_id: string
+  title: string
+  ends_at: string
+}
+
+/**
+ * GET /api/v1/org/retention/preview?days=N, and the body of the 409
+ * retention_would_purge refusal of PUT /api/v1/org/retention.
+ */
+export interface RetentionPreview {
+  would_purge: RetentionWouldPurge[]
+  count: number
 }
 
 /** GET /api/v1/events/{eventID}/privacy */

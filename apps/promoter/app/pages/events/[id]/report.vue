@@ -8,7 +8,6 @@ import { useReportStore } from '~/stores/report'
 import type { ApiError } from '~/types/event'
 import type { ReportSubmitterRow } from '~/types/report'
 import { dayLabel, timeLabel } from '~/utils/datetime'
-import { shortDate } from '~/utils/privacy'
 import { hasActivity, listBackCounts, listBackFilename, loadErrorMessage, reportPhase, updatedAgo } from '~/utils/report'
 
 /**
@@ -30,9 +29,6 @@ const privacy = usePrivacyStore()
 const { events: privacyByEvent } = storeToRefs(privacy)
 await useAsyncData(() => `privacy-${id.value}`, () => (id.value ? privacy.fetchEvent(id.value).then(() => true) : Promise.resolve(null)), { watch: [id] })
 const purgedAt = computed(() => privacyByEvent.value[id.value]?.purged_at ?? null)
-const purgedReason = computed(() => (purgedAt.value
-  ? `Guest names were erased on ${shortDate(purgedAt.value, tz.value)}, so there is nothing to list back. The numbers stay.`
-  : ''))
 
 // A report left over from another event is never shown.
 const shown = computed(() => (report.value && report.value.event.id === id.value ? report.value : null))
@@ -181,7 +177,7 @@ function onPurged() {
         <ReportKpiTiles :totals="shown.totals" :curve="shown.curve" :capacity="shown.event.capacity" :tz="tz" :event-id="current.id" />
         <ReportCheckinCurve v-if="shown.curve.length" :curve="shown.curve" :tz="tz" />
         <div class="report-grid">
-          <ReportSubmitterTable :rows="shown.by_submitter" :busy="busy" :purged-reason="purgedReason" @list-back="listBack" />
+          <ReportSubmitterTable :rows="shown.by_submitter" :busy="busy" :purged="!!purgedAt" @list-back="listBack" />
           <ReportListTable :rows="shown.by_list" />
         </div>
         <ReportTicketTypes v-if="shown.tickets_by_type.length" :rows="shown.tickets_by_type" />

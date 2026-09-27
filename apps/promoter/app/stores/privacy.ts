@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ApiError } from '~/types/event'
-import type { EventPrivacy, PurgeResponse, RetentionOverview } from '~/types/privacy'
+import type { EventPrivacy, PurgeResponse, RetentionOverview, RetentionPreview } from '~/types/privacy'
 import { apiFetch, toApiError } from '~/utils/api'
 
 /**
@@ -31,13 +31,30 @@ export const usePrivacyStore = defineStore('privacy', () => {
   }
 
   /**
-   * Save the retention period (1–365 days); throws an ApiError. The server
+   * Which ended events saving `days` would erase at once (only a shorter
+   * period can). Throws an ApiError.
+   */
+  async function previewRetention(days: number): Promise<RetentionPreview> {
+    try {
+      const p = await apiFetch<RetentionPreview>('/api/v1/org/retention/preview', { query: { days } })
+      return { would_purge: p?.would_purge ?? [], count: p?.count ?? 0 }
+    } catch (e) {
+      throw toApiError(e)
+    }
+  }
+
+  /**
+   * Save the retention period (1–365 days); throws an ApiError. A shorter
+   * period that erases ended events at once needs `confirmPurge` = their
+   * count (else 409 retention_would_purge) and a recent sign-in. The server
    * recomputes the dates of events not yet erased, so the overview is
    * reloaded (a failed reload keeps the saved value).
    */
-  async function saveRetention(days: number): Promise<void> {
+  async function saveRetention(days: number, confirmPurge?: number): Promise<void> {
+    const body: { retention_days: number, confirm_purge?: number } = { retention_days: days }
+    if (confirmPurge) body.confirm_purge = confirmPurge
     try {
-      await apiFetch('/api/v1/org/retention', { method: 'PUT', body: { retention_days: days } })
+      await apiFetch('/api/v1/org/retention', { method: 'PUT', body })
     } catch (e) {
       throw toApiError(e)
     }
@@ -83,5 +100,5 @@ export const usePrivacyStore = defineStore('privacy', () => {
     return { purged_at: purgedAt, counts: r?.counts }
   }
 
-  return { retention, retentionLoading, retentionError, events, eventErrors, fetchRetention, saveRetention, fetchEvent, purgeEvent }
+  return { retention, retentionLoading, retentionError, events, eventErrors, fetchRetention, previewRetention, saveRetention, fetchEvent, purgeEvent }
 })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  confirmMatches, countsText, daysAfterEnd, daysAfterText, isStepUp, privacyBanner, purgeDate, purgeErrorText, retentionErrorText,
-  shortDate, validateRetentionDays,
+  authIsStale, confirmMatches, countsText, daysAfterEnd, daysAfterText, ERASED_ITEMS, isStepUp, KEPT_ITEMS, normalizeTitle, privacyBanner, purgeDate,
+  purgeErrorText, retentionErrorText, retentionSaveButton, shortDate, signInAgainRoute, stepUpLoginText, validateRetentionDays, wouldPurgeText,
 } from '../privacy'
 
 const TZ = 'Europe/Berlin'
@@ -38,6 +38,9 @@ describe('purge dates', () => {
     expect(daysAfterText(30)).toBe('30 days after it ended')
     expect(daysAfterText(1)).toBe('1 day after it ended')
     expect(daysAfterText(0)).toBe('the day it ended')
+    // Not ended yet (the settings list running events too).
+    expect(daysAfterText(30, false)).toBe('30 days after it ends')
+    expect(daysAfterText(0, false)).toBe('the day it ends')
   })
 
   it('uses the server purge date, else the end plus retention', () => {
@@ -61,10 +64,10 @@ describe('privacyBanner', () => {
     })
   })
 
-  it('says the erase is due once the date passed and the job has not run yet', () => {
+  it('says the erase is running once the date passed and the job has not run yet', () => {
     const due = privacyBanner(EVENT, { ...p, purge_after: '2026-10-18T05:00:00Z', retention_days: 7 }, NOW)
     expect(due.state).toBe('due')
-    expect(due.text).toBe('Guest names and contacts for this event are due to be erased: 18 Oct (7 days after it ended). This happens within the hour.')
+    expect(due.text).toBe('Guest names and contacts for this event are being erased now (scheduled for 18 Oct, 7 days after it ended).')
   })
 
   it('says when they were erased', () => {
@@ -91,7 +94,9 @@ describe('erase copy', () => {
   })
 
   it('maps refusals to plain words', () => {
-    expect(purgeErrorText({ error: 'reauthentication_required' })).toMatch(/recent sign-in/)
+    expect(purgeErrorText({ error: 'reauthentication_required' })).toMatch(/recent sign-in.*come straight back here/)
+    expect(retentionErrorText({ error: 'reauthentication_required' })).toMatch(/recent sign-in/)
+    expect(retentionErrorText({ error: 'retention_would_purge' })).toMatch(/changed/)
     expect(purgeErrorText({ error: 'event_not_ended' })).toMatch(/has not ended yet/)
     expect(purgeErrorText({ error: 'invalid', field: 'confirm' })).toBe('The title you typed does not match the event title.')
     expect(purgeErrorText({ error: 'no_role_grant' })).toBe('Only owners and admins can erase guest data.')
@@ -100,9 +105,71 @@ describe('erase copy', () => {
     expect(retentionErrorText({ error: 'no_role_grant' })).toMatch(/Only owners and admins/)
   })
 
-  it('matches the typed title exactly, ignoring surrounding spaces', () => {
+  it('matches the typed title after normalising both sides (as the server does)', () => {
     expect(confirmMatches(' Klubnacht 02 ', 'Klubnacht 02')).toBe(true)
-    expect(confirmMatches('klubnacht 02', 'Klubnacht 02')).toBe(false)
+    expect(confirmMatches('klubnacht 02', 'Klubnacht 02')).toBe(true)
+    const title = 'Klubnacht 03 – Tresor’s “Late” Edition'
+    for (const typed of [
+      'klubnacht 03 - tresor\'s "late" edition',
+      '  KLUBNACHT   03 — Tresor\'s "Late"\tEdition  ',
+      'Ｋｌｕｂｎａｃｈｔ ０３ - tresor\'s "late" edition',
+      'klubnacht\u00a003 \u2010 tresor‘s „late“ edition',
+    ]) expect(confirmMatches(typed, title), typed).toBe(true)
+    for (const typed of ['', 'Klubnacht 03', 'Klubnacht 03 Tresors Late Edition', 'Klubnacht 3 – Tresor’s “Late” Edition']) {
+      expect(confirmMatches(typed, title), typed).toBe(false)
+    }
     expect(confirmMatches('', '')).toBe(false)
+    expect(confirmMatches(' ', '  ')).toBe(false)
+    expect(normalizeTitle('  A\u2013B  “C”  ')).toBe('a-b "c"')
+  })
+})
+
+describe('step-up before an erase', () => {
+  it('treats a sign-in older than 14 minutes as stale and leaves unknown times to the server', () => {
+    expect(authIsStale(new Date(NOW - 13 * 60_000).toISOString(), NOW)).toBe(false)
+    expect(authIsStale(new Date(NOW - 14 * 60_000).toISOString(), NOW)).toBe(false)
+    expect(authIsStale(new Date(NOW - 14 * 60_000 - 1000).toISOString(), NOW)).toBe(true)
+    expect(authIsStale(new Date(NOW - 3 * 3_600_000).toISOString(), NOW)).toBe(true)
+    expect(authIsStale(undefined, NOW)).toBe(false)
+    expect(authIsStale('not a date', NOW)).toBe(false)
+  })
+
+  it('signs in again and comes straight back, saying why', () => {
+    expect(signInAgainRoute('/events/e1/guests?erase=1', 'erase')).toEqual({ path: '/login', query: { next: '/events/e1/guests?erase=1', why: 'erase' } })
+    expect(stepUpLoginText('erase')).toBe('Confirm it\'s you to erase guest data.')
+    expect(stepUpLoginText('retention')).toMatch(/Confirm it's you to change how long guest data is kept/)
+    expect(stepUpLoginText(undefined)).toBe('')
+    expect(stepUpLoginText('other')).toBe('')
+  })
+})
+
+describe('shortening retention', () => {
+  const preview = (titles: string[]) => ({ would_purge: titles.map((title, i) => ({ event_id: `e${i}`, title, ends_at: '2026-10-11T05:00:00Z' })), count: titles.length })
+
+  it('warns with the count and up to three titles', () => {
+    expect(wouldPurgeText(7, preview(['A', 'B', 'C']))).toBe('With 7 days, guest names and contacts of 3 ended events (A, B, C) are erased within the hour. This can\'t be undone.')
+    expect(wouldPurgeText(7, preview(['A', 'B', 'C', 'D']))).toBe('With 7 days, guest names and contacts of 4 ended events (A, B, C, …) are erased within the hour. This can\'t be undone.')
+    expect(wouldPurgeText(1, preview(['Solo']))).toBe('With 1 day, guest names and contacts of 1 ended event (Solo) are erased within the hour. This can\'t be undone.')
+    expect(wouldPurgeText(7, preview([]))).toBe('')
+    expect(wouldPurgeText(7, null)).toBe('')
+  })
+
+  it('turns the save into SAVE AND ERASE N, enabled only once acknowledged with a recent sign-in', () => {
+    const base = { busy: false, changed: true, shorter: true, previewing: false, erasing: 0, ack: false, stale: false }
+    expect(retentionSaveButton(base)).toEqual({ label: 'SAVE RETENTION', danger: false, disabled: false })
+    expect(retentionSaveButton({ ...base, previewing: true }).disabled).toBe(true)
+    expect(retentionSaveButton({ ...base, shorter: false, previewing: true }).disabled).toBe(false)
+    expect(retentionSaveButton({ ...base, erasing: 3 })).toEqual({ label: 'SAVE AND ERASE 3', danger: true, disabled: true })
+    expect(retentionSaveButton({ ...base, erasing: 3, ack: true })).toEqual({ label: 'SAVE AND ERASE 3', danger: true, disabled: false })
+    expect(retentionSaveButton({ ...base, erasing: 3, ack: true, stale: true }).disabled).toBe(true)
+    expect(retentionSaveButton({ ...base, changed: false }).disabled).toBe(true)
+    expect(retentionSaveButton({ ...base, erasing: 3, ack: true, busy: true })).toMatchObject({ label: 'SAVING…', disabled: true })
+  })
+})
+
+describe('erased and kept', () => {
+  it('is one list for the settings and the dialog', () => {
+    expect(ERASED_ITEMS).toContain('Guest names, emails, phone numbers and notes')
+    expect(KEPT_ITEMS.some(k => k.startsWith('The report'))).toBe(true)
   })
 })

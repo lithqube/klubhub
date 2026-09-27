@@ -19,6 +19,7 @@ import {
 import { validateTimetable } from '~/utils/timetable'
 import { BUCKET_MS, bucketStart } from '~/utils/report'
 import { instantToZoned } from '~/utils/datetime'
+import { confirmMatches } from '~/utils/privacy'
 import { type CsvTable, type ImportProblem, type ImportRow, mapRow, maskEmail, maskName, resolveMapping } from '~/utils/attendeeImport'
 
 const DAY = 86_400_000
@@ -122,6 +123,16 @@ export const newId = (p: string) => `${p}-${Math.random().toString(36).slice(2, 
 
 /** Mock session: an owner who turns on TOTP via ACCOUNT → SECURITY; authAt feeds the ERASE NOW step-up check. */
 export const mockSession = { mfa: false, authAt: Date.now() }
+
+/**
+ * The sign-in time of this browser: the kh_mock_auth_at cookie (set by the
+ * mock login; e2e can set an old one), else the last mock login anywhere.
+ */
+export const MOCK_AUTH_COOKIE = 'kh_mock_auth_at'
+export function mockAuthAt(event: Parameters<typeof getCookie>[0]): number {
+  const n = Number(getCookie(event, MOCK_AUTH_COOKIE))
+  return Number.isFinite(n) && n > 0 ? n : mockSession.authAt
+}
 
 /** Mock collective profile (P1.5). */
 export const orgProfile: OrgProfile = {
@@ -1148,25 +1159,57 @@ export function retentionOverview() {
   return {
     retention_days: orgPrivacy.retention_days,
     upcoming: events.filter(e => e.status !== 'draft' && !eventPurges.has(e.id) && Date.parse(e.ends_at) <= soon)
-      .map(e => ({ event_id: e.id, title: e.title, ends_at: e.ends_at, purge_after: purgeAfter(e) }))
+      .map(e => ({ event_id: e.id, title: e.title, timezone: e.timezone, ends_at: e.ends_at, purge_after: purgeAfter(e) }))
       .sort((a, b) => a.purge_after.localeCompare(b.purge_after)).slice(0, 20),
-    recent: [...eventPurges.entries()].map(([id, p]) => ({ event_id: id, title: findEvent(id).title, ...p }))
+    recent: [...eventPurges.entries()].map(([id, p]) => ({ event_id: id, title: findEvent(id).title, timezone: findEvent(id).timezone, ...p }))
       .sort((a, b) => b.purged_at.localeCompare(a.purged_at)).slice(0, 20),
   }
 }
 
-export function setRetention(b: { retention_days?: unknown }) {
+const validDays = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 365
+
+/** Unpurged events that `days` makes due now but the current period does not (only a shorter period can). */
+function wouldPurge(days: number) {
+  const now = Date.now()
+  const endOf = (e: EventDetail) => Date.parse(e.ends_at || '') || Date.parse(e.starts_at) + DAY
+  const current = orgPrivacy.retention_days
+  const list = days >= current
+    ? []
+    : events.filter(e => !eventPurges.has(e.id) && endOf(e) + days * DAY <= now && endOf(e) + current * DAY > now)
+      .map(e => ({ event_id: e.id, title: e.title, ends_at: e.ends_at }))
+  return { would_purge: list, count: list.length }
+}
+
+/** GET /org/retention/preview?days=N */
+export function retentionPreview(q: { days?: unknown }) {
+  const n = Number(q?.days)
+  if (!validDays(n)) throw invalidField('days', 'between 1 and 365 days')
+  return wouldPurge(n)
+}
+
+/**
+ * PUT /org/retention: a shorter period that makes ended events due at once
+ * needs confirm_purge = their count (else 409 retention_would_purge) and a
+ * recent sign-in (403 reauthentication_required), like the server. The
+ * mock job never runs, so nothing is actually erased.
+ */
+export function setRetention(b: { retention_days?: unknown, confirm_purge?: unknown }, authAt: number) {
   const n = b?.retention_days
-  if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 365) throw invalidField('retention_days', '1 to 365 days')
+  if (!validDays(n)) throw invalidField('retention_days', '1 to 365 days')
+  const due = wouldPurge(n)
+  if (due.count > 0) {
+    if (b.confirm_purge !== due.count) throw guestErr(409, { error: 'retention_would_purge', ...due })
+    if (Date.now() - authAt > STEP_UP_MS) throw guestErr(403, { error: 'reauthentication_required' })
+  }
   orgPrivacy.retention_days = n
   return retentionOverview()
 }
 
-/** ERASE NOW: typed title, ended event, recent sign-in (mock: 15 min since the last mock login or start). */
-export function purgeNow(eventId: string, b: { confirm?: string }) {
+/** ERASE NOW: typed title (normalised like the server), ended event, recent sign-in (mock: 15 min since this browser's mock login). */
+export function purgeNow(eventId: string, b: { confirm?: string }, authAt: number) {
   const e = findEvent(eventId)
-  if (Date.now() - mockSession.authAt > STEP_UP_MS) throw guestErr(403, { error: 'reauthentication_required' })
-  if ((b?.confirm ?? '').trim() !== e.title) throw invalidField('confirm', 'must match the event title')
+  if (Date.now() - authAt > STEP_UP_MS) throw guestErr(403, { error: 'reauthentication_required' })
+  if (!confirmMatches(b?.confirm ?? '', e.title)) throw invalidField('confirm', 'type the event title')
   if (Date.parse(e.ends_at) > Date.now()) throw guestErr(409, { error: 'event_not_ended' })
   assertNotPurged(e.id)
   const p = purge(e.id, 'manual')

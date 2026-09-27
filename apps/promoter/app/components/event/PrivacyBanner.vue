@@ -5,16 +5,22 @@ import { storeToRefs } from 'pinia'
 import { usePrivacyStore } from '~/stores/privacy'
 import { useSessionStore } from '~/stores/session'
 import type { ApiError, PromoterEvent } from '~/types/event'
-import { countsText, privacyBanner } from '~/utils/privacy'
+import { countsText, privacyBanner, shortDate } from '~/utils/privacy'
 
 /**
  * The quiet retention banner of the GUESTS and REPORT tabs (P2.5): after
  * the event ends it says when guest names and contacts are erased, then
  * that they were. Owners and admins can ERASE NOW (typed title + step-up).
  * The page loads the event's purge state; `purged` fires after an erase so
- * it can reload its tables.
+ * it can reload its tables. `consequence` (erased events only) says what
+ * the tab can no longer do; `consequenceId` lets controls point at it.
+ * Back from SIGN IN AGAIN (?erase=1) the dialog opens again.
  */
-const props = defineProps<{ event: Pick<PromoterEvent, 'id' | 'title' | 'ends_at' | 'timezone'> }>()
+const props = defineProps<{
+  event: Pick<PromoterEvent, 'id' | 'title' | 'ends_at' | 'timezone'>
+  consequence?: string
+  consequenceId?: string
+}>()
 const emit = defineEmits<{ purged: [] }>()
 
 const store = usePrivacyStore()
@@ -25,6 +31,25 @@ const now = useNow({ interval: 60_000 })
 const privacy = computed(() => events.value[props.event.id] ?? null)
 const banner = computed(() => privacyBanner(props.event, privacy.value, now.value.getTime()))
 const canErase = computed(() => canManageOrg.value && (banner.value.state === 'scheduled' || banner.value.state === 'due'))
+const purgeOn = computed(() => (banner.value.state === 'scheduled' && banner.value.at ? shortDate(banner.value.at, props.event.timezone, now.value.getTime()) : null))
+
+// Back from SIGN IN AGAIN (?erase=1): drop the query, then open the dialog.
+// Dropping it may remount the page, so the intent survives in useState.
+const route = useRoute()
+const router = useRouter()
+const reopen = useState<string | null>('privacy-erase-reopen', () => null)
+let unmounted = false
+onBeforeUnmount(() => { unmounted = true })
+onMounted(async () => {
+  if (route.query.erase === '1') {
+    reopen.value = props.event.id
+    const { erase: _drop, ...query } = route.query
+    await router.replace({ query, hash: route.hash })
+  }
+  if (unmounted || reopen.value !== props.event.id) return
+  reopen.value = null
+  if (canErase.value) start()
+})
 
 const open = ref(false)
 const busy = ref(false)
@@ -68,7 +93,8 @@ async function erase(typed: string) {
     <component :is="banner.state === 'purged' ? ShieldCheck : Clock" class="ic" aria-hidden="true" />
     <div class="body">
       <p class="txt" data-testid="privacy-banner-text">{{ banner.text }}</p>
-      <p v-if="done" ref="doneEl" role="status" tabindex="-1" class="done" data-testid="privacy-erased">{{ done }}</p>
+      <p v-if="banner.state === 'purged' && consequence" :id="consequenceId" class="txt consequence" data-testid="privacy-consequence">{{ consequence }}</p>
+      <p v-if="done" ref="doneEl" tabindex="-1" class="done" data-testid="privacy-erased">{{ done }}</p>
       <div class="acts">
         <NuxtLink to="/settings#retention" class="link">RETENTION SETTINGS →</NuxtLink>
         <button v-if="canErase" type="button" class="btn-hud btn-hud-ghost erase" data-testid="erase-now" @click="start">ERASE NOW</button>
@@ -76,7 +102,7 @@ async function erase(typed: string) {
     </div>
     <EventEraseDialog
       v-if="canErase || open" v-model:open="open" :title="event.title" :personal-rows="privacy?.personal_rows ?? null" :busy="busy" :error="error"
-      @confirm="erase"
+      :purge-on="purgeOn" :ends-at="event.ends_at" @confirm="erase"
     />
   </div>
 </template>
@@ -111,6 +137,7 @@ async function erase(typed: string) {
   color: var(--color-on-surface);
   overflow-wrap: anywhere;
 }
+.consequence { color: var(--color-on-surface-variant); }
 .done {
   margin: 0;
   font-size: 13px;

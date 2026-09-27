@@ -5,12 +5,17 @@ import type { Allocation, AllocationInput } from '~/types/guest'
 import { instantToZoned, zonedToInstant } from '~/utils/datetime'
 import { guestErrorText, MAX_PLUS_N } from '~/utils/guests'
 
-/** Create or edit a submitter's allocation (quota, +N, deadline, approval). */
+/**
+ * Create or edit a submitter's allocation (quota, +N, deadline, approval).
+ * On an erased event (purged) there is no CONTACT field: the server takes
+ * no personal data for it any more.
+ */
 const props = defineProps<{
   initial?: Allocation | null
   timezone: string
   error?: ApiError | null
   saving?: boolean
+  purged?: boolean
 }>()
 const emit = defineEmits<{ save: [AllocationInput], cancel: [] }>()
 
@@ -25,12 +30,16 @@ const f = reactive({
   time: dl?.time ?? '18:00',
   approval: props.initial?.requires_approval ?? false,
 })
-const errorText = computed(() => (props.error ? guestErrorText(props.error) : ''))
+const errorText = computed(() => {
+  if (!props.error) return ''
+  if (props.error.error === 'event_purged') return 'Guest data for this event was erased, so a submitter contact can\'t be saved. Leave it out; quota, +N and deadline still save.'
+  return guestErrorText(props.error)
+})
 
 function submit() {
   emit('save', {
     label: f.label,
-    submitter_contact: f.contact,
+    submitter_contact: props.purged ? '' : f.contact,
     quota: Number(f.quota),
     plus_n_max: Number(f.plus),
     deadline: f.date ? zonedToInstant(f.date, f.time || '23:59', props.timezone).toISOString() : null,
@@ -46,7 +55,7 @@ function submit() {
         <span class="section-lbl">SUBMITTER</span>
         <input :id="`${uid}-label`" v-model="f.label" class="hud-input" required maxlength="120" placeholder="Artist or promoter name">
       </label>
-      <label>
+      <label v-if="!purged">
         <span class="section-lbl" style="display:inline-flex;align-items:center;gap:4px;"><Lock style="width:10px;height:10px;" aria-hidden="true" /> CONTACT · ENCRYPTED</span>
         <input v-model="f.contact" class="hud-input" maxlength="200" placeholder="Email or phone (optional)" autocomplete="off">
       </label>

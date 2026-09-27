@@ -1,0 +1,27 @@
+meta {
+  name: Shortening to 1 day without confirming is refused
+  type: http
+  seq: 21
+}
+
+put {
+  url: {{baseUrl}}/api/v1/org/retention
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "retention_days": 1 }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq retention_would_purge
+  res.body.count: eq 1
+  res.body.would_purge[0].event_id: eq {{shortEventId}}
+}

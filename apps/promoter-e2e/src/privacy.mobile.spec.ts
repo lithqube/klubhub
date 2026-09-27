@@ -34,6 +34,7 @@ test.describe('privacy and retention (mobile)', () => {
   });
 
   test('the erase dialog fits the phone and its buttons are in reach', async ({ page }) => {
+    await page.request.post('/api/v1/auth/login', { data: { email: 'owner@example.org', password: 'x', totp: '' } }); // fresh sign-in (step-up)
     await page.goto('/events/e-klubnacht-02/guests');
     await hydrated(page);
     await page.getByTestId('erase-now').click();
