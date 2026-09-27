@@ -113,7 +113,7 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 - **P2-D3** Retention default 30 days after the event end, configurable per org (min 1, max 365).
 - **P2-D4** The sealed tier ships in P2.6 with the ban list, as ADR 0001 planned.
 
-## Status (2026-09-27)
+## Status (2026-09-27) — P2 complete
 
 | Slice | State | Commits |
 |---|---|---|
@@ -122,7 +122,7 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 | P2.3 Offline door | Done | `2c97f57` (API, migration 00010, manager PIN), next commit (`/door`, event Door tab, encrypted cache, service worker, jsQR, mocks, e2e) |
 | P2.4 Post-event report | Done | `5ed04eb` (report API, list-back CSV), `e851b9e` (REPORT tab, curve, mocks, e2e) |
 | P2.5 Privacy & retention | Done | `496d324` (retention job, purge, privacy API), `71cd4bd` (settings, erase-now, erased UI), `583d1be` (UX review fixes, guarded shortening) |
-| P2.6 Sealed tier + ban list | Not started (migration 00012) | — |
+| P2.6 Sealed tier + ban list | Done | `79ba3ee` (key custody, sealed ban list API), `7ecd7b4` (browser crypto, settings, ban list, door matching), `100c53f` (security + UX review fixes) |
 
 ### P2.1 decisions (implementation)
 
@@ -178,6 +178,18 @@ All P0/P1/P2 findings fixed. The deferred check-in state landed with P2.4 (`6d42
 - **Writers vs purge:** writers take `FOR SHARE` on the event row first, the purge takes `FOR UPDATE`, so a write lands before the purge (and is erased with it) or sees 409. Beyond the contract, guest updates, allocation writes carrying a contact, import dry runs, the door bundle and a second manual purge also answer 409 `event_purged`.
 - **UI:** erased rows read "Erased guest" but keep list, +N, status and check-in; actions that no longer apply are removed (export stays, disabled with its reason); the erase dialog asks for a recent sign-in *first* and returns to itself afterwards, says when the erase would happen anyway, and warns about unsynced door devices within the grace window. Disabled buttons now look disabled app-wide.
 - **No ID images:** a migration guard test rejects image/photo/passport/id-document/selfie/scan columns (allow-list empty).
+
+### P2.6 decisions (implementation)
+
+- **Libraries:** `@noble/curves` / `@noble/hashes` 2.4.0 (X25519, Argon2id, SHA-256), WebCrypto for AES-GCM and HKDF. Argon2id (64 MiB, t=3, p=1) runs in a module Web Worker with progress; no test-only shortcut (e2e runs production cost; unit tests pass small params directly). Output pinned against Node's native Argon2.
+- **Formats:** version byte `0x01`, base64url without padding; wraps `{recipient_kind, recipient_id, wrap}` (member id = user uuid); member-key AAD `klubhub-member-key-v1|<public_key>`; passphrase NFKC-normalised. Recovery kit = 32 random bytes + 3-byte SHA-256 checksum → 56 base32 chars in 8 groups of 7 (typo detection); recovery keypair via HKDF with empty salt.
+- **Server validates structure only** (32-byte canonical keys, small-order points rejected, blob sizes, KDF bounds, recovery fingerprint = hex of SHA-256(pub)[:8]); limits are also DB CHECKs (2000 ban entries per org, 500 wraps per request, expiry now+24 h … now+3 y with 5 min skew).
+- **Key substitution** (server swapping a recipient's public key) is mitigated by fingerprints: every member and door device shows its fingerprint, and GRANT/PROVISION require the owner to confirm the match per key. Rotation cross-checks the recovery fingerprint.
+- **Local identity only for now:** member keys are bound to local user ids; with Zitadel the key routes answer 403 `local_identity_required` (UI explains; SECURITY.md "Known limits").
+- **Recover with kit replaces the member key** and needs `security.manage` (owner, MFA, step-up); a non-owner who forgets the passphrase is removed and re-invited. Rotation reuses the recovery key, so the kit keeps working.
+- **Rotation** is flagged only when the removed member or revoked device held a wrap; it must re-encrypt every live entry exactly, requires the recovery wrap, deletes older wraps and makes door devices need re-provisioning (bundle `sealed` is null until then).
+- **Door:** the device private key lives in its own encrypted IndexedDB vault (survives door logouts; "forget this device" clears it). The card never says "ban list" where a guest can read it (MANAGER CHECK); single-word names only match exactly; the reason needs the manager PIN (5 wrong tries → 60 s pause), admitting after a reveal needs a deliberate second tap, TURN AWAY / HIDE REASON exist and the reason hides after 30 s; the door says when the ban list isn't checked on the device.
+- **Audit and events** never contain ciphertext (tested); every key/ban-list write and every recovery-wrap read is audited.
 
 ## P2.3 contract (offline door)
 
