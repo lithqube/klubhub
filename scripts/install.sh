@@ -28,6 +28,7 @@ set -euo pipefail
 REPO_URL="${KLUBHUB_REPO_URL:-https://github.com/lithqube/klubhub.git}"
 REGISTRY="ghcr.io/lithqube"
 NATS_BOX_IMAGE="natsio/nats-box:0.20.0"
+HISTORY=200 # commits searched for the newest published image
 # Where ./klubhub fetches this installer again if its saved copy is missing.
 INSTALLER_URL="${KLUBHUB_INSTALLER_URL:-https://raw.githubusercontent.com/lithqube/klubhub/main/scripts/install.sh}"
 
@@ -57,9 +58,12 @@ Products
 Install
   --dir DIR                install directory (default: ~/klubhub)
   --ref REF                branch, tag or commit to install (default: main)
-  --dj-tag TAG             DJ image tag (default: sha-<commit>)
-  --promoter-tag TAG       Promoter image tag (default: sha-<commit>)
+  --dj-tag TAG             DJ image tag (default: newest image built from the
+                           installed commit or its history)
+  --promoter-tag TAG       Promoter image tag (same default)
   --emulate-arm64          allow the arm64-only DJ image on x86 via QEMU (slow)
+  --check                  only check this machine and show what would be
+                           installed (commit, images, ports); starts nothing
   -y, --yes                accept defaults, never prompt
 
 Network (both products)
@@ -133,6 +137,7 @@ parse_args() {
   ORIGIN="${KLUBHUB_ORIGIN:-}"; ORG_NAME="${KLUBHUB_ORG_NAME:-}"; SLUG="${KLUBHUB_SLUG:-}"
   OWNER_EMAIL="${KLUBHUB_OWNER_EMAIL:-}"; OWNER_NAME="${KLUBHUB_OWNER_NAME:-}"
   TZNAME="${KLUBHUB_TIMEZONE:-}"; CURRENCY="${KLUBHUB_CURRENCY:-}"; EMULATE="${KLUBHUB_EMULATE_ARM64:-0}"
+  CHECK="${KLUBHUB_CHECK:-0}"
   [[ -z "${KLUBHUB_BIND:-}" ]]           || { set_var dj "API_BIND=$KLUBHUB_BIND"; set_var dj "S3_BIND=$KLUBHUB_BIND"; set_var promoter "PROMOTER_BIND=$KLUBHUB_BIND"; }
   [[ -z "${KLUBHUB_DJ_PORT:-}" ]]        || set_var dj "API_PORT=$KLUBHUB_DJ_PORT"
   [[ -z "${KLUBHUB_DJ_URL:-}" ]]         || set_var dj "CORS_ORIGIN=$KLUBHUB_DJ_URL"
@@ -165,6 +170,7 @@ parse_args() {
       --timezone) need_val "$@"; TZNAME="$2"; shift ;;
       --currency) need_val "$@"; CURRENCY="$2"; shift ;;
       --emulate-arm64) EMULATE=1 ;;
+      --check) CHECK=1 ;;
       -y|--yes) YES=1 ;;
       -h|--help) usage; exit 0 ;;
       *) usage >&2; die "Unknown option: $1" ;;
@@ -316,27 +322,46 @@ fetch_repo() {
   else
     mkdir -p "$DIR"; git -C "$DIR" init -q; git -C "$DIR" remote add origin "$REPO_URL"
   fi
-  git -C "$DIR" fetch -q --depth 1 origin "$REF" || die "Could not fetch '$REF' from $REPO_URL."
+  git -C "$DIR" fetch -q --depth "$HISTORY" origin "$REF" || die "Could not fetch '$REF' from $REPO_URL."
   git -C "$DIR" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD
   COMMIT="$(git -C "$DIR" rev-parse --short=7 HEAD)"
   ok "commit $COMMIT"
   mkdir -p "$DIR/.local"; chmod 700 "$DIR/.local"
 }
 
-image_exists() { # repo, tag — anonymous registry check, no docker login needed
-  local token
-  token="$(curl -fsS "https://ghcr.io/token?scope=repository:lithqube/$1:pull" 2>/dev/null | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
-  [[ -n "$token" ]] || return 1
+registry_token() { # repo — anonymous pull token, no docker login needed
+  curl -fsS "https://ghcr.io/token?scope=repository:lithqube/$1:pull" 2>/dev/null | sed -n 's/.*"token":"\([^"]*\)".*/\1/p'
+}
+image_exists() { # repo, tag
+  local token; token="$(registry_token "$1")"; [[ -n "$token" ]] || return 1
   curl -fsS -o /dev/null -H "Authorization: Bearer $token" \
     -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json" \
     "https://ghcr.io/v2/lithqube/$1/manifests/$2"
 }
+image_tags() { # repo — every published tag, one per line
+  local token; token="$(registry_token "$1")"; [[ -n "$token" ]] || return 1
+  curl -fsS -H "Authorization: Bearer $token" "https://ghcr.io/v2/lithqube/$1/tags/list?n=10000" 2>/dev/null \
+    | sed -e 's/.*"tags":\[//' -e 's/\].*//' | tr ',' '\n' | tr -d '" '
+}
 resolve_tag() { # var, image repo, flag name
-  local __v="$1" repo="$2" flag="$3" tag="${!1:-}"
-  tag="${tag:-sha-$COMMIT}"
-  image_exists "$repo" "$tag" || die "Image $REGISTRY/$repo:$tag is not published (yet). If this commit was just pushed its images may still be building: wait a few minutes and re-run, or pass $flag <tag>."
+  # CI publishes an image only when that product's files change, tagged
+  # sha-<short commit>. Use the newest one built from the installed commit
+  # or its history, so scripts and image always come from the same line.
+  local __v="$1" repo="$2" flag="$3" tag="${!1:-}" tags c n
+  if [[ -n "$tag" ]]; then
+    image_exists "$repo" "$tag" || die "Image $REGISTRY/$repo:$tag is not published. Check the tag passed with $flag."
+  else
+    tags="$(image_tags "$repo")" || die "Could not reach the image registry (ghcr.io). Check your internet connection."
+    for c in $(git -C "$DIR" rev-list --max-count="$HISTORY" HEAD); do
+      for n in 7 8 9 10; do
+        if grep -qx "sha-${c:0:$n}" <<<"$tags"; then tag="sha-${c:0:$n}"; break 2; fi
+      done
+    done
+    [[ -n "$tag" ]] || die "No published $repo image found for commit $COMMIT or its last $HISTORY ancestors. If it was just pushed, CI may still be building it: wait a few minutes and re-run, or pass $flag <tag>."
+  fi
   printf -v "$__v" '%s' "$tag"
-  ok "image $REGISTRY/$repo:$tag"
+  if [[ "$tag" == "sha-$COMMIT" ]]; then ok "image $REGISTRY/$repo:$tag"
+  else ok "image $REGISTRY/$repo:$tag $D(newest build for this commit's history)$N"; fi
 }
 
 # --------------------------------------------------------------------- DJ ----
@@ -519,6 +544,21 @@ summary() {
   fi
 }
 
+check_only() {
+  step "Would install"
+  if [[ "$DJ" == 1 ]]; then
+    resolve_tag DJ_TAG klubhub-dj-api --dj-tag
+    check_ports klubhub-dj-prod "UI/API $DJ_PORT" "storage $S3_PORT_V"
+    ok "DJ on $(env_get "$DIR/.local/dj.env" CORS_ORIGIN) (port $DJ_PORT free or ours)"
+  fi
+  if [[ "$PROMOTER" == 1 ]]; then
+    resolve_tag PROMOTER_TAG klubhub-promoter-api --promoter-tag
+    check_ports klubhub-promoter "UI/API $P_PORT"
+    ok "Promoter on ${ORIGIN:-http://localhost:$P_PORT} (port $P_PORT free or ours)"
+  fi
+  printf '\n  Everything looks ready. Run again without --check to install.\n\n'
+}
+
 main() {
   parse_args "$@"
   printf '%sKlubHub installer%s\n' "$B" "$N"
@@ -527,6 +567,7 @@ main() {
   preflight
   fetch_repo
   load_settings
+  if [[ "$CHECK" == 1 ]]; then check_only; return; fi
   if [[ "$DJ" == 1 ]]; then install_dj; fi
   if [[ "$PROMOTER" == 1 ]]; then install_promoter; fi
   write_settings

@@ -75,10 +75,10 @@ Choose a mode. The [canonical setup guide](./docs/SELF-HOSTING.md) covers prereq
 **Run it in production with one line** (Docker required; asks DJ, Promoter or both):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lithqube/klubhub/main/scripts/install.sh | bash
+curl -fsSL https://klubhub.io/install.sh | bash
 ```
 
-The same installer is published as a [gist](https://gist.github.com/lithqube/3a73d34d4dbdcbb602359362eff31e47): `curl -fsSL https://gist.githubusercontent.com/lithqube/3a73d34d4dbdcbb602359362eff31e47/raw/klubhub-install.sh | bash`.
+The same file is served from GitHub (`https://raw.githubusercontent.com/lithqube/klubhub/main/scripts/install.sh`) and published as a [gist](https://gist.github.com/lithqube/3a73d34d4dbdcbb602359362eff31e47): `curl -fsSL https://gist.githubusercontent.com/lithqube/3a73d34d4dbdcbb602359362eff31e47/raw/klubhub-install.sh | bash`.
 
 It checks the machine, fetches the scripts and matching images, creates every secret, starts the stack and prints the URLs, and for Promoter creates your organisation with a one-time owner link. Re-run it (or `~/klubhub/klubhub update`) to update; secrets and data are kept. Options such as `--promoter --yes`, `--bind`, ports and public URLs: [one-line install](./docs/SELF-HOSTING.md#one-line-install).
 

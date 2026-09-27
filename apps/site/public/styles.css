@@ -98,3 +98,13 @@ dd { margin: 10px 0 0 50px; color: var(--color-on-surface-variant); font-size: 1
 }
 @media (max-width: 950px) { .wrap { width: calc(100% - 48px); } .brand-meta { display: none; } .hero { gap: 30px; padding-block: 64px; } .signal-next { padding-inline: 16px; flex-wrap: wrap; } .future-product { grid-template-columns: 1fr auto; } .future-product > p { grid-row: 2; } .future-product .badge { grid-column: 2; grid-row: 1; } .footer { flex-wrap: wrap; } }
 @media (max-width: 650px) { .wrap { width: calc(100% - 40px); } .header { flex-wrap: wrap; padding-block: 22px 12px; gap: 12px; } nav { gap: 24px; } .hero { grid-template-columns: 1fr; padding-block: 48px; gap: 40px; } h1 { font-size: clamp(44px, 12vw, 72px); } .signal-current strong { font-size: 42px; } .section-heading { display: block; } .section-heading h2 { margin-top: 16px; } .dj-panel, .ownership { grid-template-columns: 1fr; } .dj-intro { padding: 26px; } .features { border-left: 0; border-top: 1px dashed var(--color-outline); padding: 4px 26px; } .future-product { gap: 14px; } .future-product h3 { font-size: 20px; } .future-product .badge { font-size: 8px; } .ownership { gap: 28px; } .footer { align-items: flex-start; flex-direction: column; gap: 12px; } }
+
+/* One-line install (self-hosted edition). */
+.install { min-width: 0; margin: 24px 0; padding: 20px 22px; border: 1px dashed var(--color-primary); background: var(--color-surface-container-lowest); }
+.install .eyebrow { margin: 0 0 12px; color: var(--color-primary); }
+.install-cmd { display: flex; align-items: stretch; gap: 10px; }
+.install-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 12px 14px; background: var(--color-surface-variant); color: var(--color-on-surface); font: 13px/1.5 var(--font-terminal); }
+.install .copy { flex: none; min-width: 88px; cursor: pointer; background: transparent; color: var(--color-on-surface); }
+.install-status { min-height: 1.5em; margin: 6px 0 0; color: var(--color-primary); font: 11px/1.5 var(--font-terminal); letter-spacing: .05em; text-transform: uppercase; }
+.install .muted { margin: 4px 0 10px; }
+@media (max-width: 560px) { .install-cmd { flex-direction: column; } .install-cmd code { white-space: normal; overflow-wrap: anywhere; } .install .copy { width: 100%; } }

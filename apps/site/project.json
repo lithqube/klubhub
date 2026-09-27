@@ -5,7 +5,7 @@
     "build": {
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/site"],
-      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/libs/ui/app/assets/css/kinetic.css", "{workspaceRoot}/libs/ui/public/fonts/**/*"],
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/scripts/install.sh", "{workspaceRoot}/libs/ui/app/assets/css/kinetic.css", "{workspaceRoot}/libs/ui/public/fonts/**/*"],
       "options": {"command": "node apps/site/build.mjs"}
     },
     "test": {

@@ -147,6 +147,19 @@ test('newsletter form is wired to Plunk public-key track endpoint', async () => 
   assert.doesNotMatch(html, /<script[^>]+src="https?:/);
 });
 
+test('publishes the one-line installer and shows its command', async () => {
+  const [published, source, html] = await Promise.all([
+    read('install.sh'), readFile('scripts/install.sh', 'utf8'), read('index.html'),
+  ]);
+  assert.equal(published, source, 'dist/site/install.sh must be scripts/install.sh byte for byte');
+  assert.match(published, /^#!\/usr\/bin\/env bash/);
+  assert.match(html, /<code id="install-command">curl -fsSL https:\/\/klubhub\.io\/install\.sh \| bash<\/code>/);
+  assert.match(html, /data-copy="install-command"/);
+  assert.match(html, /<script src="\.\/install\.js" defer>/);
+  await stat('dist/site/install.js');
+  assert.match(html, /href="#install">Get started/);
+});
+
 test('build fails closed when PLUNK_PUBLIC_KEY is missing', () => {
   const result = spawnSync(process.execPath, ['apps/site/build.mjs'], {
     env: {
