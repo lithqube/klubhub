@@ -59,3 +59,12 @@
     overflow-wrap: anywhere;
   }
 }
+
+/* ── Disabled HUD buttons look disabled (P2.5: personal-data actions are
+ *    turned off after an erase, with the reason next to them). ── */
+.btn-hud:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}

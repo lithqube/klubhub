@@ -305,6 +305,7 @@ const REJECTION_TEXT: Record<string, string> = {
   id_conflict: 'someone with the same id already exists',
   manager_pin_invalid: 'manager PIN not accepted (wrong, expired or locked)',
   event_full: 'the event is full',
+  event_purged: 'guest names for this event were erased',
 }
 
 /** Plain words for a server rejection code ("invalid_op: …" and "invalid_add: …" match by prefix). */

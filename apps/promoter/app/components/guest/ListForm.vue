@@ -98,7 +98,7 @@ function submit() {
       <span>
         COLLECT EMAIL &amp; PHONE
         <span style="display:block;font-size:11px;color:var(--color-on-surface-variant);">
-          Off = name-only (recommended). On = contacts are stored encrypted and can be used to update guests by email.
+          Off: names only (default). On: also email and phone, erased with the rest after the retention period (Settings → Data retention).
         </span>
       </span>
     </label>

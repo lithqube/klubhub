@@ -91,6 +91,8 @@ export interface Guest {
   heads_in: number
   /** Earliest non-undone `in` (device clock); kept after the guest leaves again. */
   first_in_at: string | null
+  /** Personal data erased by retention (P2.5): name, email, phone and note are "". List, status and check-in state stay. */
+  purged?: boolean
 }
 
 export interface GuestCounts {
@@ -137,6 +139,8 @@ export interface Ticket {
   /** Has a non-undone door `in`. */
   checked_in: boolean
   first_in_at: string | null
+  /** Holder name and email erased by retention (P2.5); type, status and check-in state stay. */
+  purged?: boolean
 }
 
 export interface ImportCounts {

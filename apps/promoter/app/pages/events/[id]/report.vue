@@ -3,10 +3,12 @@ import { useDocumentVisibility, useIntervalFn, useNow } from '@vueuse/core'
 import { ChartNoAxesColumn, Radio, RefreshCw } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useEventStore } from '~/stores/event'
+import { usePrivacyStore } from '~/stores/privacy'
 import { useReportStore } from '~/stores/report'
 import type { ApiError } from '~/types/event'
 import type { ReportSubmitterRow } from '~/types/report'
 import { dayLabel, timeLabel } from '~/utils/datetime'
+import { shortDate } from '~/utils/privacy'
 import { hasActivity, listBackCounts, listBackFilename, loadErrorMessage, reportPhase, updatedAgo } from '~/utils/report'
 
 /**
@@ -22,6 +24,15 @@ const { report, loading, error, busy } = storeToRefs(store)
 
 const id = computed(() => current.value?.id ?? '')
 await useAsyncData(() => `report-${id.value}`, () => (id.value ? store.load(id.value).then(() => true) : Promise.resolve(null)), { watch: [id] })
+
+// Retention (P2.5): the report survives an erase (counts only); list-backs need names, so they stop.
+const privacy = usePrivacyStore()
+const { events: privacyByEvent } = storeToRefs(privacy)
+await useAsyncData(() => `privacy-${id.value}`, () => (id.value ? privacy.fetchEvent(id.value).then(() => true) : Promise.resolve(null)), { watch: [id] })
+const purgedAt = computed(() => privacyByEvent.value[id.value]?.purged_at ?? null)
+const purgedReason = computed(() => (purgedAt.value
+  ? `Guest names were erased on ${shortDate(purgedAt.value, tz.value)}, so there is nothing to list back. The numbers stay.`
+  : ''))
 
 // A report left over from another event is never shown.
 const shown = computed(() => (report.value && report.value.event.id === id.value ? report.value : null))
@@ -39,7 +50,7 @@ const updated = computed(() => {
 const loadError = computed(() => (error.value ? loadErrorMessage(error.value, Boolean(shown.value)) : null))
 
 // Allocations with someone to list back, for the header shortcut.
-const listBacks = computed(() => shown.value?.by_submitter.filter(r => r.going > 0).length ?? 0)
+const listBacks = computed(() => (purgedAt.value ? 0 : shown.value?.by_submitter.filter(r => r.going > 0).length ?? 0))
 
 // ---------------------------------------------------------------- live polling
 const visibility = useDocumentVisibility()
@@ -100,7 +111,10 @@ async function listBack(row: ReportSubmitterRow) {
       ? 'That allocation no longer exists. Refresh the report.'
       : err.error === 'forbidden' || err.error === 'no_role_grant'
         ? 'Your role cannot export guest names.'
-        : 'Could not prepare the list-back CSV. Check your connection and try again.')
+        : err.error === 'event_purged'
+          ? 'Guest names for this event were erased, so there is nothing to list back.'
+          : 'Could not prepare the list-back CSV. Check your connection and try again.')
+    if (err.error === 'event_purged') await privacy.fetchEvent(current.value.id)
     return
   }
   const file = new File([csv], listBackFilename(current.value.slug, row.submitter), { type: 'text/csv;charset=utf-8' })
@@ -114,10 +128,16 @@ function reload() {
   notice.value = ''
   return current.value ? store.load(current.value.id) : Promise.resolve()
 }
+
+function onPurged() {
+  notice.value = ''
+  return reload()
+}
 </script>
 
 <template>
   <div v-if="current" class="space-y-3">
+    <EventPrivacyBanner :event="current" @purged="onPurged" />
     <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
         <h2 class="section-lbl" style="margin:0;" data-testid="report-heading">{{ heading }}</h2>
@@ -161,7 +181,7 @@ function reload() {
         <ReportKpiTiles :totals="shown.totals" :curve="shown.curve" :capacity="shown.event.capacity" :tz="tz" :event-id="current.id" />
         <ReportCheckinCurve v-if="shown.curve.length" :curve="shown.curve" :tz="tz" />
         <div class="report-grid">
-          <ReportSubmitterTable :rows="shown.by_submitter" :busy="busy" @list-back="listBack" />
+          <ReportSubmitterTable :rows="shown.by_submitter" :busy="busy" :purged-reason="purgedReason" @list-back="listBack" />
           <ReportListTable :rows="shown.by_list" />
         </div>
         <ReportTicketTypes v-if="shown.tickets_by_type.length" :rows="shown.tickets_by_type" />

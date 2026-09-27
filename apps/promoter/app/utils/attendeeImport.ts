@@ -352,6 +352,7 @@ export function importErrorText(err: { error: string, field?: string, problem?: 
     case 'unsupported_media_type': return 'Upload the export as a CSV file.'
     case 'invalid': return err.problem ? `${err.field === 'file' ? 'File' : (err.field ?? '').replace(/_/g, ' ')}: ${err.problem}.` : 'Check the file.'
     case 'not_found': return 'This event no longer exists.'
+    case 'event_purged': return 'Guest names and contacts for this event were erased, so attendees can no longer be imported.'
     case 'forbidden': case 'no_role_grant': return 'Your role cannot import attendees.'
     default: return 'Could not import. Check your connection and try again.'
   }

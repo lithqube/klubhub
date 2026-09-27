@@ -15,7 +15,7 @@ import {
  * only to show its columns; the server parses and applies it. Re-importing
  * a newer export updates tickets instead of duplicating them.
  */
-const emit = defineEmits<{ done: [message: string], cancel: [] }>()
+const emit = defineEmits<{ done: [message: string], cancel: [], purged: [] }>()
 const store = useGuestStore()
 const uid = useId()
 
@@ -88,6 +88,8 @@ async function run(dryRun: boolean) {
       + `${c.positions_updated} updated${c.rejected ? `, ${c.rejected} ${c.rejected === 1 ? 'row' : 'rows'} skipped` : ''}.`)
   } catch (e) {
     error.value = importErrorText(e as ApiError)
+    // The event's guest data was erased meanwhile (P2.5): the page switches to its erased state.
+    if ((e as ApiError).error === 'event_purged') emit('purged')
   } finally {
     busy.value = null
   }

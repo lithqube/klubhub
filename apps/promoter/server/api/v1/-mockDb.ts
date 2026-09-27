@@ -80,6 +80,14 @@ export const events: EventDetail[] = [
     location_mode: 'venue', external_ticket_url: null, version: 3, capacity: 400,
     venue: { id: 'v-tresor', name: 'Tresor.West', city: 'Berlin' }, stages: [], lineup: [],
   }),
+  // Five weeks ago: guest data already erased by retention (P2.5); the rows
+  // stay anonymised, so the report and the guest table still have numbers.
+  detail({
+    ...common, id: 'e-klubnacht-01', title: 'Klubnacht 01', slug: 'klubnacht-01', status: 'published',
+    starts_at: iso(-35), ends_at: iso(-35, 8), doors_at: null, venue_id: 'v-tresor', city: 'Berlin',
+    location_mode: 'venue', external_ticket_url: null, version: 2, capacity: 400,
+    venue: { id: 'v-tresor', name: 'Tresor.West', city: 'Berlin' }, stages: [], lineup: [],
+  }),
 ]
 
 export function summary(e: EventDetail): EventSummary {
@@ -112,8 +120,8 @@ export function assertVersion(e: EventDetail, version: number) {
 
 export const newId = (p: string) => `${p}-${Math.random().toString(36).slice(2, 10)}`
 
-/** Mock session: an owner who turns on TOTP via ACCOUNT → SECURITY. */
-export const mockSession = { mfa: false }
+/** Mock session: an owner who turns on TOTP via ACCOUNT → SECURITY; authAt feeds the ERASE NOW step-up check. */
+export const mockSession = { mfa: false, authAt: Date.now() }
 
 /** Mock collective profile (P1.5). */
 export const orgProfile: OrgProfile = {
@@ -151,6 +159,8 @@ export const guestLists: ListRow[] = [
   { id: 'gl-02-comp', event_id: 'e-klubnacht-02', name: 'Comp', type: 'comp', collect_contact: false, standing_template_id: null, position: 0, entry_terms: terms() },
   { id: 'gl-02-artist', event_id: 'e-klubnacht-02', name: 'Artist guests', type: 'artist', collect_contact: false, standing_template_id: 'sl-residents', position: 1, entry_terms: terms({ perks: ['drink token'] }) },
   { id: 'gl-02-promo', event_id: 'e-klubnacht-02', name: 'Promoters', type: 'promoter', collect_contact: false, standing_template_id: null, position: 2, entry_terms: terms() },
+  { id: 'gl-01-artist', event_id: 'e-klubnacht-01', name: 'Artist guests', type: 'artist', collect_contact: false, standing_template_id: 'sl-residents', position: 0, entry_terms: terms() },
+  { id: 'gl-01-industry', event_id: 'e-klubnacht-01', name: 'Industry', type: 'industry', collect_contact: true, standing_template_id: null, position: 1, entry_terms: terms() },
 ]
 
 export const allocations: AllocRow[] = [
@@ -159,6 +169,7 @@ export const allocations: AllocRow[] = [
   { id: 'al-02-kaiser', event_id: 'e-klubnacht-02', list_id: 'gl-02-artist', label: 'Kaiser', submitter_contact: '', quota: 6, plus_n_max: 1, deadline: null, requires_approval: false, revoked_at: null },
   { id: 'al-02-lena', event_id: 'e-klubnacht-02', list_id: 'gl-02-artist', label: 'Lena W', submitter_contact: '', quota: 4, plus_n_max: 2, deadline: null, requires_approval: false, revoked_at: null },
   { id: 'al-02-crew', event_id: 'e-klubnacht-02', list_id: 'gl-02-promo', label: 'Nachtwerk street team', submitter_contact: '', quota: 4, plus_n_max: 0, deadline: null, requires_approval: false, revoked_at: iso(-8) },
+  { id: 'al-01-kaiser', event_id: 'e-klubnacht-01', list_id: 'gl-01-artist', label: 'Kaiser', submitter_contact: 'kaiser@agency.example', quota: 6, plus_n_max: 1, deadline: null, requires_approval: false, revoked_at: null },
 ]
 
 const seedGuest = (id: string, event_id: string, list_id: string, allocation_id: string | null, name: string, extra: Partial<Guest> = {}): GuestRow => ({
@@ -187,6 +198,11 @@ export const guests: GuestRow[] = [
   seedGuest('g02-7', 'e-klubnacht-02', 'gl-02-comp', null, 'Ivo Petrov', { status: 'declined' }),
   seedGuest('g02-8', 'e-klubnacht-02', 'gl-02-comp', null, 'Ravi Nair'),
   seedGuest('g02-9', 'e-klubnacht-02', 'gl-02-promo', 'al-02-crew', 'Mei Chen'),
+  // Erased at start-up (see seedPurged): only list, +N, status and check-ins remain.
+  seedGuest('g01-1', 'e-klubnacht-01', 'gl-01-artist', 'al-01-kaiser', 'Anna Roth', { plus_n: 1 }),
+  seedGuest('g01-2', 'e-klubnacht-01', 'gl-01-artist', 'al-01-kaiser', 'Ben Adler'),
+  seedGuest('g01-3', 'e-klubnacht-01', 'gl-01-industry', null, 'Clara Stein', { email: 'clara@label.example', note: 'label A&R' }),
+  seedGuest('g01-4', 'e-klubnacht-01', 'gl-01-industry', null, 'Dario Conti', { email: 'dario@press.example', status: 'declined' }),
 ]
 
 const guestErr = (statusCode: number, data: Record<string, unknown>) => createError({ statusCode, data })
@@ -291,6 +307,7 @@ function quotaCheck(a: AllocRow, requested: number, exclude?: string) {
 
 export function addGuests(eventId: string, b: AddGuestsInput): AddResult {
   findEvent(eventId)
+  assertNotPurged(eventId)
   const list = findList(eventId, b.list_id)
   if (!b.guests?.length || b.guests.length > 500) throw invalidField('guests', '1 to 500 per request')
   const input = b.guests.map((g, i) => checkGuest(g, `guests[${i}].`, list.collect_contact))
@@ -333,6 +350,7 @@ export function addGuests(eventId: string, b: AddGuestsInput): AddResult {
 export function updateGuest(eventId: string, id: string, b: GuestInput): Guest {
   const g = guests.find(x => x.id === id && x.event_id === eventId)
   if (!g) throw guestErr(404, { error: 'not_found' })
+  if (g.purged) throw eventPurged()
   const list = findList(eventId, g.list_id)
   const next = checkGuest({ ...b, status: b.status || g.status }, '', list.collect_contact)
   const status = next.status ?? g.status
@@ -425,7 +443,7 @@ interface TicketTypeRow { id: string, event_id: string, name: string, key: strin
 interface OrderRow { id: string, event_id: string, source: ImportPreset, ref: string, buyer_name: string, buyer_email: string }
 interface PositionRow {
   id: string, event_id: string, order_id: string, ticket_type_id: string, ref: string, name: string, email: string, secret: string,
-  status: TicketStatus, imported_at: string
+  status: TicketStatus, imported_at: string, purged?: boolean
 }
 
 export const ticketTypes: TicketTypeRow[] = [
@@ -433,11 +451,13 @@ export const ticketTypes: TicketTypeRow[] = [
   { id: 'tt-regular', event_id: 'e-klubnacht', name: 'Regular', key: 'regular', ref: null },
   { id: 'tt-02-early', event_id: 'e-klubnacht-02', name: 'Early bird', key: 'early bird', ref: null },
   { id: 'tt-02-regular', event_id: 'e-klubnacht-02', name: 'Regular', key: 'regular', ref: null },
+  { id: 'tt-01-regular', event_id: 'e-klubnacht-01', name: 'Regular', key: 'regular', ref: null },
 ]
 export const orders: OrderRow[] = [
   { id: 'o-1', event_id: 'e-klubnacht', source: 'dice', ref: 'D-7001', buyer_name: 'Hana Kim', buyer_email: 'hana@example.org' },
   { id: 'o-2', event_id: 'e-klubnacht', source: 'dice', ref: 'D-7002', buyer_name: 'Theo Brandt', buyer_email: 'theo@example.org' },
   { id: 'o-02-1', event_id: 'e-klubnacht-02', source: 'dice', ref: 'D-6001', buyer_name: 'Nils Berg', buyer_email: 'nils@example.org' },
+  { id: 'o-01-1', event_id: 'e-klubnacht-01', source: 'ra', ref: 'RA-5001', buyer_name: 'Eva Lind', buyer_email: 'eva@example.org' },
 ]
 export const positions: PositionRow[] = [
   { id: 'p-1', event_id: 'e-klubnacht', order_id: 'o-1', ticket_type_id: 'tt-early', ref: 'TK-1', name: 'Hana Kim', email: 'hana@example.org', secret: 'DICE-0001', status: 'valid', imported_at: iso(-2) },
@@ -447,6 +467,8 @@ export const positions: PositionRow[] = [
   { id: 'p-02-2', event_id: 'e-klubnacht-02', order_id: 'o-02-1', ticket_type_id: 'tt-02-early', ref: 'TK-2', name: 'Ada Berg', email: 'nils@example.org', secret: 'DICE-6002', status: 'valid', imported_at: iso(-9) },
   { id: 'p-02-3', event_id: 'e-klubnacht-02', order_id: 'o-02-1', ticket_type_id: 'tt-02-regular', ref: 'TK-3', name: 'Jonas Wolf', email: 'nils@example.org', secret: 'DICE-6003', status: 'valid', imported_at: iso(-9) },
   { id: 'p-02-4', event_id: 'e-klubnacht-02', order_id: 'o-02-1', ticket_type_id: 'tt-02-regular', ref: 'TK-4', name: 'Lea Wolf', email: 'nils@example.org', secret: 'DICE-6004', status: 'refunded', imported_at: iso(-9) },
+  { id: 'p-01-1', event_id: 'e-klubnacht-01', order_id: 'o-01-1', ticket_type_id: 'tt-01-regular', ref: 'TK-1', name: 'Eva Lind', email: 'eva@example.org', secret: 'RA-9001', status: 'valid', imported_at: iso(-37) },
+  { id: 'p-01-2', event_id: 'e-klubnacht-01', order_id: 'o-01-1', ticket_type_id: 'tt-01-regular', ref: 'TK-2', name: 'Jan Lind', email: 'eva@example.org', secret: 'RA-9002', status: 'valid', imported_at: iso(-37) },
 ]
 
 const validTickets = (eventId: string) => positions.filter(p => p.event_id === eventId && p.status === 'valid').length
@@ -459,7 +481,7 @@ function ticketViews(eventId: string): Ticket[] {
     return {
       id: p.id, order_id: o.id, source: o.source, order_ref: o.ref, ticket_type_id: p.ticket_type_id,
       ticket_type: ticketTypes.find(t => t.id === p.ticket_type_id)?.name ?? '', name: p.name, email: p.email, status: p.status,
-      imported_at: p.imported_at, checked_in: firstIn !== null, first_in_at: firstIn,
+      imported_at: p.imported_at, checked_in: firstIn !== null, first_in_at: firstIn, ...(p.purged ? { purged: true } : {}),
     }
   }).sort((a, b) => a.order_ref.localeCompare(b.order_ref))
 }
@@ -468,6 +490,7 @@ interface PlannedPos { id: string, ref: string, row: ImportRow, existing: Positi
 
 export function importAttendees(eventId: string, preset: ImportPreset, explicit: Partial<Record<ImportField, string>>, table: CsvTable, dryRun: boolean): ImportResult {
   findEvent(eventId)
+  assertNotPurged(eventId)
   let m: ReturnType<typeof resolveMapping>
   try {
     m = resolveMapping(preset, table.headers, explicit)
@@ -707,6 +730,7 @@ export function revokeDoorDevice(id: string) {
 
 export function setDoorPin(eventId: string, b: { manager?: boolean, valid_until?: string }): { pin: string, valid_until: string, manager: boolean } {
   findEvent(eventId)
+  assertNotPurged(eventId)
   const until = Date.parse(b?.valid_until ?? '')
   const now = Date.now()
   if (!(until > now) || until - now > PIN_WINDOW_MS) throw guestErr(400, { error: 'invalid_input' })
@@ -785,6 +809,7 @@ function eventCounters(eventId: string): DoorCounters {
 
 export function doorBundle(s: DoorSessionRow): DoorBundle {
   const e = findEvent(s.event_id)
+  assertNotPurged(e.id)
   const mgr = doorPins.get(e.id)?.manager
   const liveMgr = mgr && Date.parse(mgr.valid_until) > Date.now() ? mgr : null
   if (liveMgr && !liveMgr.verifier) liveMgr.verifier = verifierFor(liveMgr.pin)
@@ -870,6 +895,7 @@ export function doorSync(sess: DoorSessionRow, b: { since?: string | null, ops?:
 
 export function doorAdds(sess: DoorSessionRow, b: { adds?: DoorAdd[] }): { results: DoorAddResult[] } {
   const adds = b?.adds ?? []
+  assertNotPurged(sess.event_id)
   if (!adds.length || adds.length > 50) throw guestErr(422, { error: 'invalid', field: 'adds', problem: '1 to 50 per request' })
   const mgr = doorPins.get(sess.event_id)?.manager
   const results = adds.map((a): DoorAddResult => {
@@ -1038,6 +1064,7 @@ export function listBackAllocation(eventId: string, allocationId: string): Alloc
 export function listBackRows(eventId: string, allocationId: string): (string | number)[][] {
   const e = findEvent(eventId)
   const a = listBackAllocation(e.id, allocationId)
+  assertNotPurged(e.id)
   const { heads, firstIn } = reportCheckins(e.id)
   const local = (at: string | undefined) => {
     if (!at) return ''
@@ -1050,3 +1077,110 @@ export function listBackRows(eventId: string, allocationId: string): (string | n
   })
   return [['name', 'plus_n', 'status', 'arrived', 'heads_admitted', 'first_in_local'], ...rows]
 }
+
+// ---------------------------------------------------------------- privacy and retention (P2.5)
+// Mirrors the P2.5 contract: purging anonymises in place (personal columns
+// emptied, rows kept with `purged`), so counts, the curve and the report
+// survive. The mock never purges on a timer; e-klubnacht-01 starts purged
+// and ERASE NOW purges on request. Writes that would add personal data to
+// a purged event answer 409 event_purged.
+
+const STEP_UP_MS = 15 * 60_000
+
+/** Org retention (missing row = 30 days). */
+export const orgPrivacy = { retention_days: 30 }
+
+interface PurgeRow { purged_at: string, trigger: 'schedule' | 'manual', counts: Record<string, number> }
+const eventPurges = new Map<string, PurgeRow>()
+
+export const eventPurged = () => guestErr(409, { error: 'event_purged' })
+
+export function assertNotPurged(eventId: string) {
+  if (eventPurges.has(eventId)) throw eventPurged()
+}
+
+/** ends_at + retention, recomputed until purged (events without an end would use starts_at + 24 h). */
+function purgeAfter(e: EventDetail): string {
+  const end = Date.parse(e.ends_at || '') || Date.parse(e.starts_at) + DAY
+  return new Date(end + orgPrivacy.retention_days * DAY).toISOString()
+}
+
+function personalRows(eventId: string): number {
+  return guests.filter(g => g.event_id === eventId && !g.purged).length
+    + positions.filter(p => p.event_id === eventId && !p.purged).length
+}
+
+/** Anonymise one event in place; returns rows touched per table. */
+function purge(eventId: string, trigger: PurgeRow['trigger'], at = new Date().toISOString()): PurgeRow {
+  const counts = { guests: 0, orders: 0, order_positions: 0, guest_allocations: 0, door_pins: 0 }
+  for (const g of guests.filter(x => x.event_id === eventId && !x.purged)) {
+    Object.assign(g, { name: '', email: '', phone: '', note: '', purged: true })
+    counts.guests++
+  }
+  for (const p of positions.filter(x => x.event_id === eventId && !x.purged)) {
+    Object.assign(p, { name: '', email: '', secret: '', purged: true })
+    counts.order_positions++
+  }
+  for (const o of orders.filter(x => x.event_id === eventId && (x.buyer_name || x.buyer_email))) {
+    Object.assign(o, { buyer_name: '', buyer_email: '' })
+    counts.orders++
+  }
+  for (const a of allocations.filter(x => x.event_id === eventId && x.submitter_contact)) {
+    a.submitter_contact = ''
+    counts.guest_allocations++
+  }
+  const pins = doorPins.get(eventId)
+  if (pins) counts.door_pins = Number(!!pins.staff) + Number(!!pins.manager)
+  doorPins.delete(eventId)
+  const row = { purged_at: at, trigger, counts }
+  eventPurges.set(eventId, row)
+  return row
+}
+
+export function eventPrivacy(eventId: string) {
+  const e = findEvent(eventId)
+  const p = eventPurges.get(e.id)
+  return { purge_after: purgeAfter(e), purged_at: p?.purged_at ?? null, retention_days: orgPrivacy.retention_days, personal_rows: personalRows(e.id) }
+}
+
+export function retentionOverview() {
+  const soon = Date.now() + 7 * DAY
+  return {
+    retention_days: orgPrivacy.retention_days,
+    upcoming: events.filter(e => e.status !== 'draft' && !eventPurges.has(e.id) && Date.parse(e.ends_at) <= soon)
+      .map(e => ({ event_id: e.id, title: e.title, ends_at: e.ends_at, purge_after: purgeAfter(e) }))
+      .sort((a, b) => a.purge_after.localeCompare(b.purge_after)).slice(0, 20),
+    recent: [...eventPurges.entries()].map(([id, p]) => ({ event_id: id, title: findEvent(id).title, ...p }))
+      .sort((a, b) => b.purged_at.localeCompare(a.purged_at)).slice(0, 20),
+  }
+}
+
+export function setRetention(b: { retention_days?: unknown }) {
+  const n = b?.retention_days
+  if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 365) throw invalidField('retention_days', '1 to 365 days')
+  orgPrivacy.retention_days = n
+  return retentionOverview()
+}
+
+/** ERASE NOW: typed title, ended event, recent sign-in (mock: 15 min since the last mock login or start). */
+export function purgeNow(eventId: string, b: { confirm?: string }) {
+  const e = findEvent(eventId)
+  if (Date.now() - mockSession.authAt > STEP_UP_MS) throw guestErr(403, { error: 'reauthentication_required' })
+  if ((b?.confirm ?? '').trim() !== e.title) throw invalidField('confirm', 'must match the event title')
+  if (Date.parse(e.ends_at) > Date.now()) throw guestErr(409, { error: 'event_not_ended' })
+  assertNotPurged(e.id)
+  const p = purge(e.id, 'manual')
+  return { purged_at: p.purged_at, counts: p.counts }
+}
+
+// Klubnacht 01: a few door check-ins, then erased by the schedule 30 days after it ended.
+function seedPurged() {
+  const e = findEvent('e-klubnacht-01')
+  const seed = (nonce: string, kind: 'guest' | 'ticket', id: string, count: number, h: number, m: number) =>
+    checkinRows.push({ event_id: e.id, seq: ++doorSeq, nonce, subject: { kind, id }, count, direction: 'in', at: iso(-35, h, m), device_id: 'dd-front', undone: false, conflict: false })
+  seed('seed-01-c01', 'guest', 'g01-1', 2, 0, 30)
+  seed('seed-01-c02', 'guest', 'g01-3', 1, 1, 10)
+  seed('seed-01-c03', 'ticket', 'p-01-1', 1, 1, 20)
+  purge(e.id, 'schedule', new Date(Date.parse(e.ends_at) + 30 * DAY).toISOString())
+}
+seedPurged()

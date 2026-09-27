@@ -378,7 +378,14 @@ export const useDoorStore = defineStore('door', () => {
 
   async function pushAdds() {
     const batch = adds.value.slice(0, MAX_ADDS)
-    const r = await apiFetch<AddsResponse>('/api/v1/door/adds', { method: 'POST', body: { adds: batch } })
+    let r: AddsResponse
+    try {
+      r = await apiFetch<AddsResponse>('/api/v1/door/adds', { method: 'POST', body: { adds: batch } })
+    } catch (e) {
+      // The event's guest data was erased (P2.5): these adds can never apply.
+      if (toApiError(e).error !== 'event_purged') throw e
+      r = { results: batch.map(a => ({ nonce: a.nonce, id: a.id, status: 'rejected' as const, error: 'event_purged' })) }
+    }
     const answered = new Map(r.results.map(x => [x.nonce, x]))
     adds.value = adds.value.filter(a => !answered.has(a.nonce))
     for (const res of r.results) {

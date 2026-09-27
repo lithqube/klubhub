@@ -185,6 +185,20 @@ describe('useDoorStore (door device)', () => {
     expect(s.queued).toBe(0)
   })
 
+  it('drops door adds refused because the event was erased, and says why', async () => {
+    const s = await ready()
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    await s.addGuest({ name: 'Ola Nordmann', plus_n: 0, list_id: 'l1', manager_pin: '246810', count: 1 })
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+    fetchMock.mockReset()
+    fetchMock.mockImplementation((url: string, o: { body: { ops?: { nonce: string }[] } }) => (url.endsWith('/adds')
+      ? Promise.reject({ statusCode: 409, data: { error: 'event_purged' } })
+      : Promise.resolve(syncOk(o.body as { ops: { nonce: string }[] }))))
+    await s.sync()
+    expect(s.adds).toEqual([])
+    expect(s.rejections).toEqual([expect.objectContaining({ what: 'Add Ola Nordmann', error: 'event_purged' })])
+  })
+
   it('keeps unsynced actions when the door session expires, and asks for a new PIN instead of wiping', async () => {
     const s = await ready()
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })

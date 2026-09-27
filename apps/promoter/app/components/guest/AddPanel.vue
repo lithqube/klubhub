@@ -10,7 +10,7 @@ import { allocationState, guestErrorText, MAX_PLUS_N, parsePastedGuests } from '
  * "add directly as Going" is the staff override for approval.
  */
 const props = defineProps<{ lists: GuestList[], defaultListId?: string | null }>()
-const emit = defineEmits<{ done: [message: string], cancel: [] }>()
+const emit = defineEmits<{ done: [message: string], cancel: [], purged: [] }>()
 const store = useGuestStore()
 const uid = useId()
 
@@ -59,6 +59,8 @@ async function submit() {
     emit('done', msg)
   } catch (e) {
     error.value = e as ApiError
+    // The event's guest data was erased meanwhile (P2.5): the page switches to its erased state.
+    if (error.value.error === 'event_purged') emit('purged')
   } finally {
     saving.value = false
   }

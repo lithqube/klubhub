@@ -3,10 +3,12 @@ import { KeyRound, MonitorSmartphone, ScanLine } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useDoorStore } from '~/stores/door'
 import { useEventStore } from '~/stores/event'
+import { usePrivacyStore } from '~/stores/privacy'
 import type { ApiError } from '~/types/event'
 import type { PinResult, PinWindow } from '~/types/door'
 import { dayLabel, instantToZoned, timeLabel, zonedToInstant } from '~/utils/datetime'
 import { defaultPinValidUntil, MAX_PIN_WINDOW_HOURS } from '~/utils/doorState'
+import { shortDate } from '~/utils/privacy'
 
 /**
  * Event DOOR tab (P2.3): prepare this browser as a door device, generate
@@ -29,6 +31,12 @@ function load() {
   })
 }
 const { refresh } = await useAsyncData(() => `door-${id.value}`, load, { watch: [id] })
+
+// Retention (P2.5): an erased event has no names left to check against, so no new PINs.
+const privacy = usePrivacyStore()
+const { events: privacyByEvent } = storeToRefs(privacy)
+await useAsyncData(() => `privacy-${id.value}`, () => (id.value ? privacy.fetchEvent(id.value).then(() => true) : Promise.resolve(null)), { watch: [id] })
+const purgedAt = computed(() => privacyByEvent.value[id.value]?.purged_at ?? null)
 
 onMounted(() => store.loadDevice())
 
@@ -101,7 +109,10 @@ async function generate(manager: boolean) {
     const err = e as ApiError
     pinError.value = err.error === 'invalid_input'
       ? `Pick an end time in the next ${MAX_PIN_WINDOW_HOURS} hours.`
-      : 'Could not generate the PIN. Try again.'
+      : err.error === 'event_purged'
+        ? 'Guest names for this event were erased, so there is no list for the door. PINs can no longer be generated.'
+        : 'Could not generate the PIN. Try again.'
+    if (err.error === 'event_purged') await privacy.fetchEvent(current.value.id)
   } finally {
     busy.value = null
   }
@@ -184,6 +195,9 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
           Staff log in at the door with the <strong>staff PIN</strong>. The <strong>manager PIN</strong> approves adding someone at the door.
           Each PIN is shown once; generating a new one replaces the old.
         </p>
+        <p v-if="purgedAt" class="warn" data-testid="door-purged">
+          Guest names and contacts for this event were erased on {{ shortDate(purgedAt, tz) }}. The door has no list to check against, so new PINs can't be generated.
+        </p>
         <dl class="status" aria-label="PIN status">
           <div>
             <dt class="section-lbl">STAFF PIN</dt>
@@ -204,10 +218,10 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
           <input :id="`${uid}-t`" v-model="until.time" class="hud-input" type="time" style="width:120px;">
         </fieldset>
         <div class="row">
-          <button type="button" class="btn-hud btn-hud-cta" style="min-height:44px;" :disabled="!!busy" @click="generate(false)">
+          <button type="button" class="btn-hud btn-hud-cta" style="min-height:44px;" :disabled="!!busy || !!purgedAt" @click="generate(false)">
             {{ busy === 'staff' ? 'GENERATING…' : pinStatus?.staff ? 'NEW STAFF PIN' : 'GENERATE STAFF PIN' }}
           </button>
-          <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" :disabled="!!busy" @click="generate(true)">
+          <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" :disabled="!!busy || !!purgedAt" @click="generate(true)">
             {{ busy === 'manager' ? 'GENERATING…' : pinStatus?.manager ? 'NEW MANAGER PIN' : 'GENERATE MANAGER PIN' }}
           </button>
         </div>

@@ -108,6 +108,7 @@ const LOGIN_ERRORS: Record<string, string> = {
   pin_expired: 'This door PIN has expired. Ask a manager for a new one (the event’s DOOR tab).',
   network_error: 'No connection. The first login needs the network; after that the door works offline.',
   not_prepared: 'This browser is not a door device.',
+  event_purged: 'Guest names for this event were erased after the night, so there is no list to open.',
 }
 async function login(pin: string) {
   loginBusy.value = true

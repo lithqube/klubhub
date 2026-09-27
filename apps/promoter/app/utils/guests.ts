@@ -262,6 +262,7 @@ export function guestErrorText(err: { error: string, field?: string, problem?: s
     case 'list_not_empty': return `This list still has ${Number(d.guests)} guests.`
     case 'not_found': return 'That list or guest no longer exists. Reload to see the latest.'
     case 'invalid': return err.problem ? `${(err.field ?? '').replace(/^guests\[(\d+)\]\./, (_, i) => `Line ${Number(i) + 1}: `).replace('plus_n', '+N').replace(/_/g, ' ')} — ${err.problem}` : 'Check the highlighted field.'
+    case 'event_purged': return 'Guest names and contacts for this event were erased, so guests can no longer be added or changed.'
     case 'forbidden': case 'no_role_grant': return 'Your role cannot change guest lists.'
     default: return 'Could not save. Check your connection and try again.'
   }

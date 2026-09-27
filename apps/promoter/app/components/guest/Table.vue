@@ -26,8 +26,11 @@ import { arrivalTag, countByStatus, guestErrorText, isCheckedIn, searchGuests, s
  * A status change says what it did with an UNDO (back to the previous
  * status); DECLINED from the dropdown asks first. Errors show on the row.
  * A list filter shows as a removable "LIST: name ✕" chip.
+ *
+ * Erased rows (P2.5 retention): "Erased guest" / "Erased ticket holder",
+ * still with list, +N, status and check-in state, and no row actions.
  */
-const props = withDefaults(defineProps<{ guests: Guest[], lists: GuestList[], tickets?: Ticket[], timezone?: string }>(), { tickets: () => [], timezone: 'UTC' })
+const props = withDefaults(defineProps<{ guests: Guest[], lists: GuestList[], tickets?: Ticket[], timezone?: string, purged?: boolean }>(), { tickets: () => [], timezone: 'UTC', purged: false })
 const listFilter = defineModel<string>('list', { default: '' })
 const store = useGuestStore()
 
@@ -162,7 +165,7 @@ async function remove(g: Guest) {
       <label style="position:relative;flex:1;min-width:180px;">
         <span class="sr-only">Search guests</span>
         <Search style="position:absolute;left:10px;top:13px;width:14px;height:14px;color:var(--color-tertiary);" aria-hidden="true" />
-        <input v-model="q" class="hud-input" type="search" placeholder="Search names, emails, notes" style="padding-left:30px;" autocomplete="off">
+        <input v-model="q" class="hud-input" type="search" :placeholder="purged ? 'Names were erased' : 'Search names, emails, notes'" style="padding-left:30px;" autocomplete="off">
       </label>
       <label style="min-width:160px;">
         <span class="sr-only">Filter by list</span>
@@ -206,7 +209,8 @@ async function remove(g: Guest) {
         <tr v-for="row in shown" :key="row.key" :class="{ 'accent-bar-pending': row.kind === 'guest' && row.g.status === 'pending' }">
           <template v-if="row.kind === 'ticket'">
             <td>
-              <span style="font-size:14px;">{{ row.t.name }}</span>
+              <span v-if="row.t.purged" class="erased" data-testid="erased-name">Erased ticket holder</span>
+              <span v-else style="font-size:14px;">{{ row.t.name }}</span>
               <span v-if="row.t.email" style="display:block;font-size:11px;color:var(--color-on-surface-variant);overflow:hidden;text-overflow:ellipsis;">{{ row.t.email }}</span>
             </td>
             <td style="font-size:12px;">
@@ -246,7 +250,8 @@ async function remove(g: Guest) {
           </template>
           <template v-else>
             <td>
-              <span style="font-size:14px;">{{ row.g.name }}</span>
+              <span v-if="row.g.purged" class="erased" data-testid="erased-name">Erased guest</span>
+              <span v-else style="font-size:14px;">{{ row.g.name }}</span>
               <span v-if="row.g.plus_n" class="data-frag" style="font-size:11px;margin-left:6px;">+{{ row.g.plus_n }}</span>
               <span v-if="row.g.email || row.g.note" style="display:block;font-size:11px;color:var(--color-on-surface-variant);overflow:hidden;text-overflow:ellipsis;">
                 {{ [row.g.email, row.g.note].filter(Boolean).join(' · ') }}
@@ -265,7 +270,10 @@ async function remove(g: Guest) {
                 ><span aria-hidden="true">{{ tagOf(row.g)!.text }}<template v-if="row.g.first_in_at"> · {{ firstIn(row.g.first_in_at) }}</template></span></span>
               </span>
             </td>
-            <td class="actions-cell">
+            <td v-if="row.g.purged" class="actions-cell">
+              <span class="erased-note">ERASED · NO CHANGES</span>
+            </td>
+            <td v-else class="actions-cell">
               <div class="actions">
               <template v-if="row.g.status === 'pending'">
                 <button type="button" class="btn-hud btn-hud-cta act" :aria-label="`Approve ${row.g.name}`" @click="setStatus(row.g, 'going')">APPROVE</button>
@@ -344,6 +352,19 @@ async function remove(g: Guest) {
 .in-tag-in { color: var(--color-primary); }
 .in-tag-over { color: var(--color-error); }
 .in-tag-left { color: var(--color-on-surface-variant); border-style: dashed; }
+.erased {
+  font-size: 14px;
+  font-style: italic;
+  color: var(--color-on-surface-variant);
+}
+.erased-note {
+  display: block;
+  text-align: right;
+  font-family: var(--font-terminal);
+  font-size: 11px;
+  letter-spacing: .05em;
+  color: var(--color-on-surface-variant);
+}
 .row-err {
   margin: 4px 0 0;
   font-size: 13px;
@@ -408,6 +429,7 @@ async function remove(g: Guest) {
   .guest-table td[colspan] { grid-column: 1 / -1; }
   .guest-table td.actions-cell { grid-column: 1 / -1; }
   .actions { justify-content: flex-start; }
+  .erased-note { text-align: left; }
   .row-err { text-align: left; }
 }
 </style>
