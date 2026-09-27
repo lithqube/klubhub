@@ -215,6 +215,25 @@ export function formatFingerprint(fp: string | null | undefined): string {
   return (fp ?? '').toUpperCase().replace(/(.{4})(?=.)/g, '$1 ')
 }
 
+/**
+ * The fingerprint of an X25519 public key (base64url or bytes), grouped for
+ * reading aloud: "3F9A 01C2 77B0 E4D1" (4 × 4 hex). The same for member
+ * keys, door device keys and the recovery key, so an owner can compare
+ * what a member or a door device shows on its own screen before GRANT
+ * ACCESS / PROVISION (a key substituted on the way would not match).
+ * '' when the input is not a 32-byte key.
+ */
+export function keyFingerprint(publicKey: string | Uint8Array | null | undefined): string {
+  if (!publicKey) return ''
+  let pub: Uint8Array
+  try {
+    pub = typeof publicKey === 'string' ? fromB64url(publicKey) : publicKey
+  } catch {
+    return ''
+  }
+  return pub.length === KEY_BYTES ? formatFingerprint(fingerprint(pub)) : ''
+}
+
 export interface RecoveryKit {
   secret: Uint8Array
   groups: string[]
@@ -253,8 +272,9 @@ export function kitFileText(k: { groups: string[], fingerprint: string, org: str
     '',
     'This code opens your collective\'s sealed data (the ban list) if every',
     'owner forgets their passphrase. Anyone with it can read that data.',
-    'Keep it offline: print it or store it in a password manager, and delete',
-    'this file from your downloads folder. KlubHub cannot recover it for you.',
+    'Store it away from this computer: printed in a drawer or safe, or in a',
+    'password manager. Then delete this file from your downloads folder.',
+    'KlubHub cannot recover it for you.',
     '',
     'To use it: Settings → ENCRYPTION & BAN LIST → RECOVER WITH KIT.',
     '',

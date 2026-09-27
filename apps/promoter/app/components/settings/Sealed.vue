@@ -3,6 +3,7 @@ import { Lock, LockOpen } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useSealedStore } from '~/stores/sealed'
 import { formatFingerprint } from '~/utils/sealed/keys'
+import { sealedErrorText } from '~/utils/sealedText'
 
 /**
  * ENCRYPTION & BAN LIST (P2.6), driven by the sealed state:
@@ -13,15 +14,18 @@ import { formatFingerprint } from '~/utils/sealed/keys'
  * Loaded in the browser only: nothing sealed is part of the SSR payload.
  */
 const store = useSealedStore()
-const { state, org, isOwner, unlockedVersion, error, loading } = storeToRefs(store)
+const { state, org, isOwner, unlockedVersion, error, loading, myFingerprint } = storeToRefs(store)
 const uid = useId()
+const route = useRoute()
 
 const recovering = ref(false)
 const notice = ref('')
 const noticeEl = ref<HTMLElement | null>(null)
 
-onMounted(() => {
-  if (!store.loaded) void store.fetchStatus()
+onMounted(async () => {
+  if (!store.loaded) await store.fetchStatus()
+  // The locked ban list page links here with ?recover=1 (owners who forgot the passphrase).
+  if (route.query.recover === '1' && isOwner.value && (state.value === 'locked' || state.value === 'no_access' || (state.value === 'no_key' && !!org.value && org.value.status !== 'not_setup'))) recovering.value = true
 })
 
 function say(text: string) {
@@ -55,7 +59,7 @@ const orgLine = computed(() => {
   return `${o.status === 'rotation_pending' ? 'ROTATION PENDING' : 'READY'} · KEY VERSION ${o.version}`
 })
 const keyLine = computed(() => ({
-  loading: '…', error: '…', no_key: 'NO KEY YET', not_setup: 'KEY READY', no_access: 'NO ACCESS YET', locked: 'LOCKED', unlocked: 'UNLOCKED',
+  loading: '…', error: '…', local_required: 'NEEDS A KLUBHUB ACCOUNT', no_key: 'NO KEY YET', not_setup: 'KEY READY', no_access: 'NO ACCESS YET', locked: 'LOCKED', unlocked: 'UNLOCKED',
 }[state.value]))
 
 function lock() {
@@ -70,19 +74,33 @@ function lock() {
       <span>SEALED DATA · <strong>{{ orgLine }}</strong></span>
       <span>YOUR KEY · <strong>{{ keyLine }}</strong></span>
     </p>
+    <p v-if="myFingerprint && state !== 'no_key'" class="fp" data-testid="sealed-my-fingerprint">
+      <span class="fp-lbl">YOUR KEY FINGERPRINT</span>
+      <span class="mono fp-val" data-testid="sealed-my-fingerprint-value">{{ myFingerprint }}</span>
+      <span class="fp-hint">The owner will compare this before granting access.</span>
+    </p>
     <p v-if="notice" ref="noticeEl" tabindex="-1" role="status" class="ok" data-testid="sealed-notice">{{ notice }}</p>
 
     <p v-if="state === 'loading'" role="status" class="data-frag" style="font-size:11px;">LOADING ENCRYPTION STATUS…</p>
     <p v-else-if="state === 'error'" role="alert" class="glass accent-bar-failed row" style="padding:10px 14px;margin:0;font-size:13px;">
       COULDN'T LOAD THE ENCRYPTION STATUS.
       <button type="button" class="btn-hud btn-hud-ghost act" :disabled="loading" @click="store.fetchStatus()">RETRY</button>
-      <span v-if="error?.error === 'local_identity_required'" class="hint">Sealed data needs a KlubHub account (single sign-on accounts are not supported yet).</span>
+      <span v-if="error" class="hint">{{ sealedErrorText(error) }}</span>
     </p>
+
+    <section v-else-if="state === 'local_required'" class="glass panel" :aria-labelledby="`${uid}-lr`" data-testid="sealed-local-required">
+      <h3 :id="`${uid}-lr`" class="lbl">SEALED DATA NEEDS A KLUBHUB ACCOUNT</h3>
+      <p class="txt">
+        Sealed data needs a local KlubHub account for now. You signed in with single sign-on, which can't hold an encryption key yet, so you can't
+        open or manage the ban list from this account.
+      </p>
+      <p class="txt">Ask an owner to invite you with a KlubHub account (email and password) if you need the ban list. Everything else works as usual.</p>
+    </section>
 
     <template v-else-if="state === 'no_key'">
       <SettingsSealedRecover v-if="recovering" @cancel="recovering = false" />
       <template v-else>
-        <SettingsSealedPassphrase />
+        <SettingsSealedPassphrase :step="isOwner && (!org || org.status === 'not_setup') ? 'STEP 1 OF 4' : ''" />
         <p v-if="isOwner && org && org.status !== 'not_setup'" class="hint">
           Lost your passphrase and have the recovery kit?
           <button type="button" class="linkbtn" @click="recovering = true">RECOVER WITH KIT</button>
@@ -168,6 +186,19 @@ function lock() {
 .act { min-height: 44px; font-size: 11px; }
 .ic { width: 14px; height: 14px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.fp {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  background: var(--color-surface-container);
+  border-left: 3px solid var(--color-tertiary);
+}
+.fp-lbl { font-family: var(--font-terminal); font-size: 11px; letter-spacing: .07em; color: var(--color-tertiary); }
+.fp-val { font-size: 15px; font-weight: 700; letter-spacing: .08em; color: var(--color-on-surface); }
+.fp-hint { flex-basis: 100%; font-size: 12px; color: var(--color-on-surface-variant); }
 .linkbtn {
   display: inline-flex;
   align-items: center;

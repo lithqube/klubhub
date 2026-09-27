@@ -29,6 +29,7 @@ export const useBanListStore = defineStore('banList', () => {
   async function toEntry(r: BanRecord): Promise<BanEntry> {
     return {
       id: r.id, key_version: r.key_version, expires_at: r.expires_at, created_at: r.created_at, updated_at: r.updated_at,
+      created_by_name: r.created_by_name ?? null,
       plain: await sealed.openEntry(r.id, r.key_version, r.entry_sealed),
     }
   }
@@ -79,7 +80,10 @@ export const useBanListStore = defineStore('banList', () => {
       const body: BanInput = { id, key_version, entry_sealed, expires_at: expiresAt }
       const r = await apiFetch<Partial<BanRecord> | null>('/api/v1/ban-list', { method: 'POST', body })
       const now = new Date().toISOString()
-      const e: BanEntry = { id, key_version, expires_at: r?.expires_at ?? expiresAt, created_at: r?.created_at ?? now, updated_at: r?.updated_at ?? now, plain: p }
+      const e: BanEntry = {
+        id, key_version, expires_at: r?.expires_at ?? expiresAt, created_at: r?.created_at ?? now, updated_at: r?.updated_at ?? now,
+        created_by_name: r?.created_by_name ?? 'You', plain: p,
+      }
       upsert(e)
       return e
     })
@@ -95,7 +99,8 @@ export const useBanListStore = defineStore('banList', () => {
       const prev = entries.value.find(x => x.id === id)
       const now = new Date().toISOString()
       const e: BanEntry = {
-        id, key_version, expires_at: r?.expires_at ?? expiresAt, created_at: r?.created_at ?? prev?.created_at ?? now, updated_at: r?.updated_at ?? now, plain: p,
+        id, key_version, expires_at: r?.expires_at ?? expiresAt, created_at: r?.created_at ?? prev?.created_at ?? now, updated_at: r?.updated_at ?? now,
+        created_by_name: prev?.created_by_name ?? r?.created_by_name ?? null, plain: p,
       }
       upsert(e)
       return e

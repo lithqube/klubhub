@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Eye, EyeOff } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useSealedStore } from '~/stores/sealed'
 import type { ApiError } from '~/types/event'
@@ -16,6 +17,7 @@ const { working, progress, lockedBy } = storeToRefs(store)
 const uid = useId()
 
 const pass = ref('')
+const show = ref(false)
 const error = ref<ApiError | null>(null)
 const input = ref<HTMLInputElement | null>(null)
 const busy = computed(() => working.value === 'unlock')
@@ -33,8 +35,11 @@ async function submit() {
     emit('unlocked')
   } catch (e) {
     error.value = e as ApiError
-    pass.value = ''
-    nextTick(() => input.value?.focus())
+    // Keep what was typed and select it: fixing one typo beats typing it all again.
+    nextTick(() => {
+      input.value?.focus()
+      input.value?.select()
+    })
   }
 }
 </script>
@@ -44,14 +49,21 @@ async function submit() {
     <h3 :id="`${uid}-h`" class="lbl">{{ props.title }}</h3>
     <p v-if="lockNote" class="note" data-testid="sealed-lock-note">{{ lockNote }}</p>
     <p v-if="props.why" class="txt">{{ props.why }}</p>
+    <SettingsSealedUsername />
+    <label :for="`${uid}-p`" class="lbl">SEALED PASSPHRASE</label>
     <div class="line">
-      <label :for="`${uid}-p`" class="sr-only">Sealed passphrase</label>
-      <input
-        :id="`${uid}-p`" ref="input" v-model="pass" class="hud-input" type="password" autocomplete="current-password" placeholder="Sealed passphrase"
-        :disabled="busy" :aria-invalid="!!error" :aria-describedby="error ? `${uid}-e` : undefined" data-testid="sealed-passphrase"
-      >
+      <div class="pw">
+        <input
+          :id="`${uid}-p`" ref="input" v-model="pass" class="hud-input" :type="show ? 'text' : 'password'" name="sealed-passphrase" autocomplete="current-password"
+          :disabled="busy" :aria-invalid="!!error" :aria-describedby="error ? `${uid}-e ${uid}-nl` : `${uid}-nl`" data-testid="sealed-passphrase"
+        >
+        <button type="button" class="btn-hud btn-hud-ghost eye" :aria-label="show ? 'Hide passphrase' : 'Show passphrase'" :aria-pressed="show" @click="show = !show">
+          <EyeOff v-if="show" class="ic" aria-hidden="true" /><Eye v-else class="ic" aria-hidden="true" />
+        </button>
+      </div>
       <button type="submit" class="btn-hud btn-hud-cta act" :disabled="busy" :aria-busy="busy">{{ busy ? 'UNLOCKING…' : 'UNLOCK' }}</button>
     </div>
+    <span :id="`${uid}-nl`" class="hint">Not your login password.</span>
     <SettingsSealedProgress v-if="busy" label="UNLOCKING… THIS TAKES A FEW SECONDS" :progress="progress" />
     <p v-if="error" :id="`${uid}-e`" role="alert" class="err" data-testid="sealed-unlock-error">{{ sealedErrorText(error) }}</p>
     <slot />
@@ -65,8 +77,11 @@ async function submit() {
 .txt { margin: 0; font-size: 13px; color: var(--color-on-surface-variant); }
 .note { margin: 0; font-size: 13px; color: var(--color-on-surface); }
 .line { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
-.line .hud-input { flex: 1 1 200px; min-width: 0; }
+.pw { display: flex; gap: 6px; flex: 1 1 200px; min-width: 0; }
+.pw .hud-input { flex: 1; min-width: 0; }
+.eye { min-width: 44px; min-height: 44px; padding: 0; }
+.ic { width: 18px; height: 18px; }
+.hint { margin: 0; font-size: 12px; color: var(--color-on-surface-variant); }
 .act { min-height: 44px; font-size: 11px; }
 .err { margin: 0; font-size: 12px; color: var(--color-error); }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>

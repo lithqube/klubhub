@@ -6,7 +6,7 @@ import { memoryKV, type KV } from '~/utils/doorDb'
 import { DEVICE_KEY, setDoorDeviceKV, setDoorKV, useDoorStore } from '../door'
 import { fromB64url } from '~/utils/sealed/bytes'
 import { encryptBan } from '~/utils/sealed/ban'
-import { generateOsk, oskAad, wrapOsk } from '~/utils/sealed/keys'
+import { generateOsk, keyFingerprint, oskAad, wrapOsk } from '~/utils/sealed/keys'
 
 const fetchMock = vi.fn()
 vi.stubGlobal('$fetch', fetchMock)
@@ -392,6 +392,39 @@ describe('useDoorStore (ban list at the door, P2.6)', () => {
     expect(await s.hasDeviceKey()).toBe(true)
     await s.forgetDevice()
     expect(await deviceKv.get('session-key')).toBeUndefined()
+  })
+
+  it('shows the fingerprint of the public key it registered, the same one the owner sees, and forgets it with the device', async () => {
+    let pub = ''
+    fetchMock.mockImplementation((url: string, opts?: { method?: string, body?: { public_key?: string } }) => {
+      if (url === '/api/v1/door/devices' && opts?.method === 'POST') {
+        pub = opts.body!.public_key!
+        return Promise.resolve({ id: 'd-1', label: 'Front door', token: 'tok' })
+      }
+      return Promise.resolve([])
+    })
+    const s = useDoorStore()
+    expect(s.deviceFp).toBe('')
+    await s.registerDevice('Front door', { id: 'e1', title: 'Klubnacht', starts_at: later(-1) }, 'org-1')
+    expect(s.deviceFp).toMatch(/^[0-9A-F]{4}( [0-9A-F]{4}){3}$/)
+    expect(s.deviceFp).toBe(keyFingerprint(pub))
+    // A reload derives it again from the key in the device vault.
+    setActivePinia(createPinia())
+    const again = useDoorStore()
+    await again.init()
+    expect(again.deviceFp).toBe(keyFingerprint(pub))
+    await again.forgetDevice()
+    expect(again.deviceFp).toBe('')
+  })
+
+  it('locks the manager PIN reveal after 5 wrong tries, per device', () => {
+    const s = useDoorStore()
+    for (let i = 0; i < 4; i++) s.revealAttempt(false, 1000)
+    expect(s.revealGuard).toEqual({ fails: 4, lockedUntil: null })
+    s.revealAttempt(false, 1000)
+    expect(s.revealGuard.lockedUntil).toBe(61_000)
+    s.revealAttempt(true, 70_000)
+    expect(s.revealGuard).toEqual({ fails: 0, lockedUntil: null })
   })
 
   it('says unreadable for a wrap to another tenant and no_key without the device key', async () => {

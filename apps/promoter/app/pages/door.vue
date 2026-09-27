@@ -36,7 +36,7 @@ useHead({
 })
 
 const store = useDoorStore()
-const { phase, device, bundle, rejections, sessionEnded, queued, occ, checkins, wipedBecause, recent, offline, syncError, ban, banStatus } = storeToRefs(store)
+const { phase, device, bundle, rejections, sessionEnded, queued, occ, checkins, wipedBecause, recent, offline, syncError, ban, banStatus, deviceFp } = storeToRefs(store)
 
 // ---------------------------------------------------------------- forced dark theme
 const { theme } = useTheme()
@@ -152,10 +152,21 @@ const tz = computed(() => bundle.value?.event.timezone ?? 'UTC')
 /** Possible ban list matches for the open card (P2.6; empty when the bundle has no sealed block). */
 const banHits = computed(() => (view.value ? banMatches(ban.value, view.value.name) : []))
 const BAN_STATUS: Record<string, string> = {
+  none: 'BAN LIST NOT ON THIS DEVICE',
   ready: 'BAN LIST CHECKED ON THIS DEVICE',
   no_key: 'BAN LIST NOT AVAILABLE: THIS DEVICE HAS NO KEY',
   unreadable: 'BAN LIST NOT AVAILABLE: IT DOES NOT OPEN ON THIS DEVICE',
 }
+
+/**
+ * After a login (or reopening the door), one quiet line under the header
+ * when names are not checked against the ban list on this device; it goes
+ * once the first card opens. The menu keeps the status.
+ */
+const banNote = ref(false)
+watch(phase, (p, was) => {
+  if (p === 'ready' && was !== 'ready') banNote.value = banStatus.value !== 'ready'
+}, { immediate: true })
 
 // The sticky header's height, so the search field scrolls to just under it.
 useResizeObserver(headRef, (entries) => {
@@ -193,7 +204,10 @@ function notify(text: string, nonce: string | null, tone: 'ok' | 'warn' = 'ok') 
 }
 // A card replaces the toast: its UNDO must never sit under the next ADMIT.
 watch(selected, (s) => {
-  if (s) toast.value = null
+  if (s) {
+    toast.value = null
+    banNote.value = false
+  }
 })
 watch(q, (v) => {
   if (v.trim()) searchNote.value = ''
@@ -365,6 +379,7 @@ const rejectionHelp = computed(() => (rejections.value.length && rejections.valu
         <DoorPinPad :busy="loginBusy" :disabled="!!lockedUntil" :error="loginError" @submit="login" />
       </template>
       <p class="foot">Wrong event? Switch it in that event’s DOOR tab.</p>
+      <p v-if="deviceFp" class="foot fp" data-testid="door-device-fp">DEVICE KEY FINGERPRINT <span class="mono">{{ deviceFp }}</span></p>
     </main>
 
     <template v-else-if="phase === 'ready' && bundle">
@@ -385,6 +400,7 @@ const rejectionHelp = computed(() => (rejections.value.length && rejections.valu
             <div v-if="menuOpen" id="door-menu" class="menu glass">
               <p class="menu-meta">{{ device?.label }}<br>{{ eventLine }}</p>
               <p v-if="BAN_STATUS[banStatus]" class="menu-meta" data-testid="door-ban-status">{{ BAN_STATUS[banStatus] }}</p>
+              <p v-if="deviceFp" class="menu-meta" data-testid="door-menu-fp">KEY FINGERPRINT<br><span class="mono">{{ deviceFp }}</span></p>
               <button type="button" class="btn-hud btn-hud-ghost big" style="color:var(--color-error);width:100%;" @click="logout">
                 <LogOut style="width:18px;height:18px;" aria-hidden="true" /> LOG OUT
               </button>
@@ -393,6 +409,9 @@ const rejectionHelp = computed(() => (rejections.value.length && rejections.valu
         </div>
         <p v-if="endingSoon" role="status" class="ending" data-testid="door-ending">
           DOOR PIN ENDS {{ timeLabel(bundle.session_expires_at, tz) }} · ASK A MANAGER FOR A NEW ONE
+        </p>
+        <p v-if="banNote" class="menu-meta" data-testid="door-ban-note">
+          Ban list not checked on this device<template v-if="banStatus === 'none' && deviceFp"> · key {{ deviceFp }}</template>
         </p>
         <DoorUndoToast :toast="toast" @undo="undo" @expire="toast = null" />
       </header>
@@ -575,6 +594,15 @@ const rejectionHelp = computed(() => (rejections.value.length && rejections.valu
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
   overflow-wrap: anywhere;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .06em;
+}
+.foot.fp {
+  font-family: var(--font-terminal);
+  font-size: 11px;
+  letter-spacing: .05em;
 }
 .ending {
   margin: 0;

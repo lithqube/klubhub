@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { banMatches, banTokens, namesMatch, openDoorBan, type DoorBanEntry } from '../doorBan'
+import { banMatches, banTokens, isSingleToken, namesMatch, openDoorBan, type DoorBanEntry } from '../doorBan'
 import { b64url, randomBytes } from '../sealed/bytes'
 import { encryptBan } from '../sealed/ban'
 import { generateOsk, oskAad, wrapOsk } from '../sealed/keys'
@@ -24,11 +24,35 @@ describe('door ban matching', () => {
     expect(namesMatch('', 'Anna')).toBe(false)
   })
 
+  it('needs at least two tokens in the shorter name for a subset match', () => {
+    // One-word entries only match the same one word.
+    expect(namesMatch('Ole', 'ole')).toBe(true)
+    expect(namesMatch('Olé', 'OLE')).toBe(true)
+    expect(namesMatch('Ole', 'Ole Petersen')).toBe(false)
+    expect(namesMatch('Ole Petersen', 'Ole')).toBe(false)
+    expect(namesMatch('Ole', 'Ola')).toBe(false)
+    // Two or more tokens: the shorter is a subset of the longer, either way round.
+    expect(namesMatch('Ole Petersen', 'Ole Jan Petersen')).toBe(true)
+    expect(namesMatch('Ole Jan Petersen', 'Petersen Ole')).toBe(true)
+    expect(namesMatch('Ole Petersen', 'Ole Jan')).toBe(false)
+    // Repeated tokens count once.
+    expect(namesMatch('Ole Ole', 'Ole Petersen')).toBe(false)
+  })
+
+  it('flags single-token names for the form', () => {
+    expect(isSingleToken('Ole')).toBe(true)
+    expect(isSingleToken('  Ole  ')).toBe(true)
+    expect(isSingleToken('Ole Petersen')).toBe(false)
+    expect(isSingleToken('Ole-Petersen')).toBe(false)
+    expect(isSingleToken('')).toBe(false)
+  })
+
   it('lists the possible matches for a guest, with email only when both carry one', () => {
     const list = [entry('Viktor Brandt'), entry('Mia Klein', { email: 'mia@example.org' }), entry('Ole')]
     expect(banMatches(list, 'viktor brandt').map(e => e.name)).toEqual(['Viktor Brandt'])
     expect(banMatches(list, 'Someone Else', 'MIA@example.org').map(e => e.name)).toEqual(['Mia Klein'])
-    expect(banMatches(list, 'Ole Petersen').map(e => e.name)).toEqual(['Ole'])
+    expect(banMatches(list, 'Ole Petersen').map(e => e.name)).toEqual([])
+    expect(banMatches(list, 'OLE').map(e => e.name)).toEqual(['Ole'])
     expect(banMatches(null, 'Viktor Brandt')).toEqual([])
     expect(banMatches([], 'Viktor Brandt')).toEqual([])
   })

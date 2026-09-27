@@ -116,6 +116,15 @@ taken earlier.
   against a real Zitadel deployment.
 - The `sealed` (end-to-end) tier's browser key management ships with the
   first sealed feature (the P2 ban list); P0 defines the model only.
+- Sealed data (P2.6) needs a **local KlubHub account**: member keys and
+  their wraps are bound to local user ids. Accounts signed in through
+  single sign-on (Zitadel) get `403 local_identity_required` from the key
+  routes and cannot hold a key or open the ban list yet; Settings says so.
+- The server cannot tell a member's real public key from a substituted
+  one. Before GRANT ACCESS or PROVISION, the owner compares the key
+  fingerprint the member (Settings) or door device (its menu or the door
+  login screen) shows on their own screen; the API also refuses
+  non-canonical and low-order X25519 public keys.
 
 ## Secrets handling
 

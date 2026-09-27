@@ -35,20 +35,28 @@ export function sealedErrorText(err: { error: string, count?: number } | null | 
     case 'not_setup': return 'Sealed data is not set up for this collective yet.'
     case 'no_public_key': return 'This door device has no key. Register it again from the door browser.'
     case 'public_key_mismatch': return 'You already have a key. Only an owner recovering with the kit can replace it.'
-    case 'local_identity_required': return 'Sealed data needs a KlubHub account (single sign-on accounts are not supported yet).'
+    case 'local_identity_required': return 'Sealed data needs a local KlubHub account for now. Accounts that sign in with single sign-on can\'t hold an encryption key yet.'
     case 'no_member_key': return 'Create your key first.'
     case 'not_found': return 'That no longer exists. Reload the page.'
     case 'network_error': return 'The server could not be reached. Check your connection and try again.'
-    default: return 'Something went wrong. Try again.'
+    default: return `Something went wrong (${codeOf(err.error)}). Try again, or tell whoever runs your KlubHub this code.`
   }
 }
+
+/** An error code as shown to the user: short, and nothing but code characters. */
+const codeOf = (code: string) => (code || 'unknown').replace(/[^\w.-]/g, '').slice(0, 40) || 'unknown'
+
+/** The fields the ban list form can highlight. */
+const FORM_FIELDS = new Set(['name', 'reason', 'email', 'note'])
 
 /** Ban list form and table refusals. */
 export function banErrorText(err: { error: string, field?: string } | null | undefined): string {
   if (!err) return ''
   switch (err.error) {
     case 'key_version_stale': case 'version_conflict': return 'The ban list key changed meanwhile (someone rotated it). RELOAD AND RETRY re-opens the new key and saves again.'
-    case 'invalid': return err.field === 'expires_at' ? 'Pick an expiry between tomorrow and 3 years from now.' : 'Check the highlighted fields.'
+    case 'invalid':
+      if (err.field === 'expires_at') return 'Pick an expiry between tomorrow and 3 years from now.'
+      return err.field && FORM_FIELDS.has(err.field) ? 'Check the highlighted fields.' : `The server refused this entry (${codeOf(err.field ?? 'invalid')}). Try again.`
     case 'no_role_grant': case 'forbidden': return 'Your role can see the ban list but not change it.'
     case 'id_conflict': case 'ban_entry_exists': return 'This entry was already saved. Reload the list.'
     case 'ban_list_full': return 'The ban list is full (2,000 entries). Remove old entries first.'
@@ -56,7 +64,7 @@ export function banErrorText(err: { error: string, field?: string } | null | und
     case 'locked': return 'Your key locked. Unlock it and try again.'
     case 'not_setup': return 'Sealed data is not set up yet.'
     case 'network_error': return 'The server could not be reached. Nothing was saved.'
-    default: return 'Could not save. Try again.'
+    default: return `Could not save (${codeOf(err.error)}). Try again.`
   }
 }
 

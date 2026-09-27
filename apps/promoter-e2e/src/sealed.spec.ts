@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { addBan, CSRF, hydrated, isolate, PASS, setUpSealed, tag } from './sealed-helpers';
+import { addBan, CSRF, fingerprintOf, hydrated, isolate, PASS, setUpSealed, tag } from './sealed-helpers';
 
 // Sealed tier and ban list (P2.6) against the mock API. The mock keeps
 // ciphertext only; every test has its own sealed namespace (see isolate()).
@@ -21,9 +21,23 @@ test.describe('sealed tier and ban list (mock API)', () => {
     const again = await page.request.post('/api/v1/keys/org/setup', { headers: CSRF, data: { version: 1, recovery: {}, wraps: [] } });
     expect(again.status()).toBe(409);
 
-    // Grant access to a member who already has a key.
+    // The owner's own key fingerprint is on screen, as the server's copy of the public key says.
+    const mine = await (await page.request.get('/api/v1/keys/me')).json() as { public_key: string };
+    await expect(section.getByTestId('sealed-my-fingerprint')).toContainText('YOUR KEY FINGERPRINT');
+    await expect(section.getByTestId('sealed-my-fingerprint-value')).toHaveText(fingerprintOf(mine.public_key));
+
+    // Grant access to a member who already has a key: only after comparing her fingerprint.
     const access = section.getByTestId('sealed-access');
-    await access.getByRole('button', { name: 'Grant access to Lena Park' }).click();
+    const who = await (await page.request.get('/api/v1/keys/org/recipients')).json() as { members: { name: string, public_key: string | null }[] };
+    const lena = who.members.filter(m => m.name === 'Lena Park').map(m => String(m.public_key));
+    expect(lena).toHaveLength(1);
+    const lenaKey = String(lena[0]);
+    // What Lena sees in her Settings is fingerprintOf(her public key) — the same text the owner compares.
+    await expect(access.getByTestId('sealed-fp-Lena Park')).toHaveText(fingerprintOf(lenaKey));
+    const grantLena = access.getByRole('button', { name: 'Grant access to Lena Park' });
+    await expect(grantLena).toBeDisabled();
+    await access.getByTestId('sealed-confirm-Lena Park').check();
+    await grantLena.click();
     await expect(access.getByTestId('sealed-access-notice')).toContainText('Lena Park can now open the sealed data');
     await expect(access.getByTestId('sealed-member-Lena Park')).toContainText('HAS ACCESS');
     await expect(access.getByTestId('sealed-member-Sam Ortiz')).toContainText('NO KEY YET');
@@ -34,7 +48,9 @@ test.describe('sealed tier and ban list (mock API)', () => {
     await section.getByTestId('sealed-passphrase').fill('not the passphrase');
     await section.getByRole('button', { name: 'UNLOCK' }).click();
     await expect(section.getByTestId('sealed-unlock-error')).toContainText('does not unlock your key', { timeout: 30_000 });
+    // The typed passphrase stays, selected, so a typo can be fixed.
     await expect(section.getByTestId('sealed-passphrase')).toBeFocused();
+    await expect(section.getByTestId('sealed-passphrase')).toHaveValue('not the passphrase');
     await section.getByTestId('sealed-passphrase').fill(PASS);
     await section.getByRole('button', { name: 'UNLOCK' }).click();
     await expect(section.getByTestId('sealed-unlocked')).toBeVisible({ timeout: 30_000 });
@@ -71,13 +87,22 @@ test.describe('sealed tier and ban list (mock API)', () => {
     await page.getByLabel('DEVICE NAME').fill(`Door ${t}`);
     await page.getByRole('button', { name: 'USE THIS BROWSER AS A DOOR DEVICE' }).click();
     await expect(page.getByTestId('door-this-device')).toContainText(`Door ${t}`);
-    await expect(page.getByTestId(`door-sealed-Door ${t}`)).toHaveText('KEY PRESENT');
+    await expect(page.getByTestId(`door-sealed-Door ${t}`)).toHaveText('READY TO PROVISION');
     const panel = page.getByTestId('door-ban-panel');
+    await expect(panel.getByTestId('door-staff-briefing')).toContainText('MANAGER CHECK on the door means a possible ban list match.');
     await panel.getByTestId('sealed-passphrase').fill(PASS);
     await panel.getByRole('button', { name: 'UNLOCK' }).click();
     await expect(panel.getByTestId('door-ban-unlocked')).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: `Provision Door ${t} with the ban list` }).click();
-    await expect(page.getByTestId(`door-sealed-Door ${t}`)).toHaveText('PROVISIONED');
+    // The device's fingerprint as the owner sees it (from the server) is the one this browser holds.
+    const ownerSeesFp = ((await page.getByTestId(`door-fp-Door ${t}`).textContent()) ?? '').trim();
+    expect(ownerSeesFp).toMatch(/^[0-9A-F]{4}( [0-9A-F]{4}){3}$/);
+    await expect(page.getByTestId('door-this-fp')).toHaveText(ownerSeesFp);
+    const provisionBtn = page.getByRole('button', { name: `Provision Door ${t} with the ban list` });
+    await expect(provisionBtn).toBeDisabled();
+    await page.getByTestId(`door-confirm-Door ${t}`).check();
+    await provisionBtn.click();
+    await expect(page.getByTestId(`door-sealed-Door ${t}`)).toHaveText('GETS THE BAN LIST');
+    await expect(page.getByTestId('door-provision-notice')).toContainText(`Door ${t} now gets the ban list`);
 
     await page.getByRole('button', { name: /STAFF PIN$/ }).click();
     const staffPin = ((await page.getByTestId('door-staff-pin').textContent()) ?? '').trim();
@@ -87,11 +112,15 @@ test.describe('sealed tier and ban list (mock API)', () => {
     // The door: log in, find the guest, see the quiet warning; the reason needs the manager PIN.
     await page.getByRole('link', { name: 'OPEN THE DOOR' }).click();
     await expect(page).toHaveURL(/\/door$/);
+    // The door device shows the same fingerprint on its own screen (login screen and menu).
+    await expect(page.getByTestId('door-device-fp')).toContainText(ownerSeesFp);
     await enterPin(page, staffPin);
     const search = page.getByLabel('Search guests and tickets');
     await expect(search).toBeFocused();
+    await expect(page.getByTestId('door-ban-note')).toHaveCount(0);
     await page.getByRole('button', { name: 'Door menu' }).click();
     await expect(page.getByTestId('door-ban-status')).toHaveText('BAN LIST CHECKED ON THIS DEVICE');
+    await expect(page.getByTestId('door-menu-fp')).toContainText(ownerSeesFp);
     await page.getByRole('button', { name: 'Door menu' }).click();
 
     await search.fill(`jonas ${t}`);
@@ -104,24 +133,47 @@ test.describe('sealed tier and ban list (mock API)', () => {
     await page.getByRole('list', { name: 'Search results' }).getByRole('button').first().click();
     const card = page.getByRole('article', { name: `Viktor Brändt ${t}` });
     const warning = card.getByTestId('door-ban');
-    await expect(warning).toContainText('BAN LIST · POSSIBLE MATCH — ASK A MANAGER');
+    // Discreet: the guest may see the screen, so the card never says "ban list" before the reveal.
+    await expect(warning).toContainText('MANAGER CHECK');
+    await expect(card).not.toContainText(/ban list/i);
     await expect(warning).not.toContainText('Fight at the bar');
     await expect(card.getByTestId('door-admit')).toBeDisabled();
-    await expect(card.getByTestId('door-admit')).toHaveText('MANAGER PIN NEEDED');
+    await expect(card.getByTestId('door-admit')).toHaveText('ASK A MANAGER');
 
     await warning.getByTestId('door-ban-pin').fill('000000');
     await warning.getByTestId('door-ban-reveal').click();
-    await expect(warning.getByRole('alert')).toHaveText('Wrong manager PIN.');
+    await expect(warning.getByRole('alert')).toContainText('Wrong manager PIN.');
     await expect(warning.getByTestId('door-ban-pin')).toBeFocused();
     await warning.getByTestId('door-ban-pin').fill('246810');
     await warning.getByTestId('door-ban-reveal').click();
     await expect(warning.getByTestId('door-ban-reasons')).toContainText(`Viktor Brandt ${t} · Fight at the bar in March`);
     await expect(warning).not.toContainText('Stole a phone');
 
-    // The manager decides: admitting still works. (Not clicked: door.spec counts
-    // occupancy on this shared mock event while running in parallel.)
+    // The manager decides deliberately: ADMIT is a second tap, TURN AWAY and HIDE REASON are there.
+    // (ADMIT is not clicked: door.spec counts occupancy on this shared mock event in parallel.)
     await expect(card.getByTestId('door-admit')).toBeEnabled();
-    await expect(card.getByTestId('door-admit')).toHaveText(/ADMIT 1/);
+    await expect(card.getByTestId('door-admit')).toHaveText('MANAGER DECIDED? TAP TO ADMIT');
+    await warning.getByTestId('door-ban-hide').click();
+    await expect(warning.getByTestId('door-ban-reasons')).toHaveCount(0);
+    await expect(warning.getByTestId('door-ban-hidden')).toBeVisible();
+    await expect(card).not.toContainText('Fight at the bar');
+    await warning.getByTestId('door-ban-turn-away').click();
+    await expect(card).toHaveCount(0);
+    await expect(search).toBeVisible();
+
+    // Five wrong manager PINs pause SHOW REASON on this device, whichever card is open.
+    await search.fill(`viktor brandt ${t}`);
+    await page.getByRole('list', { name: 'Search results' }).getByRole('button').first().click();
+    for (const left of ['4 tries', '3 tries', '2 tries', '1 try']) {
+      await warning.getByTestId('door-ban-pin').fill('000000');
+      await warning.getByTestId('door-ban-reveal').click();
+      await expect(warning.getByRole('alert')).toContainText(`${left} left`);
+    }
+    await warning.getByTestId('door-ban-pin').fill('000000');
+    await warning.getByTestId('door-ban-reveal').click();
+    await expect(warning.getByTestId('door-ban-locked')).toContainText('Too many wrong PINs');
+    await expect(warning.getByTestId('door-ban-reveal')).toBeDisabled();
+    await expect(warning.getByTestId('door-ban-reveal')).toHaveText(/WAIT \d+ S/);
   });
 
   test('an owner who forgot the passphrase recovers with the kit, and the ban list still opens', async ({ page }) => {
@@ -161,6 +213,8 @@ test.describe('sealed tier and ban list (mock API)', () => {
     await section.getByRole('link', { name: 'OPEN THE BAN LIST →' }).click();
     await expect(page.getByTestId('ban-table')).toContainText(`Ole Sander ${t}`);
     await expect(page.getByTestId('ban-table')).toContainText('Threatened staff');
+    // Loaded from the server: who added it.
+    await expect(page.getByTestId('ban-added-by').first()).toHaveText('by Owner (you)');
 
     // The old passphrase no longer unlocks; the new one does.
     await page.getByTestId('ban-lock').click();
@@ -187,6 +241,8 @@ test.describe('sealed tier and ban list (mock API)', () => {
     const dev = await (await page.request.post('/api/v1/door/devices', { headers: CSRF, data: { label: `Spare ${t}`, public_key: pub } })).json() as { id: string };
     await page.getByRole('link', { name: 'ENCRYPTION SETTINGS' }).click();
     const access = section.getByTestId('sealed-access');
+    await expect(access.getByTestId(`sealed-fp-Spare ${t}`)).toHaveText(fingerprintOf(pub));
+    await access.getByTestId(`sealed-confirm-Spare ${t}`).check();
     await access.getByRole('button', { name: `Provision Spare ${t}` }).click();
     await expect(access.getByTestId('sealed-access-notice')).toContainText(`Spare ${t} can now open`);
     expect((await page.request.delete(`/api/v1/door/devices/${dev.id}`, { headers: CSRF })).status()).toBe(204);
@@ -220,11 +276,83 @@ test.describe('sealed tier and ban list (mock API)', () => {
     await section.getByRole('button', { name: 'CREATE MY KEY' }).click();
     await expect(section.getByTestId('sealed-notice')).toContainText('Your key is ready', { timeout: 30_000 });
     await expect(section.getByTestId('sealed-mfa')).toContainText('two-factor');
-    await expect(section.getByRole('link', { name: 'SET UP 2FA →' })).toHaveAttribute('href', '/account/security');
+    await expect(section.getByRole('link', { name: 'SET UP 2FA →' })).toHaveAttribute('href', /^\/account\/security\?next=/);
     await expect(section.getByTestId('sealed-setup-start')).toBeDisabled();
     // The ban list page explains instead of showing anything.
     await page.goto('/ban-list');
     await hydrated(page);
     await expect(page.getByTestId('ban-not-ready')).toContainText('Set up sealed data for the collective first');
+  });
+
+  test('the locked ban list offers owners RECOVER WITH KIT; a failed remove is an alert; the list says who added an entry', async ({ page }) => {
+    const t = tag();
+    page.on('dialog', d => void d.accept());
+    await isolate(page);
+    await setUpSealed(page);
+    await page.getByTestId('sealed-section').getByRole('link', { name: 'OPEN THE BAN LIST →' }).click();
+    await addBan(page, `Rafa Lindqvist ${t}`, 'Spiked a drink');
+    await expect(page.getByTestId(`ban-table`).getByTestId('ban-added-by')).toHaveText('by You');
+
+    // A remove that fails keeps the entry and says so in an alert box.
+    await page.route('**/api/v1/ban-list/*', route => (route.request().method() === 'DELETE'
+      ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'internal' }) })
+      : route.continue()));
+    await page.getByRole('button', { name: `Remove Rafa Lindqvist ${t}` }).click();
+    const listError = page.getByTestId('ban-list-error');
+    await expect(listError).toHaveText('Could not remove. Try again.');
+    await expect(listError).toHaveAttribute('role', 'alert');
+    await expect(listError).toHaveClass(/accent-bar-failed/);
+    await expect(page.getByTestId('ban-table')).toContainText(`Rafa Lindqvist ${t}`);
+    await page.unroute('**/api/v1/ban-list/*');
+
+    // ADD waits while another row is being edited.
+    await page.getByRole('button', { name: `Edit Rafa Lindqvist ${t}` }).click();
+    await expect(page.getByTestId('ban-add')).toBeDisabled();
+    await expect(page.getByTestId('ban-form')).toContainText('KEEP ·');
+    await page.getByTestId('ban-form').getByRole('button', { name: 'CANCEL' }).click();
+    await expect(page.getByTestId('ban-add')).toBeEnabled();
+
+    // Locked (a reload forgets the keys): owners get a way back with the kit.
+    await page.reload();
+    await hydrated(page);
+    await expect(page.getByTestId('sealed-unlock')).toBeVisible();
+    await page.getByTestId('ban-recover-link').click();
+    await expect(page).toHaveURL(/\/settings\?recover=1#sealed$/);
+    await expect(page.getByTestId('sealed-recover')).toBeVisible();
+  });
+
+  test('the ban list form warns about one-word names and lists the GDPR hint', async ({ page }) => {
+    await isolate(page);
+    await setUpSealed(page);
+    await page.getByTestId('sealed-section').getByRole('link', { name: 'OPEN THE BAN LIST →' }).click();
+    await page.getByTestId('ban-add').click();
+    const form = page.getByTestId('ban-form');
+    await expect(form).toContainText('Use full name (first and last). One-word names match too many guests.');
+    await expect(form.getByTestId('ban-gdpr-hint')).toHaveText('The person can ask what you hold about them. Write only what you\'d be comfortable showing them.');
+    await form.getByTestId('ban-name').fill('Ole');
+    await expect(form.getByTestId('ban-name-one-word')).toBeVisible();
+    await form.getByTestId('ban-name').fill('Ole Petersen');
+    await expect(form.getByTestId('ban-name-one-word')).toHaveCount(0);
+    // Esc with something typed asks first; dismissing keeps the form.
+    page.once('dialog', d => void d.dismiss());
+    await form.getByTestId('ban-name').press('Escape');
+    await expect(form).toBeVisible();
+    page.once('dialog', d => void d.accept());
+    await form.getByTestId('ban-name').press('Escape');
+    await expect(form).toHaveCount(0);
+  });
+
+  test('a single sign-on account is told sealed data needs a local KlubHub account', async ({ page }) => {
+    await isolate(page);
+    await page.context().addCookies([{ name: 'kh_mock_sso', value: '1', domain: 'localhost', path: '/' }]);
+    await page.goto('/settings#sealed');
+    await hydrated(page);
+    const section = page.getByTestId('sealed-section');
+    await expect(section.getByTestId('sealed-local-required')).toContainText('Sealed data needs a local KlubHub account for now');
+    await expect(section.getByTestId('sealed-create')).toHaveCount(0);
+    await expect(section.getByRole('alert')).toHaveCount(0);
+    await page.goto('/ban-list');
+    await hydrated(page);
+    await expect(page.getByTestId('ban-local-required')).toBeVisible();
   });
 });

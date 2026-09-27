@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
 
@@ -79,3 +80,9 @@ export async function addBan(page: Page, name: string, reason: string) {
 }
 
 export const overflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
+/** The fingerprint the app shows for a base64url X25519 public key: SHA-256, first 8 bytes, "3F9A 01C2 77B0 E4D1". */
+export function fingerprintOf(publicKey: string): string {
+  const hex = createHash('sha256').update(Buffer.from(publicKey, 'base64url')).digest('hex').slice(0, 16).toUpperCase();
+  return hex.replace(/(.{4})(?=.)/g, '$1 ');
+}

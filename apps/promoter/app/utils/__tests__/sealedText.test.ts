@@ -24,11 +24,16 @@ describe('sealed copy', () => {
     expect(sealedErrorText({ error: 'unreadable_entries', count: 1 })).toMatch(/1 ban list entry does not open/)
     expect(sealedErrorText({ error: 'unreadable_entries', count: 3 })).toMatch(/3 ban list entries do not open/)
     expect(sealedErrorText({ error: 'public_key_mismatch' })).toMatch(/recovering with the kit/)
-    expect(sealedErrorText({ error: 'something_new' })).toBe('Something went wrong. Try again.')
+    expect(sealedErrorText({ error: 'something_new' })).toBe('Something went wrong (something_new). Try again, or tell whoever runs your KlubHub this code.')
+    expect(sealedErrorText({ error: '<b>x</b>' })).toContain('(bxb)')
+    expect(sealedErrorText({ error: 'local_identity_required' })).toContain('local KlubHub account')
     expect(sealedErrorText(null)).toBe('')
     expect(banErrorText({ error: 'key_version_stale' })).toMatch(/RELOAD AND RETRY/)
     expect(banErrorText({ error: 'invalid', field: 'expires_at' })).toMatch(/3 years/)
     expect(banErrorText({ error: 'ban_entry_exists' })).toMatch(/already saved/)
+    expect(banErrorText({ error: 'invalid', field: 'name' })).toBe('Check the highlighted fields.')
+    expect(banErrorText({ error: 'invalid', field: 'entry_sealed' })).toBe('The server refused this entry (entry_sealed). Try again.')
+    expect(banErrorText({ error: 'teapot' })).toBe('Could not save (teapot). Try again.')
   })
 
   it('formats KDF progress', () => {

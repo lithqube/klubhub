@@ -40,6 +40,8 @@ const formError = ref<ApiError | null>(null)
 const stale = ref<{ retry: () => Promise<void> } | null>(null)
 const notice = ref('')
 const noticeEl = ref<HTMLElement | null>(null)
+/** A failed REMOVE (the list stays as it was). */
+const listError = ref('')
 const addBtn = ref<HTMLButtonElement | null>(null)
 
 function say(text: string) {
@@ -51,6 +53,7 @@ function open(e: BanEntry | 'new') {
   formError.value = null
   stale.value = null
   notice.value = ''
+  listError.value = ''
   editing.value = e
 }
 
@@ -99,16 +102,21 @@ async function retryStale() {
 async function remove(e: BanEntry) {
   const name = e.plain?.name ?? 'this unreadable entry'
   if (!window.confirm(`Remove ${name} from the ban list? Door devices stop matching it after their next login.`)) return
+  listError.value = ''
   try {
     await ban.remove(e.id)
     say(`${name} removed.`)
   } catch (err) {
-    say(banErrorText(err as ApiError))
+    const code = (err as ApiError).error
+    notice.value = ''
+    listError.value = code === 'no_role_grant' || code === 'forbidden' || code === 'locked' ? banErrorText(err as ApiError) : 'Could not remove. Try again.'
   }
 }
 
 const date = (iso: string) => (iso ? shortDate(iso, tz) : '—')
 const soon = (iso: string) => Date.parse(iso) - Date.now() < 14 * 86_400_000
+/** ADD waits while another row is being edited (one form at a time). */
+const editingRow = computed(() => editing.value !== null && editing.value !== 'new')
 </script>
 
 <template>
@@ -128,7 +136,7 @@ const soon = (iso: string) => Date.parse(iso) - Date.now() < 14 * 86_400_000
           <button type="button" class="btn-hud btn-hud-ghost act" @click="sealed.fetchStatus()">RETRY</button>
         </p>
 
-        <section v-else-if="state !== 'locked' && state !== 'unlocked'" class="glass panel" aria-labelledby="ban-setup-h" data-testid="ban-not-ready">
+        <section v-else-if="state === 'no_key' || state === 'not_setup' || state === 'no_access'" class="glass panel" aria-labelledby="ban-setup-h" data-testid="ban-not-ready">
           <h2 id="ban-setup-h" class="lbl"><ShieldBan class="ic" aria-hidden="true" /> THE BAN LIST IS SEALED</h2>
           <p class="txt">
             <template v-if="state === 'no_key'">Create your personal key first (a sealed passphrase), in Settings.</template>
@@ -138,10 +146,20 @@ const soon = (iso: string) => Date.parse(iso) - Date.now() < 14 * 86_400_000
           <NuxtLink to="/settings#sealed" class="btn-hud btn-hud-cta act" style="justify-self:start;">GO TO ENCRYPTION SETTINGS</NuxtLink>
         </section>
 
+        <section v-else-if="state === 'local_required'" class="glass panel" aria-labelledby="ban-local-h" data-testid="ban-local-required">
+          <h2 id="ban-local-h" class="lbl"><ShieldBan class="ic" aria-hidden="true" /> THE BAN LIST IS SEALED</h2>
+          <p class="txt">Sealed data needs a local KlubHub account for now. You signed in with single sign-on, so this account can't open the ban list yet.</p>
+        </section>
+
         <SettingsSealedUnlock
           v-else-if="state === 'locked'" title="UNLOCK THE BAN LIST"
           why="The ban list is encrypted. Your sealed passphrase opens it in this browser; it locks again after 30 minutes without activity."
-        />
+        >
+          <p v-if="isOwner" class="hint">
+            Forgot your passphrase?
+            <NuxtLink to="/settings?recover=1#sealed" class="linkbtn" data-testid="ban-recover-link">RECOVER WITH KIT</NuxtLink>
+          </p>
+        </SettingsSealedUnlock>
 
         <template v-else>
           <p v-if="notice" ref="noticeEl" tabindex="-1" role="status" class="ok" data-testid="ban-notice">{{ notice }}</p>
@@ -152,7 +170,10 @@ const soon = (iso: string) => Date.parse(iso) - Date.now() < 14 * 86_400_000
               <label :for="`${uid}-q`" class="sr-only">Search the ban list</label>
               <input :id="`${uid}-q`" v-model="q" class="hud-input" type="search" placeholder="Search name or email" autocomplete="off" data-testid="ban-search">
             </div>
-            <button ref="addBtn" type="button" class="btn-hud btn-hud-cta act" :aria-expanded="editing === 'new'" data-testid="ban-add" @click="open('new')">
+            <button
+              ref="addBtn" type="button" class="btn-hud btn-hud-cta act" :aria-expanded="editing === 'new'" :disabled="editingRow"
+              :title="editingRow ? 'Save or cancel the entry you are editing first' : undefined" data-testid="ban-add" @click="open('new')"
+            >
               <Plus class="ic" aria-hidden="true" /> ADD ENTRY
             </button>
             <button type="button" class="btn-hud btn-hud-ghost act" data-testid="ban-lock" @click="sealed.lock('manual')"><Lock class="ic" aria-hidden="true" /> LOCK</button>
@@ -167,6 +188,8 @@ const soon = (iso: string) => Date.parse(iso) - Date.now() < 14 * 86_400_000
             v-if="editing === 'new'" :busy="busy" :server-error="formError" @save="save" @cancel="close"
           />
           <p v-if="editing === 'new' && formError && !stale" role="alert" class="err" data-testid="ban-error">{{ banErrorText(formError) }}</p>
+
+          <p v-if="listError" role="alert" class="glass box accent-bar-failed" data-testid="ban-list-error">{{ listError }}</p>
 
           <p v-if="error" role="alert" class="glass box accent-bar-failed">
             COULDN'T LOAD THE BAN LIST.
@@ -204,8 +227,12 @@ const soon = (iso: string) => Date.parse(iso) - Date.now() < 14 * 86_400_000
                       <template v-if="e.plain">{{ e.plain.reason }}<span v-if="e.plain.note" class="sub">{{ e.plain.note }}</span></template>
                       <span v-else class="sub">Sealed under another key.</span>
                     </td>
-                    <td data-label="EXPIRES" :class="{ soon: soon(e.expires_at) }">{{ date(e.expires_at) }}</td>
-                    <td data-label="ADDED">{{ date(e.created_at) }}</td>
+                    <td data-label="EXPIRES" :class="{ soon: soon(e.expires_at) }">
+                      {{ date(e.expires_at) }}<span v-if="soon(e.expires_at)" class="soon-tag" data-testid="ban-expires-soon"> · EXPIRES SOON</span>
+                    </td>
+                    <td data-label="ADDED">
+                      {{ date(e.created_at) }}<span v-if="e.created_by_name" class="sub" data-testid="ban-added-by">by {{ e.created_by_name }}</span>
+                    </td>
                     <td class="acts">
                       <button v-if="e.plain" type="button" class="btn-hud btn-hud-ghost act" :aria-label="`Edit ${e.plain.name}`" @click="open(e)">EDIT</button>
                       <button type="button" class="btn-hud btn-hud-ghost act danger" :aria-label="`Remove ${e.plain?.name ?? 'unreadable entry'}`" @click="remove(e)">REMOVE</button>
@@ -258,6 +285,17 @@ const soon = (iso: string) => Date.parse(iso) - Date.now() < 14 * 86_400_000
 .sub { display: block; font-size: 12px; font-weight: 400; color: var(--color-on-surface-variant); }
 .unread { font-family: var(--font-terminal); font-size: 11px; color: var(--color-status-archived); }
 .soon { color: var(--color-status-archived); }
+.soon-tag { font-family: var(--font-terminal); font-size: 11px; letter-spacing: .05em; font-weight: 600; }
+.linkbtn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  font-family: var(--font-terminal);
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--color-primary);
+}
 .acts { white-space: nowrap; text-align: right; }
 .acts .act + .act { margin-left: 4px; }
 .danger { color: var(--color-error); }

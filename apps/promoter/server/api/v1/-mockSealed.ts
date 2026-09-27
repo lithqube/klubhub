@@ -17,6 +17,8 @@ import { doorDevices, mockAuthAt, mockMfa } from './-mockDb'
 type H3Event = Parameters<typeof getCookie>[0]
 
 export const SEALED_NS_COOKIE = 'kh_mock_sealed'
+/** Simulates a single sign-on (Zitadel) session: the key routes answer 403 local_identity_required, as the API. */
+export const SSO_COOKIE = 'kh_mock_sso'
 const STEP_UP_MS = 15 * 60_000
 const DAY = 86_400_000
 /** The mock session's user (auth/me.get.ts): sub "local:<uuid>". */
@@ -105,7 +107,12 @@ function fp(pub: string): string {
 
 // ---------------------------------------------------------------- /keys/me
 
+function requireLocal(event: H3Event) {
+  if (getCookie(event, SSO_COOKIE) === '1') throw err(403, 'local_identity_required')
+}
+
 export function getMemberKey(event: H3Event): MemberKey {
+  requireLocal(event)
   const k = nsOf(event).memberKeys.get(MOCK_USER_ID)
   if (!k) throw err(404, 'no_member_key')
   return { public_key: k.public_key, private_sealed: k.private_sealed, kdf: k.kdf }
@@ -126,6 +133,7 @@ function validKdf(k: Partial<KdfParams> | undefined): KdfParams {
  * public_key_mismatch — as the API.
  */
 export function putMemberKey(event: H3Event, b: Partial<MemberKey>): { key: MemberKey, created: boolean } {
+  requireLocal(event)
   const ns = nsOf(event)
   const pub = bytes(b?.public_key, 'public_key', { eq: 32 })
   const priv = bytes(b?.private_sealed, 'private_sealed', { min: 1 + 12 + 32 + 16, v1: true })
@@ -292,11 +300,17 @@ export function removeMember(event: H3Event, userId: string) {
 // ---------------------------------------------------------------- ban list
 
 const liveBan = (ns: Ns) => ns.ban.filter(e => Date.parse(e.expires_at) > Date.now())
-const view = ({ created_by: _c, ...e }: BanRow): BanRecord => e
+/** Write responses: no name (as the API). */
+const view = ({ created_by: _c, ...e }: BanRow): BanRecord => ({ ...e, created_by_name: null })
+/** GET /ban-list: who added each entry (the member's display name, null when gone). */
+const listView = (ns: Ns, row: BanRow): BanRecord => ({
+  ...view(row),
+  created_by_name: ns.members.find(m => `local:${m.user_id}` === row.created_by)?.name ?? null,
+})
 
 export function banList(event: H3Event): BanListResponse {
   const ns = nsOf(event)
-  return { key_version: active(ns)?.version ?? null, entries: liveBan(ns).map(view) }
+  return { key_version: active(ns)?.version ?? null, entries: liveBan(ns).map(e => listView(ns, e)) }
 }
 
 function checkBan(ns: Ns, b: Partial<BanInput>) {

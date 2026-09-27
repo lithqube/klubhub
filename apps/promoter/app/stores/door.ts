@@ -9,8 +9,10 @@ import type { Me } from '~/types/session'
 import { apiFetch, toApiError } from '~/utils/api'
 import { type DoorBanEntry, openDoorBan } from '~/utils/doorBan'
 import { DEVICE_DB, DeviceKeyVault, DoorVault, idbKV, type KV, memoryKV } from '~/utils/doorDb'
+import { freshGuard, revealFailed, type RevealGuard, revealSucceeded } from '~/utils/doorReveal'
 import { b64url, wipe as wipeBytes } from '~/utils/sealed/bytes'
-import { x25519Keypair } from '~/utils/sealed/seal'
+import { keyFingerprint } from '~/utils/sealed/keys'
+import { x25519Keypair, x25519Public } from '~/utils/sealed/seal'
 import { verifyManagerPin } from '~/utils/doorPin'
 import { buildIndex, type SearchEntry } from '~/utils/doorSearch'
 import {
@@ -101,6 +103,10 @@ export const useDoorStore = defineStore('door', () => {
   /** Decrypted ban list entries, in memory only (the bundle keeps them encrypted in the vault). */
   const ban = shallowRef<DoorBanEntry[] | null>(null)
   const banStatus = ref<DoorBanStatus>('none')
+  /** This device's key fingerprint ("3F9A 01C2 …"), for the owner to compare before PROVISION; '' without a key. */
+  const deviceFp = ref('')
+  /** Wrong manager PINs at the reveal, per device (not per card). */
+  const revealGuard = ref<RevealGuard>(freshGuard())
 
   // Staff side (event DOOR tab).
   const devices = ref<DoorDevice[]>([])
@@ -163,6 +169,7 @@ export const useDoorStore = defineStore('door', () => {
   /** Read the device record and reopen an existing door session (offline reloads). */
   async function init(): Promise<void> {
     device.value = readDevice()
+    await loadDeviceFp()
     if (phase.value === 'ready' && bundle.value && bundle.value.event.id === device.value?.event.id) return
     if (!device.value) {
       phase.value = 'unprepared'
@@ -282,6 +289,25 @@ export const useDoorStore = defineStore('door', () => {
     } finally {
       wipeBytes(priv)
     }
+  }
+
+  /** The fingerprint of this device's public key (derived from the private key in the device vault). Never throws. */
+  async function loadDeviceFp(): Promise<string> {
+    const d = device.value
+    const priv = d ? await theKeyVault().load(d.id).catch(() => null) : null
+    try {
+      deviceFp.value = priv ? keyFingerprint(x25519Public(priv)) : ''
+    } catch {
+      deviceFp.value = ''
+    } finally {
+      wipeBytes(priv)
+    }
+    return deviceFp.value
+  }
+
+  /** A manager PIN typed at a card's SHOW REASON: counts wrong ones towards the lockout. */
+  function revealAttempt(ok: boolean, now = Date.now()) {
+    revealGuard.value = ok ? revealSucceeded() : revealFailed(revealGuard.value, now)
   }
 
   /** Drop everything cached on this device (the device record stays). */
@@ -538,6 +564,7 @@ export const useDoorStore = defineStore('door', () => {
     if (org) rec.org_id = org
     writeDevice(rec)
     device.value = rec
+    await loadDeviceFp()
     await fetchDevices().catch(() => undefined)
     return rec
   }
@@ -554,6 +581,7 @@ export const useDoorStore = defineStore('door', () => {
     writeDevice(null)
     device.value = null
     await theKeyVault().clear().catch(() => undefined)
+    deviceFp.value = ''
     await wipe('logout')
     wipedBecause.value = null
   }
@@ -585,9 +613,9 @@ export const useDoorStore = defineStore('door', () => {
   }
 
   return {
-    device, phase, bundle, queue, adds, journal, rejections, syncing, lastSyncAt, offline, syncError, sessionEnded, wipedBecause, ban, banStatus,
+    device, phase, bundle, queue, adds, journal, rejections, syncing, lastSyncAt, offline, syncError, sessionEnded, wipedBecause, ban, banStatus, deviceFp, revealGuard,
     devices, pinStatus, checkins, counters, occ, queued, recent, index,
     init, login, downloadBundle, wipe, logout, checkExpiry, checkIn, counter, undo, addGuest, dismissRejections, sync, startLoop, stopLoop,
-    loadDevice, registerDevice, assignEvent, forgetDevice, hasDeviceKey, fetchDevices, revokeDevice, setPin, fetchPinStatus,
+    loadDevice, registerDevice, assignEvent, forgetDevice, hasDeviceKey, loadDeviceFp, revealAttempt, fetchDevices, revokeDevice, setPin, fetchPinStatus,
   }
 })

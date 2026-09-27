@@ -22,7 +22,10 @@ func scanBan(r pgx.Row) (BanEntry, error) {
 	return e, err
 }
 
-// BanList returns the active key version and the unexpired entries.
+// BanList returns the active key version and the unexpired entries, each
+// with the display name of the staff member who added it (created_by_name;
+// null when that account is gone or its name does not open). The name is
+// opened with the tenant's envelope key, like the recipients list.
 func (s *Service) BanList(ctx context.Context) (BanList, error) {
 	out := BanList{Entries: []BanEntry{}}
 	tenant, err := tenantOf(ctx)
@@ -33,13 +36,45 @@ func (s *Service) BanList(ctx context.Context) (BanList, error) {
 		if out.KeyVersion, err = activeVersion(ctx, tx); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT `+banColumns+` FROM ban_entries WHERE expires_at > $1 ORDER BY created_at, id`, s.clock())
+		rows, err := tx.Query(ctx, `SELECT b.id, b.key_version, b.entry_sealed, b.expires_at, b.created_at, b.updated_at, u.id, u.display_name_enc
+		  FROM ban_entries b LEFT JOIN users u ON u.id = b.created_by
+		  WHERE b.expires_at > $1 ORDER BY b.created_at, b.id`, s.clock())
 		if err != nil {
 			return err
 		}
-		list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (BanEntry, error) { return scanBan(r) })
-		out.Entries = append(out.Entries, list...)
-		return err
+		type banRow struct {
+			BanEntry
+			by    *uuid.UUID
+			nameE []byte
+		}
+		list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (banRow, error) {
+			var e banRow
+			var blob []byte
+			err := r.Scan(&e.ID, &e.KeyVersion, &blob, &e.ExpiresAt, &e.CreatedAt, &e.UpdatedAt, &e.by, &e.nameE)
+			e.EntrySealed = Encode(blob)
+			e.ExpiresAt, e.CreatedAt, e.UpdatedAt = e.ExpiresAt.UTC(), e.CreatedAt.UTC(), e.UpdatedAt.UTC()
+			return e, err
+		})
+		if err != nil {
+			return err
+		}
+		names := map[uuid.UUID]*string{}
+		for _, e := range list {
+			if e.by != nil {
+				name, seen := names[*e.by]
+				if !seen {
+					// A name that does not open is left out rather than
+					// failing the list the door and the managers rely on.
+					if n, err := s.open(ctx, tx, tenant, "display_name_enc", *e.by, e.nameE); err == nil && n != "" {
+						name = &n
+					}
+					names[*e.by] = name
+				}
+				e.CreatedByName = name
+			}
+			out.Entries = append(out.Entries, e.BanEntry)
+		}
+		return nil
 	})
 	return out, err
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -56,6 +57,62 @@ func TestDecodePublicKey(t *testing.T) {
 	wantInvalid(t, func() error { _, err := DecodePublicKey("pk", b64(append(pub(), 1))); return err }(), "pk")
 	wantInvalid(t, func() error { _, err := DecodePublicKey("pk", b64(make([]byte, 32))); return err }(), "pk")
 	wantInvalid(t, func() error { _, err := DecodePublicKey("pk", "not base64!"); return err }(), "pk")
+}
+
+// le32 encodes u as a 32-byte little-endian X25519 u-coordinate.
+func le32(t *testing.T, u *big.Int) []byte {
+	t.Helper()
+	be := u.FillBytes(make([]byte, 32))
+	out := make([]byte, 32)
+	for i, c := range be {
+		out[31-i] = c
+	}
+	return out
+}
+
+func TestDecodePublicKeySmallOrderAndNonCanonical(t *testing.T) {
+	dec := func(s string) *big.Int {
+		v, _ := new(big.Int).SetString(s, 10)
+		return v
+	}
+	p := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
+	add := func(a *big.Int, n int64) *big.Int { return new(big.Int).Add(a, big.NewInt(n)) }
+	topBit := pub()
+	topBit[31] |= 0x80
+	cases := []struct {
+		name    string
+		key     []byte
+		problem string // "" = accepted
+	}{
+		{"zero", le32(t, big.NewInt(0)), "low-order key"},
+		{"one", le32(t, big.NewInt(1)), "low-order key"},
+		{"p-1", le32(t, add(p, -1)), "low-order key"},
+		{"order 8 (a)", le32(t, dec("325606250916557431795983626356110631294008115727848805560023387167927233504")), "low-order key"},
+		{"order 8 (b)", le32(t, dec("39382357235489614581723060781553021112529911719440698176882885853963445705823")), "low-order key"},
+		{"p (alias of 0)", le32(t, p), "non-canonical key (u >= p)"},
+		{"p+1 (alias of 1)", le32(t, add(p, 1)), "non-canonical key (u >= p)"},
+		{"2^255-1", le32(t, add(p, 18)), "non-canonical key (u >= p)"},
+		{"top bit set", topBit, "non-canonical key (top bit set)"},
+		{"top bit on zero", func() []byte { b := make([]byte, 32); b[31] = 0x80; return b }(), "non-canonical key (top bit set)"},
+		{"base point 9", le32(t, big.NewInt(9)), ""},
+		{"p-2", le32(t, add(p, -2)), ""},
+		{"ordinary", pub(), ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := DecodePublicKey("pk", b64(c.key))
+			if c.problem == "" {
+				if err != nil || !bytes.Equal(got, c.key) {
+					t.Fatalf("want accepted, got %v", err)
+				}
+				return
+			}
+			var inv *InvalidError
+			if !errors.As(err, &inv) || inv.Field != "pk" || inv.Problem != c.problem {
+				t.Fatalf("want invalid pk %q, got %v", c.problem, err)
+			}
+		})
+	}
 }
 
 func TestBlobBounds(t *testing.T) {

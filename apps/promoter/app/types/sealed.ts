@@ -117,6 +117,8 @@ export interface BanRecord {
   expires_at: string
   created_at: string
   updated_at: string
+  /** Who added it (the staff member's display name; GET /ban-list only, null when unknown). */
+  created_by_name?: string | null
 }
 
 /** GET /api/v1/ban-list (expired entries excluded). */
@@ -140,6 +142,8 @@ export interface BanEntry {
   expires_at: string
   created_at: string
   updated_at: string
+  /** Who added it; "You" for an entry added in this tab (the write response carries no name). */
+  created_by_name: string | null
   plain: BanPlain | null
 }
 

@@ -3,7 +3,7 @@ import type { BanEntry, KdfParams } from '~/types/sealed'
 import { b64url, concat, fromB64url, randomBytes, utf8 } from '../sealed/bytes'
 import { argon2InThread, deriveKey, KDF_DEFAULTS, newKdfParams, validKdf } from '../sealed/kdf'
 import {
-  banAad, base32, createMemberKey, fingerprint, formatFingerprint, fromBase32, generateOsk, generateRecoveryKit, groupMatches, kitFileText,
+  banAad, base32, createMemberKey, fingerprint, formatFingerprint, keyFingerprint, fromBase32, generateOsk, generateRecoveryKit, groupMatches, kitFileText,
   kitGroups, memberIdCandidates, normaliseKit, oskAad, parseKit, passphraseStrength, pickChallenge, recoveryKeypair, unlockMemberKey, unwrapOsk,
   wrapOsk,
 } from '../sealed/keys'
@@ -213,6 +213,8 @@ describe('recovery kit', () => {
     expect(fingerprint(a.publicKey)).toBe(fingerprint(b.publicKey))
     expect((await recoveryKeypair(randomBytes(32))).publicKey).not.toEqual(a.publicKey)
     expect(formatFingerprint('3f9a01c277b0e4d1')).toBe('3F9A 01C2 77B0 E4D1')
+    expect(formatFingerprint(null)).toBe('')
+    expect(formatFingerprint(undefined)).toBe('')
   })
 
   it('opens the OSK wrapped to the recovery key after re-deriving it from the typed kit', async () => {
@@ -306,11 +308,40 @@ describe('ban entries', () => {
   })
 
   it('searches names and emails accent-folded, prefix per token', () => {
-    const e = (id: string, name: string, email?: string): BanEntry => ({ id, key_version: 1, expires_at: '', created_at: '', updated_at: '', plain: { name, reason: 'r', email } })
+    const e = (id: string, name: string, email?: string): BanEntry => ({ id, key_version: 1, expires_at: '', created_at: '', updated_at: '', created_by_name: null, plain: { name, reason: 'r', email } })
     const list = [e('1', 'Zoë Brändt'), e('2', 'Max Power', 'max@power.example'), { ...e('3', 'x'), plain: null }]
     expect(searchBan(list, 'zoe bra').map(x => x.id)).toEqual(['1'])
     expect(searchBan(list, 'power.ex').map(x => x.id)).toEqual(['2'])
     expect(searchBan(list, '').map(x => x.id)).toEqual(['1', '2', '3'])
     expect(sortBan(list).map(x => x.id)).toEqual(['2', '1', '3'])
+  })
+})
+
+describe('keyFingerprint (member and door device keys)', () => {
+  it('is the first 8 bytes of SHA-256 of the key, upper-case hex in 4 groups of 4', async () => {
+    const { publicKey } = await recoveryKeypair(new Uint8Array(32).fill(3))
+    const fp = keyFingerprint(publicKey)
+    expect(fp).toMatch(/^[0-9A-F]{4} [0-9A-F]{4} [0-9A-F]{4} [0-9A-F]{4}$/)
+    expect(fp).toBe(formatFingerprint(fingerprint(publicKey)))
+    expect(fp.replace(/ /g, '').toLowerCase()).toBe(fingerprint(publicKey))
+  })
+
+  it('gives the same text for the base64url and the byte form (what the owner and the member see)', async () => {
+    const { publicKey } = await recoveryKeypair(new Uint8Array(32).fill(4))
+    expect(keyFingerprint(b64url(publicKey))).toBe(keyFingerprint(publicKey))
+  })
+
+  it('is empty for anything that is not a 32-byte key', () => {
+    expect(keyFingerprint(null)).toBe('')
+    expect(keyFingerprint('')).toBe('')
+    expect(keyFingerprint('not base64!')).toBe('')
+    expect(keyFingerprint(new Uint8Array(31))).toBe('')
+    expect(keyFingerprint(b64url(new Uint8Array(33)))).toBe('')
+  })
+
+  it('differs for different keys', async () => {
+    const a = await recoveryKeypair(new Uint8Array(32).fill(5))
+    const b = await recoveryKeypair(new Uint8Array(32).fill(6))
+    expect(keyFingerprint(a.publicKey)).not.toBe(keyFingerprint(b.publicKey))
   })
 })

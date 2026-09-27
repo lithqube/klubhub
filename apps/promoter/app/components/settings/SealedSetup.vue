@@ -43,6 +43,19 @@ watch(step, (s) => {
   if (s !== 'check') nextTick(() => heading.value?.focus())
 })
 onBeforeUnmount(() => store.cancelSetup())
+// Locking (idle, sign-out) throws the draft away: start again from the intro, not on an empty step.
+watch(setup, (d) => {
+  if (!d && step.value !== 'intro') {
+    step.value = 'intro'
+    error.value = null
+  }
+})
+const reloadable = computed(() => error.value?.error === 'already_setup' || error.value?.error === 'conflict')
+async function reload() {
+  error.value = null
+  store.cancelSetup()
+  await store.fetchStatus()
+}
 
 async function start() {
   error.value = null
@@ -74,7 +87,11 @@ function toCheck() {
 }
 
 function cancel() {
-  if (!window.confirm('Stop the setup? This kit is thrown away; you\'ll get a new one when you start again.')) return
+  const fp = formatFingerprint(setup.value?.fingerprint)
+  const msg = downloaded.value
+    ? `Stop the setup? The kit you downloaded (fingerprint ${fp}) will never work: delete that file. You'll get a new kit when you start again.`
+    : 'Stop the setup? This kit is thrown away; you\'ll get a new one when you start again.'
+  if (!window.confirm(msg)) return
   store.cancelSetup()
   error.value = null
   step.value = 'intro'
@@ -97,13 +114,17 @@ const groupNo = (i: number) => i + 1
 <template>
   <section class="glass panel" :aria-labelledby="`${uid}-h`" data-testid="sealed-setup">
     <template v-if="step === 'intro'">
-      <h3 :id="`${uid}-h`" ref="heading" tabindex="-1" class="lbl">SET UP SEALED DATA · STEP 1 OF 3</h3>
+      <h3 :id="`${uid}-h`" ref="heading" tabindex="-1" class="lbl">SET UP SEALED DATA · STEP 2 OF 4</h3>
       <p class="txt">
         This creates your collective's key for sealed data. The ban list is encrypted with it in the browser; the server only stores ciphertext
         and can't read it. You then give access to other members and door devices.
       </p>
       <p class="txt">
         You also get a <strong>recovery kit</strong>: the only way back in if every owner forgets their passphrase. It is shown once. Keep it offline.
+      </p>
+      <p class="txt">
+        If every owner forgets their passphrase and the kit is lost, nobody — not even KlubHub — can open the ban list again. You'd start a new,
+        empty one. Events, guests and tickets are not affected.
       </p>
       <SettingsSealedSecurity v-if="block" :kind="block" :next="next" action="Setting up sealed data" />
       <div class="row">
@@ -112,10 +133,10 @@ const groupNo = (i: number) => i + 1
     </template>
 
     <template v-else-if="step === 'kit' && setup">
-      <h3 :id="`${uid}-h`" ref="heading" tabindex="-1" class="lbl">RECOVERY KIT · STEP 2 OF 3 · SHOWN ONCE</h3>
+      <h3 :id="`${uid}-h`" ref="heading" tabindex="-1" class="lbl">RECOVERY KIT · STEP 3 OF 4 · SHOWN ONCE</h3>
       <p class="txt">
-        Download it or write it down now, then store it offline (printed, or in a password manager). Anyone with it can read the ban list.
-        KlubHub cannot show it again or recover it for you.
+        Download it or write it down now, then store it away from this computer — printed in a drawer or safe, or in a password manager.
+        Anyone with it can read the ban list. KlubHub cannot show it again or recover it for you.
       </p>
       <ol class="kit" aria-label="Recovery kit groups" data-testid="sealed-kit">
         <li v-for="(g, i) in setup.groups" :key="i" :data-testid="`kit-group-${groupNo(i)}`">
@@ -143,7 +164,7 @@ const groupNo = (i: number) => i + 1
     </template>
 
     <form v-else-if="step === 'check' && setup" novalidate class="form" @submit.prevent="finish">
-      <h3 :id="`${uid}-h`" ref="heading" tabindex="-1" class="lbl">CHECK THE KIT · STEP 3 OF 3</h3>
+      <h3 :id="`${uid}-h`" ref="heading" tabindex="-1" class="lbl">CHECK THE KIT · STEP 4 OF 4</h3>
       <p class="txt">From your stored kit (not from memory of this screen), type these two groups. Case, spaces and dashes don't matter.</p>
       <div class="answers">
         <div v-for="(pos, k) in setup.challenge" :key="pos" class="f">
@@ -158,6 +179,7 @@ const groupNo = (i: number) => i + 1
       <SettingsSealedSecurity v-if="refusal" :kind="refusal" :next="next" action="Setting up sealed data" />
       <p v-else-if="error" role="alert" class="err" data-testid="sealed-setup-error">
         {{ sealedErrorText(error) }}
+        <button v-if="reloadable" type="button" class="btn-hud btn-hud-ghost act" data-testid="sealed-setup-reload" @click="reload">RELOAD</button>
       </p>
       <p v-if="refusal" class="hint">After signing in again, start the setup again: you'll get a new kit (this one is not saved).</p>
       <div class="row">
@@ -178,7 +200,7 @@ h3.lbl:focus { outline: none; }
 h3.lbl:focus-visible { outline: 1px solid var(--color-primary); outline-offset: 2px; }
 .txt { margin: 0; font-size: 13px; color: var(--color-on-surface-variant); }
 .hint { margin: 0; font-size: 12px; color: var(--color-on-surface-variant); }
-.err { margin: 0; font-size: 12px; color: var(--color-error); }
+.err { margin: 0; font-size: 12px; color: var(--color-error); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
 .row.start { justify-content: flex-start; }
 .act { min-height: 44px; font-size: 11px; }

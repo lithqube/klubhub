@@ -8,6 +8,7 @@ import { useSealedStore } from '~/stores/sealed'
 import { useSessionStore } from '~/stores/session'
 import type { ApiError } from '~/types/event'
 import type { DoorDevice, PinResult, PinWindow } from '~/types/door'
+import { keyFingerprint } from '~/utils/sealed/keys'
 import { sealedErrorText } from '~/utils/sealedText'
 import { dayLabel, instantToZoned, timeLabel, zonedToInstant } from '~/utils/datetime'
 import { defaultPinValidUntil, MAX_PIN_WINDOW_HOURS } from '~/utils/doorState'
@@ -19,11 +20,12 @@ import { shortDate } from '~/utils/privacy'
  * hidden), see a PIN lockout, list and revoke devices, and open the door.
  * P2.6: registering makes the device's keypair in this browser; device
  * rows show their sealed status and PROVISION (with unlocked keys) gives a
- * device the ban list.
+ * device the ban list — after the manager ticks that the key fingerprint
+ * matches what the device shows (its door menu or login screen).
  */
 const { current } = storeToRefs(useEventStore())
 const store = useDoorStore()
-const { device, devices, pinStatus } = storeToRefs(store)
+const { device, devices, pinStatus, deviceFp } = storeToRefs(store)
 const uid = useId()
 
 const id = computed(() => current.value?.id ?? '')
@@ -44,7 +46,10 @@ const { events: privacyByEvent } = storeToRefs(privacy)
 await useAsyncData(() => `privacy-${id.value}`, () => (id.value ? privacy.fetchEvent(id.value).then(() => true) : Promise.resolve(null)), { watch: [id] })
 const purgedAt = computed(() => privacyByEvent.value[id.value]?.purged_at ?? null)
 
-onMounted(() => store.loadDevice())
+onMounted(async () => {
+  store.loadDevice()
+  await store.loadDeviceFp()
+})
 
 // ---------------------------------------------------------------- ban list on door devices (P2.6)
 const sealed = useSealedStore()
@@ -66,17 +71,32 @@ function sealedTag(d: DoorDevice): SealedTag {
   if (d.has_wrap) return 'provisioned'
   return d.public_key ? 'key' : 'none'
 }
-const SEALED_TAG: Record<Exclude<SealedTag, null>, string> = { none: 'NO KEY', key: 'KEY PRESENT', provisioned: 'PROVISIONED' }
+const SEALED_TAG: Record<Exclude<SealedTag, null>, string> = { none: 'NEEDS RE-REGISTERING', key: 'READY TO PROVISION', provisioned: 'GETS THE BAN LIST' }
 const provisionError = ref<ApiError | null>(null)
+const provisionNotice = ref('')
+
+/** The fingerprints the manager compared, per device and exact public key (a new key needs a new tick). */
+const confirmed = ref<Record<string, boolean>>({})
+const confirmKey = (d: DoorDevice) => `${d.id}|${d.public_key ?? ''}`
+function setConfirmed(d: DoorDevice, on: boolean) {
+  confirmed.value = { ...confirmed.value, [confirmKey(d)]: on }
+}
+/** For the device registered in this browser: does the server's key match the one this browser holds? */
+function localMatch(d: DoorDevice): 'match' | 'mismatch' | null {
+  if (device.value?.id !== d.id || !deviceFp.value || !d.public_key) return null
+  return keyFingerprint(d.public_key) === deviceFp.value ? 'match' : 'mismatch'
+}
+const canProvision = (d: DoorDevice) => !!confirmed.value[confirmKey(d)] && localMatch(d) !== 'mismatch'
 
 async function provision(d: DoorDevice) {
-  if (!d.public_key) return
+  if (!d.public_key || !canProvision(d)) return
   busy.value = `provision-${d.id}`
   provisionError.value = null
+  provisionNotice.value = ''
   try {
     await sealed.provisionDevice(d.id, d.public_key)
     await store.fetchDevices()
-    notice.value = `${d.label} now gets the ban list at its next door login.`
+    provisionNotice.value = `${d.label} now gets the ban list at its next door login.`
   } catch (e) {
     provisionError.value = e as ApiError
   } finally {
@@ -215,6 +235,7 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
           </template>
           <template v-else-if="deviceState === 'this'">
             <p class="txt" data-testid="door-this-device">This browser is the door device <strong>{{ device!.label }}</strong> for this event.</p>
+            <p v-if="deviceFp" class="hint">KEY FINGERPRINT <span class="mono" data-testid="door-this-fp">{{ deviceFp }}</span></p>
             <div class="row">
               <!-- A full page load: the door is its own document (camera policy, service worker scope). -->
               <a href="/door" class="btn-hud btn-hud-cta" style="min-height:44px;"><ScanLine class="ic" aria-hidden="true" /> OPEN THE DOOR</a>
@@ -292,18 +313,24 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
           A provisioned door device downloads the ban list encrypted to its own key and checks names offline. A possible match asks for a manager;
           the reason shows only with the manager PIN.
         </p>
+        <p class="brief" data-testid="door-staff-briefing"><strong>Brief the door staff:</strong> MANAGER CHECK on the door means a possible ban list match.</p>
+        <p v-if="pinStatus && !pinStatus.manager" class="warn" data-testid="door-no-manager-pin">
+          No manager PIN yet: the door can flag a MANAGER CHECK but can't show the reason. Generate a manager PIN above and give it to the manager on duty.
+        </p>
         <p v-if="device && thisHasKey === false" class="warn" data-testid="door-no-device-key">
           This browser's door device has no key (it was registered before the ban list existed). Forget it on this browser and register it again to use the ban list here.
         </p>
         <p v-if="sealedState === 'loading'" role="status" class="hint">LOADING…</p>
+        <p v-else-if="sealedState === 'local_required'" class="txt">Sealed data needs a local KlubHub account for now, so you can't provision devices from this account.</p>
         <template v-else-if="sealedState === 'not_setup' || sealedState === 'no_key'">
           <p class="txt">Sealed data is not set up for you yet.</p>
           <NuxtLink to="/settings#sealed" class="btn-hud btn-hud-ghost" style="min-height:44px;justify-self:start;">ENCRYPTION SETTINGS →</NuxtLink>
         </template>
         <p v-else-if="sealedState === 'no_access'" class="txt">You don't have access to the ban list key, so you can't provision devices. Someone with access (an owner) can.</p>
-        <SettingsSealedUnlock v-else-if="sealedState === 'locked'" title="UNLOCK TO PROVISION" why="Unlock with your sealed passphrase, then PROVISION the devices marked KEY PRESENT." />
+        <SettingsSealedUnlock v-else-if="sealedState === 'locked'" title="UNLOCK TO PROVISION" why="Unlock with your sealed passphrase, then PROVISION the devices marked READY TO PROVISION." />
         <p v-else-if="sealedState === 'unlocked'" class="txt" data-testid="door-ban-unlocked">
-          Unlocked. PROVISION the devices marked KEY PRESENT; devices marked NO KEY must be registered again from their browser.
+          Unlocked. For each device marked READY TO PROVISION, compare its key fingerprint with the one in that device's door menu, tick the box,
+          then PROVISION. Devices marked NEEDS RE-REGISTERING must be registered again from their browser.
         </p>
         <p v-else-if="sealedState === 'error'" role="alert" class="txt">
           Couldn't load the encryption status.
@@ -325,11 +352,25 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
               {{ SEALED_TAG[sealedTag(d)!] }}
             </span>
             <div class="hint">Added {{ when(d.created_at) }} · last login {{ when(d.last_seen_at) }}</div>
+            <div v-if="!d.revoked_at && d.public_key" class="hint">
+              KEY FINGERPRINT <span class="mono fpv" :data-testid="`door-fp-${d.label}`">{{ keyFingerprint(d.public_key) }}</span>
+              <ClientOnly>
+                <span v-if="localMatch(d) === 'match'" class="fp-ok"> · SAME AS THIS BROWSER'S KEY</span>
+                <span v-else-if="localMatch(d) === 'mismatch'" class="fp-bad" role="alert"> · DOES NOT MATCH THIS BROWSER'S KEY — DON'T PROVISION</span>
+              </ClientOnly>
+            </div>
+            <label v-if="!d.revoked_at && sealedTag(d) === 'key' && sealedState === 'unlocked'" class="ack">
+              <input
+                type="checkbox" :checked="!!confirmed[confirmKey(d)]" :disabled="!!busy" :data-testid="`door-confirm-${d.label}`"
+                @change="setConfirmed(d, ($event.target as HTMLInputElement).checked)"
+              >
+              Fingerprint matches what {{ d.label }} shows on its screen
+            </label>
           </div>
           <span class="dev-acts">
             <button
               v-if="!d.revoked_at && sealedTag(d) === 'key' && sealedState === 'unlocked'" type="button" class="btn-hud btn-hud-cta btn-hud-sm"
-              style="min-height:44px;" :disabled="!!busy || sealedWorking !== null" :aria-label="`Provision ${d.label} with the ban list`"
+              style="min-height:44px;" :disabled="!!busy || sealedWorking !== null || !canProvision(d)" :aria-label="`Provision ${d.label} with the ban list`"
               :aria-busy="busy === `provision-${d.id}`" @click="provision(d)"
             >
               {{ busy === `provision-${d.id}` ? 'PROVISIONING…' : 'PROVISION' }}
@@ -343,6 +384,7 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
           </span>
         </li>
       </ul>
+      <p v-if="provisionNotice" role="status" class="prov-ok" data-testid="door-provision-notice">{{ provisionNotice }}</p>
       <p v-if="provisionError" role="alert" style="margin:0;font-size:13px;color:var(--color-error);" data-testid="door-provision-error">{{ sealedErrorText(provisionError) }}</p>
     </section>
 
@@ -450,6 +492,46 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
 }
 .sealed-tag {
   margin-left: 6px;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.fpv {
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--color-on-surface);
+}
+.fp-ok {
+  color: var(--color-primary);
+}
+.fp-bad {
+  color: var(--color-error);
+  font-weight: 600;
+}
+.ack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ack input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.brief {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-on-surface);
+}
+.prov-ok {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-surface-container);
 }
 .sealed-tag.t-provisioned {
   color: var(--color-primary);

@@ -9,7 +9,7 @@ import { b64url, fromB64url, wipe } from '~/utils/sealed/bytes'
 import { decryptBan, encryptBan } from '~/utils/sealed/ban'
 import type { Progress } from '~/utils/sealed/kdf'
 import {
-  createMemberKey, fingerprint, generateOsk, generateRecoveryKit, groupMatches, kitFileText, memberIdCandidates, oskAad, parseKit,
+  createMemberKey, fingerprint, generateOsk, keyFingerprint, generateRecoveryKit, groupMatches, kitFileText, memberIdCandidates, oskAad, parseKit,
   PASSPHRASE_MIN, pickChallenge, recoveryKeypair, type RecoveryKit, unlockMemberKey, unwrapOsk, wrapOsk,
 } from '~/utils/sealed/keys'
 import { useSessionStore } from './session'
@@ -26,8 +26,10 @@ export type SealedWork = 'create' | 'unlock' | 'setup' | 'grant' | 'rotate' | 'r
  * - not_setup: the collective has no sealed key yet (owners: the wizard)
  * - no_access: set up, but nobody gave this user a wrap (ask an owner / owners: recover with kit)
  * - locked / unlocked: this user has a wrap; the keys are (not) in memory
+ * - local_required: this account signs in through single sign-on; sealed
+ *   data needs a local KlubHub account for now (403 local_identity_required)
  */
-export type SealedState = 'loading' | 'error' | 'no_key' | 'not_setup' | 'no_access' | 'locked' | 'unlocked'
+export type SealedState = 'loading' | 'error' | 'local_required' | 'no_key' | 'not_setup' | 'no_access' | 'locked' | 'unlocked'
 
 const fail = (error: string, extra: Record<string, unknown> = {}): ApiError => ({ error, ...extra }) as ApiError
 
@@ -63,6 +65,8 @@ export const useSealedStore = defineStore('sealed', () => {
   const recipients = ref<Recipients | null>(null)
   const recipientsError = ref<ApiError | null>(null)
   const setup = ref<SetupDraft | null>(null)
+  /** The API refused this account's key routes: 403 local_identity_required (single sign-on). */
+  const localRequired = ref(false)
 
   let memberPriv: Uint8Array | null = null
   let osk: Uint8Array | null = null
@@ -72,9 +76,12 @@ export const useSealedStore = defineStore('sealed', () => {
   const isOwner = computed(() => !!session.me?.roles.includes('owner'))
   const unlocked = computed(() => unlockedVersion.value !== null)
   const myId = computed(() => memberIdCandidates(session.me?.sub ?? '')[0] ?? '')
+  /** This user's key fingerprint ("3F9A 01C2 77B0 E4D1"): owners compare it before GRANT ACCESS. */
+  const myFingerprint = computed(() => keyFingerprint(memberKey.value?.public_key))
 
   const state = computed<SealedState>(() => {
     if (!loaded.value) return error.value ? 'error' : 'loading'
+    if (localRequired.value) return 'local_required'
     if (unlocked.value) return 'unlocked'
     if (!memberKey.value) return 'no_key'
     if (!org.value || org.value.status === 'not_setup') return 'not_setup'
@@ -150,17 +157,23 @@ export const useSealedStore = defineStore('sealed', () => {
   async function fetchStatus(): Promise<void> {
     loading.value = true
     error.value = null
+    let local = false
     try {
       const [me, info] = await Promise.all([
         apiFetch<MemberKey>('/api/v1/keys/me').catch((e) => {
           const err = toApiError(e)
           if (err.status === 404 || err.error === 'no_member_key') return null
+          if (err.error === 'local_identity_required') {
+            local = true
+            return null
+          }
           throw e
         }),
         apiFetch<OrgKeyInfo>('/api/v1/keys/org'),
       ])
       memberKey.value = me
       org.value = info
+      localRequired.value = local
       loaded.value = true
       await followVersion()
     } catch (e) {
@@ -518,8 +531,8 @@ export const useSealedStore = defineStore('sealed', () => {
   })
 
   return {
-    memberKey, org, loaded, loading, error, unlockedVersion, working, progress, lockedBy, recipients, recipientsError, setup,
-    tenant, isOwner, unlocked, state, myId,
+    memberKey, org, loaded, loading, error, unlockedVersion, working, progress, lockedBy, recipients, recipientsError, setup, localRequired,
+    tenant, isOwner, unlocked, state, myId, myFingerprint,
     fetchStatus, setupMemberKey, unlock, lock, startSetup, cancelSetup, kitText, finishSetup, fetchRecipients, grant, provisionDevice,
     rotate, recoverWithKit, sealEntry, openEntry, refreshKeys, checkIdle,
   }

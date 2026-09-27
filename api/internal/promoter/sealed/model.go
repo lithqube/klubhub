@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -147,8 +148,11 @@ func Decode(s string) ([]byte, error) {
 	return base64.RawURLEncoding.Strict().DecodeString(s)
 }
 
-// DecodePublicKey decodes an X25519 public key (exactly 32 bytes; the
-// all-zero key is refused).
+// DecodePublicKey decodes an X25519 public key: exactly 32 bytes, a
+// canonical encoding (top bit clear, u < p) and not one of the small-order
+// u-coordinates. The browser (@noble/curves) refuses those when sealing,
+// but a key substituted on the server path must not be stored either: a
+// wrap "sealed" to a low-order point would be readable by anyone.
 func DecodePublicKey(field, s string) ([]byte, error) {
 	b, err := Decode(s)
 	if err != nil {
@@ -157,14 +161,55 @@ func DecodePublicKey(field, s string) ([]byte, error) {
 	if len(b) != PublicKeyLen {
 		return nil, invalid(field, fmt.Sprintf("must be %d bytes", PublicKeyLen))
 	}
-	zero := true
-	for _, c := range b {
-		zero = zero && c == 0
-	}
-	if zero {
-		return nil, invalid(field, "all-zero key")
+	if problem := publicKeyProblem(b); problem != "" {
+		return nil, invalid(field, problem)
 	}
 	return b, nil
+}
+
+// curveP is the Curve25519 field prime 2^255 - 19.
+var curveP = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
+
+// lowOrderU are the u-coordinates whose order divides the cofactor (on the
+// curve or its twist): 0, 1, p - 1 and the two order-8 points. The same
+// list @noble/curves (abstract/montgomery.js) and libsodium reject; the
+// non-canonical aliases p, p + 1, … are refused by the u < p check.
+var lowOrderU = func() []*big.Int {
+	n := func(s string) *big.Int {
+		v, ok := new(big.Int).SetString(s, 10)
+		if !ok {
+			panic("sealed: bad low-order constant")
+		}
+		return v
+	}
+	return []*big.Int{
+		big.NewInt(0),
+		big.NewInt(1),
+		new(big.Int).Sub(curveP, big.NewInt(1)),
+		n("325606250916557431795983626356110631294008115727848805560023387167927233504"),
+		n("39382357235489614581723060781553021112529911719440698176882885853963445705823"),
+	}
+}()
+
+// publicKeyProblem says why a 32-byte X25519 public key is refused, or "".
+func publicKeyProblem(b []byte) string {
+	if b[PublicKeyLen-1]&0x80 != 0 {
+		return "non-canonical key (top bit set)"
+	}
+	le := make([]byte, PublicKeyLen)
+	for i, c := range b {
+		le[PublicKeyLen-1-i] = c
+	}
+	u := new(big.Int).SetBytes(le)
+	if u.Cmp(curveP) >= 0 {
+		return "non-canonical key (u >= p)"
+	}
+	for _, bad := range lowOrderU {
+		if u.Cmp(bad) == 0 {
+			return "low-order key"
+		}
+	}
+	return ""
 }
 
 // decodeBlob decodes a sealed blob: version byte 0x01, length in [lo, hi].
@@ -462,6 +507,9 @@ type BanEntry struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	// CreatedByName is the display name of the staff member who added the
+	// entry (GET /ban-list only; null when unknown or on write responses).
+	CreatedByName *string `json:"created_by_name"`
 }
 
 // BanList is GET /ban-list: the active key version and the unexpired

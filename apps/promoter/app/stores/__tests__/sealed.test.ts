@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { BanRecord, KdfParams, MemberKey, OrgSetupInput, RotateInput, WrapInput } from '~/types/sealed'
 import { b64url, fromB64url, randomBytes } from '~/utils/sealed/bytes'
-import { fingerprint, oskAad, unwrapOsk } from '~/utils/sealed/keys'
+import { fingerprint, keyFingerprint, oskAad, unwrapOsk } from '~/utils/sealed/keys'
 import { x25519Keypair } from '~/utils/sealed/seal'
 import { openDoorBan } from '~/utils/doorBan'
 import { useSessionStore } from '../session'
@@ -195,6 +195,29 @@ describe('useSealedStore', () => {
     expect(setup.version).toBe(1)
     expect(setup.wraps).toEqual([{ recipient_kind: 'member', recipient_id: ME, wrap: expect.any(String) }])
     expect(setup.recovery.fingerprint).toBe(fingerprint(fromB64url(setup.recovery.public_key)))
+  })
+
+  it('shows this user\'s key fingerprint, the one owners see in the recipients list', async () => {
+    const s = useSealedStore()
+    await s.fetchStatus()
+    expect(s.myFingerprint).toBe('')
+    await s.setupMemberKey(PASS)
+    const pub = sent<MemberKey>('/api/v1/keys/me', 'PUT').body.public_key
+    expect(s.myFingerprint).toMatch(/^[0-9A-F]{4}( [0-9A-F]{4}){3}$/)
+    expect(s.myFingerprint).toBe(keyFingerprint(pub))
+  })
+
+  it('says local_required when the API wants a local account (single sign-on)', async () => {
+    const real = api.handler.getMockImplementation()!
+    api.handler.mockImplementation(async (url: string, opts?: Sent) => {
+      if (url === '/api/v1/keys/me') throw Object.assign(new Error('x'), { statusCode: 403, data: { error: 'local_identity_required' } })
+      return real(url, opts)
+    })
+    const s = useSealedStore()
+    await s.fetchStatus()
+    expect(s.error).toBeNull()
+    expect(s.localRequired).toBe(true)
+    expect(s.state).toBe('local_required')
   })
 
   it('locks, refuses a wrong passphrase and unlocks the stored wrap with the right one', async () => {

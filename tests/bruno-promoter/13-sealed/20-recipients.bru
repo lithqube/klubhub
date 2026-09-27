@@ -26,6 +26,7 @@ tests {
     expect(owner.email).to.equal(String(bru.getEnvVar("ownerEmail")).trim().toLowerCase());
     expect(owner.public_key).to.equal(bru.getVar("ownerPub"));
     expect(owner.has_wrap).to.equal(true);
+    bru.setVar("ownerName", owner.name);
     const booker = b.members.find((m) => m.email === "booker@example.org");
     expect(booker.role).to.equal("booker");
     expect(booker.name).to.equal("Bruno Booker");

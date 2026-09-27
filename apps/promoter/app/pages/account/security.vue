@@ -6,6 +6,12 @@ import { useSessionStore } from '~/stores/session'
 useHead({ title: 'Account security' })
 
 const session = useSessionStore()
+const route = useRoute()
+/** Where to go back after setting up 2FA (e.g. /settings#sealed); same-site paths only. */
+const next = computed(() => {
+  const n = route.query.next
+  return typeof n === 'string' && n.startsWith('/') && !n.startsWith('//') ? n : null
+})
 const { me } = storeToRefs(session)
 const uri = ref<string | null>(null)
 const code = ref('')
@@ -53,6 +59,7 @@ async function confirm() {
         <template v-if="me?.mfa">
           <div class="section-lbl">STATUS</div>
           <p style="margin:8px 0 0;font-size:14px;">Authenticator app active for this session.</p>
+          <NuxtLink v-if="next" :to="next" class="btn-hud btn-hud-cta" style="min-height:44px;margin-top:12px;" data-testid="security-continue">CONTINUE →</NuxtLink>
         </template>
         <template v-else-if="!uri">
           <p style="margin:0 0 14px;font-size:14px;">

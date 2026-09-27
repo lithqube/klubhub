@@ -20,3 +20,12 @@ assert {
   res.body.entries[0].id: eq {{banId1}}
   res.body.entries[0].entry_sealed: eq {{entry1b}}
 }
+
+tests {
+  test("each entry says who added it (created_by_name)", function () {
+    const e = res.getBody().entries[0];
+    expect(e).to.have.property("created_by_name");
+    expect(e.created_by_name).to.be.a("string").and.not.equal("");
+    expect(e.created_by_name).to.equal(bru.getVar("ownerName"));
+  });
+}

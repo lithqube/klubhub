@@ -212,7 +212,13 @@ func blob(n int) string {
 	return b64(b)
 }
 
-func pubKey() []byte { return randBytes(32) }
+// pubKey is a random canonical X25519 public key (top bit clear; the
+// server refuses non-canonical and low-order encodings).
+func pubKey() []byte {
+	b := randBytes(32)
+	b[31] &= 0x7f
+	return b
+}
 
 func wrapBlob() string { return blob(sealed.MinWrap) }
 
@@ -618,6 +624,13 @@ func TestBanListCRUD(t *testing.T) {
 	if *list.KeyVersion != 1 || len(list.Entries) != 3 || list.Entries[0].ID != e["id"] {
 		t.Fatalf("list: %+v", list)
 	}
+	// Who added each entry (the staff member's display name, opened server-side).
+	for _, x := range list.Entries {
+		if x.CreatedByName == nil || *x.CreatedByName != "Ben Booker" {
+			t.Fatalf("created_by_name: %+v", x)
+		}
+	}
+	expect(t, o.call(bp, http.MethodGet, "/api/v1/ban-list", nil), http.StatusOK, `"created_by_name":"Ben Booker"`)
 
 	id := e["id"].(uuid.UUID).String()
 	upd := map[string]any{"key_version": 1, "entry_sealed": blob(300), "expires_at": now.AddDate(0, 6, 0)}

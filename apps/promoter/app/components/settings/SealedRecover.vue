@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useNow } from '@vueuse/core'
+import { Eye, EyeOff } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useSealedStore } from '~/stores/sealed'
 import { useSessionStore } from '~/stores/session'
@@ -23,6 +24,8 @@ const now = useNow({ interval: 30_000 })
 const kit = ref('')
 const pass = ref('')
 const again = ref('')
+const show = ref(false)
+const mismatch = computed(() => again.value !== '' && pass.value !== '' && again.value !== pass.value)
 const error = ref<ApiError | null>(null)
 const kitEl = ref<HTMLTextAreaElement | null>(null)
 const busy = computed(() => working.value === 'recover')
@@ -62,6 +65,7 @@ async function submit() {
       <template v-if="org?.recovery_fingerprint">The kit's fingerprint must be <strong class="mono">{{ formatFingerprint(org.recovery_fingerprint) }}</strong>.</template>
     </p>
     <SettingsSealedSecurity v-if="block && !refusal" :kind="block" next="/settings#sealed" action="Recovering with the kit" />
+    <SettingsSealedUsername />
     <div class="f">
       <label :for="`${uid}-k`" class="lbl">RECOVERY KIT</label>
       <textarea
@@ -73,15 +77,25 @@ async function submit() {
     <div class="two">
       <div class="f">
         <label :for="`${uid}-p`" class="lbl">NEW SEALED PASSPHRASE</label>
-        <input
-          :id="`${uid}-p`" v-model="pass" class="hud-input" type="password" autocomplete="new-password" :disabled="busy" :aria-describedby="`${uid}-ph`"
-          data-testid="sealed-recover-passphrase"
-        >
+        <div class="pw">
+          <input
+            :id="`${uid}-p`" v-model="pass" class="hud-input" :type="show ? 'text' : 'password'" name="sealed-passphrase" autocomplete="new-password" :disabled="busy"
+            :aria-describedby="`${uid}-nl ${uid}-ph`" data-testid="sealed-recover-passphrase"
+          >
+          <button type="button" class="btn-hud btn-hud-ghost eye" :aria-label="show ? 'Hide passphrase' : 'Show passphrase'" :aria-pressed="show" @click="show = !show">
+            <EyeOff v-if="show" class="ic" aria-hidden="true" /><Eye v-else class="ic" aria-hidden="true" />
+          </button>
+        </div>
+        <span :id="`${uid}-nl`" class="hint">Not your login password.</span>
         <span :id="`${uid}-ph`" class="hint" aria-live="polite">{{ pass ? STRENGTH_TEXT[strength] : `At least ${PASSPHRASE_MIN} characters.` }}</span>
       </div>
       <div class="f">
         <label :for="`${uid}-a`" class="lbl">TYPE IT AGAIN</label>
-        <input :id="`${uid}-a`" v-model="again" class="hud-input" type="password" autocomplete="new-password" :disabled="busy" data-testid="sealed-recover-passphrase-again">
+        <input
+          :id="`${uid}-a`" v-model="again" class="hud-input" :type="show ? 'text' : 'password'" name="sealed-passphrase-again" autocomplete="new-password" :disabled="busy"
+          :aria-invalid="mismatch" :aria-describedby="mismatch ? `${uid}-mm` : undefined" data-testid="sealed-recover-passphrase-again"
+        >
+        <span v-if="mismatch" :id="`${uid}-mm`" class="err">Not the same as the new passphrase.</span>
       </div>
     </div>
     <SettingsSealedProgress v-if="busy" label="RECOVERING… MAKING YOUR NEW KEY" :progress="progress" />
@@ -105,6 +119,10 @@ async function submit() {
 .f { display: grid; gap: 4px; min-width: 0; }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .hud-input { height: 44px; }
+.pw { display: flex; gap: 6px; min-width: 0; }
+.pw .hud-input { flex: 1; min-width: 0; }
+.eye { min-width: 44px; min-height: 44px; padding: 0; }
+.ic { width: 18px; height: 18px; }
 .kit { height: auto; min-height: 64px; padding: 8px 12px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }

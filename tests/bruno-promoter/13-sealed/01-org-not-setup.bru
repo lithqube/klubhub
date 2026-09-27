@@ -16,15 +16,16 @@ headers {
 
 script:pre-request {
   // Fixed test vectors. The server does no cryptography on sealed data, so
-  // these are syntactically valid only: 32-byte public keys and blobs that
+  // these are syntactically valid only: 32-byte canonical X25519 public keys
+  // (top bit clear, not a low-order point: the server refuses those) and blobs that
   // start with the version byte 0x01 followed by random bytes (base64url).
   // Wraps are 93 bytes, private keys 61, ban entries 90-140. The recovery
   // fingerprints are the first 8 bytes of SHA-256(public key), hex.
   bru.setVar("ownerPub", "tn55m4aPIb9gjZCpGVFlspIoRffswC0IuDTm23ygkjU");
   bru.setVar("bookerPub", "cQ3cpb-x1x747xsV0PZ3oXIvlFmJaatOuxFRu_ygSHY");
   bru.setVar("devicePub", "Jpwv9rg9DaYuoJLVS-btFp9FohISOi04MerUJ2W2_38");
-  bru.setVar("recoveryPub1", "K2Ktb5XQxkCF3i0U9qj0VI1N0V2RIoiDagnzFdkmWNg");
-  bru.setVar("recoveryFp1", "d560aa3843bf07b0");
+  bru.setVar("recoveryPub1", "K2Ktb5XQxkCF3i0U9qj0VI1N0V2RIoiDagnzFdkmWFg");
+  bru.setVar("recoveryFp1", "ceb378133011ea71");
   bru.setVar("recoveryWrap1", "AZVjHp5BvbBHA1VCXT2a8DnLJ12IzJ9zU1fM8P-IOPueIg-aYo9ZydrsmAQOO7TbmBVnjg6ynA3IZ8IA4WzQEtUImBtk8RcHuH-w9vGdZ1-wqREvKgi5_29TkXLR");
   bru.setVar("recoveryPub2", "7QuDR2qz0EsftOlJQfQsMj555756gkbb4S1Q4z7b-xs");
   bru.setVar("recoveryFp2", "5152f8dd133c8d18");

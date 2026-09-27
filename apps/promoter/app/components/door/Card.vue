@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { AlertTriangle, ArrowLeft, Ban, Check, Minus, Plus, ShieldAlert } from 'lucide-vue-next'
+import { useNow } from '@vueuse/core'
+import { AlertTriangle, ArrowLeft, Ban, Check, EyeOff, Minus, Plus, ShieldAlert, UserX } from 'lucide-vue-next'
+import { storeToRefs } from 'pinia'
+import { useDoorStore } from '~/stores/door'
 import type { ManagerPinVerifier } from '~/types/door'
 import type { DoorBanEntry } from '~/utils/doorBan'
 import type { SubjectView } from '~/utils/doorState'
@@ -7,6 +10,7 @@ import { verifyManagerPin } from '~/utils/doorPin'
 import { shortDate } from '~/utils/privacy'
 import { IMPORT_PRESETS } from '~/utils/attendeeImport'
 import { timeLabel } from '~/utils/datetime'
+import { lockSecondsLeft, REVEAL_HIDE_MS, revealLocked, triesLeft } from '~/utils/doorReveal'
 import { admitReasons, confirmAllowed, deviceTag } from '~/utils/doorState'
 
 /**
@@ -22,11 +26,15 @@ import { admitReasons, confirmAllowed, deviceTag } from '~/utils/doorState'
  * focus back to the search field for keyboard users (a touch refocus pops
  * the phone keyboard over the next card).
  *
- * Ban list (P2.6): a possible match shows a quiet amber "BAN LIST ·
- * POSSIBLE MATCH — ASK A MANAGER". The reason is revealed only with the
- * manager PIN (checked offline against the bundle's verifier), and ADMIT
- * waits for it; after the PIN the manager decides and can still admit.
- * Without a manager PIN for the night, the match only arms a second tap.
+ * Ban list (P2.6): a possible match shows a quiet amber "MANAGER CHECK" —
+ * never the words "ban list", since the guest may be looking at the
+ * screen (staff are briefed on the event's DOOR tab). The reason is
+ * revealed only with the manager PIN (checked offline against the bundle's
+ * verifier) and ADMIT reads ASK A MANAGER until then. After the PIN the
+ * manager decides deliberately: TURN AWAY (back to search), or ADMIT with a
+ * second tap; HIDE REASON (or 30 s) takes the reason off the screen. Five
+ * wrong PINs disable SHOW REASON on this device for a minute. Without a
+ * manager PIN for the night, the match only arms a second tap.
  */
 const props = withDefaults(defineProps<{
   view: SubjectView
@@ -36,6 +44,8 @@ const props = withDefaults(defineProps<{
   managerPin?: ManagerPinVerifier | null
 }>(), { ban: () => [], managerPin: null })
 const emit = defineEmits<{ admit: [count: number, keyboard: boolean], back: [] }>()
+const door = useDoorStore()
+const { revealGuard } = storeToRefs(door)
 
 const v = computed(() => props.view)
 const maxCount = computed(() => (v.value.remaining > 0 ? v.value.remaining : v.value.allowance))
@@ -49,32 +59,62 @@ watch(() => [v.value.key, v.value.remaining] as const, () => {
 }, { immediate: true })
 
 // ---------------------------------------------------------------- ban list
+/** The reason is on screen (hidden again by HIDE REASON or after 30 s). */
 const revealed = ref(false)
+/** A manager typed the right PIN for this card: ADMIT no longer waits (hiding the reason keeps that). */
+const approved = ref(false)
 const pin = ref('')
 const pinError = ref('')
 const checking = ref(false)
 const pinInput = ref<HTMLInputElement | null>(null)
-watch(() => v.value.key, () => {
+const hideBtn = ref<HTMLButtonElement | null>(null)
+const clock = useNow({ interval: 1000 })
+let hideTimer: ReturnType<typeof setTimeout> | undefined
+function clearHide() {
+  clearTimeout(hideTimer)
+  hideTimer = undefined
+}
+function hideReason() {
+  clearHide()
   revealed.value = false
+}
+watch(() => v.value.key, () => {
+  clearHide()
+  revealed.value = false
+  approved.value = false
   pin.value = ''
   pinError.value = ''
 })
+onBeforeUnmount(clearHide)
 const banned = computed(() => props.ban.length > 0)
-/** ADMIT waits for the manager PIN while a possible match is unrevealed. */
-const banGate = computed(() => banned.value && !!props.managerPin && !revealed.value)
+/** ADMIT waits for the manager PIN while a possible match is not yet approved. */
+const banGate = computed(() => banned.value && !!props.managerPin && !approved.value)
+const locked = computed(() => revealLocked(revealGuard.value, clock.value.getTime()))
+const lockLeft = computed(() => lockSecondsLeft(revealGuard.value, clock.value.getTime()))
 
 async function reveal() {
+  if (locked.value) return
   pinError.value = ''
   checking.value = true
   const ok = await verifyManagerPin(pin.value.trim(), props.managerPin)
   checking.value = false
   pin.value = ''
+  door.revealAttempt(ok)
   if (!ok) {
-    pinError.value = 'Wrong manager PIN.'
+    pinError.value = revealLocked(revealGuard.value, Date.now())
+      ? 'Wrong manager PIN. Too many tries: SHOW REASON is off for a minute.'
+      : `Wrong manager PIN. ${triesLeft(revealGuard.value)} ${triesLeft(revealGuard.value) === 1 ? 'try' : 'tries'} left before a 1-minute pause.`
     nextTick(() => pinInput.value?.focus())
     return
   }
+  approved.value = true
   revealed.value = true
+  clearHide()
+  hideTimer = setTimeout(() => {
+    hideTimer = undefined
+    revealed.value = false
+  }, REVEAL_HIDE_MS)
+  nextTick(() => hideBtn.value?.focus())
 }
 const until = (iso: string) => shortDate(iso, props.timezone)
 
@@ -84,19 +124,30 @@ onMounted(() => heading.value?.focus())
 
 const reasons = computed(() => {
   const r: { code: string, text: string }[] = admitReasons(v.value)
-  // No manager PIN tonight: the possible match is one more thing to confirm.
-  if (banned.value && !props.managerPin) r.unshift({ code: 'ban', text: 'BAN LIST · ASK A MANAGER' })
+  // A possible match is always one more thing to confirm deliberately:
+  // without a manager PIN tonight, and after the manager saw the reason.
+  if (banned.value && !banGate.value) r.unshift({ code: 'ban', text: 'MANAGER CHECK' })
   return r
 })
 const needsSecondTap = computed(() => reasons.value.length > 0)
+/** The amber block lists the other reasons; the match has its own block above. */
+const otherReasons = computed(() => reasons.value.filter(r => r.code !== 'ban'))
 const primary = computed(() => {
-  const r = reasons.value[0]
+  const r = otherReasons.value[0]
   if (!r) return ''
   const last = v.value.lastIn
   if (r.code === 'already_in' && last) return `ALREADY IN · ${timeLabel(last.at, props.timezone)} · ${deviceTag(last.device_id, props.selfDevice)}`
   return r.text
 })
 const more = computed(() => reasons.value.length - 1)
+const moreOthers = computed(() => otherReasons.value.length - 1)
+/** The first tap's label: the match reads ASK A MANAGER until a manager has approved it. */
+const checkText = computed(() => {
+  const r = reasons.value[0]
+  if (!r) return ''
+  if (r.code === 'ban') return approved.value ? 'MANAGER DECIDED? TAP TO ADMIT' : 'ASK A MANAGER'
+  return `CHECK: ${r.text}`
+})
 
 const terms = computed(() => v.value.list?.entry_terms ?? null)
 const priceText = computed(() => {
@@ -125,7 +176,7 @@ function admit(e: MouseEvent) {
 </script>
 
 <template>
-  <article class="card glass" :class="v.blocked ? 'accent-bar-failed' : needsSecondTap ? 'accent-bar-archived' : 'accent-bar-ready'" :aria-labelledby="`card-${v.key}`">
+  <article class="card glass" :class="v.blocked ? 'accent-bar-failed' : needsSecondTap || banned ? 'accent-bar-archived' : 'accent-bar-ready'" :aria-labelledby="`card-${v.key}`">
     <button type="button" class="btn-hud btn-hud-ghost back" @click="emit('back')">
       <ArrowLeft style="width:16px;height:16px;" aria-hidden="true" /> BACK TO SEARCH
     </button>
@@ -140,34 +191,50 @@ function admit(e: MouseEvent) {
       </template>
     </p>
 
-    <section v-if="banned" class="banblock" role="status" :aria-labelledby="`ban-${v.key}`" data-testid="door-ban">
+    <!-- No live region: the card's heading takes focus, and screen reader users read on from there. -->
+    <section v-if="banned" class="banblock" :aria-labelledby="`ban-${v.key}`" data-testid="door-ban">
       <p :id="`ban-${v.key}`" class="bantitle">
-        <ShieldAlert style="width:18px;height:18px;flex-shrink:0;" aria-hidden="true" /> BAN LIST · POSSIBLE MATCH — ASK A MANAGER
+        <ShieldAlert style="width:13px;height:13px;flex-shrink:0;" aria-hidden="true" /> MANAGER CHECK
       </p>
       <template v-if="!revealed">
+        <p v-if="approved" class="bantext" data-testid="door-ban-hidden">Reason hidden. The manager PIN shows it again.</p>
         <form v-if="managerPin" class="reveal" novalidate @submit.prevent="reveal">
           <label :for="`ban-pin-${v.key}`" class="section-lbl">MANAGER PIN TO SEE THE REASON</label>
           <div class="reveal-row">
             <input
               :id="`ban-pin-${v.key}`" ref="pinInput" v-model="pin" class="hud-input pin" type="password" inputmode="numeric" pattern="[0-9]*"
-              maxlength="6" autocomplete="off" :aria-invalid="!!pinError" :aria-describedby="pinError ? `ban-pin-e-${v.key}` : undefined"
-              data-testid="door-ban-pin"
+              maxlength="6" autocomplete="off" :disabled="locked" :aria-invalid="!!pinError"
+              :aria-describedby="locked ? `ban-pin-l-${v.key}` : pinError ? `ban-pin-e-${v.key}` : undefined" data-testid="door-ban-pin"
             >
-            <button type="submit" class="btn-hud btn-hud-ghost reveal-btn" :disabled="checking || pin.length < 6" data-testid="door-ban-reveal">
-              {{ checking ? 'CHECKING…' : 'SHOW REASON' }}
+            <button type="submit" class="btn-hud btn-hud-ghost reveal-btn" :disabled="checking || locked || pin.length < 6" data-testid="door-ban-reveal">
+              {{ checking ? 'CHECKING…' : locked ? `WAIT ${lockLeft} S` : 'SHOW REASON' }}
             </button>
           </div>
-          <p v-if="pinError" :id="`ban-pin-e-${v.key}`" role="alert" class="pin-err">{{ pinError }}</p>
+          <p v-if="locked" :id="`ban-pin-l-${v.key}`" class="pin-err" data-testid="door-ban-locked">Too many wrong PINs. SHOW REASON works again in {{ lockLeft }} s.</p>
+          <p v-else-if="pinError" :id="`ban-pin-e-${v.key}`" role="alert" class="pin-err">{{ pinError }}</p>
         </form>
-        <p v-else class="bantext">No manager PIN is set for tonight, so the reason can't be shown here.</p>
+        <p v-else class="bantext" data-testid="door-ban-no-pin">
+          No manager PIN tonight, so the reason can't be shown here. Ask the manager on duty: they decide. A manager PIN can be generated in the
+          event's DOOR tab in the admin.
+        </p>
       </template>
-      <ul v-else class="banlist" aria-label="Ban list entries" data-testid="door-ban-reasons">
-        <li v-for="e in ban" :key="e.id">
-          <strong>{{ e.name }}</strong> · {{ e.reason }}
-          <span v-if="e.note" class="bannote">{{ e.note }}</span>
-          <span class="bannote">ON THE LIST UNTIL {{ until(e.expires_at).toUpperCase() }} · The manager decides; ADMIT still works.</span>
-        </li>
-      </ul>
+      <template v-else>
+        <ul class="banlist" aria-label="Matching entries" data-testid="door-ban-reasons">
+          <li v-for="e in ban" :key="e.id">
+            <strong>{{ e.name }}</strong> · {{ e.reason }}
+            <span v-if="e.note" class="bannote">{{ e.note }}</span>
+            <span class="bannote">ON THE LIST UNTIL {{ until(e.expires_at).toUpperCase() }} · The manager decides: TURN AWAY, or ADMIT with two taps.</span>
+          </li>
+        </ul>
+      </template>
+      <div v-if="approved || !managerPin" class="ban-acts">
+        <button type="button" class="btn-hud btn-hud-ghost ban-act" data-testid="door-ban-turn-away" @click="emit('back')">
+          <UserX style="width:18px;height:18px;" aria-hidden="true" /> TURN AWAY
+        </button>
+        <button v-if="revealed" ref="hideBtn" type="button" class="btn-hud btn-hud-ghost ban-act" data-testid="door-ban-hide" @click="hideReason">
+          <EyeOff style="width:18px;height:18px;" aria-hidden="true" /> HIDE REASON
+        </button>
+      </div>
     </section>
 
     <p v-if="v.blocked" role="alert" class="block">
@@ -178,8 +245,8 @@ function admit(e: MouseEvent) {
       <p class="primary">
         <AlertTriangle style="width:20px;height:20px;flex-shrink:0;" aria-hidden="true" /> {{ primary }}
       </p>
-      <ul v-if="more" class="flags" aria-label="Also check">
-        <li v-for="r in reasons.slice(1)" :key="r.code">{{ r.text }}</li>
+      <ul v-if="moreOthers > 0" class="flags" aria-label="Also check">
+        <li v-for="r in otherReasons.slice(1)" :key="r.code">{{ r.text }}</li>
       </ul>
     </div>
 
@@ -213,9 +280,9 @@ function admit(e: MouseEvent) {
     >
       <Check v-if="!needsSecondTap && !v.blocked && !banGate" style="width:20px;height:20px;" aria-hidden="true" />
       <template v-if="v.blocked">CANNOT ADMIT</template>
-      <template v-else-if="banGate">MANAGER PIN NEEDED</template>
+      <template v-else-if="banGate">ASK A MANAGER</template>
       <template v-else-if="armed">TAP AGAIN · ADMIT {{ count }}<span v-if="more" class="more">+{{ more }} MORE</span></template>
-      <template v-else-if="needsSecondTap">CHECK: {{ reasons[0]!.text }}</template>
+      <template v-else-if="needsSecondTap">{{ checkText }}</template>
       <template v-else>ADMIT {{ count }}</template>
     </button>
   </article>
@@ -361,7 +428,7 @@ function admit(e: MouseEvent) {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-family: var(--font-terminal);
   font-size: 13px;
   font-weight: 600;
@@ -400,6 +467,16 @@ function admit(e: MouseEvent) {
   margin: 0;
   font-size: 14px;
   color: var(--color-error);
+}
+.ban-acts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+.ban-act {
+  min-height: 56px;
+  height: 56px;
+  font-size: 11px;
 }
 .banlist {
   list-style: none;
