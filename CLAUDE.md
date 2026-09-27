@@ -10,11 +10,12 @@ This file provides Claude-specific instructions for working with the KlubHub DJ 
 - Tracklist image generator (flagship feature)
 - Social media scheduler (Instagram)
 - EPK / Press Kit Builder (PDF export)
-- Gig tracker, Finance tracker (mock UI, Phase 4/5 wiring pending)
+- Gig tracker (complete)
+- Finance tracker: invoicing, payments, agreements and email shipped in v1.1.0; income/expense (earnings) tracking is the remaining Phase 5 work
 
-**Current state:** Phases 0-3 and 1.5, 1.5.5 complete. Phase 4 (Gig Tracker) is next.
+**Current state:** Phases 0 through 4, 1.5, 1.5.5 complete. v1.0.0/v1.0.1 released. v1.1.0 shipped Phase 5's invoicing half; earnings tracking is in progress. Next: Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard). See `.planning/ROADMAP.md` for per-phase status.
 
-**KlubHub Promoter** (branch work, plan `.claude/plans/promoter-app.plan.md`): `apps/promoter` (Nuxt, port 4400), `api/cmd/promoter` + `api/internal/promoter/*`, shared UI in `libs/ui` (Nuxt layer, `#kui` alias). P0 foundations done: RLS tenancy, envelope encryption, embedded OPA, local/Zitadel identity, NATS outbox. ADRs in `docs/adr/`.
+**KlubHub Promoter** (merged to `main`, plan `.claude/plans/promoter-app.plan.md`): `apps/promoter` (Nuxt, port 4400), `api/cmd/promoter` + `api/internal/promoter/*`, shared UI in `libs/ui` (Nuxt layer, `#kui` alias). P0 (foundations: RLS tenancy, envelope encryption, embedded OPA, local/Zitadel identity, NATS outbox), P1 (events, venues, lineup, export pack) and P2 (guest lists, attendee import, offline door, retention, sealed ban list) are done. P3 (audience & promotion) is next — see `.claude/plans/soundcloud-integration.plan.md` and `.claude/plans/spotify-integration.plan.md` for related licensed-feature research. ADRs in `docs/adr/`.
 
 ---
 
@@ -112,4 +113,4 @@ pnpm nx lint @dev/dj
 
 ---
 
-*Last updated: 2026-04-27*
+*Last updated: 2026-09-27*

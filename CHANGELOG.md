@@ -6,6 +6,21 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- README, `docs/INDEX.md` and `CLAUDE.md` synced to the current state
+  of the repo: the project structure tree now shows `apps/promoter`,
+  `libs/ui`, `api/cmd/promoter` and `api/internal/promoter` (previously
+  DJ-only); the Node prerequisite corrected to 22.x (matches CI, was
+  20.x); the `IMAGE_TAG=v1.0.1` publication caveat corrected to name
+  the actual unpublished tag and the real one (`1.0.1`); the browser
+  demo (`klubhub.io/demo`) linked from the README for the first time;
+  `docs/INDEX.md` gained `container-images.md`, `INVOICING.md`,
+  `DESIGN.md`, `github-pages.md` (all existed but weren't indexed) and
+  a KlubHub Promoter self-hosting pointer; `CLAUDE.md`'s project-state
+  summary (previously five months stale — still said Phase 4 was next
+  and Promoter was "branch work") updated to the current phase status.
+
 ### Added
 
 - **`dj-ci.yml`**: KlubHub DJ's own CI gate. Go vet and `-race` tests for
