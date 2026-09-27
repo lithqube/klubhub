@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { KeyRound, MonitorSmartphone, ScanLine } from 'lucide-vue-next'
+import { KeyRound, MonitorSmartphone, ScanLine, ShieldBan } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useDoorStore } from '~/stores/door'
 import { useEventStore } from '~/stores/event'
 import { usePrivacyStore } from '~/stores/privacy'
+import { useSealedStore } from '~/stores/sealed'
+import { useSessionStore } from '~/stores/session'
 import type { ApiError } from '~/types/event'
-import type { PinResult, PinWindow } from '~/types/door'
+import type { DoorDevice, PinResult, PinWindow } from '~/types/door'
+import { sealedErrorText } from '~/utils/sealedText'
 import { dayLabel, instantToZoned, timeLabel, zonedToInstant } from '~/utils/datetime'
 import { defaultPinValidUntil, MAX_PIN_WINDOW_HOURS } from '~/utils/doorState'
 import { shortDate } from '~/utils/privacy'
@@ -14,6 +17,9 @@ import { shortDate } from '~/utils/privacy'
  * Event DOOR tab (P2.3): prepare this browser as a door device, generate
  * the staff and manager PINs (each shown once; both stay visible until
  * hidden), see a PIN lockout, list and revoke devices, and open the door.
+ * P2.6: registering makes the device's keypair in this browser; device
+ * rows show their sealed status and PROVISION (with unlocked keys) gives a
+ * device the ban list.
  */
 const { current } = storeToRefs(useEventStore())
 const store = useDoorStore()
@@ -40,6 +46,44 @@ const purgedAt = computed(() => privacyByEvent.value[id.value]?.purged_at ?? nul
 
 onMounted(() => store.loadDevice())
 
+// ---------------------------------------------------------------- ban list on door devices (P2.6)
+const sealed = useSealedStore()
+const { state: sealedState, working: sealedWorking } = storeToRefs(sealed)
+const { me } = storeToRefs(useSessionStore())
+const thisHasKey = ref<boolean | null>(null)
+onMounted(async () => {
+  if (!sealed.loaded) await sealed.fetchStatus()
+  thisHasKey.value = device.value ? await store.hasDeviceKey() : null
+})
+watch(() => device.value?.id, async (d) => {
+  thisHasKey.value = d ? await store.hasDeviceKey() : null
+})
+
+type SealedTag = 'none' | 'key' | 'provisioned' | null
+/** The device's sealed status, when the API says (older APIs leave the fields out). */
+function sealedTag(d: DoorDevice): SealedTag {
+  if (d.public_key === undefined && d.has_wrap === undefined) return null
+  if (d.has_wrap) return 'provisioned'
+  return d.public_key ? 'key' : 'none'
+}
+const SEALED_TAG: Record<Exclude<SealedTag, null>, string> = { none: 'NO KEY', key: 'KEY PRESENT', provisioned: 'PROVISIONED' }
+const provisionError = ref<ApiError | null>(null)
+
+async function provision(d: DoorDevice) {
+  if (!d.public_key) return
+  busy.value = `provision-${d.id}`
+  provisionError.value = null
+  try {
+    await sealed.provisionDevice(d.id, d.public_key)
+    await store.fetchDevices()
+    notice.value = `${d.label} now gets the ban list at its next door login.`
+  } catch (e) {
+    provisionError.value = e as ApiError
+  } finally {
+    busy.value = null
+  }
+}
+
 const tz = computed(() => current.value?.timezone ?? 'UTC')
 const eventRef = computed(() => (current.value ? { id: current.value.id, title: current.value.title, starts_at: current.value.starts_at } : null))
 const deviceState = computed(() => (!device.value ? 'none' : device.value.event.id === id.value ? 'this' : 'other'))
@@ -60,7 +104,7 @@ async function register() {
   busy.value = 'register'
   error.value = ''
   try {
-    const d = await store.registerDevice(label.value, eventRef.value)
+    const d = await store.registerDevice(label.value, eventRef.value, me.value?.org_id)
     notice.value = `This browser is now the door device ${d.label}.`
   } catch {
     error.value = 'Could not register this browser. Check the label (1–80 characters) and try again.'
@@ -241,6 +285,33 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
       </section>
     </div>
 
+    <ClientOnly>
+      <section class="hud-card glass panel" aria-labelledby="ban-h" data-testid="door-ban-panel">
+        <h2 id="ban-h" class="section-lbl" style="margin:0;"><ShieldBan class="ic" aria-hidden="true" /> BAN LIST AT THE DOOR</h2>
+        <p class="txt">
+          A provisioned door device downloads the ban list encrypted to its own key and checks names offline. A possible match asks for a manager;
+          the reason shows only with the manager PIN.
+        </p>
+        <p v-if="device && thisHasKey === false" class="warn" data-testid="door-no-device-key">
+          This browser's door device has no key (it was registered before the ban list existed). Forget it on this browser and register it again to use the ban list here.
+        </p>
+        <p v-if="sealedState === 'loading'" role="status" class="hint">LOADING…</p>
+        <template v-else-if="sealedState === 'not_setup' || sealedState === 'no_key'">
+          <p class="txt">Sealed data is not set up for you yet.</p>
+          <NuxtLink to="/settings#sealed" class="btn-hud btn-hud-ghost" style="min-height:44px;justify-self:start;">ENCRYPTION SETTINGS →</NuxtLink>
+        </template>
+        <p v-else-if="sealedState === 'no_access'" class="txt">You don't have access to the ban list key, so you can't provision devices. Someone with access (an owner) can.</p>
+        <SettingsSealedUnlock v-else-if="sealedState === 'locked'" title="UNLOCK TO PROVISION" why="Unlock with your sealed passphrase, then PROVISION the devices marked KEY PRESENT." />
+        <p v-else-if="sealedState === 'unlocked'" class="txt" data-testid="door-ban-unlocked">
+          Unlocked. PROVISION the devices marked KEY PRESENT; devices marked NO KEY must be registered again from their browser.
+        </p>
+        <p v-else-if="sealedState === 'error'" role="alert" class="txt">
+          Couldn't load the encryption status.
+          <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" @click="sealed.fetchStatus()">RETRY</button>
+        </p>
+      </section>
+    </ClientOnly>
+
     <section class="hud-card glass panel" aria-labelledby="dev-h">
       <h2 id="dev-h" class="section-lbl" style="margin:0;">DOOR DEVICES · {{ devices.filter(d => !d.revoked_at).length }} ACTIVE</h2>
       <p v-if="!devices.length" class="txt">No door devices yet.</p>
@@ -250,17 +321,31 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
             <strong>{{ d.label }}</strong>
             <ClientOnly><span v-if="device?.id === d.id" class="data-frag" style="margin-left:6px;">THIS BROWSER</span></ClientOnly>
             <span v-if="d.revoked_at" class="data-frag" style="margin-left:6px;color:var(--color-error);">REVOKED</span>
+            <span v-else-if="sealedTag(d)" class="data-frag sealed-tag" :class="`t-${sealedTag(d)}`" :data-testid="`door-sealed-${d.label}`">
+              {{ SEALED_TAG[sealedTag(d)!] }}
+            </span>
             <div class="hint">Added {{ when(d.created_at) }} · last login {{ when(d.last_seen_at) }}</div>
           </div>
-          <button
+          <span class="dev-acts">
+            <button
+              v-if="!d.revoked_at && sealedTag(d) === 'key' && sealedState === 'unlocked'" type="button" class="btn-hud btn-hud-cta btn-hud-sm"
+              style="min-height:44px;" :disabled="!!busy || sealedWorking !== null" :aria-label="`Provision ${d.label} with the ban list`"
+              :aria-busy="busy === `provision-${d.id}`" @click="provision(d)"
+            >
+              {{ busy === `provision-${d.id}` ? 'PROVISIONING…' : 'PROVISION' }}
+            </button>
+            <button
             v-if="!d.revoked_at" type="button" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;color:var(--color-error);"
             :disabled="busy === `revoke-${d.id}`" :aria-label="`Revoke ${d.label}`" @click="revoke(d)"
           >
             REVOKE
           </button>
+          </span>
         </li>
       </ul>
+      <p v-if="provisionError" role="alert" style="margin:0;font-size:13px;color:var(--color-error);" data-testid="door-provision-error">{{ sealedErrorText(provisionError) }}</p>
     </section>
+
   </div>
 </template>
 
@@ -356,6 +441,21 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
 }
 .devs li.revoked {
   opacity: .6;
+}
+.dev-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.sealed-tag {
+  margin-left: 6px;
+}
+.sealed-tag.t-provisioned {
+  color: var(--color-primary);
+}
+.sealed-tag.t-none {
+  color: var(--color-on-surface-variant);
 }
 .sr-only {
   position: absolute;

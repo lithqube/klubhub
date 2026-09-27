@@ -38,7 +38,7 @@ async function save(p: OrgProfile) {
   }
 }
 
-const coming = ['Team members and roles', 'Door devices and PINs', 'Encryption status and ban list']
+const coming = ['Team members and roles', 'Door devices and PINs']
 </script>
 
 <template>
@@ -62,6 +62,15 @@ const coming = ['Team members and roles', 'Door devices and PINs', 'Encryption s
       <section id="retention" aria-labelledby="retention-h" class="space-y-3" style="scroll-margin-top:72px;">
         <h2 id="retention-h" class="section-lbl" style="margin:0;">DATA RETENTION</h2>
         <SettingsRetention :read-only="!canManageOrg" :timezone="org?.timezone ?? 'UTC'" />
+      </section>
+      <section id="sealed" aria-labelledby="sealed-h" class="space-y-3" style="scroll-margin-top:72px;">
+        <h2 id="sealed-h" class="section-lbl" style="margin:0;">ENCRYPTION &amp; BAN LIST</h2>
+        <ClientOnly>
+          <SettingsSealed />
+          <template #fallback>
+            <p role="status" class="data-frag" style="font-size:11px;">LOADING ENCRYPTION STATUS…</p>
+          </template>
+        </ClientOnly>
       </section>
       <section aria-labelledby="coming-h" class="glass" style="padding:16px;">
         <h2 id="coming-h" class="section-lbl" style="margin:0 0 6px;">COMING NEXT</h2>

@@ -1,6 +1,8 @@
 import { registerDoorDevice } from '../../-mockDb'
 export default defineEventHandler(async (event) => {
-  const d = registerDoorDevice((await readBody<{ label: string }>(event))?.label)
+  // P2.6: an optional public_key (X25519, base64url) made in the door browser.
+  const b = await readBody<{ label: string, public_key?: string }>(event)
+  const d = registerDoorDevice(b?.label, b?.public_key)
   setResponseStatus(event, 201)
   return d
 })

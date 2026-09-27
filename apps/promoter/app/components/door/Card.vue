@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { AlertTriangle, ArrowLeft, Ban, Check, Minus, Plus } from 'lucide-vue-next'
+import { AlertTriangle, ArrowLeft, Ban, Check, Minus, Plus, ShieldAlert } from 'lucide-vue-next'
+import type { ManagerPinVerifier } from '~/types/door'
+import type { DoorBanEntry } from '~/utils/doorBan'
 import type { SubjectView } from '~/utils/doorState'
+import { verifyManagerPin } from '~/utils/doorPin'
+import { shortDate } from '~/utils/privacy'
 import { IMPORT_PRESETS } from '~/utils/attendeeImport'
 import { timeLabel } from '~/utils/datetime'
 import { admitReasons, confirmAllowed, deviceTag } from '~/utils/doorState'
@@ -17,8 +21,20 @@ import { admitReasons, confirmAllowed, deviceTag } from '~/utils/doorState'
  * `admit` says whether it came from the keyboard, so the page only moves
  * focus back to the search field for keyboard users (a touch refocus pops
  * the phone keyboard over the next card).
+ *
+ * Ban list (P2.6): a possible match shows a quiet amber "BAN LIST ·
+ * POSSIBLE MATCH — ASK A MANAGER". The reason is revealed only with the
+ * manager PIN (checked offline against the bundle's verifier), and ADMIT
+ * waits for it; after the PIN the manager decides and can still admit.
+ * Without a manager PIN for the night, the match only arms a second tap.
  */
-const props = defineProps<{ view: SubjectView, timezone: string, selfDevice: string }>()
+const props = withDefaults(defineProps<{
+  view: SubjectView
+  timezone: string
+  selfDevice: string
+  ban?: DoorBanEntry[]
+  managerPin?: ManagerPinVerifier | null
+}>(), { ban: () => [], managerPin: null })
 const emit = defineEmits<{ admit: [count: number, keyboard: boolean], back: [] }>()
 
 const v = computed(() => props.view)
@@ -32,11 +48,46 @@ watch(() => [v.value.key, v.value.remaining] as const, () => {
   armedAt.value = null
 }, { immediate: true })
 
+// ---------------------------------------------------------------- ban list
+const revealed = ref(false)
+const pin = ref('')
+const pinError = ref('')
+const checking = ref(false)
+const pinInput = ref<HTMLInputElement | null>(null)
+watch(() => v.value.key, () => {
+  revealed.value = false
+  pin.value = ''
+  pinError.value = ''
+})
+const banned = computed(() => props.ban.length > 0)
+/** ADMIT waits for the manager PIN while a possible match is unrevealed. */
+const banGate = computed(() => banned.value && !!props.managerPin && !revealed.value)
+
+async function reveal() {
+  pinError.value = ''
+  checking.value = true
+  const ok = await verifyManagerPin(pin.value.trim(), props.managerPin)
+  checking.value = false
+  pin.value = ''
+  if (!ok) {
+    pinError.value = 'Wrong manager PIN.'
+    nextTick(() => pinInput.value?.focus())
+    return
+  }
+  revealed.value = true
+}
+const until = (iso: string) => shortDate(iso, props.timezone)
+
 // A new card takes focus on its name, so screen readers start there.
 watch(() => v.value.key, () => nextTick(() => heading.value?.focus({ preventScroll: false })))
 onMounted(() => heading.value?.focus())
 
-const reasons = computed(() => admitReasons(v.value))
+const reasons = computed(() => {
+  const r: { code: string, text: string }[] = admitReasons(v.value)
+  // No manager PIN tonight: the possible match is one more thing to confirm.
+  if (banned.value && !props.managerPin) r.unshift({ code: 'ban', text: 'BAN LIST · ASK A MANAGER' })
+  return r
+})
 const needsSecondTap = computed(() => reasons.value.length > 0)
 const primary = computed(() => {
   const r = reasons.value[0]
@@ -60,7 +111,7 @@ function step(d: 1 | -1) {
 }
 
 function admit(e: MouseEvent) {
-  if (v.value.blocked) return
+  if (v.value.blocked || banGate.value) return
   if (needsSecondTap.value) {
     if (armedAt.value === null) {
       armedAt.value = Date.now()
@@ -88,6 +139,36 @@ function admit(e: MouseEvent) {
         TICKET · {{ v.ticket.ticket_type || 'TICKET' }} · {{ sourceLabel(v.ticket.source) }} · order {{ v.ticket.order_ref }}
       </template>
     </p>
+
+    <section v-if="banned" class="banblock" role="status" :aria-labelledby="`ban-${v.key}`" data-testid="door-ban">
+      <p :id="`ban-${v.key}`" class="bantitle">
+        <ShieldAlert style="width:18px;height:18px;flex-shrink:0;" aria-hidden="true" /> BAN LIST · POSSIBLE MATCH — ASK A MANAGER
+      </p>
+      <template v-if="!revealed">
+        <form v-if="managerPin" class="reveal" novalidate @submit.prevent="reveal">
+          <label :for="`ban-pin-${v.key}`" class="section-lbl">MANAGER PIN TO SEE THE REASON</label>
+          <div class="reveal-row">
+            <input
+              :id="`ban-pin-${v.key}`" ref="pinInput" v-model="pin" class="hud-input pin" type="password" inputmode="numeric" pattern="[0-9]*"
+              maxlength="6" autocomplete="off" :aria-invalid="!!pinError" :aria-describedby="pinError ? `ban-pin-e-${v.key}` : undefined"
+              data-testid="door-ban-pin"
+            >
+            <button type="submit" class="btn-hud btn-hud-ghost reveal-btn" :disabled="checking || pin.length < 6" data-testid="door-ban-reveal">
+              {{ checking ? 'CHECKING…' : 'SHOW REASON' }}
+            </button>
+          </div>
+          <p v-if="pinError" :id="`ban-pin-e-${v.key}`" role="alert" class="pin-err">{{ pinError }}</p>
+        </form>
+        <p v-else class="bantext">No manager PIN is set for tonight, so the reason can't be shown here.</p>
+      </template>
+      <ul v-else class="banlist" aria-label="Ban list entries" data-testid="door-ban-reasons">
+        <li v-for="e in ban" :key="e.id">
+          <strong>{{ e.name }}</strong> · {{ e.reason }}
+          <span v-if="e.note" class="bannote">{{ e.note }}</span>
+          <span class="bannote">ON THE LIST UNTIL {{ until(e.expires_at).toUpperCase() }} · The manager decides; ADMIT still works.</span>
+        </li>
+      </ul>
+    </section>
 
     <p v-if="v.blocked" role="alert" class="block">
       <Ban style="width:18px;height:18px;flex-shrink:0;" aria-hidden="true" />
@@ -128,10 +209,11 @@ function admit(e: MouseEvent) {
     <button
       type="button" class="btn-hud admit"
       :class="v.blocked ? 'btn-hud-ghost' : armed ? 'btn-hud-error' : needsSecondTap ? 'btn-hud-ghost check' : 'btn-hud-cta'"
-      :disabled="!!v.blocked" data-testid="door-admit" @click="admit"
+      :disabled="!!v.blocked || banGate" data-testid="door-admit" @click="admit"
     >
-      <Check v-if="!needsSecondTap && !v.blocked" style="width:20px;height:20px;" aria-hidden="true" />
+      <Check v-if="!needsSecondTap && !v.blocked && !banGate" style="width:20px;height:20px;" aria-hidden="true" />
       <template v-if="v.blocked">CANNOT ADMIT</template>
+      <template v-else-if="banGate">MANAGER PIN NEEDED</template>
       <template v-else-if="armed">TAP AGAIN · ADMIT {{ count }}<span v-if="more" class="more">+{{ more }} MORE</span></template>
       <template v-else-if="needsSecondTap">CHECK: {{ reasons[0]!.text }}</template>
       <template v-else>ADMIT {{ count }}</template>
@@ -267,6 +349,72 @@ function admit(e: MouseEvent) {
 .admit.check {
   border: 2px solid var(--color-status-archived);
   color: var(--color-status-archived);
+}
+.banblock {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--color-status-archived);
+  background: var(--color-surface-container);
+}
+.bantitle {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-terminal);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  color: var(--color-status-archived);
+  overflow-wrap: anywhere;
+}
+.bantext {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-on-surface);
+}
+.reveal {
+  display: grid;
+  gap: 4px;
+}
+.reveal-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pin {
+  flex: 1 1 120px;
+  min-width: 0;
+  height: 56px;
+  font-size: 22px;
+  letter-spacing: .3em;
+}
+.reveal-btn {
+  min-height: 56px;
+  height: 56px;
+  font-size: 11px;
+  flex: 1 1 140px;
+}
+.pin-err {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-error);
+}
+.banlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 15px;
+  color: var(--color-on-surface);
+  overflow-wrap: anywhere;
+}
+.bannote {
+  display: block;
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
 }
 .more {
   flex-basis: 100%;

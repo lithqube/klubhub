@@ -1,6 +1,7 @@
 // Mirrors the P2.3 door contract (.claude/plans/promoter-p2-guests-door.plan.md,
 // "P2.3 contract (offline door)"). JSON is snake_case; times are RFC 3339 UTC.
 import type { GuestStatus, ImportPreset, ListType, PriceMode, TicketStatus } from '~/types/guest'
+import type { DoorSealed } from '~/types/sealed'
 
 export type SubjectKind = 'guest' | 'ticket'
 export type Direction = 'in' | 'out'
@@ -92,6 +93,8 @@ export interface DoorBundle {
   counters: DoorCounters
   cursor: string
   manager_pin: ManagerPinVerifier | null
+  /** P2.6: the ban list for this device (null when the org is not set up or this device has no wrap). */
+  sealed?: DoorSealed | null
 }
 
 // ---------------------------------------------------------------- sync
@@ -175,6 +178,8 @@ export interface DoorDeviceRecord {
   label: string
   token: string
   event: { id: string, title: string, starts_at: string }
+  /** P2.6: the collective's id, part of the ban list's AAD (the bundle does not carry it). */
+  org_id?: string
 }
 
 export interface DoorDevice {
@@ -183,6 +188,9 @@ export interface DoorDevice {
   created_at: string
   last_seen_at: string | null
   revoked_at: string | null
+  /** P2.6, if the API includes them: the device's X25519 public key and whether it holds the active wrap. */
+  public_key?: string | null
+  has_wrap?: boolean
 }
 
 /** POST /api/v1/door/devices (the token is shown once). */

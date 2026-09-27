@@ -5,8 +5,12 @@ import type {
   AddsResponse, CounterKind, CounterOp, DoorAdd, DoorBundle, DoorDevice, DoorDeviceRecord, DoorOp, DoorRejection, DoorSubject,
   JournalEntry, PinInput, PinResult, PinStatus, RegisteredDevice, SyncResponse,
 } from '~/types/door'
+import type { Me } from '~/types/session'
 import { apiFetch, toApiError } from '~/utils/api'
-import { DoorVault, idbKV, type KV, memoryKV } from '~/utils/doorDb'
+import { type DoorBanEntry, openDoorBan } from '~/utils/doorBan'
+import { DEVICE_DB, DeviceKeyVault, DoorVault, idbKV, type KV, memoryKV } from '~/utils/doorDb'
+import { b64url, wipe as wipeBytes } from '~/utils/sealed/bytes'
+import { x25519Keypair } from '~/utils/sealed/seal'
 import { verifyManagerPin } from '~/utils/doorPin'
 import { buildIndex, type SearchEntry } from '~/utils/doorSearch'
 import {
@@ -35,6 +39,20 @@ let kvFactory: () => KV = () => (typeof indexedDB === 'undefined' ? memoryKV() :
 export function setDoorKV(factory: () => KV) {
   kvFactory = factory
 }
+
+let deviceKvFactory: () => KV = () => (typeof indexedDB === 'undefined' ? memoryKV() : idbKV(DEVICE_DB))
+
+/** Tests: swap the storage behind the device key vault. */
+export function setDoorDeviceKV(factory: () => KV) {
+  deviceKvFactory = factory
+}
+
+/**
+ * The ban list on this device (P2.6): none (no sealed block in the
+ * bundle), ready (decrypted in memory), no_key (this browser does not hold
+ * the device key) or unreadable (the wrap did not open).
+ */
+export type DoorBanStatus = 'none' | 'ready' | 'no_key' | 'unreadable'
 
 const uuid = () => globalThis.crypto.randomUUID()
 const nowIso = () => new Date().toISOString()
@@ -80,12 +98,18 @@ export const useDoorStore = defineStore('door', () => {
   /** Why the cache was last wiped (shown on the lock screen). */
   const wipedBecause = ref<'logout' | 'session' | 'event' | null>(null)
 
+  /** Decrypted ban list entries, in memory only (the bundle keeps them encrypted in the vault). */
+  const ban = shallowRef<DoorBanEntry[] | null>(null)
+  const banStatus = ref<DoorBanStatus>('none')
+
   // Staff side (event DOOR tab).
   const devices = ref<DoorDevice[]>([])
   const pinStatus = ref<PinStatus | null>(null)
 
   let vault: DoorVault | null = null
   const theVault = () => (vault ??= new DoorVault(kvFactory()))
+  let keyVault: DeviceKeyVault | null = null
+  const theKeyVault = () => (keyVault ??= new DeviceKeyVault(deviceKvFactory()))
   const inflight = new Set<string>()
   let timer: ReturnType<typeof setInterval> | null = null
   let again = false
@@ -122,6 +146,8 @@ export const useDoorStore = defineStore('door', () => {
 
   function reset() {
     bundle.value = null
+    ban.value = null
+    banStatus.value = 'none'
     queue.value = []
     adds.value = []
     journal.value = []
@@ -161,6 +187,7 @@ export const useDoorStore = defineStore('door', () => {
         rejections.value = q?.rejections ?? []
         lastSyncAt.value = b.generated_at
         sessionEnded.value = why === 'session'
+        await openBan()
         phase.value = 'ready'
         startLoop()
         return
@@ -209,9 +236,52 @@ export const useDoorStore = defineStore('door', () => {
     sessionEnded.value = false
     await persistBundle()
     await persistQueue()
+    await openBan()
     phase.value = 'ready'
     startLoop()
     if (queued.value) void sync()
+  }
+
+  /** The collective id for the ban list's AAD: kept with the device record, else asked once (online at login). */
+  async function orgId(): Promise<string | null> {
+    const d = device.value
+    if (d?.org_id) return d.org_id
+    try {
+      const me = await apiFetch<Me>('/api/v1/auth/me')
+      if (d && me?.org_id) {
+        device.value = { ...d, org_id: me.org_id }
+        writeDevice(device.value)
+      }
+      return me?.org_id ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /** Decrypt the bundle's ban list with this device's key (offline). Never throws. */
+  async function openBan(): Promise<void> {
+    const b = bundle.value
+    ban.value = null
+    if (!b?.sealed) {
+      banStatus.value = 'none'
+      return
+    }
+    const priv = await theKeyVault().load(b.device_id).catch(() => null)
+    if (!priv) {
+      banStatus.value = 'no_key'
+      return
+    }
+    try {
+      const org = await orgId()
+      if (!org) throw new Error('no org id')
+      const r = await openDoorBan(b.sealed, priv, org, b.device_id)
+      ban.value = r.entries
+      banStatus.value = 'ready'
+    } catch {
+      banStatus.value = 'unreadable'
+    } finally {
+      wipeBytes(priv)
+    }
   }
 
   /** Drop everything cached on this device (the device record stays). */
@@ -449,10 +519,23 @@ export const useDoorStore = defineStore('door', () => {
     return device.value
   }
 
-  /** Register this browser as a door device for an event; the token stays in localStorage. */
-  async function registerDevice(label: string, event: DoorDeviceRecord['event']): Promise<DoorDeviceRecord> {
-    const d = await call(() => apiFetch<RegisteredDevice>('/api/v1/door/devices', { method: 'POST', body: { label: label.trim() } }))
+  /**
+   * Register this browser as a door device for an event; the token stays in
+   * localStorage. The device's X25519 keypair (P2.6) is made here: the
+   * public key goes to the server, the private key into the device key
+   * vault — so an owner can later PROVISION the ban list to this device.
+   */
+  async function registerDevice(label: string, event: DoorDeviceRecord['event'], org?: string): Promise<DoorDeviceRecord> {
+    const kp = x25519Keypair()
+    let d: RegisteredDevice
+    try {
+      d = await call(() => apiFetch<RegisteredDevice>('/api/v1/door/devices', { method: 'POST', body: { label: label.trim(), public_key: b64url(kp.publicKey) } }))
+      await theKeyVault().save(d.id, kp.privateKey).catch(() => undefined)
+    } finally {
+      wipeBytes(kp.privateKey)
+    }
     const rec: DoorDeviceRecord = { id: d.id, label: d.label, token: d.token, event: { id: event.id, title: event.title, starts_at: event.starts_at } }
+    if (org) rec.org_id = org
     writeDevice(rec)
     device.value = rec
     await fetchDevices().catch(() => undefined)
@@ -470,8 +553,15 @@ export const useDoorStore = defineStore('door', () => {
   async function forgetDevice() {
     writeDevice(null)
     device.value = null
+    await theKeyVault().clear().catch(() => undefined)
     await wipe('logout')
     wipedBecause.value = null
+  }
+
+  /** This browser holds the private key of its door device (registered after P2.6). */
+  async function hasDeviceKey(): Promise<boolean> {
+    const d = device.value
+    return d ? theKeyVault().has(d.id).catch(() => false) : false
   }
 
   async function fetchDevices(): Promise<void> {
@@ -495,9 +585,9 @@ export const useDoorStore = defineStore('door', () => {
   }
 
   return {
-    device, phase, bundle, queue, adds, journal, rejections, syncing, lastSyncAt, offline, syncError, sessionEnded, wipedBecause,
+    device, phase, bundle, queue, adds, journal, rejections, syncing, lastSyncAt, offline, syncError, sessionEnded, wipedBecause, ban, banStatus,
     devices, pinStatus, checkins, counters, occ, queued, recent, index,
     init, login, downloadBundle, wipe, logout, checkExpiry, checkIn, counter, undo, addGuest, dismissRejections, sync, startLoop, stopLoop,
-    loadDevice, registerDevice, assignEvent, forgetDevice, fetchDevices, revokeDevice, setPin, fetchPinStatus,
+    loadDevice, registerDevice, assignEvent, forgetDevice, hasDeviceKey, fetchDevices, revokeDevice, setPin, fetchPinStatus,
   }
 })

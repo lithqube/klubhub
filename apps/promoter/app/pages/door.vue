@@ -6,6 +6,7 @@ import { useDoorStore } from '~/stores/door'
 import type { ApiError } from '~/types/event'
 import type { DoorSubject, DoorToast } from '~/types/door'
 import { dayLabel, timeLabel } from '~/utils/datetime'
+import { banMatches } from '~/utils/doorBan'
 import { admitReasons, rejectionText, sessionEndingSoon, subjectView } from '~/utils/doorState'
 import { loadJsQR, nativeQrDetector } from '~/utils/qrDecode'
 
@@ -35,7 +36,7 @@ useHead({
 })
 
 const store = useDoorStore()
-const { phase, device, bundle, rejections, sessionEnded, queued, occ, checkins, wipedBecause, recent, offline, syncError } = storeToRefs(store)
+const { phase, device, bundle, rejections, sessionEnded, queued, occ, checkins, wipedBecause, recent, offline, syncError, ban, banStatus } = storeToRefs(store)
 
 // ---------------------------------------------------------------- forced dark theme
 const { theme } = useTheme()
@@ -148,6 +149,13 @@ const headRef = ref<HTMLElement | null>(null)
 const headH = ref(80)
 const view = computed(() => (bundle.value && selected.value ? subjectView(bundle.value, checkins.value, selected.value, now.value.getTime()) : null))
 const tz = computed(() => bundle.value?.event.timezone ?? 'UTC')
+/** Possible ban list matches for the open card (P2.6; empty when the bundle has no sealed block). */
+const banHits = computed(() => (view.value ? banMatches(ban.value, view.value.name) : []))
+const BAN_STATUS: Record<string, string> = {
+  ready: 'BAN LIST CHECKED ON THIS DEVICE',
+  no_key: 'BAN LIST NOT AVAILABLE: THIS DEVICE HAS NO KEY',
+  unreadable: 'BAN LIST NOT AVAILABLE: IT DOES NOT OPEN ON THIS DEVICE',
+}
 
 // The sticky header's height, so the search field scrolls to just under it.
 useResizeObserver(headRef, (entries) => {
@@ -261,7 +269,7 @@ async function onCode(code: string) {
   }
   const s: DoorSubject = { kind: 'ticket', id: t.id }
   const v = subjectView(b, checkins.value, s, now.value.getTime())
-  const clean = !!v && !v.blocked && v.remaining > 0 && !admitReasons(v).length
+  const clean = !!v && !v.blocked && v.remaining > 0 && !admitReasons(v).length && !banMatches(ban.value, v.name).length
   if (express.value && v && clean) {
     const nonce = await store.checkIn(s, 1)
     feedback('ok')
@@ -376,6 +384,7 @@ const rejectionHelp = computed(() => (rejections.value.length && rejections.valu
             </button>
             <div v-if="menuOpen" id="door-menu" class="menu glass">
               <p class="menu-meta">{{ device?.label }}<br>{{ eventLine }}</p>
+              <p v-if="BAN_STATUS[banStatus]" class="menu-meta" data-testid="door-ban-status">{{ BAN_STATUS[banStatus] }}</p>
               <button type="button" class="btn-hud btn-hud-ghost big" style="color:var(--color-error);width:100%;" @click="logout">
                 <LogOut style="width:18px;height:18px;" aria-hidden="true" /> LOG OUT
               </button>
@@ -404,7 +413,7 @@ const rejectionHelp = computed(() => (rejections.value.length && rejections.valu
 
         <DoorCard
           v-if="view" :view="view" :timezone="bundle.event.timezone" :self-device="bundle.device_id"
-          @admit="admit" @back="backToSearch()"
+          :ban="banHits" :manager-pin="bundle.manager_pin" @admit="admit" @back="backToSearch()"
         />
         <DoorSearch v-show="!view" ref="searchRef" v-model="q" :note="searchNote" @pick="selected = $event" @scan="scanning = true" @announce="say" />
 

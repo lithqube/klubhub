@@ -94,7 +94,7 @@ importers:
         version: 1.15.11
       jsdom:
         specifier: ^27.4.0
-        version: 27.4.0(supports-color@10.2.2)
+        version: 27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2)
       nuxt:
         specifier: ^4.5.2
         version: 4.5.2(@babel/plugin-proposal-decorators@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7(supports-color@10.2.2)))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7(supports-color@10.2.2)))(@oxc-project/types@0.149.0)(@types/node@20.19.9)(@vue/compiler-sfc@3.5.42)(commander@14.0.3)(db0@0.3.4)(esbuild@0.28.2)(eslint@10.10.0(jiti@2.7.0)(supports-color@10.2.2))(ioredis@5.11.1(supports-color@10.2.2))(lightningcss@1.32.0)(magicast@0.5.5)(optionator@0.9.4)(pinia@3.0.4(typescript@5.9.3)(vue@3.5.42(typescript@5.9.3)))(rolldown@1.2.8)(rollup-plugin-visualizer@7.1.1(rolldown@1.2.8)(rollup@4.63.3))(rollup@4.63.3)(srvx@0.11.22)(supports-color@10.2.2)(terser@5.51.2)(typescript@5.9.3)(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))(vue-tsc@2.2.12(typescript@5.9.3))(yaml@2.9.1)
@@ -118,7 +118,7 @@ importers:
         version: 7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1)
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
       vue:
         specifier: ^3.5.42
         version: 3.5.42(typescript@5.9.3)
@@ -182,6 +182,12 @@ importers:
       '@dev/ui':
         specifier: workspace:*
         version: link:../../libs/ui
+      '@noble/curves':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
       '@pinia/nuxt':
         specifier: ^0.11.3
         version: 0.11.3(magic-string@1.4.1)(magicast@0.5.5)(pinia@3.0.4(typescript@5.9.3)(vue@3.5.42(typescript@5.9.3)))(rolldown@1.2.8)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.8)(rollup@4.63.3)(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1)))
@@ -1292,6 +1298,14 @@ packages:
   '@nats-io/transport-node@3.4.0':
     resolution: {integrity: sha512-hH7u7ejIBTFEJIZ8rIcMrHJI6wl+HhpO5sVFs1+ppmXa8RuB2+Lh1+UwTzZ5xTNNm1TKcRkYy+2qCV56qp8RxA==}
     engines: {node: '>= 18.0.0'}
+
+  '@noble/curves@2.4.0':
+    resolution: {integrity: sha512-P4/62zrgfH33CneE3Dn4WhJVA22YUU0eR51wKIan4NVRvwsA0YnPTwWGpNbpuacSujmSFLvyzpyuR30+fbq2Ew==}
+    engines: {node: '>= 20.19.0'}
+
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
+    engines: {node: '>= 20.19.0'}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -7572,7 +7586,9 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@exodus/bytes@1.15.1': {}
+  '@exodus/bytes@1.15.1(@noble/hashes@2.4.0)':
+    optionalDependencies:
+      '@noble/hashes': 2.4.0
 
   '@floating-ui/core@1.8.0':
     dependencies:
@@ -7753,6 +7769,12 @@ snapshots:
       '@nats-io/nats-core': 3.4.0
       '@nats-io/nkeys': 2.0.3
       '@nats-io/nuid': 3.0.0
+
+  '@noble/curves@2.4.0':
+    dependencies:
+      '@noble/hashes': 2.4.0
+
+  '@noble/hashes@2.4.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
@@ -8361,7 +8383,7 @@ snapshots:
       tsconfig-paths: 4.2.0
       tslib: 2.8.1
       vite: 7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1)
-      vitest: 4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
+      vitest: 4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
     transitivePeerDependencies:
       - '@babel/traverse'
       - '@nx/eslint'
@@ -8383,7 +8405,7 @@ snapshots:
     optionalDependencies:
       '@nx/eslint': 22.7.7(@babel/traverse@7.29.8(supports-color@10.2.2))(@swc-node/register@1.11.1(@swc/core@1.15.47(@swc/helpers@0.5.23))(@swc/types@0.1.28)(supports-color@10.2.2)(typescript@5.9.3))(@swc/core@1.15.47(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(debug@4.4.3(supports-color@10.2.2))(eslint@10.10.0(jiti@2.7.0)(supports-color@10.2.2))(nx@22.7.7(@swc-node/register@1.11.1(@swc/core@1.15.47(@swc/helpers@0.5.23))(@swc/types@0.1.28)(supports-color@10.2.2)(typescript@5.9.3))(@swc/core@1.15.47(@swc/helpers@0.5.23))(debug@4.4.3(supports-color@10.2.2)))(supports-color@10.2.2)
       vite: 7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1)
-      vitest: 4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
+      vitest: 4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
     transitivePeerDependencies:
       - '@babel/traverse'
       - '@swc-node/register'
@@ -9308,7 +9330,7 @@ snapshots:
       obug: 2.2.1
       std-env: 4.2.0
       tinyrainbow: 3.1.1
-      vitest: 4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
+      vitest: 4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
 
   '@vitest/expect@4.1.11':
     dependencies:
@@ -10835,9 +10857,9 @@ snapshots:
     dependencies:
       whatwg-encoding: 2.0.0
 
-  html-encoding-sniffer@6.0.0:
+  html-encoding-sniffer@6.0.0(@noble/hashes@2.4.0):
     dependencies:
-      '@exodus/bytes': 1.15.1
+      '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - '@noble/hashes'
 
@@ -11088,15 +11110,15 @@ snapshots:
       '@types/estree': 1.0.9
       '@types/node': 26.5.1
 
-  jsdom@27.4.0(supports-color@10.2.2):
+  jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2):
     dependencies:
       '@acemir/cssom': 0.9.31
       '@asamuzakjp/dom-selector': 6.8.1
-      '@exodus/bytes': 1.15.1
+      '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
       cssstyle: 5.3.7
       data-urls: 6.0.1
       decimal.js: 10.6.0
-      html-encoding-sniffer: 6.0.0
+      html-encoding-sniffer: 6.0.0(@noble/hashes@2.4.0)
       http-proxy-agent: 7.0.2(supports-color@10.2.2)
       https-proxy-agent: 7.0.6(supports-color@10.2.2)
       is-potential-custom-element-name: 1.0.1
@@ -13311,7 +13333,7 @@ snapshots:
       terser: 5.51.2
       yaml: 2.9.1
 
-  vitest@4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1)):
+  vitest@4.1.11(@types/node@20.19.9)(@vitest/coverage-v8@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1)):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@7.3.6(@types/node@20.19.9)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
@@ -13336,7 +13358,7 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.19.9
       '@vitest/coverage-v8': 4.1.11(vitest@4.1.11)
-      jsdom: 27.4.0(supports-color@10.2.2)
+      jsdom: 27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2)
     transitivePeerDependencies:
       - msw
 

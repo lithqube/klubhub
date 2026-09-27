@@ -4,6 +4,8 @@
   "private": true,
   "dependencies": {
     "@dev/ui": "workspace:*",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
     "@pinia/nuxt": "^0.11.3",
     "@vueuse/core": "^14.4.0",
     "jsqr": "^1.4.0",

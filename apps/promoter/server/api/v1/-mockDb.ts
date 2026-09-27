@@ -134,6 +134,17 @@ export function mockAuthAt(event: Parameters<typeof getCookie>[0]): number {
   return Number.isFinite(n) && n > 0 ? n : mockSession.authAt
 }
 
+/**
+ * A second factor for this browser: TOTP confirmed (for everyone, as
+ * before), or a mock sign-in that carried a code, which sets the
+ * kh_mock_mfa cookie (so parallel e2e specs that expect "no 2FA" are not
+ * affected).
+ */
+export const MOCK_MFA_COOKIE = 'kh_mock_mfa'
+export function mockMfa(event: Parameters<typeof getCookie>[0]): boolean {
+  return mockSession.mfa || getCookie(event, MOCK_MFA_COOKIE) === '1'
+}
+
 /** Mock collective profile (P1.5). */
 export const orgProfile: OrgProfile = {
   bio: 'Berlin techno nights since 2019.', website_url: 'https://nachtwerk.example', instagram_url: 'https://instagram.com/nachtwerk',
@@ -695,9 +706,10 @@ export const MOCK_EXPIRED_PIN = '999999'
 export const DOOR_COOKIE = 'klubhub_door_mock'
 const PIN_WINDOW_MS = 36 * 3_600_000
 
-interface DeviceRow extends DoorDevice { token: string }
+/** public_key (P2.6): base64url X25519 key sent at registration; the device list does not return it (as the API). */
+interface DeviceRow extends DoorDevice { token: string, public_key: string | null }
 export const doorDevices: DeviceRow[] = [
-  { id: 'dd-front', label: 'Front door phone', token: 'mock-door-token-front', created_at: iso(-5), last_seen_at: null, revoked_at: null },
+  { id: 'dd-front', label: 'Front door phone', token: 'mock-door-token-front', created_at: iso(-5), last_seen_at: null, revoked_at: null, public_key: null },
 ]
 
 interface PinRow { pin: string, valid_until: string, verifier?: ManagerPinVerifier, locked_until?: string }
@@ -724,12 +736,17 @@ function verifierFor(pin: string): ManagerPinVerifier {
   return { salt: salt.toString('base64'), iterations, hash: pbkdf2Sync(pin, salt, iterations, 32, 'sha256').toString('base64') }
 }
 
-export const deviceList = (): DoorDevice[] => doorDevices.map(({ token: _t, ...d }) => d)
+export const deviceList = (): DoorDevice[] => doorDevices.map(({ token: _t, public_key: _k, ...d }) => d)
 
-export function registerDoorDevice(label: string): RegisteredDevice {
+export function registerDoorDevice(label: string, publicKey?: unknown): RegisteredDevice {
   const l = (label ?? '').trim()
   if (!l || l.length > 80) throw guestErr(400, { error: 'invalid_input' })
-  const d: DeviceRow = { id: newId('dd'), label: l, token: `mock-door-token-${randomBytes(12).toString('hex')}`, created_at: new Date().toISOString(), last_seen_at: null, revoked_at: null }
+  let pub: string | null = null
+  if (publicKey !== undefined && publicKey !== null) {
+    if (typeof publicKey !== 'string' || !/^[\w-]+$/.test(publicKey) || Buffer.from(publicKey, 'base64url').length !== 32) throw invalidField('public_key', '32-byte X25519 key, base64url')
+    pub = publicKey
+  }
+  const d: DeviceRow = { id: newId('dd'), label: l, token: `mock-door-token-${randomBytes(12).toString('hex')}`, created_at: new Date().toISOString(), last_seen_at: null, revoked_at: null, public_key: pub }
   doorDevices.push(d)
   return { id: d.id, label: d.label, token: d.token }
 }

@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { DoorBundle, DoorDeviceRecord } from '~/types/door'
 import { memoryKV, type KV } from '~/utils/doorDb'
-import { DEVICE_KEY, setDoorKV, useDoorStore } from '../door'
+import { DEVICE_KEY, setDoorDeviceKV, setDoorKV, useDoorStore } from '../door'
+import { fromB64url } from '~/utils/sealed/bytes'
+import { encryptBan } from '~/utils/sealed/ban'
+import { generateOsk, oskAad, wrapOsk } from '~/utils/sealed/keys'
 
 const fetchMock = vi.fn()
 vi.stubGlobal('$fetch', fetchMock)
@@ -284,7 +287,7 @@ describe('useDoorStore (event DOOR tab)', () => {
       Promise.resolve(opts?.method === 'POST' ? { id: 'd-9', label: 'Front', token: 'secret-token' } : []))
     const s = useDoorStore()
     await s.registerDevice(' Front ', { id: 'e1', title: 'Klubnacht', starts_at: 'x' })
-    expect(fetchMock.mock.calls[0]![1].body).toEqual({ label: 'Front' })
+    expect(fetchMock.mock.calls[0]![1].body).toEqual({ label: 'Front', public_key: expect.stringMatching(/^[\w-]{43}$/) })
     expect(JSON.parse(localStorage.getItem(DEVICE_KEY)!)).toEqual({ id: 'd-9', label: 'Front', token: 'secret-token', event: { id: 'e1', title: 'Klubnacht', starts_at: 'x' } })
     s.assignEvent({ id: 'e2', title: 'Warehouse', starts_at: 'y' })
     expect(JSON.parse(localStorage.getItem(DEVICE_KEY)!).event.id).toBe('e2')
@@ -311,5 +314,94 @@ describe('useDoorStore (event DOOR tab)', () => {
     expect(fetchMock.mock.calls[0]![1].body).toEqual({ manager: true, valid_until: '2026-10-04T09:00:00Z' })
     expect(r.pin).toBe('246810')
     expect(s.pinStatus?.manager?.valid_until).toBe('2026-10-04T09:00:00Z')
+  })
+})
+
+describe('useDoorStore (ban list at the door, P2.6)', () => {
+  let deviceKv: KV
+  let sessionKv: KV
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    fetchMock.mockReset()
+    localStorage.clear()
+    sessionKv = memoryKV()
+    setDoorKV(() => sessionKv)
+    deviceKv = memoryKV()
+    setDoorDeviceKV(() => deviceKv)
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+  })
+  afterEach(() => useDoorStore().stopLoop())
+
+  /** Register (keypair made in this browser), then build a bundle whose sealed block is wrapped to that device. */
+  async function registered(withSealed = true, tenant = 'org-1') {
+    let pub = ''
+    fetchMock.mockImplementation((url: string, opts?: { method?: string, body?: { public_key?: string } }) => {
+      if (url === '/api/v1/door/devices' && opts?.method === 'POST') {
+        pub = opts.body!.public_key!
+        return Promise.resolve({ id: 'd-1', label: 'Front door', token: 'tok' })
+      }
+      return Promise.resolve([])
+    })
+    const s = useDoorStore()
+    await s.registerDevice('Front door', { id: 'e1', title: 'Klubnacht', starts_at: later(-1) }, 'org-1')
+    expect(JSON.parse(localStorage.getItem(DEVICE_KEY)!).org_id).toBe('org-1')
+    expect(fromB64url(pub)).toHaveLength(32)
+    const osk = generateOsk()
+    const sealed = withSealed
+      ? {
+          key_version: 2,
+          wrap: await wrapOsk(osk, pub, oskAad(tenant, 2, 'device', 'd-1')),
+          ban_entries: [
+            { id: 'b1', entry_sealed: await encryptBan(osk, tenant, 'b1', 2, { name: 'Mara Weiß', reason: 'Fight at the bar' }), expires_at: later(24) },
+            { id: 'b2', entry_sealed: await encryptBan(osk, tenant, 'b2', 2, { name: 'Old Case', reason: 'x' }), expires_at: later(-1) },
+          ],
+        }
+      : null
+    fetchMock.mockImplementation((url: string) => Promise.resolve(url === '/api/v1/door/bundle' ? { ...bundle(), sealed } : null))
+    await s.init()
+    await s.login('123456')
+    return s
+  }
+
+  it('decrypts the ban list offline with the key made at registration, in memory only', async () => {
+    const s = await registered()
+    expect(s.banStatus).toBe('ready')
+    expect(s.ban).toEqual([expect.objectContaining({ id: 'b1', name: 'Mara Weiß', reason: 'Fight at the bar' })])
+    // The vault keeps the bundle encrypted: no plaintext name of an entry anywhere in storage.
+    const stored = await sessionKv.get('slot:bundle') as { ct: ArrayBuffer }
+    expect(new TextDecoder().decode(stored.ct)).not.toContain('Mara')
+    // A reload reopens it from the vault.
+    setActivePinia(createPinia())
+    const again = useDoorStore()
+    await again.init()
+    expect(again.banStatus).toBe('ready')
+    expect(again.ban?.[0]?.name).toBe('Mara Weiß')
+  })
+
+  it('shows no ban list without a sealed block and wipes it on logout', async () => {
+    const none = await registered(false)
+    expect(none.banStatus).toBe('none')
+    expect(none.ban).toBeNull()
+    const s = await registered(true)
+    expect(s.ban).toHaveLength(1)
+    fetchMock.mockResolvedValue(null)
+    await s.logout()
+    expect(s.ban).toBeNull()
+    expect(s.banStatus).toBe('none')
+    // The device key survives a door logout (it belongs to the device, not the session).
+    expect(await s.hasDeviceKey()).toBe(true)
+    await s.forgetDevice()
+    expect(await deviceKv.get('session-key')).toBeUndefined()
+  })
+
+  it('says unreadable for a wrap to another tenant and no_key without the device key', async () => {
+    const s = await registered(true, 'org-2')
+    expect(s.banStatus).toBe('unreadable')
+    expect(s.ban).toBeNull()
+    await deviceKv.clear()
+    setActivePinia(createPinia())
+    const fresh = useDoorStore()
+    await fresh.init()
+    expect(fresh.banStatus).toBe('no_key')
   })
 })

@@ -136,7 +136,7 @@ export function authIsStale(authTime: string | null | undefined, now = Date.now(
   return Number.isFinite(t) && now - t > STEP_UP_FRESH_MS
 }
 
-export type StepUpWhy = 'erase' | 'retention'
+export type StepUpWhy = 'erase' | 'retention' | 'sealed'
 
 /** SIGN IN AGAIN: the login page, then straight back to `next` (a path with its own query). */
 export function signInAgainRoute(next: string, why: StepUpWhy) {
@@ -147,6 +147,7 @@ export function signInAgainRoute(next: string, why: StepUpWhy) {
 export function stepUpLoginText(why: unknown): string {
   if (why === 'erase') return 'Confirm it\'s you to erase guest data.'
   if (why === 'retention') return 'Confirm it\'s you to change how long guest data is kept.'
+  if (why === 'sealed') return 'Confirm it\'s you to manage the encryption keys.'
   return ''
 }
 

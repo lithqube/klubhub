@@ -133,3 +133,53 @@ export class DoorVault {
     await this.kv.clear()
   }
 }
+
+// ---------------------------------------------------------------- device key (P2.6)
+
+/**
+ * The door device's X25519 private key (it opens the ban list offline).
+ * It must outlive door sessions — logout and session wipes clear the
+ * session vault above — so it sits in a vault of its own: a separate
+ * IndexedDB database, sealed the same way under its own non-extractable
+ * AES-GCM key. Only "forget this device" (or revoking it here) clears it.
+ */
+export const DEVICE_DB = 'klubhub-door-device'
+const DEVICE_SLOT = 'device-key'
+
+interface DeviceSecret {
+  device_id: string
+  private_key: number[]
+}
+
+export class DeviceKeyVault {
+  private readonly vault: DoorVault
+  constructor(kv: KV) {
+    this.vault = new DoorVault(kv)
+  }
+
+  /** Replace whatever is stored with this device's private key. */
+  async save(deviceId: string, privateKey: Uint8Array): Promise<void> {
+    await this.vault.create()
+    const s: DeviceSecret = { device_id: deviceId, private_key: [...privateKey] }
+    await this.vault.put(DEVICE_SLOT, s)
+    s.private_key.fill(0)
+  }
+
+  /** The private key for deviceId, or null (none stored, another device's, unreadable). */
+  async load(deviceId: string): Promise<Uint8Array | null> {
+    if (!(await this.vault.open())) return null
+    const s = await this.vault.get<DeviceSecret>(DEVICE_SLOT)
+    if (!s || s.device_id !== deviceId || !Array.isArray(s.private_key) || s.private_key.length !== 32) return null
+    return Uint8Array.from(s.private_key)
+  }
+
+  async has(deviceId: string): Promise<boolean> {
+    const k = await this.load(deviceId)
+    k?.fill(0)
+    return !!k
+  }
+
+  async clear(): Promise<void> {
+    await this.vault.wipe()
+  }
+}

@@ -1,2 +1,8 @@
 import { DOOR_COOKIE, doorBundle, doorSession } from '../-mockDb'
-export default defineEventHandler(event => doorBundle(doorSession(getCookie(event, DOOR_COOKIE))))
+import { sealedForDevice } from '../-mockSealed'
+
+// P2.6: the bundle carries the ban list sealed to this device (null when not provisioned).
+export default defineEventHandler((event) => {
+  const s = doorSession(getCookie(event, DOOR_COOKIE))
+  return { ...doorBundle(s), sealed: sealedForDevice(event, s.device_id) }
+})

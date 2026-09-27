@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ListPlus } from 'lucide-vue-next'
+import { ListPlus, ShieldBan } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useGuestStore } from '~/stores/guest'
 import type { ApiError } from '~/types/event'
@@ -59,6 +59,9 @@ function edit(s: StandingList | 'new') {
         <h1 class="page-title">GUESTS</h1>
         <p class="page-sub">Guest lists across your upcoming events, and the lists every new event starts with.</p>
       </div>
+      <NuxtLink to="/ban-list" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" data-testid="guests-ban-list-link">
+        <ShieldBan style="width:14px;height:14px;" aria-hidden="true" /> BAN LIST
+      </NuxtLink>
     </div>
     <div class="page-body space-y-4">
       <section aria-labelledby="upcoming-h" class="space-y-2">
