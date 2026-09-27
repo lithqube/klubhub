@@ -135,3 +135,42 @@ func TestVerifyCoverage(t *testing.T) {
 		t.Fatalf("coverage must catch unguarded routes and unknown actions, got:\n%s", joined)
 	}
 }
+
+// Door routes take the event from the session, never the URL.
+func TestGuardEventFromScope(t *testing.T) {
+	e := engine(t)
+	reg := authz.NewRegistry()
+	mux := chi.NewRouter()
+	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
+	e.Handle(mux, reg, authz.Route{Method: http.MethodGet, Pattern: "/api/v1/door/bundle", Action: "door.read", ResourceType: "door", EventFromScope: true}, ok, nil)
+	e.Handle(mux, reg, authz.Route{Method: http.MethodGet, Pattern: "/api/v1/door/x/{eventID}", Action: "door.read", ResourceType: "door", EventFromScope: true}, ok, nil)
+	e.Handle(mux, reg, authz.Route{Method: http.MethodGet, Pattern: "/api/v1/events/{eventID}/door", Action: "door.read", ResourceType: "door"}, ok, nil)
+
+	door := authz.Principal{Sub: "device:d", OrgID: org, Roles: []string{"door"}, EventScope: "e1", AuthTime: time.Now()}
+	unscoped := authz.Principal{Sub: "device:d", OrgID: org, Roles: []string{"door"}, AuthTime: time.Now()}
+	owner := authz.Principal{Sub: "local:u", OrgID: org, Roles: []string{"owner"}, AuthTime: time.Now()}
+	cases := []struct {
+		name   string
+		path   string
+		p      authz.Principal
+		status int
+		reason string
+	}{
+		{"door session reaches its own event", "/api/v1/door/bundle", door, http.StatusNoContent, ""},
+		{"the URL cannot pick another event", "/api/v1/door/x/e2", door, http.StatusNoContent, ""},
+		{"a URL event route still checks the scope", "/api/v1/events/e2/door", door, http.StatusForbidden, "outside_event_scope"},
+		{"door principal without a scope", "/api/v1/door/bundle", unscoped, http.StatusForbidden, "outside_event_scope"},
+		{"staff pass the guard; the handler decides", "/api/v1/door/bundle", owner, http.StatusNoContent, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, c.path, nil)
+			req = req.WithContext(authz.ContextWithPrincipal(req.Context(), c.p))
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != c.status || (c.reason != "" && !strings.Contains(rec.Body.String(), c.reason)) {
+				t.Fatalf("got %d %s, want %d %s", rec.Code, rec.Body, c.status, c.reason)
+			}
+		})
+	}
+}

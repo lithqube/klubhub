@@ -9,7 +9,7 @@ useHead({ title: 'Venues' })
 const store = useVenueStore()
 const { venues, loading, error } = storeToRefs(store)
 const { canEditEvents } = storeToRefs(useSessionStore())
-await useAsyncData('venues', () => store.fetchVenues())
+await useAsyncData('venues', () => store.fetchVenues().then(() => true))
 
 const search = ref('')
 const rows = computed(() => {

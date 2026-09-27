@@ -1,0 +1,4 @@
+Order Id,Ticket Id,Ticket title,First Name,Last Name,Email,Barcode,Ticket status
+5501,88001,Phase 1,Juno,Park,juno@example.org,SG88001X,valid
+5502,88002,Phase 2,Kim,Lee,kim@example.org,SG88002X,canceled
+5503,88003,Phase 2,Ana,Silva,ana@example.org,SG88003X,resold elsewhere

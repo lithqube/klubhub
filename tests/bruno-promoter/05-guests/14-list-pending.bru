@@ -1,0 +1,28 @@
+meta {
+  name: Guest table filtered by status
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests?status=pending
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+params:query {
+  status: pending
+}
+
+assert {
+  res.status: eq 200
+  res.body.guests.length: eq 1
+  res.body.guests[0].id: eq {{guestAdaId}}
+  res.body.counts.pending: eq 1
+  res.body.counts.going: eq 3
+  res.body.counts.all: eq 4
+}

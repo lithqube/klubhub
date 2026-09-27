@@ -1,0 +1,21 @@
+meta {
+  name: Refused rotations changed nothing
+  type: http
+  seq: 49
+}
+
+get {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.key_version: eq 1
+  res.body.entries[0].entry_sealed: eq {{entry1b}}
+}

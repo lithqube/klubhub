@@ -1,0 +1,35 @@
+meta {
+  name: Generate the staff PIN
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/events/{{eventId}}/pin
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "valid_until": "{{pinValidUntil}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.manager: eq false
+}
+
+tests {
+  test("PIN is 6 digits, shown once", function () {
+    const pin = res.getBody().pin;
+    expect(pin).to.match(/^\d{6}$/);
+    bru.setVar("staffPin", pin); // secret: runtime only
+  });
+}

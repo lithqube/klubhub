@@ -1,0 +1,45 @@
+meta {
+  name: Create an event that ended three days ago
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "Bruno Past Night",
+    "starts_at": "{{pastStartsAt}}",
+    "ends_at": "{{pastEndsAt}}",
+    "timezone": "Europe/Berlin",
+    "city": "Berlin"
+  }
+}
+
+script:pre-request {
+  const now = Date.now();
+  const iso = (ms) => new Date(Math.floor(ms / 60000) * 60000).toISOString().replace(".000Z", "Z");
+  bru.setVar("pastStartsAt", iso(now - 72 * 3600e3));
+  bru.setVar("pastEndsAt", iso(now - 64 * 3600e3));
+}
+
+assert {
+  res.status: eq 201
+}
+
+tests {
+  test("save the past event id", function () {
+    const id = res.getBody().id;
+    expect(id).to.match(/^[0-9a-f-]{36}$/);
+    bru.setVar("pastEventId", id);
+  });
+}

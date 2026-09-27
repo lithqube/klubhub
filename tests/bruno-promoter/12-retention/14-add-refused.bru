@@ -1,0 +1,25 @@
+meta {
+  name: Adding guests to the erased event is refused
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{pastEventId}}/guests
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "list_id": "{{pastListId}}", "guests": [{ "name": "Too Late", "status": "going" }] }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq event_purged
+}

@@ -1,0 +1,14 @@
+{
+  "name": "KlubHub Door",
+  "short_name": "Door",
+  "description": "Offline guest list and ticket check-in for the door.",
+  "start_url": "/door",
+  "scope": "/door",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0E0E0F",
+  "theme_color": "#0E0E0F",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }
+  ]
+}

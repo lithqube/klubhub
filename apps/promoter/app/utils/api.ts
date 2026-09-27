@@ -41,5 +41,6 @@ export function toApiError(e: unknown): import('~/types/event').ApiError {
     issues: Array.isArray(data.issues) ? (data.issues as never) : undefined,
     entries: Array.isArray(data.entries) ? (data.entries as string[]) : undefined,
     status: err?.statusCode ?? err?.status,
+    detail: data,
   }
 }

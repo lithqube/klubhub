@@ -20,8 +20,13 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/authz"
 	platformhttp "github.com/klubhub/dj/api/internal/platform/http"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
+	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
+	"github.com/klubhub/dj/api/internal/promoter/report"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 )
 
 // Pinger reports database health.
@@ -37,6 +42,11 @@ type Deps struct {
 	Authn         auth.Authenticator
 	Identity      *identity.Handler // nil when the provider is not local
 	Events        *event.Handler
+	Guests        *guest.Handler
+	Door          *door.Handler
+	Reports       *report.Handler
+	Retention     *retention.Handler
+	Sealed        *sealed.Handler
 	Origins       []string
 	ServeFrontend bool
 	NuxtURL       string
@@ -82,6 +92,21 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 	}
 	if d.Events != nil {
 		d.Events.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Guests != nil {
+		d.Guests.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Door != nil {
+		d.Door.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Reports != nil {
+		d.Reports.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Retention != nil {
+		d.Retention.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Sealed != nil {
+		d.Sealed.Mount(r, d.Authz, reg, onDeny)
 	}
 
 	notFound := func(w http.ResponseWriter, req *http.Request) {

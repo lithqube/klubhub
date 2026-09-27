@@ -1,0 +1,29 @@
+meta {
+  name: Re-wrap the private key (same public key)
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/v1/keys/me
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "public_key": "{{ownerPub}}",
+    "private_sealed": "{{ownerPrivB}}",
+    "kdf": { "alg": "argon2id", "m": 65536, "t": 3, "p": 1, "salt": "{{kdfSalt}}" }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.private_sealed: eq {{ownerPrivB}}
+}

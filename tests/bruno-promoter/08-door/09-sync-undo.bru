@@ -1,0 +1,38 @@
+meta {
+  name: Undo the ticket check-in
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/checkins
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "since": "{{syncCursor}}",
+    "ops": [
+      { "nonce": "{{nUndo}}", "type": "undo", "target": "{{nTicketIn}}", "at": "{{opAt}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.results[0].status: eq applied
+}
+
+tests {
+  test("the undone check-in reaches devices through the delta", function () {
+    const c = res.getBody().checkins.find((x) => x.nonce === bru.getVar("nTicketIn"));
+    expect(c, "undone ticket check-in in delta").to.be.an("object");
+    expect(c.undone).to.equal(true);
+  });
+}

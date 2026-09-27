@@ -1,0 +1,43 @@
+meta {
+  name: Confirm TOTP with a computed code (upgrades the session)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/totp/confirm
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "code": "{{totpCode}}"
+  }
+}
+
+script:pre-request {
+  const crypto = require("crypto");
+  const b32 = (s) => {
+    const a = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let bits = "";
+    for (const ch of s.replace(/=+$/, "").toUpperCase()) bits += a.indexOf(ch).toString(2).padStart(5, "0");
+    const out = [];
+    for (let i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i + 8), 2));
+    return Buffer.from(out);
+  };
+  const msg = Buffer.alloc(8);
+  msg.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const h = crypto.createHmac("sha1", b32(bru.getVar("totpSecret"))).update(msg).digest();
+  const o = h[h.length - 1] & 0xf;
+  bru.setVar("totpCode", String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, "0"));
+}
+
+assert {
+  res.status: eq 204
+}

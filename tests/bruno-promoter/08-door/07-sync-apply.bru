@@ -1,0 +1,65 @@
+meta {
+  name: Sync check-ins (applied)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/checkins
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "since": "{{bundleCursor}}",
+    "ops": [
+      { "nonce": "{{nGuestIn}}", "type": "checkin", "subject": { "kind": "guest", "id": "{{guestMaraId}}" }, "count": 2, "direction": "in", "at": "{{opAt}}" },
+      { "nonce": "{{nTicketIn}}", "type": "checkin", "subject": { "kind": "ticket", "id": "{{ticketId}}" }, "count": 1, "direction": "in", "at": "{{opAt}}" },
+      { "nonce": "{{nWalkup}}", "type": "counter", "kind": "walkup", "delta": 1, "at": "{{opAt}}" }
+    ]
+  }
+}
+
+script:pre-request {
+  const run = Date.now().toString(36);
+  bru.setVar("nGuestIn", "bru-" + run + "-guest-in");
+  bru.setVar("nTicketIn", "bru-" + run + "-ticket-in");
+  bru.setVar("nWalkup", "bru-" + run + "-walkup");
+  bru.setVar("nUndo", "bru-" + run + "-undo");
+  bru.setVar("opAt", new Date().toISOString());
+}
+
+assert {
+  res.status: eq 200
+  res.body.results.length: eq 3
+  res.body.counters.walkups: eq 1
+  res.body.cursor: isString
+}
+
+tests {
+  const b = res.getBody();
+  test("every op is applied without conflict", function () {
+    b.results.forEach((r) => {
+      expect(r.status, r.nonce + " " + (r.error || "")).to.equal("applied");
+      expect(r.conflict).to.equal(false);
+    });
+    expect(b.results.map((r) => r.nonce)).to.deep.equal([
+      bru.getVar("nGuestIn"), bru.getVar("nTicketIn"), bru.getVar("nWalkup"),
+    ]);
+  });
+  test("the delta returns the new check-ins", function () {
+    const g = b.checkins.find((c) => c.nonce === bru.getVar("nGuestIn"));
+    expect(g.subject).to.deep.equal({ kind: "guest", id: bru.getVar("guestMaraId") });
+    expect(g.count).to.equal(2);
+    expect(g.direction).to.equal("in");
+    expect(g.device_id).to.equal(bru.getVar("deviceId"));
+    expect(g.undone).to.equal(false);
+    bru.setVar("syncCursor", b.cursor);
+  });
+}

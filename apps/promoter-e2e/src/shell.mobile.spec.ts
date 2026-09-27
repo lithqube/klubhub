@@ -12,7 +12,7 @@ test.describe('promoter shell (mobile)', () => {
     await expect(page.locator('.page-title')).toHaveText('VENUES');
     await page.getByRole('button', { name: 'MORE' }).click();
     await page.getByRole('navigation', { name: 'More sections' }).getByRole('link', { name: /DOOR/ }).click();
-    await expect(page.locator('.page-title')).toHaveText('DOOR');
+    await expect(page.getByRole('heading', { name: 'DOOR', level: 1 })).toBeVisible();
   });
 
   test('mobile header shows the product brand', async ({ page }) => {

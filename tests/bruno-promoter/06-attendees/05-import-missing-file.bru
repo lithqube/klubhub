@@ -1,0 +1,25 @@
+meta {
+  name: Multipart import without a file is 422
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/attendees/import
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+body:multipart-form {
+  preset: ra
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq file
+}

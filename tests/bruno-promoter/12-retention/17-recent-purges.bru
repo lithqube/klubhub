@@ -1,0 +1,32 @@
+meta {
+  name: Settings list the purge under recent
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/api/v1/org/retention
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.recent.length: eq 1
+  res.body.recent[0].event_id: eq {{pastEventId}}
+  res.body.recent[0].title: eq Bruno Past Night
+  res.body.recent[0].timezone: eq Europe/Berlin
+  res.body.recent[0].trigger: eq manual
+  res.body.recent[0].counts.guests: eq 2
+}
+
+tests {
+  test("the erased event is no longer upcoming", function () {
+    const ids = res.getBody().upcoming.map((u) => u.event_id);
+    expect(ids).to.not.include(bru.getVar("pastEventId"));
+  });
+}

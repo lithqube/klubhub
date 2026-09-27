@@ -1,5 +1,5 @@
 import type { EventInput } from '~/types/event'
-import { events, newId, recheck, venues } from '../-mockDb'
+import { copyStandingLists, events, newId, recheck, venues } from '../-mockDb'
 export default defineEventHandler(async (event) => {
   const b = await readBody<EventInput>(event)
   if (!b?.title?.trim()) throw createError({ statusCode: 422, data: { error: 'invalid', field: 'title', problem: 'required, at most 200 characters' } })
@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
     lineup: [], issues: [],
   })
   events.push(e)
+  copyStandingLists(e)
   setResponseStatus(event, 201)
   return e
 })

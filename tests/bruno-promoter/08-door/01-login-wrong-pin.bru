@@ -1,0 +1,33 @@
+meta {
+  name: Door login with a wrong PIN is 401
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "device_token": "{{deviceToken}}",
+    "event_id": "{{eventId}}",
+    "pin": "{{wrongStaffPin}}"
+  }
+}
+
+script:pre-request {
+  const pin = Number(bru.getVar("staffPin"));
+  bru.setVar("wrongStaffPin", String((pin + 1) % 1000000).padStart(6, "0"));
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq invalid_credentials
+}

@@ -1,0 +1,39 @@
+meta {
+  name: Create allocation (quota 2 heads)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/lists/{{artistListId}}/allocations
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "label": "DJ Bruno",
+    "quota": 2,
+    "plus_n_max": 1,
+    "requires_approval": false
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.label: eq DJ Bruno
+  res.body.quota: eq 2
+  res.body.used: eq 0
+  res.body.list_id: eq {{artistListId}}
+}
+
+tests {
+  test("save allocation id", function () {
+    bru.setVar("allocationId", res.getBody().id);
+  });
+}

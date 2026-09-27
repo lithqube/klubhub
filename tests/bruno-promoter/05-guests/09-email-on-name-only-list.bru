@@ -1,0 +1,31 @@
+meta {
+  name: Email on a name-only list is 422
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "list_id": "{{artistListId}}",
+    "guests": [
+      { "name": "Nina Test", "email": "nina.test@example.org" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq guests[0].email
+}

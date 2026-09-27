@@ -1,0 +1,19 @@
+meta {
+  name: Revoke the provisioned device
+  type: http
+  seq: 55
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/door/devices/{{sealedDeviceId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 204
+}

@@ -1,0 +1,31 @@
+meta {
+  name: New event is listed under drafts
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events?view=drafts
+  body: none
+  auth: none
+}
+
+params:query {
+  view: drafts
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("contains the created event", function () {
+    const e = res.getBody().find((x) => x.id === bru.getVar("eventId"));
+    expect(e, "created event").to.be.an("object");
+    expect(e.status).to.equal("draft");
+  });
+}

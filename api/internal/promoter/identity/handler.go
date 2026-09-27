@@ -3,8 +3,10 @@ package identity
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +14,8 @@ import (
 
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 )
 
 const maxBody = 16 << 10
@@ -42,9 +46,12 @@ func (h *Handler) Mount(r chi.Router, e *authz.Engine, reg *authz.Registry, onDe
 	guarded(http.MethodPost, "/api/v1/auth/totp/enroll", "account.self", "account", h.totpEnroll)
 	guarded(http.MethodPost, "/api/v1/auth/totp/confirm", "account.self", "account", h.totpConfirm)
 	guarded(http.MethodPost, "/api/v1/members/invites", "member.manage", "member", h.invite)
+	guarded(http.MethodDelete, "/api/v1/members/{userID}", "member.manage", "member", h.removeMember)
 	guarded(http.MethodPost, "/api/v1/door/devices", "door.device.manage", "door_device", h.registerDevice)
 	guarded(http.MethodDelete, "/api/v1/door/devices/{deviceID}", "door.device.manage", "door_device", h.revokeDevice)
+	guarded(http.MethodGet, "/api/v1/door/devices", "door.device.manage", "door_device", h.listDevices)
 	guarded(http.MethodPost, "/api/v1/door/events/{eventID}/pin", "door.device.manage", "door_pin", h.setPIN)
+	guarded(http.MethodGet, "/api/v1/door/events/{eventID}/pin", "door.device.manage", "door_pin", h.pinStatus)
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -66,7 +73,26 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func fail(w http.ResponseWriter, err error) {
 	var perr *ProfileError
+	var locked *PINLockedError
 	switch {
+	case errors.As(err, &locked):
+		// 429 (not 423): the lock is a rate limit on PIN guessing and lifts by
+		// itself; Retry-After (seconds) and retry_after (RFC 3339) say when.
+		secs := int(math.Ceil(locked.Wait.Seconds()))
+		w.Header().Set("Retry-After", strconv.Itoa(max(secs, 1)))
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "pin_locked", "retry_after": locked.Until.UTC().Format(time.RFC3339)})
+	case errors.Is(err, ErrMemberNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+	case errors.Is(err, ErrCannotRemoveSelf):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot_remove_self"})
+	case errors.Is(err, ErrLastOwner):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "last_owner"})
+	case errors.Is(err, ErrOwnerRequired):
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "owner_required"})
+	case errors.Is(err, retention.ErrEventPurged):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "event_purged"})
+	case errors.Is(err, ErrPINExpired):
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "pin_expired"})
 	case errors.As(err, &perr):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid", "field": perr.Field, "problem": perr.Problem})
 	case errors.Is(err, ErrTOTPRequired):
@@ -228,12 +254,21 @@ func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) registerDevice(w http.ResponseWriter, r *http.Request) {
 	p, _ := authz.PrincipalFrom(r.Context())
 	var in struct {
-		Label string `json:"label"`
+		Label     string  `json:"label"`
+		PublicKey *string `json:"public_key"` // optional X25519 key for the sealed tier (P2.6)
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	d, err := h.svc.RegisterDoorDevice(r.Context(), p, in.Label)
+	var pub []byte
+	if in.PublicKey != nil {
+		var err error
+		if pub, err = sealed.DecodePublicKey("public_key", *in.PublicKey); err != nil {
+			fail(w, &ProfileError{Field: "public_key", Problem: "X25519 public key: 32 bytes, base64url"})
+			return
+		}
+	}
+	d, err := h.svc.RegisterDoorDeviceWithKey(r.Context(), p, in.Label, pub)
 	if err != nil {
 		fail(w, err)
 		return
@@ -255,6 +290,30 @@ func (h *Handler) revokeDevice(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
+	p, _ := authz.PrincipalFrom(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		fail(w, ErrMemberNotFound)
+		return
+	}
+	if err := h.svc.RemoveMember(r.Context(), p, id); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) listDevices(w http.ResponseWriter, r *http.Request) {
+	p, _ := authz.PrincipalFrom(r.Context())
+	list, err := h.svc.DoorDevices(r.Context(), p)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
 func (h *Handler) setPIN(w http.ResponseWriter, r *http.Request) {
 	p, _ := authz.PrincipalFrom(r.Context())
 	event, err := uuid.Parse(chi.URLParam(r, "eventID"))
@@ -264,16 +323,36 @@ func (h *Handler) setPIN(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct {
 		ValidUntil time.Time `json:"valid_until"`
+		Manager    bool      `json:"manager"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	pin, err := h.svc.SetDoorPIN(r.Context(), p, event, in.ValidUntil)
+	set := h.svc.SetDoorPIN
+	if in.Manager {
+		set = h.svc.SetManagerPIN
+	}
+	pin, err := set(r.Context(), p, event, in.ValidUntil)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"pin": pin, "valid_until": in.ValidUntil})
+	writeJSON(w, http.StatusCreated, map[string]any{"pin": pin, "valid_until": in.ValidUntil, "manager": in.Manager})
+}
+
+func (h *Handler) pinStatus(w http.ResponseWriter, r *http.Request) {
+	p, _ := authz.PrincipalFrom(r.Context())
+	event, err := uuid.Parse(chi.URLParam(r, "eventID"))
+	if err != nil {
+		fail(w, ErrInvalidInput)
+		return
+	}
+	st, err := h.svc.DoorPINStatus(r.Context(), p, event)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
 }
 
 func (h *Handler) doorLogin(w http.ResponseWriter, r *http.Request) {

@@ -4,3 +4,67 @@
  * comes from the @dev/ui layer. Add promoter-only surfaces below.
  */
 @import "#kui/assets/css/kinetic.css";
+
+/* ── Report tables (P2.4): numbers right-aligned in tabular figures; on
+ *    phones each row becomes a labelled card so nothing scrolls sideways.
+ *    The wrapper scrolls a wide table inside its panel, never the page. ── */
+.report-table-wrap { overflow-x: auto; max-width: 100%; }
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-data);
+  font-size: 13px;
+}
+.report-table th {
+  text-align: left;
+  font-family: var(--font-terminal);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  color: var(--color-tertiary);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+.report-table td {
+  padding: 8px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-outline-variant);
+  color: var(--color-on-surface);
+}
+.report-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.report-table .muted { color: var(--color-on-surface-variant); font-size: 11px; }
+@media (max-width: 639px) {
+  .report-table.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .report-table.stack tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 4px 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--color-outline-variant);
+  }
+  .report-table.stack td { display: flex; justify-content: space-between; gap: 8px; min-width: 0; border: 0; padding: 2px 0; text-align: left; }
+  .report-table.stack td.head, .report-table.stack td.wide { grid-column: 1 / -1; display: block; }
+  .report-table.stack td[data-label]::before {
+    content: attr(data-label);
+    font-family: var(--font-terminal);
+    font-size: 10px;
+    letter-spacing: .07em;
+    color: var(--color-tertiary);
+    align-self: center;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ── Disabled HUD buttons look disabled (P2.5: personal-data actions are
+ *    turned off after an erase, with the reason next to them). ── */
+.btn-hud:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}

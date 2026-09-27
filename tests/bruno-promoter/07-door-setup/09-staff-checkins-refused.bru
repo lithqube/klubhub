@@ -1,0 +1,28 @@
+meta {
+  name: Staff session posting door check-ins is 403 door_session_required
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/checkins
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "since": null,
+    "ops": []
+  }
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: eq door_session_required
+}

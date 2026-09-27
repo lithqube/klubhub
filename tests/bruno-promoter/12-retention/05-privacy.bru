@@ -1,0 +1,33 @@
+meta {
+  name: Privacy of the main event (not purged)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/privacy
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.retention_days: eq 60
+  res.body.purged_at: isNull
+}
+
+tests {
+  test("purge_after is the end plus 60 days", function () {
+    const b = res.getBody();
+    const want = Date.parse(bru.getVar("eventEndsAt")) + 60 * 86400e3;
+    expect(Date.parse(b.purge_after)).to.equal(want);
+  });
+
+  test("counts guests and tickets that still hold personal data", function () {
+    expect(res.getBody().personal_rows).to.be.a("number").and.to.be.above(0);
+  });
+}

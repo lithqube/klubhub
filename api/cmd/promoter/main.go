@@ -3,6 +3,7 @@
 //	promoter [serve]      run the HTTP API (default)
 //	promoter migrate      apply schema migrations (schema-owner connection)
 //	promoter bootstrap    create the instance organisation and first owner
+//	promoter purge        run the retention job once, incl. expired ban entries (--dry-run: list only)
 //	promoter healthcheck  probe the local /api/v1/health (container HEALTHCHECK)
 package main
 
@@ -33,9 +34,14 @@ import (
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/config"
+	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
+	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/migrations"
+	"github.com/klubhub/dj/api/internal/promoter/report"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
 
@@ -56,12 +62,14 @@ func main() {
 		err = migrate()
 	case "bootstrap":
 		err = bootstrap(args)
+	case "purge":
+		err = purge(args)
 	case "healthcheck":
 		err = healthcheck()
 	case "version":
 		fmt.Println(version)
 	default:
-		err = fmt.Errorf("unknown command %q (serve | migrate | bootstrap | healthcheck)", cmd)
+		err = fmt.Errorf("unknown command %q (serve | migrate | bootstrap | purge | healthcheck)", cmd)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "promoter:", err)
@@ -123,15 +131,24 @@ func serve() error {
 	}
 	defer rt.pool.Close()
 
+	events := event.NewService(rt.db, rt.keys, nil)
+	guests := guest.NewService(rt.db, rt.keys, nil)
+	events.OnCreate(guests.CopyStandingLists) // standing lists join each new event atomically
 	deps := server.Deps{
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),
-		Events:        event.NewHandler(event.NewService(rt.db, rt.keys, nil)),
+		Events:        event.NewHandler(events),
+		Guests:        guest.NewHandler(guests),
+		Reports:       report.NewHandler(report.NewService(rt.db, rt.keys, nil)),
+		Retention:     retention.NewHandler(retention.NewService(rt.db, nil)),
+		Sealed:        sealed.NewHandler(sealed.NewService(rt.db, rt.keys, nil)),
 		ServeFrontend: rt.cfg.ServeFrontend, NuxtURL: rt.cfg.NuxtInternalURL,
 	}
+	var managerPINs door.ManagerPINs // door sessions and PINs exist with local identity only
 	switch rt.cfg.AuthProvider {
 	case "local":
 		svc := identity.NewService(rt.db, rt.keys, identity.Options{})
 		deps.Authn, deps.Identity = svc, identity.NewHandler(svc)
+		managerPINs = svc
 	case "zitadel":
 		jwks := rt.cfg.ZitadelJWKSURL
 		if jwks == "" {
@@ -147,6 +164,7 @@ func serve() error {
 		}
 		deps.Authn = z
 	}
+	deps.Door = door.NewHandler(door.NewService(rt.db, rt.keys, managerPINs, nil))
 	mux, _ := server.New(deps)
 
 	if rt.cfg.NATSServers != "" {
@@ -158,6 +176,10 @@ func serve() error {
 	} else {
 		rt.log.Warn().Msg("PROMOTER_NATS_SERVERS not set: events stay in the outbox (development only)")
 	}
+
+	// Retention job: once at start, then hourly; stops with the server.
+	stopRetention := startRetention(ctx, rt)
+	defer stopRetention()
 
 	srv := &http.Server{
 		Addr:              net.JoinHostPort(rt.cfg.BindAddress, rt.cfg.Port),
@@ -218,6 +240,69 @@ func startRelay(ctx context.Context, rt *runtime) (func(), error) {
 		_ = nc.Drain()
 		pool.Close()
 	}, nil
+}
+
+// startRetention runs the retention worker until ctx ends; the returned
+// func stops it and waits for a running purge to finish or roll back.
+func startRetention(ctx context.Context, rt *runtime) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	w := &retention.Worker{Service: retention.NewService(rt.db, nil), Log: rt.log}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.Run(ctx)
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+// purge runs the retention job once, or with --dry-run lists what it would
+// purge. Output carries ids, titles (public) and counts, never guest data.
+func purge(args []string) error {
+	fs := flag.NewFlagSet("purge", flag.ContinueOnError)
+	dry := fs.Bool("dry-run", false, "list the events that are due, purge nothing")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	rt, err := open(ctx)
+	if err != nil {
+		return err
+	}
+	defer rt.pool.Close()
+	svc := retention.NewService(rt.db, nil)
+	if *dry {
+		due, err := svc.DryRun(ctx)
+		for _, d := range due {
+			fmt.Printf("due  org=%s event=%s ended=%s purge_after=%s  %q\n", d.TenantID, d.EventID,
+				d.EndsAt.Format(time.RFC3339), d.PurgeAfter.Format(time.RFC3339), d.Title)
+		}
+		fmt.Printf("promoter: %d event(s) due (dry run, nothing purged)\n", len(due))
+		if err != nil {
+			return err
+		}
+		n, err := svc.ExpiredBans(ctx)
+		fmt.Printf("promoter: %d expired ban entr(ies) due (dry run, nothing deleted)\n", n)
+		return err
+	}
+	res, err := svc.RunDue(ctx)
+	for _, r := range res {
+		c := r.Counts
+		fmt.Printf("purged  org=%s event=%s guests=%d orders=%d order_positions=%d allocation_contacts=%d door_pins=%d\n",
+			r.TenantID, r.EventID, c.Guests, c.Orders, c.OrderPositions, c.GuestAllocations, c.DoorPins)
+	}
+	fmt.Printf("promoter: %d event(s) purged\n", len(res))
+	bans, banErr := svc.PurgeExpiredBans(ctx)
+	deleted := 0
+	for _, b := range bans {
+		fmt.Printf("bans    org=%s expired_deleted=%d\n", b.TenantID, b.Deleted)
+		deleted += b.Deleted
+	}
+	fmt.Printf("promoter: %d expired ban entr(ies) deleted\n", deleted)
+	return errors.Join(err, banErr)
 }
 
 // migrate needs only the schema-owner connection (and optional role

@@ -1,0 +1,33 @@
+meta {
+  name: Shortening confirmed with the exact count (recent sign-in)
+  type: http
+  seq: 23
+}
+
+put {
+  url: {{baseUrl}}/api/v1/org/retention
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "retention_days": 1, "confirm_purge": 1 }
+}
+
+assert {
+  res.status: eq 200
+  res.body.retention_days: eq 1
+}
+
+tests {
+  test("the event is due now", function () {
+    const u = res.getBody().upcoming.find((x) => x.event_id === bru.getVar("shortEventId"));
+    expect(u).to.be.an("object");
+    expect(Date.parse(u.purge_after)).to.be.at.most(Date.now());
+  });
+}

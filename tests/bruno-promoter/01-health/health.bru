@@ -1,0 +1,25 @@
+meta {
+  name: Health is public and ok
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/health
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ok
+  res.body.database: eq ok
+}
+
+tests {
+  test("API responses carry security headers", function () {
+    expect(res.getHeader("x-content-type-options")).to.equal("nosniff");
+    expect(res.getHeader("x-frame-options")).to.equal("DENY");
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+  });
+}

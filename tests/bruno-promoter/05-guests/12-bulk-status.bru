@@ -1,0 +1,35 @@
+meta {
+  name: Bulk status by pasted emails
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests/bulk-status
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "status": "pending",
+    "emails": ["ada.test@example.org", "nobody@example.org"]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.matched: eq 1
+  res.body.updated: eq 1
+}
+
+tests {
+  test("unmatched email is reported back", function () {
+    expect(res.getBody().unmatched).to.deep.equal(["nobody@example.org"]);
+  });
+}

@@ -1,0 +1,35 @@
+meta {
+  name: Erase the past event now (typed title, case and spacing ignored)
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{pastEventId}}/purge
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "confirm": "  bruno   PAST night " }
+}
+
+assert {
+  res.status: eq 200
+  res.body.event_id: eq {{pastEventId}}
+  res.body.trigger: eq manual
+  res.body.counts.guests: eq 2
+  res.body.counts.orders: eq 0
+  res.body.counts.order_positions: eq 0
+}
+
+tests {
+  test("purged_at is set", function () {
+    expect(Date.parse(res.getBody().purged_at)).to.be.a("number").and.not.NaN;
+  });
+}

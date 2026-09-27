@@ -20,10 +20,20 @@ import (
 // Service implements venues, events, stages, lineup and export data. Every
 // method runs in the tenant carried by ctx (set by the auth middleware).
 type Service struct {
-	db   *tenantdb.DB
-	keys *envelope.Keyring
-	now  func() time.Time
+	db       *tenantdb.DB
+	keys     *envelope.Keyring
+	now      func() time.Time
+	onCreate []CreateHook
 }
+
+// CreateHook runs inside the event-creation transaction, after the event and
+// its stages exist. Other domains use it to seed per-event data (P2.1:
+// standing guest lists) atomically with the event.
+type CreateHook func(ctx context.Context, tx pgx.Tx, ev Event) error
+
+// OnCreate registers a hook for new events. Call it during wiring, before
+// the service handles requests.
+func (s *Service) OnCreate(h CreateHook) { s.onCreate = append(s.onCreate, h) }
 
 // NewService builds the service; now defaults to time.Now.
 func NewService(db *tenantdb.DB, keys *envelope.Keyring, now func() time.Time) *Service {

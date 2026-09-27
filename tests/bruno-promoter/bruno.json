@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "klubhub-promoter",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

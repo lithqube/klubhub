@@ -58,6 +58,10 @@ Nav gains VENUES. Pages: `/events` (upcoming / drafts / past), `/events/new`, `/
 
 ## Status (2026-09-26)
 
+Merged to `main` in lithqube/klubhub#21 (63339c5). The mock seed now puts
+the next night 6 days out so `/now` resolves regardless of the time of day
+(the mobile NOW e2e was time-of-day dependent).
+
 | Slice | State | Commits |
 |---|---|---|
 | P1.1 Venues | Done — list, editor, rooms, sealed address/geo/contacts, MFA-gated audited reveal, archive blocked while in use, tech-notes contact hint | 7879d5d |

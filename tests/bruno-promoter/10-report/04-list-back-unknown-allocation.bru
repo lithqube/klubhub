@@ -1,0 +1,28 @@
+meta {
+  name: List-back CSV for an unknown allocation is 404
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/report/list-back.csv?allocation_id={{randomAllocationId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+params:query {
+  allocation_id: {{randomAllocationId}}
+}
+
+script:pre-request {
+  bru.setVar("randomAllocationId", require("crypto").randomUUID());
+}
+
+assert {
+  res.status: eq 404
+  res.body.error: eq not_found
+}

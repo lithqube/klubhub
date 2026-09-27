@@ -1,0 +1,23 @@
+meta {
+  name: Ban list is re-encrypted under version 2
+  type: http
+  seq: 51
+}
+
+get {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.key_version: eq 2
+  res.body.entries: length 1
+  res.body.entries[0].key_version: eq 2
+  res.body.entries[0].entry_sealed: eq {{entry1r}}
+}

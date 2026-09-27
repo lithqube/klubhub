@@ -1,0 +1,36 @@
+meta {
+  name: Guest table filtered to checked in
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests?status=checked_in
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+params:query {
+  status: checked_in
+}
+
+assert {
+  res.status: eq 200
+  res.body.guests.length: eq 1
+  res.body.guests[0].id: eq {{guestMaraId}}
+  res.body.guests[0].heads_in: eq 2
+  res.body.counts.checked_in: eq 1
+  res.body.tickets.length: eq 0
+}
+
+tests {
+  test("tab counts ignore the status filter", function () {
+    const c = res.getBody().counts;
+    expect(c.all).to.be.above(c.checked_in);
+    expect(c.going).to.be.at.least(1);
+  });
+}

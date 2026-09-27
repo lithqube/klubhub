@@ -1,0 +1,21 @@
+meta {
+  name: Booker now has a wrap
+  type: http
+  seq: 24
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{bookerCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ready
+  res.body.my_wrap: eq {{bookerWrap1}}
+}

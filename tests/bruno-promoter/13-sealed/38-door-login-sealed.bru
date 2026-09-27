@@ -1,0 +1,35 @@
+meta {
+  name: Door login with the sealed device
+  type: http
+  seq: 38
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "device_token": "{{sealedDeviceToken}}",
+    "event_id": "{{eventId}}",
+    "pin": "{{staffPin}}"
+  }
+}
+
+assert {
+  res.status: eq 204
+}
+
+tests {
+  test("door session cookie", function () {
+    const sc = [].concat(res.getHeader("set-cookie") || []);
+    const raw = sc.find((c) => c.startsWith("__Host-kh_session="));
+    bru.setVar("sealedDoorCookie", /^__Host-kh_session=([^;]+)/.exec(raw)[1]); // secret: runtime only
+  });
+}

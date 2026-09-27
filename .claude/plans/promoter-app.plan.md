@@ -678,7 +678,26 @@ The public surface is built as a **separate "public edge" module** (`api/interna
 
 ## 14. Status (2026-09-26)
 
-**P0 complete on `feat/promoter-app`** (not merged):
+**P0 and P1 merged to `main`** in lithqube/klubhub#21 (merge commit
+63339c5, 2026-09-26), together with the browser-only DJ demo. All CI green on
+GitHub: gitleaks over full history, Go vet/race/integration + govulncheck,
+frontend lint/typecheck/unit/e2e, image build + Trivy, demo build.
+
+| Phase | State | Detail |
+|---|---|---|
+| P0 Foundations | Done (task 12 deferred to P2) | table below |
+| P1 Events | Done except P1.6 RA import, P1.7 flyers (later) | `.claude/plans/promoter-p1-events.plan.md` |
+| P2 RSVP, guest list, door | In progress on `feat/promoter-p2` | `.claude/plans/promoter-p2-guests-door.plan.md` |
+| P3–P7 | Not started | — |
+
+Fixes made while merging (not in the task table): Go toolchain 1.26.6 and
+pgx v5.9.2 (govulncheck); runtime image drops npm/corepack (Trivy); each
+app's Dockerfile keeps only its own root tsconfig reference, and
+`.dockerignore` excludes generated dirs at any depth; `trivy-action` v0.36.0
+pinned by SHA with Trivy v0.70.0; CI generates both apps' Nuxt types before
+tests; promoter mock seed keeps the next night inside the 7-day NOW window.
+
+P0 detail (originally completed on `feat/promoter-app`):
 
 | §13.8 task | Commit(s) | Verified by |
 |---|---|---|
@@ -691,12 +710,15 @@ The public surface is built as a **separate "public edge" module** (`api/interna
 | 7 NATS outbox + audit | 53ec953 | relay/least-privilege/immutability tests, JetStream dedupe on nats:2.11 |
 | 8 promoter binary | 1be3074 | Postgres smoke test |
 | 9 infra | 0aa4be5 | image build; compose stack healthy; bootstrap → door login → JetStream end to end |
-| 10 CI | 0aa4be5, 17dc896 | workflow YAML valid; gitleaks full history clean locally (not yet run on GitHub) |
+| 10 CI | 0aa4be5, 17dc896 | runs as `promoter-ci.yml` (not `containers-ci.yml`); green on GitHub in #21, gitleaks full history clean |
 | 11 docs | ef3bacc | SECURITY.md, ADRs 0001–0006, SELF-HOSTING |
 | 12 sealed-tier browser keys | — | Model in ADR 0001; implementation with the P2 ban list |
 
 Deviations from the plan text: CSRF uses Origin/Referer + a custom header (not
 double-submit); Promoter migrations live in `api/internal/promoter/migrations`;
-dev port 4400; the promoter image has no browser runtime until P3.
+dev port 4400; the promoter image has no browser runtime until P3; the
+stack is `docker-compose.promoter.yml` (no `scripts/setup.sh` promoter mode
+yet).
 
-Next: P1 (events, venues, lineup, timetable, export pack).
+Next: P2 (guest lists, attendee import, offline door, report, privacy, sealed
+ban list), then P3 to complete the MVP (D3).

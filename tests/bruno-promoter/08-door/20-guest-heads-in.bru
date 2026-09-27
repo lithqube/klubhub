@@ -1,0 +1,47 @@
+meta {
+  name: Guest table shows check-in state after the door sync
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.counts.checked_in: eq 1
+}
+
+tests {
+  const b = res.getBody();
+  test("Mara's 2 heads are in, first in at the device time; undone and rejected ops do not count", function () {
+    const mara = b.guests.find((g) => g.id === bru.getVar("guestMaraId"));
+    expect(mara.heads_in).to.equal(2);
+    expect(Date.parse(mara.first_in_at)).to.equal(Date.parse(bru.getVar("opAt")));
+    const ada = b.guests.find((g) => g.id === bru.getVar("guestAdaId"));
+    expect(ada.heads_in).to.equal(0); // its count-0 op was rejected
+    expect(ada.first_in_at).to.equal(null);
+    b.guests.filter((g) => g.id !== bru.getVar("guestMaraId")).forEach((g) => expect(g.heads_in, g.id).to.equal(0));
+  });
+  test("the undone ticket check-in leaves the ticket not checked in", function () {
+    const t = b.tickets.find((x) => x.id === bru.getVar("ticketId"));
+    expect(t.checked_in).to.equal(false);
+    expect(t.first_in_at).to.equal(null);
+    b.tickets.forEach((x) => expect(x.checked_in, x.id).to.equal(false));
+  });
+  test("remember every guest and ticket name and email (for the report checks)", function () {
+    const pii = [];
+    b.guests.forEach((g) => pii.push(g.name, g.email));
+    b.tickets.forEach((t) => pii.push(t.name, t.email));
+    const list = [...new Set(pii.filter((s) => s && s.length >= 3))];
+    expect(list.length).to.be.above(4);
+    bru.setVar("piiStrings", JSON.stringify(list));
+  });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: CSV export does not take the checked_in filter (422)
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests/export.csv?status=checked_in
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+params:query {
+  status: checked_in
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq status
+}

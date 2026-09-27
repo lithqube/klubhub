@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useSessionStore } from '~/stores/session'
+import { stepUpLoginText } from '~/utils/privacy'
 
 definePageMeta({ public: true })
 useHead({ title: 'Sign in' })
@@ -13,6 +14,8 @@ const totp = ref('')
 const needTotp = ref(false)
 const busy = ref(false)
 const error = ref<string | null>(null)
+/** Sent here by SIGN IN AGAIN before an erase (?why=erase|retention). */
+const why = computed(() => stepUpLoginText(route.query.why))
 
 const messages: Record<string, string> = {
   invalid_credentials: 'Email, password or code is not correct.',
@@ -45,6 +48,9 @@ async function submit() {
 <template>
   <AuthCard title="SIGN IN" subtitle="Your collective's private workspace.">
     <form class="space-y-4" novalidate @submit.prevent="submit">
+      <p v-if="why" class="glass" style="padding:10px 14px;margin:0;font-size:13px;border-left:3px solid var(--color-tertiary);" data-testid="login-why">
+        {{ why }}
+      </p>
       <label class="block">
         <span class="section-lbl">EMAIL</span>
         <input v-model="email" class="hud-input" type="email" name="email" autocomplete="username" required :disabled="needTotp">

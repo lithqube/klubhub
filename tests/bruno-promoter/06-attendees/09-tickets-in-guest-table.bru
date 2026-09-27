@@ -1,0 +1,37 @@
+meta {
+  name: Imported tickets show in the guest table without secrets
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.tickets.length: eq 3
+  res.body.counts.tickets: eq 2
+}
+
+tests {
+  test("ticket rows carry source, status and no secret", function () {
+    const tickets = res.getBody().tickets;
+    tickets.forEach((t) => {
+      expect(t.source).to.equal("ra");
+      expect(t).to.not.have.property("secret");
+    });
+    expect(JSON.stringify(tickets)).to.not.contain("bru-secret-");
+    const valid = tickets.find((t) => t.order_ref === "RA-1001" && t.status === "valid");
+    const cancelled = tickets.find((t) => t.status === "cancelled");
+    expect(valid, "a valid ticket").to.be.an("object");
+    expect(cancelled, "the cancelled ticket").to.be.an("object");
+    bru.setVar("ticketId", valid.id);
+  });
+}

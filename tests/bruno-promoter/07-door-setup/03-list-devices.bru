@@ -1,0 +1,28 @@
+meta {
+  name: List door devices (no tokens)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/devices
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("lists the device without its token", function () {
+    const d = res.getBody().find((x) => x.id === bru.getVar("deviceId"));
+    expect(d, "registered device").to.be.an("object");
+    expect(d.revoked_at).to.equal(null);
+    expect(d).to.not.have.property("token");
+  });
+}

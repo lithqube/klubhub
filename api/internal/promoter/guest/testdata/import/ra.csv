@@ -1,0 +1,5 @@
+Order ID;Ticket ID;First name;Last name;Email;Ticket type;Barcode;Status
+90001;T-1;Lena;Vogt;lena@example.org;Tier 1;RA-0001-AAA;Valid
+90001;T-2;Sam;Oduya;lena@example.org;Tier 1;RA-0001-AAB;Valid
+90002;T-3;Kofi;Mensah;kofi@example.org;Tier 2;RA-0002-AAA;Refunded
+90003;T-4;;;;Tier 2;RA-0003-AAA;Valid

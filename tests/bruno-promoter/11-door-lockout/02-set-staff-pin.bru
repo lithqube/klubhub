@@ -1,0 +1,36 @@
+meta {
+  name: Staff PIN for the lockout event
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/events/{{lockEventId}}/pin
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "valid_until": "{{pinValidUntil}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.manager: eq false
+}
+
+tests {
+  test("keep the PIN (runtime only) and a wrong one", function () {
+    const pin = res.getBody().pin;
+    expect(pin).to.match(/^\d{6}$/);
+    bru.setVar("lockPin", pin);
+    bru.setVar("lockWrongPin", String((Number(pin) + 1) % 1000000).padStart(6, "0"));
+  });
+}

@@ -1,0 +1,42 @@
+meta {
+  name: Resending the same ops is duplicate (nonce-idempotent)
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/checkins
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "since": "{{bundleCursor}}",
+    "ops": [
+      { "nonce": "{{nGuestIn}}", "type": "checkin", "subject": { "kind": "guest", "id": "{{guestMaraId}}" }, "count": 2, "direction": "in", "at": "{{opAt}}" },
+      { "nonce": "{{nTicketIn}}", "type": "checkin", "subject": { "kind": "ticket", "id": "{{ticketId}}" }, "count": 1, "direction": "in", "at": "{{opAt}}" },
+      { "nonce": "{{nWalkup}}", "type": "counter", "kind": "walkup", "delta": 1, "at": "{{opAt}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.results.length: eq 3
+  res.body.counters.walkups: eq 1
+}
+
+tests {
+  test("every op is reported duplicate and nothing is counted twice", function () {
+    const b = res.getBody();
+    b.results.forEach((r) => expect(r.status, r.nonce).to.equal("duplicate"));
+    const mine = b.checkins.filter((c) => c.nonce === bru.getVar("nGuestIn"));
+    expect(mine).to.have.lengthOf(1);
+  });
+}

@@ -1,0 +1,36 @@
+meta {
+  name: Register a door device with a public key
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/devices
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "label": "Bruno sealed door",
+    "public_key": "{{devicePub}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+tests {
+  test("device id and token", function () {
+    const b = res.getBody();
+    expect(b.id).to.match(/^[0-9a-f-]{36}$/);
+    bru.setVar("sealedDeviceId", b.id);
+    bru.setVar("sealedDeviceToken", b.token); // secret: runtime only
+  });
+}

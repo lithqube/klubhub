@@ -8,7 +8,7 @@ const store = useEventStore()
 const venueStore = useVenueStore()
 const { current } = storeToRefs(store)
 const { venues } = storeToRefs(venueStore)
-await useAsyncData('venues', () => venueStore.fetchVenues())
+await useAsyncData('venues', () => venueStore.fetchVenues().then(() => true))
 
 const busy = ref(false)
 const serverError = ref<ApiError | null>(null)

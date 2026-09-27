@@ -9,6 +9,7 @@ import {
   Handshake,
   Settings,
   Radio,
+  ShieldBan,
 } from 'lucide-vue-next'
 import type { KhNavItem } from '#kui/types/shell'
 
@@ -21,8 +22,9 @@ export const PROMOTER_NAV: KhNavItem[] = [
   { label: 'DASHBOARD', icon: LayoutDashboard, to: '/', group: 'PLAN' },
   { label: 'EVENTS',    icon: CalendarRange,   to: '/events', group: 'PLAN' },
   { label: 'VENUES',    icon: MapPin,          to: '/venues', group: 'PLAN' },
-  { label: 'GUESTS',    icon: ListChecks,      to: '/guests', group: 'RUN', tag: 'P2' },
-  { label: 'DOOR',      icon: ScanLine,        to: '/door', group: 'RUN', tag: 'P2' },
+  { label: 'GUESTS',    icon: ListChecks,      to: '/guests', group: 'RUN' },
+  { label: 'BAN LIST',  icon: ShieldBan,       to: '/ban-list', group: 'RUN' },
+  { label: 'DOOR',      icon: ScanLine,        to: '/door', group: 'RUN' },
   { label: 'AUDIENCE',  icon: Users,           to: '/audience', group: 'GROW', tag: 'P3' },
   { label: 'CAMPAIGNS', icon: Megaphone,       to: '/campaigns', group: 'GROW', tag: 'P3' },
   { label: 'BOOKINGS',  icon: Handshake,       to: '/bookings', group: 'DEAL', tag: 'P4' },

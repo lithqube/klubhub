@@ -1,0 +1,25 @@
+meta {
+  name: Erasing twice is refused
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{pastEventId}}/purge
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "confirm": "Bruno Past Night" }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq event_purged
+}

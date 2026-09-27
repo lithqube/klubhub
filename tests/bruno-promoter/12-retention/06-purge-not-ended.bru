@@ -1,0 +1,25 @@
+meta {
+  name: Erase now is refused for an event that has not ended
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/purge
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "confirm": "Bruno Night" }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq event_not_ended
+}

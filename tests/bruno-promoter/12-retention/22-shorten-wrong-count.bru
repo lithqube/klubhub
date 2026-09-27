@@ -1,0 +1,26 @@
+meta {
+  name: Shortening with the wrong count is refused again
+  type: http
+  seq: 22
+}
+
+put {
+  url: {{baseUrl}}/api/v1/org/retention
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "retention_days": 1, "confirm_purge": 2 }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq retention_would_purge
+  res.body.count: eq 1
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Deleting it again is 404
+  type: http
+  seq: 36
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/ban-list/{{banId2}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 404
+}

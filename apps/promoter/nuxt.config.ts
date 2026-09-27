@@ -47,6 +47,9 @@ export default defineNuxtConfig({
     },
   },
   css: ['~/assets/css/styles.css'],
+  // jsQR is imported lazily by the door scanner; pre-bundle it so the dev
+  // server does not re-optimise (and reload the page) on first use.
+  vite: { optimizeDeps: { include: ['jsqr'] } },
 
   // Security headers and rate limits (pattern from OpenSchild's config).
   // CSP keeps nuxt-security's defaults: per-request nonce on inline scripts
@@ -57,6 +60,9 @@ export default defineNuxtConfig({
       xContentTypeOptions: 'nosniff',
       referrerPolicy: 'strict-origin-when-cross-origin',
       xXSSProtection: '0',
+      // The door registers a service worker (public/door-sw.js); script-src
+      // uses 'strict-dynamic', which would otherwise block it.
+      contentSecurityPolicy: { 'worker-src': ["'self'"] },
     },
     rateLimiter: isProd ? { tokensPerInterval: 150, interval: 300000, headers: true } : false,
   },
@@ -71,6 +77,10 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
+    // The door scanner needs the camera; every other page keeps camera=().
+    '/door': {
+      security: { headers: { permissionsPolicy: { camera: ['self'] } } },
+    },
     // Auth routes (added with platform/auth): tighter limit per client.
     '/api/v1/auth/**': {
       security: { rateLimiter: isProd ? { tokensPerInterval: 10, interval: 60000 } : false },

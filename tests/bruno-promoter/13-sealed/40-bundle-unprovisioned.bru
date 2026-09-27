@@ -1,0 +1,25 @@
+meta {
+  name: Bundle of a device without a wrap has sealed null
+  type: http
+  seq: 40
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/bundle
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("sealed is null", function () {
+    expect(res.getBody()).to.have.property("sealed", null);
+  });
+}

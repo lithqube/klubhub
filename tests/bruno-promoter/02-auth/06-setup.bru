@@ -1,0 +1,26 @@
+meta {
+  name: Setup sets the first owner password
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/setup
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "token": "{{setupToken}}",
+    "password": "{{ownerPassword}}"
+  }
+}
+
+assert {
+  res.status: eq 204
+}

@@ -1,0 +1,33 @@
+meta {
+  name: Rotation that misses a ban entry is 422
+  type: http
+  seq: 47
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/org/rotate
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "from_version": 1,
+    "to_version": 2,
+    "recovery": { "public_key": "{{recoveryPub2}}", "fingerprint": "{{recoveryFp2}}", "wrap": "{{recoveryWrap2}}" },
+    "wraps": [
+      { "recipient_kind": "member", "recipient_id": "{{ownerUserId}}", "wrap": "{{ownerWrap2}}" }
+    ],
+    "ban_entries": []
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.field: eq ban_entries
+}

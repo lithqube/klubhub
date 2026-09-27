@@ -1,0 +1,20 @@
+meta {
+  name: Recipients as a booker is 403
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org/recipients
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{bookerCookie}}
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: eq no_role_grant
+}

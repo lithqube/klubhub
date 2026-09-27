@@ -1,0 +1,29 @@
+meta {
+  name: Check-in sync with unknown fields is 400
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/checkins
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "since": null,
+    "ops": [],
+    "event_id": "{{eventId}}"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq invalid_body
+}

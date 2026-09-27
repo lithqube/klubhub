@@ -1,0 +1,25 @@
+meta {
+  name: Device wrap of the old version is gone
+  type: http
+  seq: 52
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/bundle
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{sealedDoorCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("sealed is null until re-provisioned", function () {
+    expect(res.getBody()).to.have.property("sealed", null);
+  });
+}

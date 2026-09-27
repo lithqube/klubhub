@@ -12,7 +12,7 @@ import rego.v1
 known_actions := {
 	"org.read", "org.update", "org.delete",
 	"account.self", "member.read", "member.manage", "security.manage",
-	"event.read", "event.write", "venue.reveal",
+	"event.read", "event.write", "event.purge", "venue.reveal",
 	"guestlist.read", "guestlist.write",
 	"door.read", "door.checkin", "door.device.manage",
 	"audience.read", "audience.write", "audience.export",
@@ -54,7 +54,9 @@ mfa_actions := {
 # Actions that need a recent authentication (step-up), in seconds.
 step_up_max_age := 900
 
-step_up_actions := {"org.delete", "member.manage", "security.manage", "audience.export", "finance.approve"}
+# event.purge erases an event's guest data now (P2.5 "erase now"): owners
+# and admins only, with a recent sign-in.
+step_up_actions := {"org.delete", "member.manage", "security.manage", "audience.export", "finance.approve", "event.purge"}
 
 mfa_methods := {"mfa", "otp", "totp", "hwk", "swk", "webauthn"}
 

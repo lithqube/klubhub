@@ -1,0 +1,10 @@
+meta {
+  name: 11-door-lockout
+  seq: 11
+}
+
+docs {
+  Staff PIN lockout on a separate event, so the door tests of the main
+  event keep working: 5 wrong PINs lock the PIN (429 pin_locked with
+  Retry-After), PIN status shows locked_until, and a new staff PIN unlocks.
+}

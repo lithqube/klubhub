@@ -1,0 +1,30 @@
+meta {
+  name: Public key of 31 bytes is 422
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/v1/keys/me
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHg",
+    "private_sealed": "{{ownerPrivB}}",
+    "kdf": { "alg": "argon2id", "m": 65536, "t": 3, "p": 1, "salt": "{{kdfSalt}}" }
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq public_key
+}

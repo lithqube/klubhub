@@ -1,0 +1,27 @@
+meta {
+  name: Logout clears the session cookie
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/logout
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 204
+}
+
+tests {
+  test("cookie is expired", function () {
+    const sc = [].concat(res.getHeader("set-cookie") || []);
+    const raw = sc.find((c) => c.startsWith("__Host-kh_session="));
+    expect(raw).to.match(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+  });
+}

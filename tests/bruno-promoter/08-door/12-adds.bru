@@ -1,0 +1,34 @@
+meta {
+  name: On-the-spot add with the manager PIN
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/adds
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "adds": [
+      { "id": "{{addId}}", "nonce": "bru-add-ok-{{runTag}}", "list_id": "{{vipListId}}", "name": "Walk Up Test", "plus_n": 1, "manager_pin": "{{managerPin}}", "at": "{{opAt}}" }
+    ]
+  }
+}
+
+script:pre-request {
+  bru.setVar("addId", require("crypto").randomUUID());
+}
+
+assert {
+  res.status: eq 200
+  res.body.results[0].status: eq applied
+  res.body.results[0].id: eq {{addId}}
+}

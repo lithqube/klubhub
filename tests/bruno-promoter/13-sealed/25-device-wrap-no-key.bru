@@ -1,0 +1,27 @@
+meta {
+  name: Wrap for a device without a public key is 422
+  type: http
+  seq: 25
+}
+
+put {
+  url: {{baseUrl}}/api/v1/keys/devices/{{deviceId}}/wrap
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "wrap": "{{deviceWrap1}}"
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.problem: eq device has no public key
+}

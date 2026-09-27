@@ -1,0 +1,53 @@
+meta {
+  name: Confirm TOTP with a wrong code is 401
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/totp/confirm
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "code": "{{wrongTotp}}"
+  }
+}
+
+script:pre-request {
+  // RFC 6238 in the sandbox (node crypto): base32 secret, HMAC-SHA1, 30 s, 6 digits.
+  const crypto = require("crypto");
+  const b32 = (s) => {
+    const a = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let bits = "";
+    for (const ch of s.replace(/=+$/, "").toUpperCase()) bits += a.indexOf(ch).toString(2).padStart(5, "0");
+    const out = [];
+    for (let i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i + 8), 2));
+    return Buffer.from(out);
+  };
+  const code = (secret, step) => {
+    const msg = Buffer.alloc(8);
+    msg.writeBigUInt64BE(BigInt(step));
+    const h = crypto.createHmac("sha1", b32(secret)).update(msg).digest();
+    const o = h[h.length - 1] & 0xf;
+    return String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, "0");
+  };
+  const secret = bru.getVar("totpSecret");
+  const step = Math.floor(Date.now() / 30000);
+  const valid = new Set([code(secret, step - 1), code(secret, step), code(secret, step + 1)]);
+  let wrong = 0;
+  while (valid.has(String(wrong).padStart(6, "0"))) wrong++;
+  bru.setVar("wrongTotp", String(wrong).padStart(6, "0"));
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq invalid_credentials
+}

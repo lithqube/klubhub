@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,8 +25,13 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/envelope"
 	"github.com/klubhub/dj/api/internal/platform/pgtest"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
+	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
+	"github.com/klubhub/dj/api/internal/promoter/report"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
+	"github.com/klubhub/dj/api/internal/promoter/sealed"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
 
@@ -96,18 +102,58 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	keys := envelope.NewKeyring(kek)
+	events := event.NewService(db, keys, nil)
+	guests := guest.NewService(db, keys, nil)
+	events.OnCreate(guests.CopyStandingLists)
 	mux, reg := server.New(server.Deps{
 		Log: zerolog.Nop(), DB: db, Authz: engine, Authn: svc,
 		Identity: identity.NewHandler(svc), Origins: []string{origin},
-		Events: event.NewHandler(event.NewService(db, envelope.NewKeyring(kek), nil)),
+		Events: event.NewHandler(events), Guests: guest.NewHandler(guests),
+		Door:      door.NewHandler(door.NewService(db, keys, svc, nil)),
+		Reports:   report.NewHandler(report.NewService(db, keys, nil)),
+		Retention: retention.NewHandler(retention.NewService(db, nil)),
+		Sealed:    sealed.NewHandler(sealed.NewService(db, keys, nil)),
 	})
+	lastRegistry = reg
 	return mux, svc, func() []error { return authz.VerifyCoverage(context.Background(), mux, reg) }
 }
+
+// lastRegistry is the registry of the latest stack (route assertions).
+var lastRegistry *authz.Registry
 
 func TestEveryRouteHasAPolicyDecision(t *testing.T) {
 	_, _, coverage := stack(t)
 	for _, err := range coverage() {
 		t.Error(err)
+	}
+	// P2.5 routes are mounted with their contract actions.
+	for _, want := range []authz.Route{
+		{Method: http.MethodGet, Pattern: "/api/v1/org/retention", Action: "org.read"},
+		{Method: http.MethodGet, Pattern: "/api/v1/org/retention/preview", Action: "org.read"},
+		{Method: http.MethodPut, Pattern: "/api/v1/org/retention", Action: "org.update"},
+		{Method: http.MethodPost, Pattern: "/api/v1/events/{eventID}/purge", Action: "event.purge"},
+		{Method: http.MethodGet, Pattern: "/api/v1/events/{eventID}/privacy", Action: "event.read"},
+		// P2.6 sealed tier and ban list.
+		{Method: http.MethodGet, Pattern: "/api/v1/keys/me", Action: "account.self"},
+		{Method: http.MethodPut, Pattern: "/api/v1/keys/me", Action: "account.self"},
+		{Method: http.MethodGet, Pattern: "/api/v1/keys/org", Action: "account.self"},
+		{Method: http.MethodGet, Pattern: "/api/v1/keys/org/recipients", Action: "security.manage"},
+		{Method: http.MethodPost, Pattern: "/api/v1/keys/org/setup", Action: "security.manage"},
+		{Method: http.MethodPost, Pattern: "/api/v1/keys/org/wraps", Action: "security.manage"},
+		{Method: http.MethodPost, Pattern: "/api/v1/keys/org/rotate", Action: "security.manage"},
+		{Method: http.MethodGet, Pattern: "/api/v1/keys/org/recovery", Action: "security.manage"},
+		{Method: http.MethodPut, Pattern: "/api/v1/keys/devices/{deviceID}/wrap", Action: "door.device.manage"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/members/{userID}", Action: "member.manage"},
+		{Method: http.MethodGet, Pattern: "/api/v1/ban-list", Action: "guestlist.read"},
+		{Method: http.MethodPost, Pattern: "/api/v1/ban-list", Action: "guestlist.write"},
+		{Method: http.MethodPut, Pattern: "/api/v1/ban-list/{entryID}", Action: "guestlist.write"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/ban-list/{entryID}", Action: "guestlist.write"},
+	} {
+		got, ok := lastRegistry.Lookup(want.Method, want.Pattern)
+		if !ok || got.Public || got.Action != want.Action {
+			t.Errorf("%s %s: registered=%v %+v, want action %s", want.Method, want.Pattern, ok, got, want.Action)
+		}
 	}
 }
 
@@ -233,6 +279,37 @@ func TestEndToEndSelfHostedFlow(t *testing.T) {
 		t.Fatalf("outbox events: %v", subjects)
 	}
 
+	// Offline door: the device downloads its event; staff cannot.
+	rec = door.do(http.MethodGet, "/api/v1/door/bundle", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"`+event.String()+`"`) || !strings.Contains(rec.Body.String(), `"manager_pin":null`) {
+		t.Fatalf("door bundle: %d %s", rec.Code, rec.Body)
+	}
+	rec = door.do(http.MethodPost, "/api/v1/door/checkins", map[string]any{"since": nil, "ops": []map[string]any{
+		{"nonce": "walkup-0001", "type": "counter", "kind": "walkup", "delta": 2, "at": time.Now()}}}, true)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"walkups":2`) {
+		t.Fatalf("door sync: %d %s", rec.Code, rec.Body)
+	}
+	if rec := owner.do(http.MethodGet, "/api/v1/door/bundle", nil, false); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "door_session_required") {
+		t.Fatalf("staff on the door bundle: %d %s", rec.Code, rec.Body)
+	}
+	if rec := door.do(http.MethodGet, "/api/v1/door/devices", nil, false); rec.Code != http.StatusForbidden {
+		t.Fatalf("door staff must not list devices: %d", rec.Code)
+	}
+	rec = owner.do(http.MethodPost, "/api/v1/door/events/"+event.String()+"/pin", map[string]any{"valid_until": time.Now().Add(4 * time.Hour), "manager": true}, true)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"manager":true`) {
+		t.Fatalf("manager pin: %d %s", rec.Code, rec.Body)
+	}
+	rec = owner.do(http.MethodGet, "/api/v1/door/events/"+event.String()+"/pin", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"staff":{"valid_until"`) || !strings.Contains(rec.Body.String(), `"manager":{"valid_until"`) ||
+		strings.Contains(rec.Body.String(), `"pin"`) {
+		t.Fatalf("pin status (never the PIN): %d %s", rec.Code, rec.Body)
+	}
+	rec = owner.do(http.MethodGet, "/api/v1/door/devices", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"label":"Door iPhone"`) || !strings.Contains(rec.Body.String(), `"last_seen_at":"`) ||
+		strings.Contains(rec.Body.String(), "token") {
+		t.Fatalf("devices: %d %s", rec.Code, rec.Body)
+	}
+
 	if rec := owner.do(http.MethodPost, "/api/v1/auth/logout", nil, true); rec.Code != http.StatusNoContent {
 		t.Fatalf("logout: %d", rec.Code)
 	}
@@ -322,5 +399,178 @@ func TestEventsAPI(t *testing.T) {
 	}
 	if rec := c.do(http.MethodGet, "/api/v1/events?view=drafts", nil, false); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"act_count":2`) {
 		t.Fatalf("list drafts: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestGuestsAPI(t *testing.T) {
+	h, svc, _ := stack(t)
+	ctx := context.Background()
+	setup, _ := svc.Bootstrap(ctx, identity.BootstrapInput{OrgName: "Nachtwerk", Slug: "nachtwerk", OwnerEmail: "o@n.example", OwnerName: "O"})
+	_ = svc.CompleteSetup(ctx, setup, "the owner passphrase")
+	c := &client{t: t, h: h}
+	c.do(http.MethodPost, "/api/v1/auth/login", map[string]string{"email": "o@n.example", "password": "the owner passphrase"}, true)
+
+	if rec := c.do(http.MethodPost, "/api/v1/standing-lists", map[string]any{"name": "Residents", "type": "artist",
+		"entry_terms": map[string]any{"cutoff_local": "01:00"}}, true); rec.Code != http.StatusCreated {
+		t.Fatalf("standing list: %d %s", rec.Code, rec.Body)
+	}
+	start := time.Unix(time.Now().Add(72*time.Hour).Unix()/3600*3600, 0).UTC()
+	rec := c.do(http.MethodPost, "/api/v1/events", map[string]any{"title": "Klubnacht", "starts_at": start, "ends_at": start.Add(8 * time.Hour),
+		"timezone": "Europe/Berlin", "city": "Berlin"}, true)
+	var ev struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &ev)
+	base := "/api/v1/events/" + ev.ID
+
+	rec = c.do(http.MethodGet, base+"/lists", nil, false)
+	var lists []struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &lists)
+	if rec.Code != http.StatusOK || len(lists) != 1 || !strings.Contains(rec.Body.String(), `"cutoff_at"`) {
+		t.Fatalf("the standing list must be copied into the new event: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, base+"/lists/"+lists[0].ID+"/allocations", map[string]any{"label": "Ben Klock", "quota": 2}, true)
+	var alloc struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &alloc)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("allocation: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, base+"/guests", map[string]any{"list_id": lists[0].ID, "allocation_id": alloc.ID, "source": "paste",
+		"guests": []map[string]any{{"name": "=SUM(A1)", "plus_n": 0}, {"name": "Mara"}}}, true)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"status":"going"`) {
+		t.Fatalf("add guests: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, base+"/guests", map[string]any{"list_id": lists[0].ID, "allocation_id": alloc.ID, "guests": []map[string]any{{"name": "Kim"}}}, true)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"error":"quota_exceeded"`) {
+		t.Fatalf("over quota must be 409 quota_exceeded: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodPost, base+"/guests", map[string]any{"list_id": lists[0].ID, "guests": []map[string]any{{"name": "Kim", "email": "kim@example.org"}}}, true)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "name-only") {
+		t.Fatalf("email on a name-only list must be 422: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodGet, base+"/guests?status=going", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"going":2`) {
+		t.Fatalf("list guests: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodGet, base+"/guests/export.csv", nil, false)
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/csv; charset=utf-8" ||
+		!strings.Contains(rec.Header().Get("Content-Disposition"), `klubnacht-guests.csv`) ||
+		!strings.HasPrefix(body, "\xef\xbb\xbfname,plus_n") || !strings.Contains(body, "'=SUM(A1)") {
+		t.Fatalf("csv: %d %v %q", rec.Code, rec.Header(), body)
+	}
+	rec = c.do(http.MethodGet, base+"/report", nil, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"guests_going":2`) || !strings.Contains(rec.Body.String(), `"live":true`) ||
+		strings.Contains(rec.Body.String(), "Mara") {
+		t.Fatalf("report (no guest names): %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodGet, base+"/report/list-back.csv?allocation_id="+alloc.ID, nil, false)
+	if body := rec.Body.String(); rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/csv; charset=utf-8" ||
+		!strings.Contains(rec.Header().Get("Content-Disposition"), `klubnacht-list-back-ben-klock.csv`) ||
+		!strings.HasPrefix(body, "\xef\xbb\xbfname,plus_n,status,arrived,heads_admitted,first_in_local\n") || !strings.Contains(body, "'=SUM(A1),0,going,no,0,\n") {
+		t.Fatalf("list-back csv: %d %v %q", rec.Code, rec.Header(), body)
+	}
+	if rec := c.do(http.MethodGet, "/api/v1/guests/overview", nil, false); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"going_heads":2`) {
+		t.Fatalf("overview: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodDelete, base+"/lists/"+lists[0].ID, nil, true); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "list_not_empty") {
+		t.Fatalf("deleting a list with guests needs force: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodGet, "/api/v1/events/"+uuid.NewString()+"/guests", nil, false); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown event: %d", rec.Code)
+	}
+}
+
+func (c *client) upload(path, preset string, mapping map[string]string, csvText string) *httptest.ResponseRecorder {
+	c.t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	_ = mw.WriteField("preset", preset)
+	if mapping != nil {
+		m, _ := json.Marshal(mapping)
+		_ = mw.WriteField("mapping", string(m))
+	}
+	fw, _ := mw.CreateFormFile("file", "export.csv")
+	_, _ = fw.Write([]byte(csvText))
+	_ = mw.Close()
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Origin", origin)
+	req.Header.Set(auth.CSRFHeader, "1")
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: c.cookie})
+	rec := httptest.NewRecorder()
+	c.h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestAttendeeImportAPI(t *testing.T) {
+	h, svc, _ := stack(t)
+	ctx := context.Background()
+	setup, _ := svc.Bootstrap(ctx, identity.BootstrapInput{OrgName: "Nachtwerk", Slug: "nachtwerk", OwnerEmail: "o@n.example", OwnerName: "O"})
+	_ = svc.CompleteSetup(ctx, setup, "the owner passphrase")
+	c := &client{t: t, h: h}
+	c.do(http.MethodPost, "/api/v1/auth/login", map[string]string{"email": "o@n.example", "password": "the owner passphrase"}, true)
+	start := time.Unix(time.Now().Add(72*time.Hour).Unix()/3600*3600, 0).UTC()
+	rec := c.do(http.MethodPost, "/api/v1/events", map[string]any{"title": "Klubnacht", "starts_at": start, "ends_at": start.Add(8 * time.Hour),
+		"timezone": "Europe/Berlin", "city": "Berlin"}, true)
+	var ev struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &ev)
+	path := "/api/v1/events/" + ev.ID + "/attendees/import"
+	csvText := "\xef\xbb\xbfOrder ID;Ticket ID;First name;Last name;Email;Ticket type;Barcode;Status\n9001;T-1;Lena;Vogt;lena@example.org;Tier 1;RA-1;Valid\n9002;T-2;Kofi;Mensah;;Tier 2;RA-2;Refunded\n"
+
+	// Without dry_run=false nothing is written.
+	rec = c.upload(path, "ra", nil, csvText)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"dry_run":true`) || !strings.Contains(rec.Body.String(), `"positions_new":2`) ||
+		!strings.Contains(rec.Body.String(), `"name":"Le… V…"`) || strings.Contains(rec.Body.String(), "Vogt") {
+		t.Fatalf("dry run: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do(http.MethodGet, "/api/v1/events/"+ev.ID+"/guests", nil, false); !strings.Contains(rec.Body.String(), `"tickets":[]`) {
+		t.Fatalf("dry run wrote tickets: %s", rec.Body)
+	}
+	rec = c.upload(path+"?dry_run=false", "ra", nil, csvText)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"dry_run":false`) || !strings.Contains(rec.Body.String(), `"import_id":"`) {
+		t.Fatalf("import: %d %s", rec.Code, rec.Body)
+	}
+	rec = c.do(http.MethodGet, "/api/v1/events/"+ev.ID+"/guests", nil, false)
+	if !strings.Contains(rec.Body.String(), `"name":"Lena Vogt"`) || !strings.Contains(rec.Body.String(), `"tickets":1`) || strings.Contains(rec.Body.String(), "RA-1") {
+		t.Fatalf("tickets in the guest table (never their barcode): %s", rec.Body)
+	}
+
+	// JSON rows with an explicit generic mapping.
+	rec = c.do(http.MethodPost, path+"?dry_run=true", map[string]any{"preset": "generic", "mapping": map[string]string{"name": "Guest", "order_ref": "Ref"},
+		"rows": []map[string]string{{"Guest": "Anna", "Ref": "G1"}, {"Guest": "", "Ref": "G2"}}}, true)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"rejected":[{"line":2,"reason":"no name or email"}]`) {
+		t.Fatalf("json rows: %d %s", rec.Code, rec.Body)
+	}
+	// A preset that finds no key column says what it saw.
+	rec = c.upload(path, "dice", nil, "Guest,Notes\nA,b\n")
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `"error":"mapping_incomplete"`) || !strings.Contains(rec.Body.String(), `"headers":["Guest","Notes"]`) {
+		t.Fatalf("mapping error: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.upload(path, "dice", nil, "Name,Order ID\n"); rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "no rows") {
+		t.Fatalf("empty export: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.upload(path, "dice", nil, strings.Repeat("x", guest.MaxImportBytes+128<<10)); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized upload: %d %s", rec.Code, rec.Body)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("a,b"))
+	req.Header.Set("Content-Type", "text/csv")
+	req.Header.Set("Origin", origin)
+	req.Header.Set(auth.CSRFHeader, "1")
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: c.cookie})
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("raw CSV body: %d", rr.Code)
+	}
+	anon := &client{t: t, h: h}
+	if rec := anon.upload(path, "ra", nil, csvText); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous import: %d", rec.Code)
 	}
 }

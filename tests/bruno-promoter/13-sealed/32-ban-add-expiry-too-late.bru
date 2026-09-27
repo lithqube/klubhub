@@ -1,0 +1,34 @@
+meta {
+  name: Expiry over three years is 422
+  type: http
+  seq: 32
+}
+
+post {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "id": "{{banIdLate}}",
+    "key_version": 1,
+    "entry_sealed": "{{entry2}}",
+    "expires_at": "{{banExpiresTooLate}}"
+  }
+}
+
+script:pre-request {
+  bru.setVar("banIdLate", require("crypto").randomUUID());
+}
+
+assert {
+  res.status: eq 422
+  res.body.field: eq expires_at
+}

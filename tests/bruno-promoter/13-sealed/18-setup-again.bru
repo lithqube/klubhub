@@ -1,0 +1,31 @@
+meta {
+  name: Setting up twice is 409 already_setup
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/org/setup
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "version": 1,
+    "recovery": { "public_key": "{{recoveryPub1}}", "fingerprint": "{{recoveryFp1}}", "wrap": "{{recoveryWrap1}}" },
+    "wraps": [
+      { "recipient_kind": "member", "recipient_id": "{{ownerUserId}}", "wrap": "{{ownerWrap1}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq already_setup
+}

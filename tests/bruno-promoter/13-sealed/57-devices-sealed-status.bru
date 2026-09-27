@@ -1,0 +1,32 @@
+meta {
+  name: Device list shows the sealed status
+  type: http
+  seq: 57
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/devices
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("revoked device lost its wrap; keys are listed, tokens never", function () {
+    const list = res.getBody();
+    const d = list.find((x) => x.id === bru.getVar("sealedDeviceId"));
+    expect(d.revoked_at).to.be.a("string");
+    expect(d.public_key).to.equal(bru.getVar("devicePub"));
+    expect(d.has_wrap).to.equal(false);
+    const old = list.find((x) => x.id === bru.getVar("deviceId"));
+    expect(old.public_key).to.equal(null);
+    expect(JSON.stringify(list)).to.not.match(/"token"/);
+  });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: Preview of 0 days is refused
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/v1/org/retention/preview?days=0
+  body: none
+  auth: none
+}
+
+params:query {
+  days: 0
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq days
+}

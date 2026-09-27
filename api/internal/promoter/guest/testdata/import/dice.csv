@@ -1,0 +1,5 @@
+Order ID,Ticket ID,First name,Last name,Email,Ticket type,Barcode,Status
+D-7001,TK-1,Aiko,Tanaka,aiko@example.org,General Admission,,Active
+D-7001,TK-2,Rafael,Ortiz,aiko@example.org,General Admission,,Active
+D-7002,TK-3,Noor,Haddad,noor@example.org,Late Entry,,Refunded
+D-7003,TK-4,Emil,Sørensen,not-an-email,General Admission,,Active

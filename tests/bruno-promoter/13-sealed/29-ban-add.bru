@@ -1,0 +1,36 @@
+meta {
+  name: Add a ban entry (ciphertext only)
+  type: http
+  seq: 29
+}
+
+post {
+  url: {{baseUrl}}/api/v1/ban-list
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "id": "{{banId1}}",
+    "key_version": 1,
+    "entry_sealed": "{{entry1}}",
+    "expires_at": "{{banExpires}}"
+  }
+}
+
+script:pre-request {
+  bru.setVar("banId1", require("crypto").randomUUID());
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: eq {{banId1}}
+  res.body.key_version: eq 1
+  res.body.entry_sealed: eq {{entry1}}
+}

@@ -1,0 +1,22 @@
+meta {
+  name: Get event
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{eventId}}
+  res.body.capacity: eq 250
+  res.body.timezone: eq Europe/Berlin
+}

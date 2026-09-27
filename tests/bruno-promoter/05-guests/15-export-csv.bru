@@ -1,0 +1,68 @@
+meta {
+  name: Export guests as CSV (BOM + formula escaping)
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests/export.csv
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Accept: text/csv
+}
+
+script:post-response {
+  // Bruno decodes bodies with iconv, which strips a leading BOM, so
+  // res.getBody() cannot show it. Re-fetch the export raw with node's http
+  // and keep the first bytes (hex) for the BOM test below.
+  const http = require("http");
+  const url = bru.getEnvVar("baseUrl") + "/api/v1/events/" + bru.getVar("eventId") + "/guests/export.csv";
+  const cookie = "__Host-kh_session=" + bru.getVar("staffCookie");
+  const head = await new Promise((resolve, reject) => {
+    http.get(url, { headers: { Cookie: cookie } }, (r) => {
+      const chunks = [];
+      r.on("data", (c) => chunks.push(c));
+      r.on("end", () => resolve(Buffer.concat(chunks).subarray(0, 8).toString("hex")));
+    }).on("error", reject);
+  });
+  bru.setVar("exportHeadHex", head);
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  const raw = res.getBody();
+  const text = typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw);
+
+  test("is a CSV attachment, not cached", function () {
+    expect(res.getHeader("content-type")).to.match(/^text\/csv/);
+    expect(res.getHeader("content-disposition")).to.match(/^attachment; filename=".+-guests\.csv"$/);
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+  });
+
+  test("raw body starts with a UTF-8 BOM (EF BB BF)", function () {
+    expect(bru.getVar("exportHeadHex")).to.match(/^efbbbf6e616d65/); // BOM + "name"
+  });
+
+  test("has the documented header row", function () {
+    const first = text.replace(/^﻿/, "").split(/\r?\n/)[0];
+    expect(first).to.equal("name,plus_n,status,list,allocation,email,phone,note");
+  });
+
+  test("formula-like cells are prefixed with an apostrophe", function () {
+    expect(text).to.contain(`"'=HYPERLINK(""http://evil.example"",""x"")"`);
+    expect(text).to.contain("'@SUM(1+1)");
+    expect(text).to.not.match(/(^|,)=HYPERLINK/m);
+    expect(text).to.not.match(/(^|,)@SUM/m);
+  });
+
+  test("contains every guest", function () {
+    ["Ada Test", "Mara Test", "Kai Test"].forEach((n) => expect(text).to.contain(n));
+  });
+}

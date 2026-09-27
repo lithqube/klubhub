@@ -1,0 +1,33 @@
+meta {
+  name: Setup with a wrap for an unknown user is 422
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/org/setup
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "version": 1,
+    "recovery": { "public_key": "{{recoveryPub1}}", "fingerprint": "{{recoveryFp1}}", "wrap": "{{recoveryWrap1}}" },
+    "wraps": [
+      { "recipient_kind": "member", "recipient_id": "{{ownerUserId}}", "wrap": "{{ownerWrap1}}" },
+      { "recipient_kind": "member", "recipient_id": "0190f1d2-7c1a-7a00-9f00-00000000dead", "wrap": "{{strangerWrap}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.field: eq wraps[1].recipient_id
+  res.body.problem: eq unknown member
+}

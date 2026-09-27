@@ -344,8 +344,15 @@ func (s *Service) CreateEvent(ctx context.Context, in EventInput) (Detail, error
 		if err := s.emit(ctx, tx, "event", "created", map[string]uuid.UUID{"event_id": id}); err != nil {
 			return err
 		}
-		d, err = s.detail(ctx, tx, id)
-		return err
+		if d, err = s.detail(ctx, tx, id); err != nil {
+			return err
+		}
+		for _, h := range s.onCreate {
+			if err := h(ctx, tx, d.Event); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	return d, err
 }

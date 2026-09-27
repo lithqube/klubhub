@@ -1,0 +1,37 @@
+meta {
+  name: Create artist list (name-only)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/lists
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Artist guests",
+    "type": "artist",
+    "collect_contact": false,
+    "entry_terms": { "price_mode": "reduced", "reduced_price_text": "EUR 10 before 01:00", "perks": [] }
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.collect_contact: eq false
+  res.body.entry_terms.price_mode: eq reduced
+}
+
+tests {
+  test("save list id", function () {
+    bru.setVar("artistListId", res.getBody().id);
+  });
+}

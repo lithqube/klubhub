@@ -1,0 +1,23 @@
+meta {
+  name: Recovery wrap and public key
+  type: http
+  seq: 27
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keys/org/recovery
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.version: eq 1
+  res.body.public_key: eq {{recoveryPub1}}
+  res.body.fingerprint: eq {{recoveryFp1}}
+  res.body.wrap: eq {{recoveryWrap1}}
+}

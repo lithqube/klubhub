@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { useOrgStore } from '~/stores/org'
+import { usePrivacyStore } from '~/stores/privacy'
 import { useSessionStore } from '~/stores/session'
 import type { ApiError } from '~/types/event'
 import type { OrgProfile } from '~/types/org'
@@ -11,6 +12,9 @@ const store = useOrgStore()
 const { org, error } = storeToRefs(store)
 const { canManageOrg } = storeToRefs(useSessionStore())
 await callOnce('promoter-org', () => store.fetchOrg())
+// Fresh on every visit: dates move as events end and get erased.
+const privacy = usePrivacyStore()
+await useAsyncData('promoter-retention', () => privacy.fetchRetention().then(() => true))
 
 const busy = ref(false)
 const serverError = ref<ApiError | null>(null)
@@ -34,7 +38,7 @@ async function save(p: OrgProfile) {
   }
 }
 
-const coming = ['Team members and roles', 'Door devices and PINs', 'Data retention and encryption status']
+const coming = ['Team members and roles', 'Door devices and PINs']
 </script>
 
 <template>
@@ -54,6 +58,19 @@ const coming = ['Team members and roles', 'Door devices and PINs', 'Data retenti
         <p v-if="notice" role="status" class="data-frag" style="font-size:9px;">{{ notice }}</p>
         <p v-if="!canManageOrg" class="glass" style="padding:10px 14px;font-size:13px;margin:0;">READ ONLY · Owners and admins can change the profile.</p>
         <SettingsProfileForm :key="formKey" :org="org" :busy="busy" :server-error="serverError" :read-only="!canManageOrg" @submit="save" />
+      </section>
+      <section id="retention" aria-labelledby="retention-h" class="space-y-3" style="scroll-margin-top:72px;">
+        <h2 id="retention-h" class="section-lbl" style="margin:0;">DATA RETENTION</h2>
+        <SettingsRetention :read-only="!canManageOrg" :timezone="org?.timezone ?? 'UTC'" />
+      </section>
+      <section id="sealed" aria-labelledby="sealed-h" class="space-y-3" style="scroll-margin-top:72px;">
+        <h2 id="sealed-h" class="section-lbl" style="margin:0;">ENCRYPTION &amp; BAN LIST</h2>
+        <ClientOnly>
+          <SettingsSealed />
+          <template #fallback>
+            <p role="status" class="data-frag" style="font-size:11px;">LOADING ENCRYPTION STATUS…</p>
+          </template>
+        </ClientOnly>
       </section>
       <section aria-labelledby="coming-h" class="glass" style="padding:16px;">
         <h2 id="coming-h" class="section-lbl" style="margin:0 0 6px;">COMING NEXT</h2>

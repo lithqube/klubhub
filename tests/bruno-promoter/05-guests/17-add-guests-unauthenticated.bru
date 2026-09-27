@@ -1,0 +1,27 @@
+meta {
+  name: Add guests without a session is 401
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "list_id": "{{vipListId}}",
+    "guests": [{ "name": "Intruder" }]
+  }
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq unauthenticated
+}

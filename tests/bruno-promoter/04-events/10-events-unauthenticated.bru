@@ -1,0 +1,16 @@
+meta {
+  name: Events without a session is 401
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq unauthenticated
+}

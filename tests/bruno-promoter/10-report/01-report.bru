@@ -1,0 +1,57 @@
+meta {
+  name: Post-event report (aggregates only)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/report
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.event.id: eq {{eventId}}
+  res.body.event.timezone: eq Europe/Berlin
+  res.body.generated_at: isString
+  res.body.live: isBoolean
+  res.body.totals.guests_arrived: eq 1
+  res.body.totals.heads_admitted: eq 2
+  res.body.totals.tickets_scanned: eq 0
+  res.body.totals.walkups: eq 1
+  res.body.by_list: isArray
+  res.body.by_submitter: isArray
+  res.body.tickets_by_type: isArray
+  res.body.curve: isArray
+}
+
+tests {
+  const b = res.getBody();
+  test("totals have the contract's keys", function () {
+    expect(b.totals).to.have.all.keys("guests_going", "guests_arrived", "no_show_rate", "heads_expected", "heads_admitted",
+      "plus_ones_allowed", "plus_ones_used", "tickets_valid", "tickets_scanned", "walkups", "peak_occupancy", "peak_at", "conflicts");
+    expect(b.totals.tickets_valid).to.be.at.least(1);
+    expect(b.totals.peak_occupancy).to.be.at.least(1);
+  });
+  test("by list, by submitter and tickets by type", function () {
+    const vip = b.by_list.find((l) => l.list_id === bru.getVar("vipListId"));
+    expect(vip.arrived).to.equal(1);
+    expect(vip.heads_admitted).to.equal(2);
+    const dj = b.by_submitter.find((s) => s.allocation_id === bru.getVar("allocationId"));
+    expect(dj.submitter).to.equal("DJ Bruno"); // submitter labels are the only names
+    expect(dj.list_id).to.equal(bru.getVar("artistListId"));
+    b.tickets_by_type.forEach((t) => expect(t).to.have.all.keys("ticket_type_id", "name", "valid", "scanned"));
+    b.curve.forEach((p) => expect(p).to.have.all.keys("bucket_start", "in", "out", "walkups", "occupancy"));
+  });
+  test("no guest or ticket holder name or email anywhere", function () {
+    const text = JSON.stringify(b);
+    JSON.parse(bru.getVar("piiStrings")).forEach((s) => expect(text, "report contains " + s.length + "-char PII").to.not.contain(s));
+    expect(text).to.not.match(/[^\s"@]+@[^\s"@]+\.[a-z]{2,}/i);
+    expect(text).to.not.match(/"(email|phone|name_enc|secret)"/);
+  });
+}

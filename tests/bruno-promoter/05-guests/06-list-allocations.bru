@@ -1,0 +1,21 @@
+meta {
+  name: List allocations
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/lists/{{artistListId}}/allocations
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.length: eq 1
+  res.body[0].id: eq {{allocationId}}
+}
