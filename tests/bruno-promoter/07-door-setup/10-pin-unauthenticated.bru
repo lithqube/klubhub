@@ -1,0 +1,26 @@
+meta {
+  name: Setting a PIN without a session is 401
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/events/{{eventId}}/pin
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "valid_until": "{{pinValidUntil}}"
+  }
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq unauthenticated
+}

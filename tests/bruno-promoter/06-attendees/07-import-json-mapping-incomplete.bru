@@ -1,0 +1,37 @@
+meta {
+  name: JSON import without a key column is 422 mapping_incomplete
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/attendees/import
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "preset": "generic",
+    "mapping": { "name": "Name" },
+    "rows": [{ "Name": "Row Test", "Colour": "blue" }]
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq mapping_incomplete
+}
+
+tests {
+  test("lists the missing field and the file's headers", function () {
+    const b = res.getBody();
+    expect(b.missing).to.include("order number, ticket id or barcode");
+    expect(b.headers).to.include.members(["Name", "Colour"]);
+  });
+}

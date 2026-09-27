@@ -1,0 +1,34 @@
+meta {
+  name: Door add appears in the staff guest table as going, source door
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests?list_id={{vipListId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+params:query {
+  list_id: {{vipListId}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("guest has the client id, status going and source door", function () {
+    const g = res.getBody().guests.find((x) => x.id === bru.getVar("addId"));
+    expect(g, "door-added guest").to.be.an("object");
+    expect(g.status).to.equal("going");
+    expect(g.source).to.equal("door");
+    expect(g.plus_n).to.equal(1);
+    expect(res.getBody().guests.some((x) => x.name === "Walk Up Wrong")).to.equal(false);
+  });
+}

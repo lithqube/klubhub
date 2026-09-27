@@ -1,0 +1,26 @@
+meta {
+  name: Venue reveal with MFA returns the sealed address
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/venues/{{venueId}}/reveal
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.address: eq Teststrasse 1, 10115 Berlin
+}
+
+tests {
+  test("reveal is not cached", function () {
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+  });
+}

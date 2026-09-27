@@ -1,0 +1,26 @@
+meta {
+  name: List venues
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/venues
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("contains the created venue", function () {
+    const ids = res.getBody().map((v) => v.id);
+    expect(ids).to.include(bru.getVar("venueId"));
+  });
+}

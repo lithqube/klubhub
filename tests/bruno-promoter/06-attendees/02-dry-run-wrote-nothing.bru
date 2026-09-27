@@ -1,0 +1,21 @@
+meta {
+  name: Dry run wrote no tickets
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.tickets.length: eq 0
+  res.body.counts.tickets: eq 0
+}

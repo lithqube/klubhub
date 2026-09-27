@@ -1,0 +1,30 @@
+meta {
+  name: PIN status shows windows, never PINs
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/events/{{eventId}}/pin
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.staff.valid_until: isString
+  res.body.manager.valid_until: isString
+}
+
+tests {
+  test("no PIN or hash in the response", function () {
+    const text = JSON.stringify(res.getBody());
+    expect(text).to.not.contain(bru.getVar("staffPin"));
+    expect(text).to.not.contain(bru.getVar("managerPin"));
+    expect(text).to.not.match(/"(pin|hash|salt)"/);
+  });
+}

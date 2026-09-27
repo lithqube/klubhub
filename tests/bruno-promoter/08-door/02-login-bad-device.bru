@@ -1,0 +1,28 @@
+meta {
+  name: Door login with an unknown device token is 401
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "device_token": "v1.{{orgId}}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "event_id": "{{eventId}}",
+    "pin": "{{staffPin}}"
+  }
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq invalid_credentials
+}

@@ -1,0 +1,33 @@
+meta {
+  name: Setup from a foreign origin is refused (CSRF)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/setup
+  body: json
+  auth: none
+}
+
+headers {
+  Origin: https://evil.example
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "token": "{{setupToken}}",
+    "password": "{{ownerPassword}}"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("refusal is the csrf error", function () {
+    expect(JSON.stringify(res.getBody())).to.contain("csrf");
+  });
+}

@@ -1,0 +1,40 @@
+meta {
+  name: Door login (device token + staff PIN)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "device_token": "{{deviceToken}}",
+    "event_id": "{{eventId}}",
+    "pin": "{{staffPin}}"
+  }
+}
+
+assert {
+  res.status: eq 204
+}
+
+tests {
+  test("sets a door session cookie", function () {
+    const sc = [].concat(res.getHeader("set-cookie") || []);
+    const raw = sc.find((c) => c.startsWith("__Host-kh_session="));
+    expect(raw, "Set-Cookie __Host-kh_session").to.be.a("string");
+    expect(raw).to.match(/HttpOnly/i);
+    expect(raw).to.match(/Secure/i);
+    const value = /^__Host-kh_session=([^;]+)/.exec(raw)[1];
+    expect(value).to.not.equal(bru.getVar("staffCookie"));
+    bru.setVar("doorCookie", value); // secret: runtime only
+  });
+}

@@ -1,0 +1,55 @@
+meta {
+  name: Create event (starts in 2h)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "Bruno Night",
+    "starts_at": "{{eventStartsAt}}",
+    "ends_at": "{{eventEndsAt}}",
+    "doors_at": "{{eventStartsAt}}",
+    "timezone": "Europe/Berlin",
+    "venue_id": "{{venueId}}",
+    "capacity": 250
+  }
+}
+
+script:pre-request {
+  // The door PIN window is capped at 36h from now, so the event is near.
+  const now = Date.now();
+  const iso = (ms) => new Date(Math.floor(ms / 60000) * 60000).toISOString().replace(".000Z", "Z");
+  bru.setVar("eventStartsAt", iso(now + 2 * 3600e3));
+  bru.setVar("eventEndsAt", iso(now + 8 * 3600e3));
+  bru.setVar("pinValidUntil", iso(now + 12 * 3600e3));
+  bru.setVar("pinTooLate", iso(now + 48 * 3600e3));
+}
+
+assert {
+  res.status: eq 201
+  res.body.title: eq Bruno Night
+  res.body.venue_id: eq {{venueId}}
+  res.body.city: eq Berlin
+}
+
+tests {
+  test("event gets an id, slug and the venue's rooms as stages", function () {
+    const b = res.getBody();
+    expect(b.id).to.match(/^[0-9a-f-]{36}$/);
+    expect(b.slug).to.match(/^[a-z0-9-]+$/);
+    expect(b.stages.map((s) => s.name)).to.include("Main");
+    bru.setVar("eventId", b.id);
+  });
+}

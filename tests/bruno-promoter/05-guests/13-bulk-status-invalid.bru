@@ -1,0 +1,28 @@
+meta {
+  name: Bulk status with an unknown status is 422
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests/bulk-status
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "status": "vip-forever",
+    "emails": ["ada.test@example.org"]
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+}

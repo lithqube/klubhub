@@ -1,0 +1,49 @@
+meta {
+  name: Create venue with sealed address
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/venues
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bruno Test Hall",
+    "city": "Berlin",
+    "country": "DE",
+    "timezone": "Europe/Berlin",
+    "capacity": 300,
+    "rooms": [{ "name": "Main" }],
+    "protected": {
+      "address": "Teststrasse 1, 10115 Berlin",
+      "geo": "",
+      "contact_name": "",
+      "contact_email": "",
+      "contact_phone": ""
+    }
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.name: eq Bruno Test Hall
+  res.body.protected.address: eq true
+}
+
+tests {
+  test("sealed address is masked, not returned", function () {
+    const b = res.getBody();
+    expect(b.id).to.match(/^[0-9a-f-]{36}$/);
+    expect(JSON.stringify(b)).to.not.contain("Teststrasse");
+    bru.setVar("venueId", b.id);
+  });
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Me shows the owner principal without MFA
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/auth/me
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.mfa: eq false
+}
+
+tests {
+  test("principal is the org owner", function () {
+    const b = res.getBody();
+    expect(b.roles).to.include("owner");
+    expect(b.sub).to.match(/^local:[0-9a-f-]{36}$/);
+    expect(b.org_id).to.match(/^[0-9a-f-]{36}$/);
+    expect(b.event_scope).to.equal("");
+    bru.setVar("orgId", b.org_id);
+  });
+}

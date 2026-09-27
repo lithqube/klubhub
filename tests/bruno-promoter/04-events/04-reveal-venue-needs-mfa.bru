@@ -1,0 +1,20 @@
+meta {
+  name: Venue reveal without MFA is 403 mfa_required
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/venues/{{venueId}}/reveal
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: eq mfa_required
+}

@@ -1,0 +1,26 @@
+meta {
+  name: Import as text/plain is 415
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/attendees/import
+  body: text
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: text/plain
+}
+
+body:text {
+  Order ID,Name
+  X-1,Row Test
+}
+
+assert {
+  res.status: eq 415
+  res.body.error: eq unsupported_media_type
+}

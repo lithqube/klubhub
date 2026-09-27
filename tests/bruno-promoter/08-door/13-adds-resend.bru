@@ -1,0 +1,29 @@
+meta {
+  name: Resending the add is duplicate
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/adds
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "adds": [
+      { "id": "{{addId}}", "nonce": "bru-add-ok-{{runTag}}", "list_id": "{{vipListId}}", "name": "Walk Up Test", "plus_n": 1, "manager_pin": "{{managerPin}}", "at": "{{opAt}}" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.results[0].status: eq duplicate
+}

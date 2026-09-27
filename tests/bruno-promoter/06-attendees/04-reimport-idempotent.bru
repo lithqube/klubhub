@@ -1,0 +1,31 @@
+meta {
+  name: Re-import updates nothing (idempotent)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/attendees/import?dry_run=false
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+params:query {
+  dry_run: false
+}
+
+body:multipart-form {
+  preset: ra
+  file: @file(fixtures/ra-tickets.csv)
+}
+
+assert {
+  res.status: eq 200
+  res.body.counts.orders_new: eq 0
+  res.body.counts.positions_new: eq 0
+  res.body.counts.positions_unchanged: eq 3
+}

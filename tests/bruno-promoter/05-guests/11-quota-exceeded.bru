@@ -1,0 +1,35 @@
+meta {
+  name: Adding over the allocation quota is 409
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "list_id": "{{artistListId}}",
+    "allocation_id": "{{allocationId}}",
+    "guests": [
+      { "name": "Lea Test", "status": "going" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq quota_exceeded
+  res.body.allocation_id: eq {{allocationId}}
+  res.body.quota: eq 2
+  res.body.used: eq 2
+  res.body.requested: eq 1
+}

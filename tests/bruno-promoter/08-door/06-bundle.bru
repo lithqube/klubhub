@@ -1,0 +1,78 @@
+meta {
+  name: Door bundle (name-only, no email anywhere)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/bundle
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.event.id: eq {{eventId}}
+  res.body.event.capacity: eq 250
+  res.body.device_id: eq {{deviceId}}
+  res.body.cursor: isString
+}
+
+tests {
+  const b = res.getBody();
+
+  test("no email or phone field anywhere in the bundle", function () {
+    const offending = [];
+    (function walk(v, path) {
+      if (Array.isArray(v)) return v.forEach((x, i) => walk(x, path + "[" + i + "]"));
+      if (v && typeof v === "object") {
+        for (const k of Object.keys(v)) {
+          if (/email|phone/i.test(k)) offending.push(path + "." + k);
+          walk(v[k], path + "." + k);
+        }
+      }
+    })(b, "$");
+    expect(offending, offending.join(", ")).to.deep.equal([]);
+  });
+
+  test("no email address values leak either", function () {
+    const text = JSON.stringify(b);
+    expect(text).to.not.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+  });
+
+  test("lists and going/pending guests are included", function () {
+    const listIds = b.lists.map((l) => l.id);
+    expect(listIds).to.include.members([bru.getVar("vipListId"), bru.getVar("artistListId")]);
+    const names = b.guests.map((g) => g.name);
+    expect(names).to.include.members(["Ada Test", "Mara Test", "Kai Test"]);
+    const mara = b.guests.find((g) => g.id === bru.getVar("guestMaraId"));
+    expect(mara.plus_n).to.equal(1);
+    expect(mara.status).to.equal("going");
+  });
+
+  test("tickets carry their secret (QR payload) for offline scans", function () {
+    const t = b.tickets.find((x) => x.id === bru.getVar("ticketId"));
+    expect(t, "imported valid ticket").to.be.an("object");
+    expect(t.secret).to.match(/^bru-secret-/);
+    expect(b.tickets.some((x) => x.status === "cancelled")).to.equal(true);
+  });
+
+  test("manager PIN verifier is a PBKDF2 record, not the PIN", function () {
+    const m = b.manager_pin;
+    expect(m).to.be.an("object");
+    expect(m.iterations).to.be.a("number");
+    expect(m.salt).to.be.a("string").and.not.empty;
+    expect(m.hash).to.be.a("string").and.not.empty;
+    expect(JSON.stringify(b)).to.not.contain('"' + bru.getVar("managerPin") + '"');
+  });
+
+  test("no check-ins yet", function () {
+    expect(b.checkins).to.deep.equal([]);
+    expect(b.counters).to.deep.equal({ walkups: 0, manual_in: 0, manual_out: 0 });
+    bru.setVar("bundleCursor", b.cursor);
+  });
+}

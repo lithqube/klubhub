@@ -1,0 +1,17 @@
+headers {
+  Origin: {{origin}}
+  X-KlubHub-CSRF: 1
+  Accept: application/json
+}
+
+docs {
+  KlubHub Promoter API collection. Run it through scripts/test-promoter-api.sh,
+  which starts a disposable database and API and passes baseUrl, origin,
+  ownerEmail, ownerPassword and setupToken with --env-var. Requests are
+  ordered and chained with runtime variables (bru.setVar); run the whole
+  collection with -r, not single requests.
+
+  Session cookies are __Host- + Secure, so no cookie jar stores them over
+  plain http: requests capture them from Set-Cookie into runtime variables
+  and send an explicit Cookie header. Run with --disable-cookies.
+}

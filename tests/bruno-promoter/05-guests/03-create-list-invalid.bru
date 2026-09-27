@@ -1,0 +1,30 @@
+meta {
+  name: Create list with unknown type is 422
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/lists
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Nope",
+    "type": "everyone",
+    "entry_terms": {}
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq type
+}

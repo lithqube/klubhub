@@ -1,0 +1,28 @@
+meta {
+  name: Get organisation
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/org
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.slug: eq api-test
+  res.body.timezone: eq Europe/Berlin
+  res.body.currency: eq EUR
+}
+
+tests {
+  test("org id matches the session tenant", function () {
+    expect(res.getBody().id).to.equal(bru.getVar("orgId"));
+  });
+}

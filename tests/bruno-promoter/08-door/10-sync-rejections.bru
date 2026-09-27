@@ -1,0 +1,52 @@
+meta {
+  name: Invalid ops are rejected one by one
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/checkins
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "since": null,
+    "ops": [
+      { "nonce": "bru-undo-unknown-{{runTag}}", "type": "undo", "target": "no-such-nonce-{{runTag}}", "at": "{{opAt}}" },
+      { "nonce": "bru-bad-count-{{runTag}}", "type": "checkin", "subject": { "kind": "guest", "id": "{{guestAdaId}}" }, "count": 0, "direction": "in", "at": "{{opAt}}" },
+      { "nonce": "bru-unknown-subj-{{runTag}}", "type": "checkin", "subject": { "kind": "guest", "id": "00000000-0000-4000-8000-000000000000" }, "count": 1, "direction": "in", "at": "{{opAt}}" }
+    ]
+  }
+}
+
+script:pre-request {
+  bru.setVar("runTag", Date.now().toString(36));
+}
+
+assert {
+  res.status: eq 200
+  res.body.results.length: eq 3
+}
+
+tests {
+  const r = res.getBody().results;
+  test("undo of an unknown nonce is rejected", function () {
+    expect(r[0].status).to.equal("rejected");
+    expect(r[0].error).to.be.a("string").and.not.empty;
+  });
+  test("malformed op is rejected as invalid_op", function () {
+    expect(r[1].status).to.equal("rejected");
+    expect(r[1].error).to.match(/^invalid_op/);
+  });
+  test("subject outside the event is rejected as unknown_subject", function () {
+    expect(r[2].status).to.equal("rejected");
+    expect(r[2].error).to.equal("unknown_subject");
+  });
+}

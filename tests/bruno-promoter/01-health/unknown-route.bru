@@ -1,0 +1,16 @@
+meta {
+  name: Unknown API route is a JSON 404
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/does-not-exist
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+  res.body.error: eq not_found
+}

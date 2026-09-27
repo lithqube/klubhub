@@ -1,0 +1,28 @@
+meta {
+  name: Member invite without MFA is 403 mfa_required
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/members/invites
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "invitee@example.org",
+    "role": "door"
+  }
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: eq mfa_required
+}

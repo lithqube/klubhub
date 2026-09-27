@@ -1,0 +1,27 @@
+meta {
+  name: PIN valid for more than 36h is 400
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/events/{{eventId}}/pin
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "valid_until": "{{pinTooLate}}"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq invalid_input
+}

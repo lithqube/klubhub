@@ -1,0 +1,21 @@
+meta {
+  name: Import without a session is 401
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/attendees/import
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  preset: ra
+  file: @file(fixtures/ra-tickets.csv)
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq unauthenticated
+}

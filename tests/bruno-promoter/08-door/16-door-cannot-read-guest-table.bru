@@ -1,0 +1,20 @@
+meta {
+  name: Door session cannot read the staff guest table (403)
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{doorCookie}}
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: eq no_role_grant
+}

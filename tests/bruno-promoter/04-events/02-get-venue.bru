@@ -1,0 +1,29 @@
+meta {
+  name: Get venue
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/venues/{{venueId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{venueId}}
+  res.body.city: eq Berlin
+}
+
+tests {
+  test("room is listed and address stays masked", function () {
+    const b = res.getBody();
+    expect(b.rooms).to.be.an("array").with.lengthOf(1);
+    expect(JSON.stringify(b)).to.not.contain("Teststrasse");
+  });
+}

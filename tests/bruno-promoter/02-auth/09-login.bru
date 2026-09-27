@@ -1,0 +1,44 @@
+meta {
+  name: Login as owner
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{ownerEmail}}",
+    "password": "{{ownerPassword}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.totp_enrolled: eq false
+}
+
+tests {
+  // The cookie is __Host- and Secure, which no jar keeps over plain http:
+  // capture it for the following requests (secret: never logged).
+  test("sets a hardened session cookie", function () {
+    const sc = [].concat(res.getHeader("set-cookie") || []);
+    const raw = sc.find((c) => c.startsWith("__Host-kh_session="));
+    expect(raw, "Set-Cookie __Host-kh_session").to.be.a("string");
+    expect(raw).to.match(/HttpOnly/i);
+    expect(raw).to.match(/Secure/i);
+    expect(raw).to.match(/SameSite=Lax/i);
+    expect(raw).to.match(/Path=\//);
+    const value = /^__Host-kh_session=([^;]+)/.exec(raw)[1];
+    expect(value).to.match(/^v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/);
+    bru.setVar("staffCookie", value);
+  });
+}

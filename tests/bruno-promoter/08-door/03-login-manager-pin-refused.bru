@@ -1,0 +1,28 @@
+meta {
+  name: Door login with the manager PIN is refused (staff row only)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/door/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "device_token": "{{deviceToken}}",
+    "event_id": "{{eventId}}",
+    "pin": "{{managerPin}}"
+  }
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq invalid_credentials
+}

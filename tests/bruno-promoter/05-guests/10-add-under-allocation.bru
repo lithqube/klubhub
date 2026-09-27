@@ -1,0 +1,38 @@
+meta {
+  name: Add guest +1 under the allocation (fills quota)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "list_id": "{{artistListId}}",
+    "allocation_id": "{{allocationId}}",
+    "guests": [
+      { "name": "Kai Test", "plus_n": 1, "status": "going" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.added.length: eq 1
+  res.body.added[0].allocation_id: eq {{allocationId}}
+}
+
+tests {
+  test("save guest id", function () {
+    bru.setVar("guestKaiId", res.getBody().added[0].id);
+  });
+}

@@ -1,0 +1,20 @@
+meta {
+  name: Old session after logout is 401
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/org
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: eq unauthenticated
+}

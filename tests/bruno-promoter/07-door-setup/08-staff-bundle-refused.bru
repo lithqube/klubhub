@@ -1,0 +1,20 @@
+meta {
+  name: Staff session calling the door bundle is 403 door_session_required
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/door/bundle
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: eq door_session_required
+}

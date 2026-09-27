@@ -1,0 +1,27 @@
+meta {
+  name: List the event's guest lists
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/lists
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("both lists are returned", function () {
+    const ids = res.getBody().map((l) => l.id);
+    expect(ids).to.include(bru.getVar("vipListId"));
+    expect(ids).to.include(bru.getVar("artistListId"));
+  });
+}

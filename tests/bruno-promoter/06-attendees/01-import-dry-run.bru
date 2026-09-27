@@ -1,0 +1,48 @@
+meta {
+  name: Import RA CSV as dry run (default)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/attendees/import
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+body:multipart-form {
+  preset: ra
+  file: @file(fixtures/ra-tickets.csv)
+}
+
+assert {
+  res.status: eq 200
+  res.body.dry_run: eq true
+  res.body.import_id: isNull
+  res.body.preset: eq ra
+  res.body.counts.rows: eq 3
+  res.body.counts.orders_new: eq 2
+  res.body.counts.positions_new: eq 3
+  res.body.counts.rejected: eq 0
+}
+
+tests {
+  test("preset matched the RA columns", function () {
+    const m = res.getBody().mapping;
+    expect(m.order_ref).to.equal("Order ID");
+    expect(m.secret).to.equal("Barcode");
+    expect(m.email).to.equal("Email");
+  });
+
+  test("preview masks personal data and never shows secrets", function () {
+    const b = res.getBody();
+    const text = JSON.stringify(b);
+    expect(text).to.not.contain("holder.one@example.org");
+    expect(text).to.not.contain("bru-secret-");
+    expect(b.preview).to.be.an("array").with.lengthOf(3);
+  });
+}

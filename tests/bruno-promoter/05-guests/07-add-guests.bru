@@ -1,0 +1,45 @@
+meta {
+  name: Add guests as going (incl. formula-like values)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/guests
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "list_id": "{{vipListId}}",
+    "guests": [
+      { "name": "Ada Test", "email": "ada.test@example.org", "status": "going" },
+      { "name": "=HYPERLINK(\"http://evil.example\",\"x\")", "note": "@SUM(1+1)", "status": "going" },
+      { "name": "Mara Test", "email": "mara.test@example.org", "phone": "+49 30 1234567", "plus_n": 1, "status": "going" }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.added.length: eq 3
+  res.body.duplicates.length: eq 0
+}
+
+tests {
+  test("guests are stored with their status and source", function () {
+    const added = res.getBody().added;
+    added.forEach((g) => {
+      expect(g.status).to.equal("going");
+      expect(g.list_id).to.equal(bru.getVar("vipListId"));
+    });
+    bru.setVar("guestAdaId", added.find((g) => g.name === "Ada Test").id);
+    bru.setVar("guestMaraId", added.find((g) => g.name === "Mara Test").id);
+  });
+}

@@ -1,0 +1,32 @@
+meta {
+  name: Create event with end before start is 422
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "Broken",
+    "starts_at": "2030-01-02T22:00:00Z",
+    "ends_at": "2030-01-02T20:00:00Z",
+    "timezone": "Europe/Berlin",
+    "city": "Berlin"
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq ends_at
+}

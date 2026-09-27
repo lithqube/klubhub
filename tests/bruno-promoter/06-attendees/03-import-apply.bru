@@ -1,0 +1,32 @@
+meta {
+  name: Import RA CSV for real (dry_run=false)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{eventId}}/attendees/import?dry_run=false
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+params:query {
+  dry_run: false
+}
+
+body:multipart-form {
+  preset: ra
+  file: @file(fixtures/ra-tickets.csv)
+}
+
+assert {
+  res.status: eq 200
+  res.body.dry_run: eq false
+  res.body.import_id: isString
+  res.body.counts.orders_new: eq 2
+  res.body.counts.positions_new: eq 3
+}
