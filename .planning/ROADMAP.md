@@ -44,16 +44,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 00-03-PLAN.md — Health endpoint + user_settings CRUD with optimistic concurrency
 - [x] 00-04-PLAN.md — Backup/restore scripts + end-to-end smoke checkpoint
 
-### Phase 0.5: Garage S3 Storage 🔜 (INSERTED)
+### Phase 0.5: Garage S3 Storage ✅ (INSERTED)
 
 **Goal**: Replace MinIO with Garage as the S3-compatible object storage layer. Garage is an open-source, actively-maintained S3 server (https://Garage.deuxfleurs.fr/) that works in single-node and distributed modes. The S3 API is compatible with the existing minio-go client — no application code changes needed.
 **Depends on**: Phase 0
 **Requirements**: INFRA-01 (storage layer swap)
-**Status**: In progress — planning complete
+**Status**: Complete — 2026-04-27
 **Plans**:
 
-- [ ] 00.5-01-PLAN.md — Docker Compose + env vars + storage config for Garage
-- [ ] 00.5-02-PLAN.md — Backup/restore scripts + storage operations verification
+- [x] 00.5-01-PLAN.md — Docker Compose + env vars + storage config for Garage
+- [x] 00.5-02-PLAN.md — Backup/restore scripts + storage operations verification
 
 **Key deliverables:**
 - Garage `storage` service in `docker-compose.yml` replacing MinIO
@@ -144,7 +144,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 03-06-PLAN.md — epk.vue page orchestrator + EpkPageHeader + TheNav + TheBottomNav EPK entry
 - [x] 03-07-PLAN.md — Human verification checkpoint
 
-### Phase 4: Gig Tracker 🔜
+### Phase 4: Gig Tracker ✅
 
 **Goal**: Users can manage their complete gig history and pipeline, with a reusable venue/contact database, iCal export, and booking confirmation PDF; downstream modules can read gig data via a stable interface
 **Depends on**: Phase 0
@@ -219,11 +219,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: Users can track DJ income and expenses by currency, create gig-linked invoices and event agreements, retain immutable PDF versions, explicitly send reviewed email attachments, and record payments without duplicate income
 **Depends on**: Phase 4
 **Requirements**: FIN-01 through FIN-10
-**Status**: In progress — wave 0 prerequisites and baseline recorded 2026-09-24; implementation and integration gates remain open
+**Status**: In progress — invoicing, payments, agreements and email shipped in v1.1.0 (2026-09-25, see `docs/release-notes/v1.1.0-phase5.md`); income/expense tracking (FIN-01–07, FIN-09) not started
 **Plans**: `.hermes/plans/2026-09-24_213014-phase-5-invoices-agreements-email.md`
 **Progress / evidence**: `.hermes/plans/phase-5-progress.md`
 
-> Added scope: structured billing identity, draft/atomic invoice issuance, deposits and payments, immutable Garage PDF exports, versioned agreements, and explicit SMTP outbox sends. No real mail is authorized for tests. FIN-10 excludes tax/VAT calculation; the plan's tax-calculation proposal requires resolution before implementation. Existing `finance.vue` remains a labelled dev/staging mock with a production empty state until wired to persisted records. Baseline failures are recorded, not waived.
+> Added scope: structured billing identity, draft/atomic invoice issuance, deposits and payments, immutable Garage PDF exports, versioned agreements, and explicit SMTP outbox sends. No real mail is authorized for tests. FIN-10 excludes tax/VAT calculation; the invoicing UI now issues real invoices in every mode (Go API in production, in-memory mocks in dev). `finance.vue`'s Earnings panel remains a labelled, honest "not yet wired" empty state until income/expense tracking lands.
 
 ### Phase 6: Release Planner
 
@@ -251,14 +251,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Status**: Not started
 **Plans**: TBD
 
-> Note: `index.vue` Dashboard page already exists with HUD-styled static mock data. Phase 8 will wire all widgets to live module APIs.
+> Note: `index.vue` already loads live gig, social and tracklist data. Phase 8 adds the remaining widgets (finance, releases, tours) and cross-module career analytics.
 
-### Phase 9: Production Hardening
+### Phase 9: Production Hardening ✅
 
 **Goal**: Ship v1.0.0 as a polished, documented, production-ready open-source release suitable for public adoption
 **Depends on**: All prior phases (0-8)
 **Requirements**: PROD-01 through PROD-14
-**Status**: Not started
+**Status**: Complete — 2026-09-16. Landed ahead of Phases 6–8 in execution order: v1.0.0 shipped the modules complete at the time (0 through 4) with production hardening, rather than waiting for the full phase sequence. See `CHANGELOG.md` [1.0.0].
 **Plans**: TBD
 
 ---
@@ -289,6 +289,6 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 | 6. Release Planner               | 0/TBD          | Future       | —          |
 | 7. Tour Manager                  | 0/TBD          | Future       | —          |
 | 8. Unified Dashboard             | 0/TBD          | Future       | —          |
-| 9. Production Hardening          | 0/TBD          | Future       | —          |
+| 9. Production Hardening          | —              | ✅ Complete  | 2026-09-16 |
 
 *Phase 1 plan 01-06 (text tracklist export) is a backlog item — not blocking Phase 4.

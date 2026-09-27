@@ -21,7 +21,7 @@ Before any command, confirm:
 - [ ] Docker Engine 24+ with Compose v2, daemon running.
 - [ ] Architecture is `linux/arm64`. Production images do not claim amd64 support.
 - [ ] Host can pull `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:?Set IMAGE_TAG to the published release}`.
-- [ ] Selected `IMAGE_TAG` actually contains the runtime fixes. The default `v1.0.0` is a placeholder; local changes do not propagate to existing GHCR tags.
+- [ ] Selected `IMAGE_TAG` actually contains the runtime fixes. The default `v1.0.1` was never published (only `1.0.1`, no `v`, is); local changes do not propagate to existing GHCR tags.
 - [ ] Working directory is the repo root containing `docker-compose.prod.yml`.
 - [ ] The current branch is one you intend to deploy. Do not deploy a dirty tree.
 - [ ] No `.env` is being silently imported — every Compose call uses `--env-file /dev/null`.

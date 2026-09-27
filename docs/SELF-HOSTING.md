@@ -2,7 +2,7 @@
 
 This is the canonical setup guide for frontend mocks, a local development backend, and an image-only production deployment. Run commands from the repository root. Keep the scripts, Compose files, and image version from a compatible release together; downloading only a Compose file is not enough.
 
-> **Release status:** local runtime changes do not update an existing GHCR tag. The production default is `IMAGE_TAG=v1.0.0`, but these fixes require a newly published image. Anonymous requests for the existing v1.0.0 package returned 403. Confirm package access and select a release that contains the fixes before deploying. See [container images](./container-images.md).
+> **Release status:** `docker-compose.prod.yml` defaults `IMAGE_TAG` to `v1.0.1`, which **was never published** — only `1.0.1` (no `v`) is. Until a v1.2.0 release publishes matching tags, export `IMAGE_TAG=1.0.1` explicitly (this predates the v1.1.0 invoicing work; see the [v1.1.0 release notes](./release-notes/v1.1.0-phase5.md) for what it doesn't include), or pass the newest `sha-<commit>` tag from [container images](./container-images.md). `bash scripts/setup.sh prod` does not set `IMAGE_TAG` itself.
 
 ## One-line install
 
@@ -154,9 +154,9 @@ Use `docker-compose.prod.yml` **alone**, not merged with the development files. 
 |---|---|---|
 | `db` | `postgres:16-alpine` | PostgreSQL; no published host port. |
 | `storage` | `dxflrs/garage:v2.2.0` | Garage S3; loopback host port 39000 by default. |
-| `app` | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.0.0}` | One supervised Go + Nuxt/Node + Playwright app container. |
+| `app` | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.0.1}` | One supervised Go + Nuxt/Node + Playwright app container. |
 
-Choose an accessible, newly published tag containing the runtime fixes and export it before setup. The default v1.0.0 is not proof that the fixes have been released.
+The default `v1.0.1` is not published; export `IMAGE_TAG` to a tag that is (`1.0.1`, or the newest `sha-<commit>` from [container images](./container-images.md)) before setup.
 
 ```bash
 # Set IMAGE_TAG to the published version you intend to run, then:
@@ -225,6 +225,12 @@ Requirements: Docker with Compose v2, `openssl`, and
 [`nsc`](https://github.com/nats-io/nsc) (`brew install nsc`) to create the
 NATS credentials.
 
+No versioned Promoter release exists yet — only `sha-<commit>` tags are
+published to `ghcr.io/lithqube/klubhub-promoter-api`. `PROMOTER_TAG` has no
+default, so `docker compose` refuses to start until you set it: pick the
+newest tag from a [package listing](https://github.com/lithqube/klubhub/pkgs/container/klubhub-promoter-api)
+(the one-line installer does this resolution for you).
+
 ```bash
 # 1. Secrets and NATS credentials (created once, never overwritten)
 scripts/promoter-secrets.sh
@@ -233,6 +239,7 @@ scripts/promoter-secrets.sh
 #    .local/promoter/secrets/kek and .local/promoter/secrets/kek_id
 
 # 3. Start the stack (migrations run automatically)
+export PROMOTER_TAG=sha-<commit>   # newest published tag; see above
 docker compose -f docker-compose.promoter.yml up -d
 
 # 4. Create your organisation and first owner, then open the printed link
