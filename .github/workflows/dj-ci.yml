@@ -1,0 +1,79 @@
+name: KlubHub DJ CI
+
+# KlubHub DJ had no CI test gate: the Go packages under api/internal/{gig,
+# epk,finance,social,tracklist,ra,settings,artwork,contact,venue} and
+# api/cmd/api never ran in CI, and the frontend only ran when a change
+# also touched Promoter or shared files (promoter-ci.yml's path filters).
+# This workflow is DJ's own gate, mirroring promoter-ci.yml.
+on:
+  pull_request:
+    paths: &paths
+      - 'apps/dj/**'
+      - 'apps/dj-e2e/**'
+      - 'api/**'
+      - 'libs/ui/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/dj-ci.yml'
+  push:
+    branches: [main]
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dj-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: api/go.mod, cache-dependency-path: api/go.sum }
+      - name: vet
+        working-directory: api
+        run: go vet ./...
+      # promoter-ci.yml already tests internal/platform and internal/promoter
+      # (and cmd/promoter). Scope this to DJ's own packages so a DJ-only PR
+      # doesn't need a Promoter change to get Go coverage, without doubling
+      # the platform suite on every PR that touches both.
+      - name: test (race)
+        working-directory: api
+        run: |
+          go test -race -count=1 -p 1 \
+            ./internal/gig/... ./internal/epk/... ./internal/finance/... \
+            ./internal/social/... ./internal/tracklist/... ./internal/ra/... \
+            ./internal/settings/... ./internal/artwork/... ./internal/contact/... \
+            ./internal/venue/... ./cmd/api/...
+      - name: govulncheck
+        working-directory: api
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./cmd/api/...
+
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 12.4.1 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # apps/dj/tsconfig.json extends the generated .nuxt/tsconfig.json, so
+      # lint/typecheck/vitest can't load until Nuxt has generated it. The
+      # API base is a placeholder (nothing is built or contacted).
+      - name: Generate Nuxt types
+        run: pnpm --filter @dev/dj exec nuxt prepare
+        env:
+          NUXT_PUBLIC_API_BASE: http://api:8080
+      - run: pnpm nx run-many -t lint -p @dev/dj @dev/dj-e2e
+      - run: pnpm nx typecheck @dev/dj
+        env:
+          NUXT_PUBLIC_API_BASE: http://api:8080
+      - run: pnpm nx test @dev/dj
+      # apps/dj-e2e's webServer re-invokes `nx run @dev/dj:serve-static`
+      # itself (nx's dependsOn already starts one), which races a separate
+      # @dev/ui:build-static inference and is flaky today independent of
+      # this workflow — not wired in as a gate yet. Tracked as a follow-up.

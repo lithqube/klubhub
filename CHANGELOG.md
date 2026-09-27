@@ -6,6 +6,37 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`dj-ci.yml`**: KlubHub DJ's own CI gate. Go vet and `-race` tests for
+  the DJ packages (`gig`, `epk`, `finance`, `social`, `tracklist`, `ra`,
+  `settings`, `artwork`, `contact`, `venue`, `cmd/api`), govulncheck
+  scoped to `cmd/api`, and DJ lint, typecheck and unit tests through
+  `pnpm nx`. Previously these ran only on a developer's machine, or in CI
+  only incidentally when a change also touched Promoter or shared files.
+  DJ end-to-end (`apps/dj-e2e`) is not yet wired in: its Playwright
+  `webServer` re-invokes `nx run @dev/dj:serve-static` on top of the one
+  Nx's own task graph already starts, which races an unrelated
+  `@dev/ui:build-static` inference and is flaky independent of this
+  change.
+- `containers-ci.yml` now scans the DJ image with Trivy (fails on fixable
+  HIGH/CRITICAL), publishes an SPDX SBOM, and signs the published image
+  with cosign (keyless, GitHub OIDC) — the same checks `promoter-ci.yml`
+  already runs for the Promoter image. Still arm64-only.
+
+### Fixed
+
+- `apps/dj-e2e`'s `serve-static` served an empty `apps/dj/dist` instead
+  of the app: `nuxt build --prerender` (`build-static`) writes to
+  `apps/dj/.output/public`, so every request returned a bare directory
+  listing. `apps/dj-e2e/src/example.spec.ts` was a stale scaffold
+  placeholder asserting an `<h1>` containing "Welcome", which the
+  dashboard has never had; it now checks the page's real title.
+- `apps/dj/app/pages/index.vue`: two unused helper functions and two
+  `v-if`/`v-for` on the same element (now wrapped in `<template v-if>`),
+  the pre-existing lint errors that would have made `dj-ci.yml` red from
+  its first run.
+
 ### Changed
 
 - **Resident Advisor (RA) import is now a licensed feature and is off by
@@ -230,12 +261,14 @@ branch and the v1.0.0 tag.
 
 #### Added
 
-- Three GitHub Actions workflows under `.github/workflows/`:
-  - `ci.yml` — lint, typecheck, unit tests, govulncheck, pnpm audit.
-  - `scan.yml` — gitleaks secret scan + CodeQL SAST (Go and JS/TS).
-  - `image.yml` — arm64 image publish to GHCR on tag, with a
-    post-build sanity check that fails the job if any non-arm64
-    platform is present in the published manifest.
+- A GitHub Actions image-publish workflow under `.github/workflows/`
+  (now `containers-ci.yml`): arm64 image publish to GHCR on push to
+  main, with a post-build sanity check that fails the job if any
+  non-arm64 platform is present in the published manifest. This entry
+  previously also listed a `ci.yml` (lint, typecheck, unit tests,
+  govulncheck, pnpm audit) and a `scan.yml` (gitleaks + CodeQL); neither
+  was ever added, so KlubHub DJ's own Go and frontend packages had no CI
+  gate until `dj-ci.yml` (below, unreleased).
 - `.dockerignore` at root, `api/`, and `apps/dj/`, scoping the build
   context so tracked secrets (`.env`, `garage.toml`, `backups/`)
   cannot accidentally end up in a published image layer.

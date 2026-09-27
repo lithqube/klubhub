@@ -24,21 +24,22 @@ concurrency:
   group: containers-ci-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  IMAGE: ghcr.io/lithqube/klubhub-dj-api
+
 jobs:
   build-and-push:
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # cosign keyless signing
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Resolve tags
         id: tags
@@ -54,28 +55,73 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
+      # Loaded locally (not pushed yet) so Trivy scans the exact image
+      # before anything reaches the registry, matching promoter-ci.yml.
+      - name: Build (local, for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/dj/Dockerfile
+          platforms: linux/arm64
+          load: true
+          tags: ${{ env.IMAGE }}:scan
+          cache-from: type=gha,scope=containers-ci
+          cache-to: type=gha,mode=max,scope=containers-ci
+
+      - name: Trivy (fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          # Pin the scanner too: older action defaults point at Trivy
+          # releases that have since been removed upstream.
+          version: v0.70.0
+          image-ref: ${{ env.IMAGE }}:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}:scan
+          format: spdx-json
+          output-file: dj-sbom.spdx.json
+      - uses: actions/upload-artifact@v4
+        with: { name: dj-sbom, path: dj-sbom.spdx.json }
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./apps/dj/Dockerfile
           push: true
           platforms: linux/arm64
+          provenance: mode=max
+          sbom: true
           tags: |
-            ghcr.io/lithqube/klubhub-dj-api:${{ steps.tags.outputs.tag }}
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.tag }}
           cache-from: type=gha,scope=containers-ci
-          cache-to: type=gha,mode=max,scope=containers-ci
 
       - name: Verify manifest
         env:
-          IMAGE: ghcr.io/lithqube/klubhub-dj-api:${{ steps.tags.outputs.tag }}
+          IMAGE_TAGGED: ${{ env.IMAGE }}:${{ steps.tags.outputs.tag }}
         run: |
-          docker buildx imagetools inspect "$IMAGE" --raw > manifest.json
+          docker buildx imagetools inspect "$IMAGE_TAGGED" --raw > manifest.json
           jq -e '
             [.manifests[] | select(.annotations["vnd.docker.reference.type"] != "attestation-manifest") | .platform] as $p
             | ($p | length) == 1
               and $p[0].os == "linux"
               and $p[0].architecture == "arm64"
           ' manifest.json
-          echo "Published $IMAGE"
+          echo "Published $IMAGE_TAGGED"
           cat manifest.json
+
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign image (keyless, GitHub OIDC)
+        run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
