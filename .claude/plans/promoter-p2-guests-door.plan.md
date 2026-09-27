@@ -163,7 +163,7 @@ Per slice: `go test -race` (domain table tests, testcontainers Postgres integrat
 
 ### UX review of P2.1–P2.3 (commit `99ea899`)
 
-All P0/P1/P2 findings fixed except showing check-in state in the guest table (needs P2.4 aggregates; follow-up). API change: locked PIN → **429 `pin_locked`** with `Retry-After` and `retry_after` (429 rather than 423: the lock rate-limits guessing and lifts itself; the fifth wrong try already gets it), expired PIN → 401 `pin_expired`; unknown/revoked devices still only see `invalid_credentials`. PIN status gains `locked_until`. Queued ops survive session expiry (door goes to re-login instead of wiping).
+All P0/P1/P2 findings fixed. The deferred check-in state landed with P2.4 (`6d42acf`): guests carry `heads_in`/`first_in_at`, tickets `checked_in`, counts `checked_in`, and `status=checked_in` filters (the CSV export refuses it). The REPORT tab had its own UX review (`ac47716`): THROUGH THE DOOR (check-ins + manual ins + walk-ups) leads the tiles so the peak can never exceed admissions. API change: locked PIN → **429 `pin_locked`** with `Retry-After` and `retry_after` (429 rather than 423: the lock rate-limits guessing and lifts itself; the fifth wrong try already gets it), expired PIN → 401 `pin_expired`; unknown/revoked devices still only see `invalid_credentials`. PIN status gains `locked_until`. Queued ops survive session expiry (door goes to re-login instead of wiping).
 
 ### API tests
 
