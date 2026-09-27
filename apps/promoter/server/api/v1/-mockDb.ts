@@ -7,6 +7,7 @@ import type {
   RegisteredDevice, SyncResponse,
 } from '~/types/door'
 import type { EventDetail, EventSummary, Venue } from '~/types/event'
+import type { CurvePoint, EventReport, ReportSubmitterRow } from '~/types/report'
 import type {
   AddGuestsInput, AddResult, Allocation, AllocationInput, BulkResult, BulkStatusInput, EntryTerms, Guest, GuestInput, GuestList, GuestPage,
   GuestStatus, ImportField, ImportPreset, ImportResult, ListInput, OverviewRow, StandingList, Ticket, TicketStatus,
@@ -16,6 +17,8 @@ import {
   allocationState, countByStatus, cutoffInstant, fold, headsHeld, holdsQuota, LIST_TYPES, STATUSES,
 } from '~/utils/guests'
 import { validateTimetable } from '~/utils/timetable'
+import { BUCKET_MS, bucketStart } from '~/utils/report'
+import { instantToZoned } from '~/utils/datetime'
 import { type CsvTable, type ImportProblem, type ImportRow, mapRow, maskEmail, maskName, resolveMapping } from '~/utils/attendeeImport'
 
 const DAY = 86_400_000
@@ -69,6 +72,13 @@ export const events: EventDetail[] = [
     ...common, id: 'e-halloween', title: 'Halloween Special', slug: 'halloween-special', status: 'draft',
     starts_at: iso(20), ends_at: iso(20, 7), doors_at: null, venue_id: null, city: 'Berlin', location_mode: 'city_only',
     external_ticket_url: null, version: 1, venue: null, stages: [], lineup: [], min_age: null, genres: [], cost_text: '',
+  }),
+  // Last week's night: the post-event report (P2.4) has door activity to show.
+  detail({
+    ...common, id: 'e-klubnacht-02', title: 'Klubnacht 02', slug: 'klubnacht-02', status: 'published',
+    starts_at: iso(-7), ends_at: iso(-7, 8), doors_at: null, venue_id: 'v-tresor', city: 'Berlin',
+    location_mode: 'venue', external_ticket_url: null, version: 3, capacity: 400,
+    venue: { id: 'v-tresor', name: 'Tresor.West', city: 'Berlin' }, stages: [], lineup: [],
   }),
 ]
 
@@ -138,11 +148,17 @@ export const guestLists: ListRow[] = [
   { id: 'gl-comp', event_id: 'e-klubnacht', name: 'Comp', type: 'comp', collect_contact: false, standing_template_id: null, position: 1, entry_terms: terms() },
   { id: 'gl-industry', event_id: 'e-klubnacht', name: 'Industry', type: 'industry', collect_contact: true, standing_template_id: null, position: 2, entry_terms: terms({ price_mode: 'reduced', reduced_price_text: '€10 before 01:00', cutoff_at: iso(6, 2) }) },
   { id: 'gl-wh-comp', event_id: 'e-warehouse', name: 'Comp', type: 'comp', collect_contact: false, standing_template_id: null, position: 0, entry_terms: terms() },
+  { id: 'gl-02-comp', event_id: 'e-klubnacht-02', name: 'Comp', type: 'comp', collect_contact: false, standing_template_id: null, position: 0, entry_terms: terms() },
+  { id: 'gl-02-artist', event_id: 'e-klubnacht-02', name: 'Artist guests', type: 'artist', collect_contact: false, standing_template_id: 'sl-residents', position: 1, entry_terms: terms({ perks: ['drink token'] }) },
+  { id: 'gl-02-promo', event_id: 'e-klubnacht-02', name: 'Promoters', type: 'promoter', collect_contact: false, standing_template_id: null, position: 2, entry_terms: terms() },
 ]
 
 export const allocations: AllocRow[] = [
   { id: 'al-ben', event_id: 'e-klubnacht', list_id: 'gl-artist', label: 'Ben Klock', submitter_contact: 'tour@agency.example', quota: 6, plus_n_max: 1, deadline: iso(6, -3), requires_approval: false, revoked_at: null },
   { id: 'al-dasha', event_id: 'e-klubnacht', list_id: 'gl-artist', label: 'Dasha Rush', submitter_contact: '', quota: 4, plus_n_max: 1, deadline: null, requires_approval: true, revoked_at: null },
+  { id: 'al-02-kaiser', event_id: 'e-klubnacht-02', list_id: 'gl-02-artist', label: 'Kaiser', submitter_contact: '', quota: 6, plus_n_max: 1, deadline: null, requires_approval: false, revoked_at: null },
+  { id: 'al-02-lena', event_id: 'e-klubnacht-02', list_id: 'gl-02-artist', label: 'Lena W', submitter_contact: '', quota: 4, plus_n_max: 2, deadline: null, requires_approval: false, revoked_at: null },
+  { id: 'al-02-crew', event_id: 'e-klubnacht-02', list_id: 'gl-02-promo', label: 'Nachtwerk street team', submitter_contact: '', quota: 4, plus_n_max: 0, deadline: null, requires_approval: false, revoked_at: iso(-8) },
 ]
 
 const seedGuest = (id: string, event_id: string, list_id: string, allocation_id: string | null, name: string, extra: Partial<Guest> = {}): GuestRow => ({
@@ -162,6 +178,15 @@ export const guests: GuestRow[] = [
   seedGuest('g9', 'e-klubnacht', 'gl-industry', null, 'Rafael Ortiz', { email: 'rafael@press.example', status: 'invited' }),
   seedGuest('g10', 'e-warehouse', 'gl-wh-comp', null, 'Noor Haddad', { plus_n: 1 }),
   seedGuest('g11', 'e-warehouse', 'gl-wh-comp', null, 'Emil Sørensen'),
+  seedGuest('g02-1', 'e-klubnacht-02', 'gl-02-artist', 'al-02-kaiser', 'Pia Lorenz', { plus_n: 1 }),
+  seedGuest('g02-2', 'e-klubnacht-02', 'gl-02-artist', 'al-02-kaiser', 'Otto Brandl'),
+  seedGuest('g02-3', 'e-klubnacht-02', 'gl-02-artist', 'al-02-kaiser', 'Yusuf Demir', { plus_n: 1 }),
+  seedGuest('g02-4', 'e-klubnacht-02', 'gl-02-artist', 'al-02-lena', 'Carla Mendes', { plus_n: 2 }),
+  seedGuest('g02-5', 'e-klubnacht-02', 'gl-02-artist', 'al-02-lena', 'Finn Olsen'),
+  seedGuest('g02-6', 'e-klubnacht-02', 'gl-02-comp', null, 'Greta Holm', { plus_n: 1 }),
+  seedGuest('g02-7', 'e-klubnacht-02', 'gl-02-comp', null, 'Ivo Petrov', { status: 'declined' }),
+  seedGuest('g02-8', 'e-klubnacht-02', 'gl-02-comp', null, 'Ravi Nair'),
+  seedGuest('g02-9', 'e-klubnacht-02', 'gl-02-promo', 'al-02-crew', 'Mei Chen'),
 ]
 
 const guestErr = (statusCode: number, data: Record<string, unknown>) => createError({ statusCode, data })
@@ -390,15 +415,22 @@ interface PositionRow {
 export const ticketTypes: TicketTypeRow[] = [
   { id: 'tt-early', event_id: 'e-klubnacht', name: 'Early bird', key: 'early bird', ref: null },
   { id: 'tt-regular', event_id: 'e-klubnacht', name: 'Regular', key: 'regular', ref: null },
+  { id: 'tt-02-early', event_id: 'e-klubnacht-02', name: 'Early bird', key: 'early bird', ref: null },
+  { id: 'tt-02-regular', event_id: 'e-klubnacht-02', name: 'Regular', key: 'regular', ref: null },
 ]
 export const orders: OrderRow[] = [
   { id: 'o-1', event_id: 'e-klubnacht', source: 'dice', ref: 'D-7001', buyer_name: 'Hana Kim', buyer_email: 'hana@example.org' },
   { id: 'o-2', event_id: 'e-klubnacht', source: 'dice', ref: 'D-7002', buyer_name: 'Theo Brandt', buyer_email: 'theo@example.org' },
+  { id: 'o-02-1', event_id: 'e-klubnacht-02', source: 'dice', ref: 'D-6001', buyer_name: 'Nils Berg', buyer_email: 'nils@example.org' },
 ]
 export const positions: PositionRow[] = [
   { id: 'p-1', event_id: 'e-klubnacht', order_id: 'o-1', ticket_type_id: 'tt-early', ref: 'TK-1', name: 'Hana Kim', email: 'hana@example.org', secret: 'DICE-0001', status: 'valid', imported_at: iso(-2) },
   { id: 'p-2', event_id: 'e-klubnacht', order_id: 'o-1', ticket_type_id: 'tt-early', ref: 'TK-2', name: 'Mika Kim', email: 'hana@example.org', secret: 'DICE-0002', status: 'valid', imported_at: iso(-2) },
   { id: 'p-3', event_id: 'e-klubnacht', order_id: 'o-2', ticket_type_id: 'tt-regular', ref: 'TK-3', name: 'Theo Brandt', email: 'theo@example.org', secret: 'DICE-0003', status: 'refunded', imported_at: iso(-2) },
+  { id: 'p-02-1', event_id: 'e-klubnacht-02', order_id: 'o-02-1', ticket_type_id: 'tt-02-early', ref: 'TK-1', name: 'Nils Berg', email: 'nils@example.org', secret: 'DICE-6001', status: 'valid', imported_at: iso(-9) },
+  { id: 'p-02-2', event_id: 'e-klubnacht-02', order_id: 'o-02-1', ticket_type_id: 'tt-02-early', ref: 'TK-2', name: 'Ada Berg', email: 'nils@example.org', secret: 'DICE-6002', status: 'valid', imported_at: iso(-9) },
+  { id: 'p-02-3', event_id: 'e-klubnacht-02', order_id: 'o-02-1', ticket_type_id: 'tt-02-regular', ref: 'TK-3', name: 'Jonas Wolf', email: 'nils@example.org', secret: 'DICE-6003', status: 'valid', imported_at: iso(-9) },
+  { id: 'p-02-4', event_id: 'e-klubnacht-02', order_id: 'o-02-1', ticket_type_id: 'tt-02-regular', ref: 'TK-4', name: 'Lea Wolf', email: 'nils@example.org', secret: 'DICE-6004', status: 'refunded', imported_at: iso(-9) },
 ]
 
 const validTickets = (eventId: string) => positions.filter(p => p.event_id === eventId && p.status === 'valid').length
@@ -823,4 +855,164 @@ export function doorAdds(sess: DoorSessionRow, b: { adds?: DoorAdd[] }): { resul
     return { ...base, status: 'applied' }
   })
   return { results }
+}
+
+// ---------------------------------------------------------------- report (P2.4)
+// Mirrors the P2.4 contract: read-only aggregates over guests, allocations,
+// tickets, check-ins and door counters; undone rows never count. Names only
+// leave through the per-allocation list-back CSV (no email or phone).
+
+// Last week's night (e-klubnacht-02, doors 23:00 local): arrivals from
+// 23:10, a peak after 01:00, a few leaving; one undone check-in and one undone walk-up.
+function seedLastNight() {
+  const dev = 'dd-front'
+  const seed = (nonce: string, kind: 'guest' | 'ticket', id: string, count: number, direction: 'in' | 'out', h: number, m: number, undone = false) =>
+    checkinRows.push({ event_id: 'e-klubnacht-02', seq: ++doorSeq, nonce, subject: { kind, id }, count, direction, at: iso(-7, h, m), device_id: dev, undone, conflict: false })
+  const count = (nonce: string, kind: 'walkup' | 'in' | 'out', delta: number, h: number, m: number, undone = false) =>
+    counterRows.push({ event_id: 'e-klubnacht-02', nonce, kind, delta, at: iso(-7, h, m), device_id: dev, undone, seq: ++doorSeq })
+  seed('seed-02-c01', 'ticket', 'p-02-1', 1, 'in', 0, 10)
+  seed('seed-02-c02', 'guest', 'g02-6', 2, 'in', 0, 20)
+  seed('seed-02-c03', 'guest', 'g02-2', 1, 'in', 0, 40, true)
+  seed('seed-02-c04', 'guest', 'g02-2', 1, 'in', 0, 41)
+  seed('seed-02-c05', 'guest', 'g02-1', 2, 'in', 1, 5)
+  seed('seed-02-c06', 'ticket', 'p-02-3', 1, 'in', 1, 12)
+  seed('seed-02-c07', 'guest', 'g02-4', 2, 'in', 1, 35)
+  seed('seed-02-c08', 'guest', 'g02-9', 1, 'in', 1, 50)
+  seed('seed-02-c09', 'guest', 'g02-8', 1, 'in', 2, 5)
+  seed('seed-02-c10', 'guest', 'g02-9', 1, 'out', 3, 20)
+  count('seed-02-k01', 'walkup', 2, 0, 55)
+  count('seed-02-k02', 'walkup', 1, 1, 40)
+  count('seed-02-k03', 'walkup', 1, 1, 42, true)
+  count('seed-02-k04', 'walkup', 3, 2, 10)
+  count('seed-02-k05', 'out', 2, 3, 30)
+}
+seedLastNight()
+
+interface Tally { going: number, arrived: number, no_show_rate: number | null, heads_expected: number, heads_admitted: number, plus_ones_allowed: number, plus_ones_used: number }
+
+function reportCheckins(eventId: string) {
+  const live = checkinRows.filter(c => c.event_id === eventId && !c.undone)
+  const heads = new Map<string, number>()
+  const firstIn = new Map<string, string>()
+  for (const c of live) {
+    if (c.direction !== 'in') continue
+    const key = `${c.subject.kind}:${c.subject.id}`
+    heads.set(key, (heads.get(key) ?? 0) + c.count)
+    if (!firstIn.has(key) || c.at < firstIn.get(key)!) firstIn.set(key, c.at)
+  }
+  return { live, heads, firstIn }
+}
+
+function tally(rows: GuestRow[], heads: Map<string, number>): Tally {
+  const going = rows.filter(g => g.status === 'going')
+  const admitted = (g: GuestRow) => heads.get(`guest:${g.id}`) ?? 0
+  const arrived = rows.filter(g => admitted(g) >= 1)
+  const goingArrived = going.filter(g => admitted(g) >= 1).length
+  return {
+    going: going.length, arrived: arrived.length,
+    no_show_rate: going.length ? Math.round(((going.length - goingArrived) / going.length) * 10_000) / 10_000 : null,
+    heads_expected: going.reduce((n, g) => n + 1 + g.plus_n, 0), heads_admitted: rows.reduce((n, g) => n + admitted(g), 0),
+    plus_ones_allowed: going.reduce((n, g) => n + g.plus_n, 0),
+    plus_ones_used: arrived.reduce((n, g) => n + Math.min(g.plus_n, admitted(g) - 1), 0),
+  }
+}
+
+function reportCurve(eventId: string, tz: string, live: CheckinRow[]): CurvePoint[] {
+  const moves = [
+    ...live.map(c => ({ at: Date.parse(c.at), in: c.direction === 'in' ? c.count : 0, out: c.direction === 'out' ? c.count : 0, walkups: 0 })),
+    ...counterRows.filter(k => k.event_id === eventId && !k.undone).map(k => ({
+      at: Date.parse(k.at), in: k.kind === 'in' ? k.delta : 0, out: k.kind === 'out' ? k.delta : 0, walkups: k.kind === 'walkup' ? k.delta : 0,
+    })),
+  ].sort((a, b) => a.at - b.at)
+  if (!moves.length) return []
+  const first = bucketStart(moves[0]!.at, tz)
+  const last = bucketStart(moves.at(-1)!.at, tz)
+  const curve: CurvePoint[] = []
+  let occupancy = 0
+  let k = 0
+  for (let b = first; b <= last; b += BUCKET_MS) {
+    const p: CurvePoint = { bucket_start: new Date(b).toISOString(), in: 0, out: 0, walkups: 0, occupancy: 0 }
+    while (k < moves.length && moves[k]!.at < b + BUCKET_MS) {
+      const m = moves[k++]!
+      p.in += m.in
+      p.out += m.out
+      p.walkups += m.walkups
+    }
+    occupancy += p.in + p.walkups - p.out
+    p.occupancy = occupancy
+    curve.push(p)
+  }
+  return curve
+}
+
+export function eventReport(eventId: string): EventReport {
+  const e = findEvent(eventId)
+  const { live, heads } = reportCheckins(e.id)
+  const evGuests = guests.filter(g => g.event_id === e.id)
+  const lists = guestLists.filter(l => l.event_id === e.id).sort((a, b) => a.position - b.position)
+  const evTickets = positions.filter(p => p.event_id === e.id)
+  const scanned = (p: PositionRow) => (heads.get(`ticket:${p.id}`) ?? 0) >= 1
+  const validTicketCount = evTickets.filter(p => p.status === 'valid').length
+  const all = tally(evGuests, heads)
+  const curve = reportCurve(e.id, e.timezone, live)
+  const peak = curve.reduce<CurvePoint | null>((best, p) => (!best || p.occupancy > best.occupancy ? p : best), null)
+  const walkups = counterRows.filter(k => k.event_id === e.id && !k.undone && k.kind === 'walkup').reduce((n, k) => n + k.delta, 0)
+  return {
+    event: { id: e.id, title: e.title, starts_at: e.starts_at, ends_at: e.ends_at, timezone: e.timezone, capacity: e.capacity },
+    generated_at: new Date().toISOString(), live: Date.now() < Date.parse(e.ends_at),
+    totals: {
+      guests_going: all.going, guests_arrived: all.arrived, no_show_rate: all.no_show_rate,
+      heads_expected: all.heads_expected + validTicketCount,
+      heads_admitted: live.filter(c => c.direction === 'in').reduce((n, c) => n + c.count, 0),
+      plus_ones_allowed: all.plus_ones_allowed, plus_ones_used: all.plus_ones_used,
+      tickets_valid: validTicketCount, tickets_scanned: evTickets.filter(scanned).length, walkups,
+      peak_occupancy: peak && peak.occupancy > 0 ? peak.occupancy : 0, peak_at: peak && peak.occupancy > 0 ? peak.bucket_start : null,
+      conflicts: live.filter(c => c.conflict).length,
+    },
+    by_list: lists.map(l => ({ list_id: l.id, name: l.name, type: l.type, ...tally(evGuests.filter(g => g.list_id === l.id), heads) })),
+    // Artist lists first, then list position, then allocation creation (array order).
+    by_submitter: allocations.filter(a => a.event_id === e.id)
+      .map((a, i) => ({ a, i, l: lists.find(x => x.id === a.list_id)! }))
+      .sort((x, y) => Number(y.l.type === 'artist') - Number(x.l.type === 'artist') || x.l.position - y.l.position || x.i - y.i)
+      .map(({ a, l }): ReportSubmitterRow => {
+        const t = tally(evGuests.filter(g => g.allocation_id === a.id), heads)
+        return {
+          allocation_id: a.id, list_id: l.id, list_name: l.name, list_type: l.type, submitter: a.label, quota: a.quota,
+          going: t.going, arrived: t.arrived, no_show_rate: t.no_show_rate, heads_admitted: t.heads_admitted, revoked: !!a.revoked_at,
+        }
+      }),
+    tickets_by_type: ticketTypes.filter(t => t.event_id === e.id).map(t => ({
+      ticket_type_id: t.id, name: t.name,
+      valid: evTickets.filter(p => p.ticket_type_id === t.id && p.status === 'valid').length,
+      scanned: evTickets.filter(p => p.ticket_type_id === t.id && scanned(p)).length,
+    })),
+    curve,
+  }
+}
+
+/**
+ * One allocation's guests for the list-back CSV: name-level only, no email
+ * or phone. Missing or malformed id → 422; another event's allocation → 404.
+ */
+export function listBackAllocation(eventId: string, allocationId: string): AllocRow {
+  if (!/^[\w-]{1,64}$/.test(allocationId)) throw invalidField('allocation_id', 'an allocation id')
+  const a = allocations.find(x => x.id === allocationId && x.event_id === eventId)
+  if (!a) throw guestErr(404, { error: 'not_found' })
+  return a
+}
+
+export function listBackRows(eventId: string, allocationId: string): (string | number)[][] {
+  const e = findEvent(eventId)
+  const a = listBackAllocation(e.id, allocationId)
+  const { heads, firstIn } = reportCheckins(e.id)
+  const local = (at: string | undefined) => {
+    if (!at) return ''
+    const z = instantToZoned(at, e.timezone)
+    return `${z.date} ${z.time}`
+  }
+  const rows = guests.filter(g => g.event_id === e.id && g.allocation_id === a.id).sort((x, y) => x.name.localeCompare(y.name)).map((g) => {
+    const n = heads.get(`guest:${g.id}`) ?? 0
+    return [g.name, g.plus_n, g.status, n >= 1 ? 'yes' : 'no', n, local(firstIn.get(`guest:${g.id}`))]
+  })
+  return [['name', 'plus_n', 'status', 'arrived', 'heads_admitted', 'first_in_local'], ...rows]
 }
