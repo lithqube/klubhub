@@ -10,7 +10,7 @@ p, h1, h2, h3 { margin: 0; }
 h1, h2, h3, .brand { font-family: var(--font-command); letter-spacing: var(--tracking-command); line-height: 1.05; }
 .wrap { width: min(1200px, calc(100% - 80px)); margin-inline: auto; }
 .header { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 104px; border-bottom: 1px dashed var(--color-outline); }
-.brand { display: flex; align-items: center; gap: 14px; font-size: 24px; font-weight: 700; }
+.brand { display: flex; align-items: center; gap: 14px; min-height: 44px; font-size: 24px; font-weight: 700; }
 .mark { color: var(--color-primary); border: 1px solid var(--color-primary); padding: 7px 10px; }
 .brand-meta { max-width: 105px; color: var(--color-on-surface-variant); font: 10px/1.5 var(--font-terminal); letter-spacing: .08em; margin-left: 12px; }
 nav { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
@@ -35,9 +35,9 @@ h1 span, h2 span { color: var(--color-primary); }
 .signal-current strong span { display: block; color: var(--color-primary); font-size: 1.5em; }
 .signal-bottom { display: flex; justify-content: space-between; font-size: 13px; }
 .signal-next { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 20px 22px; border-top: 1px dashed var(--color-outline); font: 12px var(--font-terminal); }
-.badge { display: inline-block; width: fit-content; padding: 5px 8px; border: 1px dashed var(--color-secondary); color: var(--color-secondary); white-space: nowrap; font-size: 10px; }
+.badge { display: inline-block; width: fit-content; padding: 5px 8px; border: 1px dashed var(--color-secondary); color: var(--color-secondary); white-space: nowrap; font-size: 11px; }
 .ready { border-color: var(--color-primary); color: var(--color-primary); }
-.signal-foot { padding: 14px 22px; border-top: 1px dashed var(--color-outline); font-size: 10px; }
+.signal-foot { padding: 14px 22px; border-top: 1px dashed var(--color-outline); font-size: 11px; }
 .products, .ownership, .closing { border-top: 1px dashed var(--color-outline); padding-block: 52px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 h2 { font-size: clamp(28px, 3.4vw, 42px); }
@@ -71,7 +71,7 @@ dd { margin: 10px 0 0 50px; color: var(--color-on-surface-variant); font-size: 1
 .newsletter-copy h2 { margin: 14px 0 18px; font-size: clamp(28px, 3.4vw, 42px); }
 .newsletter-lede { color: var(--color-on-surface-variant); }
 .newsletter-form { display: flex; flex-direction: column; gap: 14px; }
-.newsletter-label { font: 10px var(--font-terminal); letter-spacing: .08em; text-transform: uppercase; color: var(--color-on-surface-variant); }
+.newsletter-label { font: 11px var(--font-terminal); letter-spacing: .08em; text-transform: uppercase; color: var(--color-on-surface-variant); }
 .newsletter-row { display: flex; gap: 12px; }
 .newsletter-input { flex: 1; min-width: 0; min-height: 48px; padding: 12px 14px; background: var(--color-surface); border: 1px dashed var(--color-outline); color: var(--color-on-surface); font: 14px var(--font-data); }
 .newsletter-input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; }
@@ -97,14 +97,39 @@ dd { margin: 10px 0 0 50px; color: var(--color-on-surface-variant); font-size: 1
   .newsletter-input { font-size: 16px; }
 }
 @media (max-width: 950px) { .wrap { width: calc(100% - 48px); } .brand-meta { display: none; } .hero { gap: 30px; padding-block: 64px; } .signal-next { padding-inline: 16px; flex-wrap: wrap; } .future-product { grid-template-columns: 1fr auto; } .future-product > p { grid-row: 2; } .future-product .badge { grid-column: 2; grid-row: 1; } .footer { flex-wrap: wrap; } }
-@media (max-width: 650px) { .wrap { width: calc(100% - 40px); } .header { flex-wrap: wrap; padding-block: 22px 12px; gap: 12px; } nav { gap: 24px; } .hero { grid-template-columns: 1fr; padding-block: 48px; gap: 40px; } h1 { font-size: clamp(44px, 12vw, 72px); } .signal-current strong { font-size: 42px; } .section-heading { display: block; } .section-heading h2 { margin-top: 16px; } .dj-panel, .ownership { grid-template-columns: 1fr; } .dj-intro { padding: 26px; } .features { border-left: 0; border-top: 1px dashed var(--color-outline); padding: 4px 26px; } .future-product { gap: 14px; } .future-product h3 { font-size: 20px; } .future-product .badge { font-size: 8px; } .ownership { gap: 28px; } .footer { align-items: flex-start; flex-direction: column; gap: 12px; } }
+@media (max-width: 650px) { .wrap { width: calc(100% - 40px); } .header { flex-wrap: wrap; padding-block: 22px 12px; gap: 12px; } nav { gap: 24px; } .hero { grid-template-columns: 1fr; padding-block: 48px; gap: 40px; } h1 { font-size: clamp(44px, 12vw, 72px); } .signal-current strong { font-size: 42px; } .section-heading { display: block; } .section-heading h2 { margin-top: 16px; } .dj-panel, .ownership { grid-template-columns: 1fr; } .dj-intro { padding: 26px; } .features { border-left: 0; border-top: 1px dashed var(--color-outline); padding: 4px 26px; } .future-product { gap: 14px; } .future-product h3 { font-size: 20px; } .future-product .badge { font-size: 10px; } .ownership { gap: 28px; } .footer { align-items: flex-start; flex-direction: column; gap: 12px; } }
 
 /* One-line install (self-hosted edition). */
+.ownership-copy { min-width: 0; } /* lets the long command scroll inside its block instead of widening the page */
 .install { min-width: 0; margin: 24px 0; padding: 20px 22px; border: 1px dashed var(--color-primary); background: var(--color-surface-container-lowest); }
 .install .eyebrow { margin: 0 0 12px; color: var(--color-primary); }
 .install-cmd { display: flex; align-items: stretch; gap: 10px; }
 .install-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 12px 14px; background: var(--color-surface-variant); color: var(--color-on-surface); font: 13px/1.5 var(--font-terminal); }
-.install .copy { flex: none; min-width: 88px; cursor: pointer; background: transparent; color: var(--color-on-surface); }
+.install .copy { flex: none; min-width: 96px; cursor: pointer; }
 .install-status { min-height: 1.5em; margin: 6px 0 0; color: var(--color-primary); font: 11px/1.5 var(--font-terminal); letter-spacing: .05em; text-transform: uppercase; }
 .install .muted { margin: 4px 0 10px; }
-@media (max-width: 560px) { .install-cmd { flex-direction: column; } .install-cmd code { white-space: normal; overflow-wrap: anywhere; } .install .copy { width: 100%; } }
+@media (max-width: 650px) { .install-cmd { flex-direction: column; } .install-cmd code { white-space: normal; overflow-wrap: anywhere; } .install .copy { width: 100%; } }
+
+/* Phones: one column of full-width actions, roomier panels, no desktop
+   offsets left over from side-by-side layouts. */
+@media (max-width: 650px) {
+  nav { gap: 18px; flex-wrap: wrap; }
+  .actions { flex-direction: column; align-items: stretch; gap: 12px; }
+  .actions .button { width: 100%; justify-content: space-between; }
+  .actions .text-link { align-self: flex-start; }
+  .dj-intro { padding: 22px 20px; }
+  .dj-intro .button { display: flex; width: 100%; justify-content: space-between; margin: 10px 0 0; }
+  .dj-intro .button + .button { margin-left: 0; }
+  .dj-intro .demo-note { margin-top: 14px; }
+  .features { padding: 4px 20px; }
+  .features div { padding: 18px 0; }
+  dt { gap: 12px; font-size: 18px; }
+  dt .eyebrow { min-width: 0; }
+  dd { margin-left: 0; font-size: 15px; }
+  .future-product { padding: 24px 0; }
+  .future-product > p { font-size: 15px; }
+  .install { padding: 18px 16px; margin-inline: -4px; }
+  .install-cmd code { font-size: 14px; }
+  .install .copy { min-height: 52px; }
+  .text-link { font-size: 14px; }
+}
