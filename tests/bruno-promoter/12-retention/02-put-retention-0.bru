@@ -1,0 +1,26 @@
+meta {
+  name: Retention of 0 days is refused
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/api/v1/org/retention
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "retention_days": 0 }
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq retention_days
+}

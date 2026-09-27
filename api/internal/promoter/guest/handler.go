@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/klubhub/dj/api/internal/platform/authz"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 // Handler exposes lists, standing lists, allocations and guests under /api/v1.
@@ -88,6 +89,8 @@ func fail(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "list_not_empty", "guests": notEmpty.Guests})
 	case errors.Is(err, ErrNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+	case errors.Is(err, retention.ErrEventPurged):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "event_purged"})
 	case errors.Is(err, ErrAllocationRevoked):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "allocation_revoked"})
 	case errors.Is(err, ErrAllocationClosed):

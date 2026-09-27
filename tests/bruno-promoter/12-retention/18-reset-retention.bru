@@ -1,0 +1,25 @@
+meta {
+  name: Set retention back to 30 days
+  type: http
+  seq: 18
+}
+
+put {
+  url: {{baseUrl}}/api/v1/org/retention
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "retention_days": 30 }
+}
+
+assert {
+  res.status: eq 200
+  res.body.retention_days: eq 30
+}

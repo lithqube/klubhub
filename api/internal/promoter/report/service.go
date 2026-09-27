@@ -12,6 +12,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/audit"
 	"github.com/klubhub/dj/api/internal/platform/envelope"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 // Service computes reports. Every method runs in the tenant carried by ctx
@@ -303,6 +304,10 @@ func (s *Service) ListBack(ctx context.Context, eventID, allocationID uuid.UUID,
 	err := s.db.Run(ctx, func(tx pgx.Tx) error {
 		ev, err := loadEvent(ctx, tx, eventID)
 		if err != nil {
+			return err
+		}
+		// Names of an erased event are gone; the report JSON still works.
+		if err := retention.RefuseIfPurged(ctx, tx, eventID); err != nil {
 			return err
 		}
 		var label string

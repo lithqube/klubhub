@@ -1,0 +1,31 @@
+meta {
+  name: Retention settings default to 30 days
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/org/retention
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.retention_days: eq 30
+}
+
+tests {
+  test("upcoming and recent are arrays, nothing purged yet", function () {
+    const b = res.getBody();
+    expect(b.upcoming).to.be.an("array");
+    expect(b.recent).to.be.an("array").that.is.empty;
+    b.upcoming.forEach((u) => {
+      expect(u).to.have.all.keys("event_id", "title", "ends_at", "purge_after");
+    });
+  });
+}

@@ -1,0 +1,26 @@
+meta {
+  name: Erase now needs the exact event title
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{pastEventId}}/purge
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "confirm": "bruno past night" }
+}
+
+assert {
+  res.status: eq 422
+  res.body.error: eq invalid
+  res.body.field: eq confirm
+}

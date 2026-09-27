@@ -14,6 +14,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/events"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/event"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 // Service implements lists, standing lists, allocations and guests. Every
@@ -477,6 +478,16 @@ func (s *Service) ListAllocations(ctx context.Context, eventID, listID uuid.UUID
 	return out, err
 }
 
+// contactAllowed refuses a submitter contact (personal data) for an erased
+// event. Called before any allocation row is locked: purges lock the event
+// first.
+func contactAllowed(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, contact *string) error {
+	if contact == nil || strings.TrimSpace(*contact) == "" {
+		return nil
+	}
+	return retention.EnsureNotPurged(ctx, tx, eventID)
+}
+
 func (s *Service) writeContact(ctx context.Context, tx pgx.Tx, id uuid.UUID, contact *string) error {
 	if contact == nil {
 		return nil
@@ -502,6 +513,9 @@ func (s *Service) CreateAllocation(ctx context.Context, eventID, listID uuid.UUI
 	id := uuid.Must(uuid.NewV7())
 	var a Allocation
 	err := s.db.Run(ctx, func(tx pgx.Tx) error {
+		if err := contactAllowed(ctx, tx, eventID, in.SubmitterContact); err != nil {
+			return err
+		}
 		if err := listExists(ctx, tx, eventID, listID); err != nil {
 			return err
 		}
@@ -531,6 +545,9 @@ func (s *Service) UpdateAllocation(ctx context.Context, eventID, listID, id uuid
 	}
 	var a Allocation
 	err := s.db.Run(ctx, func(tx pgx.Tx) error {
+		if err := contactAllowed(ctx, tx, eventID, in.SubmitterContact); err != nil {
+			return err
+		}
 		cur, err := s.oneAllocation(ctx, tx, eventID, listID, id)
 		if err != nil {
 			return err

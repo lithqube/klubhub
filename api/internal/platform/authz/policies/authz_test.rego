@@ -96,3 +96,21 @@ test_venue_reveal_is_for_planners_with_a_second_factor if {
 	m := authz.decision with input as json.patch(base(["marketing"], "venue.reveal"), [{"op": "replace", "path": "/principal/amr", "value": ["otp"]}])
 	m.deny_reason == "no_role_grant"
 }
+
+test_event_purge_needs_recent_auth if {
+	authz.decision.allow with input as base(["owner"], "event.purge")
+	authz.decision.allow with input as base(["admin"], "event.purge")
+	stale := json.patch(base(["owner"], "event.purge"), [{"op": "replace", "path": "/context/now", "value": 1000 + 901}])
+	d := authz.decision with input as stale
+	not d.allow
+	d.deny_reason == "reauthentication_required"
+}
+
+test_event_purge_is_not_for_planners_or_door if {
+	every role in ["booker", "finance", "marketing"] {
+		d := authz.decision with input as base([role], "event.purge")
+		d.deny_reason == "no_role_grant"
+	}
+	d := authz.decision with input as json.patch(base(["door"], "event.purge"), [{"op": "add", "path": "/principal/event_scope", "value": "e1"}, {"op": "add", "path": "/resource/event_id", "value": "e1"}])
+	d.deny_reason == "no_role_grant"
+}

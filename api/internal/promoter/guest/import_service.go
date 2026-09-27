@@ -13,6 +13,7 @@ import (
 
 	"github.com/klubhub/dj/api/internal/platform/audit"
 	"github.com/klubhub/dj/api/internal/platform/envelope"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 // ImportInput is a parsed export plus the preset (and, for generic, the
@@ -193,6 +194,9 @@ func (s *Service) ImportAttendees(ctx context.Context, eventID uuid.UUID, in Imp
 			if err == pgx.ErrNoRows {
 				return ErrNotFound
 			}
+			return err
+		}
+		if err := retention.EnsureNotPurged(ctx, tx, eventID); err != nil {
 			return err
 		}
 		tenant := tenantOf(ctx)

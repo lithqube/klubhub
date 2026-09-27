@@ -118,5 +118,22 @@ func (d *DB) InstanceTenant(ctx context.Context) (uuid.UUID, error) {
 	return *id, nil
 }
 
+// Tenants lists every organisation id, for background jobs that visit each
+// tenant in turn (the retention job). Like InstanceTenant it goes through a
+// narrow SECURITY DEFINER function, promoter_tenant_ids(), that returns ids
+// only; all work on a tenant then runs inside WithTenant, under row level
+// security.
+func (d *DB) Tenants(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := d.pool.Query(ctx, `SELECT promoter_tenant_ids()`)
+	if err != nil {
+		return nil, fmt.Errorf("tenantdb: tenants: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("tenantdb: tenants: %w", err)
+	}
+	return ids, nil
+}
+
 // Ping checks database connectivity (health endpoint).
 func (d *DB) Ping(ctx context.Context) error { return d.pool.Ping(ctx) }

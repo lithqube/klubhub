@@ -14,6 +14,7 @@ import (
 
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 const maxBody = 16 << 10
@@ -78,6 +79,8 @@ func fail(w http.ResponseWriter, err error) {
 		secs := int(math.Ceil(locked.Wait.Seconds()))
 		w.Header().Set("Retry-After", strconv.Itoa(max(secs, 1)))
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "pin_locked", "retry_after": locked.Until.UTC().Format(time.RFC3339)})
+	case errors.Is(err, retention.ErrEventPurged):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "event_purged"})
 	case errors.Is(err, ErrPINExpired):
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "pin_expired"})
 	case errors.As(err, &perr):

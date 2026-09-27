@@ -30,6 +30,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/report"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 	"github.com/klubhub/dj/api/internal/promoter/server"
 )
 
@@ -108,16 +109,33 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 		Log: zerolog.Nop(), DB: db, Authz: engine, Authn: svc,
 		Identity: identity.NewHandler(svc), Origins: []string{origin},
 		Events: event.NewHandler(events), Guests: guest.NewHandler(guests),
-		Door:    door.NewHandler(door.NewService(db, keys, svc, nil)),
-		Reports: report.NewHandler(report.NewService(db, keys, nil)),
+		Door:      door.NewHandler(door.NewService(db, keys, svc, nil)),
+		Reports:   report.NewHandler(report.NewService(db, keys, nil)),
+		Retention: retention.NewHandler(retention.NewService(db, nil)),
 	})
+	lastRegistry = reg
 	return mux, svc, func() []error { return authz.VerifyCoverage(context.Background(), mux, reg) }
 }
+
+// lastRegistry is the registry of the latest stack (route assertions).
+var lastRegistry *authz.Registry
 
 func TestEveryRouteHasAPolicyDecision(t *testing.T) {
 	_, _, coverage := stack(t)
 	for _, err := range coverage() {
 		t.Error(err)
+	}
+	// P2.5 routes are mounted with their contract actions.
+	for _, want := range []authz.Route{
+		{Method: http.MethodGet, Pattern: "/api/v1/org/retention", Action: "org.read"},
+		{Method: http.MethodPut, Pattern: "/api/v1/org/retention", Action: "org.update"},
+		{Method: http.MethodPost, Pattern: "/api/v1/events/{eventID}/purge", Action: "event.purge"},
+		{Method: http.MethodGet, Pattern: "/api/v1/events/{eventID}/privacy", Action: "event.read"},
+	} {
+		got, ok := lastRegistry.Lookup(want.Method, want.Pattern)
+		if !ok || got.Public || got.Action != want.Action {
+			t.Errorf("%s %s: registered=%v %+v, want action %s", want.Method, want.Pattern, ok, got, want.Action)
+		}
 	}
 }
 

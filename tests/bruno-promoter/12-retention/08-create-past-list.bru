@@ -1,0 +1,30 @@
+meta {
+  name: Create a contact list on the past event
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/events/{{pastEventId}}/lists
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "name": "Past VIP", "type": "vip", "collect_contact": true }
+}
+
+assert {
+  res.status: eq 201
+}
+
+tests {
+  test("save list id", function () {
+    bru.setVar("pastListId", res.getBody().id);
+  });
+}

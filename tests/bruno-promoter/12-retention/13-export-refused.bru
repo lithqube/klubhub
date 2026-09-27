@@ -1,0 +1,21 @@
+meta {
+  name: CSV export of the erased event is refused
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{pastEventId}}/guests/export.csv
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Accept: text/csv
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: eq event_purged
+}

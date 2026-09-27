@@ -1,0 +1,41 @@
+meta {
+  name: Guests of the erased event come back anonymised
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{pastEventId}}/guests
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.guests.length: eq 2
+}
+
+tests {
+  test("rows keep list, status and +N but no personal data", function () {
+    const guests = res.getBody().guests;
+    guests.forEach((g) => {
+      expect(g.purged).to.equal(true);
+      expect(g.name).to.equal("");
+      expect(g.email).to.equal("");
+      expect(g.phone).to.equal("");
+      expect(g.note).to.equal("");
+      expect(g.list_id).to.equal(bru.getVar("pastListId"));
+    });
+    expect(guests.map((g) => g.status).sort()).to.eql(["going", "pending"]);
+    expect(guests.find((g) => g.status === "going").plus_n).to.equal(1);
+  });
+
+  test("no trace of the names or contacts", function () {
+    const text = JSON.stringify(res.getBody());
+    ["Past Guest", "Other Past", "example.org", "7654321", "left early"].forEach((s) => expect(text).to.not.contain(s));
+  });
+}

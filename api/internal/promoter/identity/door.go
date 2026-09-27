@@ -15,6 +15,7 @@ import (
 
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 const (
@@ -147,6 +148,10 @@ func (s *Service) setPIN(ctx context.Context, by authz.Principal, event uuid.UUI
 		}
 		if !exists {
 			return ErrInvalidInput
+		}
+		// No door for an erased event: its list is gone (P2.5).
+		if err := retention.EnsureNotPurged(ctx, tx, event); err != nil {
+			return err
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO door_pins (tenant_id, event_id, manager, pin_hash_enc, check_enc, expires_at, created_by)
 		  VALUES ($1, $2, $3, $4, $5, $6, $7)

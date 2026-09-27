@@ -16,6 +16,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 // ManagerPINs verifies the event's manager PIN and hands out its offline
@@ -161,6 +162,10 @@ func (s *Service) Bundle(ctx context.Context, sess Session) (Bundle, error) {
 			return ErrNotFound
 		}
 		if err != nil {
+			return err
+		}
+		// An erased event has no names to hand out (P2.5).
+		if err := retention.RefuseIfPurged(ctx, tx, sess.Event); err != nil {
 			return err
 		}
 		// The principal does not carry its session, so this is the latest
@@ -576,6 +581,10 @@ func (s *Service) Adds(ctx context.Context, sess Session, in AddsInput) (AddsRes
 	}
 	res := AddsResult{Results: make([]Result, 0, len(in.Adds))}
 	err := s.db.WithTenant(ctx, sess.Tenant, func(tx pgx.Tx) error {
+		// Adds are personal data: refused for an erased event (P2.5).
+		if err := retention.EnsureNotPurged(ctx, tx, sess.Event); err != nil {
+			return err
+		}
 		dek, err := s.keys.Current(ctx, tx, sess.Tenant)
 		if err != nil {
 			return err

@@ -13,6 +13,7 @@ import (
 
 	"github.com/klubhub/dj/api/internal/platform/audit"
 	"github.com/klubhub/dj/api/internal/platform/envelope"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 // Blind indexes are scoped to the guests table.
@@ -101,6 +102,9 @@ func (s *Service) AddGuests(ctx context.Context, eventID uuid.UUID, in AddInput,
 	}
 	err := s.db.Run(ctx, func(tx pgx.Tx) error {
 		if _, err := eventOf(ctx, tx, eventID); err != nil {
+			return err
+		}
+		if err := retention.EnsureNotPurged(ctx, tx, eventID); err != nil {
 			return err
 		}
 		list, err := listOf(ctx, tx, eventID, in.ListID)
@@ -268,7 +272,8 @@ type guestRow struct {
 	sealed [4][]byte
 }
 
-const guestCols = `g.id, g.list_id, g.allocation_id, g.name_enc, g.email_enc, g.phone_enc, g.note_enc, g.plus_n, g.status, g.source, g.created_at, g.updated_at`
+const guestCols = `g.id, g.list_id, g.allocation_id, g.name_enc, g.email_enc, g.phone_enc, g.note_enc, g.plus_n, g.status, g.source, g.created_at, g.updated_at,
+  g.purged_at IS NOT NULL`
 
 // scanGuest scans guestCols; with arrivals it also scans the heads_in and
 // first_in_at columns that follow them.
@@ -276,7 +281,7 @@ func scanGuest(r pgx.Row, arrivals ...bool) (guestRow, error) {
 	var x guestRow
 	var plus int16
 	dst := []any{&x.ID, &x.ListID, &x.AllocationID, &x.sealed[0], &x.sealed[1], &x.sealed[2], &x.sealed[3], &plus,
-		&x.Status, &x.Source, &x.CreatedAt, &x.UpdatedAt}
+		&x.Status, &x.Source, &x.CreatedAt, &x.UpdatedAt, &x.Purged}
 	if len(arrivals) > 0 && arrivals[0] {
 		dst = append(dst, &x.HeadsIn, &x.FirstInAt)
 	}
@@ -431,6 +436,10 @@ func counts(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, listID *uuid.UUID
 func (s *Service) UpdateGuest(ctx context.Context, eventID, guestID uuid.UUID, in GuestInput) (Guest, error) {
 	var out Guest
 	err := s.db.Run(ctx, func(tx pgx.Tx) error {
+		// Before the guest row lock: purges lock the event first.
+		if err := retention.EnsureNotPurged(ctx, tx, eventID); err != nil {
+			return err
+		}
 		cur, err := scanGuest(tx.QueryRow(ctx, `SELECT `+guestCols+` FROM guests g WHERE g.id = $1 AND g.event_id = $2 FOR UPDATE`, guestID, eventID))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -647,6 +656,9 @@ func (s *Service) Export(ctx context.Context, eventID uuid.UUID, f GuestFilter, 
 	err := s.db.Run(ctx, func(tx pgx.Tx) error {
 		ev, err := eventOf(ctx, tx, eventID)
 		if err != nil {
+			return err
+		}
+		if err := retention.RefuseIfPurged(ctx, tx, eventID); err != nil {
 			return err
 		}
 		slug = ev.Slug

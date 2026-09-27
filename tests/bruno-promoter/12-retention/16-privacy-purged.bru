@@ -1,0 +1,21 @@
+meta {
+  name: Privacy of the erased event
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/api/v1/events/{{pastEventId}}/privacy
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.purged_at: isNotEmpty
+  res.body.personal_rows: eq 0
+}

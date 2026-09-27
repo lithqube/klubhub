@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/klubhub/dj/api/internal/platform/authz"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 // Handler exposes the post-event report under /api/v1/events/{eventID}.
@@ -41,6 +42,8 @@ func fail(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid", "field": inv.Field, "problem": inv.Problem})
 	case errors.Is(err, ErrNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+	case errors.Is(err, retention.ErrEventPurged):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "event_purged"})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 	}

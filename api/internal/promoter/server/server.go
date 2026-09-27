@@ -25,6 +25,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/report"
+	"github.com/klubhub/dj/api/internal/promoter/retention"
 )
 
 // Pinger reports database health.
@@ -43,6 +44,7 @@ type Deps struct {
 	Guests        *guest.Handler
 	Door          *door.Handler
 	Reports       *report.Handler
+	Retention     *retention.Handler
 	Origins       []string
 	ServeFrontend bool
 	NuxtURL       string
@@ -97,6 +99,9 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 	}
 	if d.Reports != nil {
 		d.Reports.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Retention != nil {
+		d.Retention.Mount(r, d.Authz, reg, onDeny)
 	}
 
 	notFound := func(w http.ResponseWriter, req *http.Request) {

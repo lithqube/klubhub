@@ -309,6 +309,9 @@ type Guest struct {
 	// (device clock), kept after the guest leaves again.
 	HeadsIn   int        `json:"heads_in"`
 	FirstInAt *time.Time `json:"first_in_at"`
+	// Purged: the retention job erased this guest's personal data (P2.5);
+	// name, email, phone and note are then "".
+	Purged bool `json:"purged"`
 }
 
 // Counts are the status-tab counts of an event (or one list of it).
@@ -371,6 +374,9 @@ type Ticket struct {
 	// CheckedIn: the ticket has a non-undone `in`; FirstInAt is the earliest.
 	CheckedIn bool       `json:"checked_in"`
 	FirstInAt *time.Time `json:"first_in_at"`
+	// Purged: the attendee's personal data was erased (P2.5); name and
+	// email are then "".
+	Purged bool `json:"purged"`
 }
 
 // GuestFilter narrows the guest table. Status is a guest status or

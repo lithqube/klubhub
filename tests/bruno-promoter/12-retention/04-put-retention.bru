@@ -1,0 +1,33 @@
+meta {
+  name: Set retention to 60 days
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/v1/org/retention
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: __Host-kh_session={{staffCookie}}
+  Content-Type: application/json
+}
+
+body:json {
+  { "retention_days": 60 }
+}
+
+assert {
+  res.status: eq 200
+  res.body.retention_days: eq 60
+}
+
+tests {
+  test("returns the settings view", function () {
+    const b = res.getBody();
+    expect(b.upcoming).to.be.an("array");
+    expect(b.recent).to.be.an("array");
+  });
+}

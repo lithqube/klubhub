@@ -24,7 +24,7 @@ func (s *Service) tickets(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, q s
 		}
 	}
 	rows, err := tx.Query(ctx, `SELECT p.id, p.order_id, o.source, o.external_ref, p.ticket_type_id, t.name, p.attendee_name_enc,
-	  p.attendee_email_enc, p.status, p.imported_at,
+	  p.attendee_email_enc, p.status, p.imported_at, p.purged_at IS NOT NULL,
 	  (SELECT min(c.at) FROM checkins c WHERE c.position_id = p.id AND c.direction = 'in' AND c.undone_at IS NULL)
 	  FROM order_positions p JOIN orders o ON o.id = p.order_id JOIN ticket_types t ON t.id = p.ticket_type_id
 	  WHERE p.event_id = $1 AND ($2::bytea IS NULL OR p.attendee_email_bidx = $2) AND ($3::bytea IS NULL OR p.attendee_name_bidx = $3)
@@ -38,7 +38,7 @@ func (s *Service) tickets(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, q s
 	}
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (raw, error) {
 		var x raw
-		err := r.Scan(&x.ID, &x.OrderID, &x.Source, &x.OrderRef, &x.TicketTypeID, &x.TicketType, &x.name, &x.email, &x.Status, &x.ImportedAt, &x.FirstInAt)
+		err := r.Scan(&x.ID, &x.OrderID, &x.Source, &x.OrderRef, &x.TicketTypeID, &x.TicketType, &x.name, &x.email, &x.Status, &x.ImportedAt, &x.Purged, &x.FirstInAt)
 		x.CheckedIn = x.FirstInAt != nil
 		return x, err
 	})

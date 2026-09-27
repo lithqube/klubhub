@@ -2,7 +2,7 @@
 
 [Bruno](https://www.usebruno.com/) collection that exercises the Promoter Go
 API (`api/cmd/promoter`) over HTTP: auth, org, venues/events, guest lists,
-attendee import, the offline door and the post-event report. It checks status codes, key JSON fields
+attendee import, the offline door, the post-event report and retention. It checks status codes, key JSON fields
 and security behaviour (401/403/CSRF/MFA, name-only door data, CSV hardening).
 
 ## Run
@@ -33,7 +33,7 @@ per run and never written into the repo. Extra arguments go to `bru run`
 Requirements: Docker, Go, OpenSSL, Python 3 (free-port lookup) and the
 `bru` CLI (`npm i -g @usebruno/cli`, v2.x).
 
-The collection is **stateful and ordered** (folders `01-` … `12-`, `seq` per
+The collection is **stateful and ordered** (folders `01-` … `13-`, `seq` per
 request, ids chained with `bru.setVar`). It needs a fresh instance: the setup
 link works once and TOTP is enabled at the end. Run the whole collection, not
 single requests.
@@ -53,7 +53,7 @@ single requests.
 - Runtime secrets (`deviceToken`, PINs, TOTP secret, cookies) live only in
   runtime variables and are never asserted by value or logged.
 
-## Coverage map (107 requests)
+## Coverage map (125 requests)
 
 | Folder | Endpoints | Checks |
 |---|---|---|
@@ -68,7 +68,8 @@ single requests.
 | `09-mfa/` | `POST /auth/totp/enroll`, `POST /auth/totp/confirm`, `GET /auth/me`, `POST /venues/{id}/reveal`, `POST /auth/login` | otpauth URI params; wrong code → 401; computed code → 204; `me.mfa: true`; reveal → sealed address, `no-store`; re-enroll → 400; password-only login → 401 `totp_required`, no cookie |
 | `10-report/` | `GET /events/{id}/report`, `GET …/report/list-back.csv` | report shape (event, totals keys, by list / submitter / ticket type, curve buckets); arrived 1, heads admitted 2, scanned 0 (undone), walk-ups 1; **no guest or ticket-holder name or email anywhere** (every name/email from the guest table, plus an email pattern); list-back: `text/csv` attachment, `no-store`, header `name,plus_n,status,arrived,heads_admitted,first_in_local` (**no email/phone column**), the allocation's guest with its door outcome, no `@`; without `allocation_id` → 422 `field: allocation_id`; random uuid → 404 |
 | `11-door-lockout/` | `POST /events`, `POST/GET /door/events/{id}/pin`, `POST /door/login` | on a **separate event** (the main event's door tests keep working): wrong staff PIN tries 1–4 → 401, **5th → 429 `pin_locked` with `Retry-After` (~15 min) and `retry_after`**, no cookie; the right PIN while locked → 429; PIN status shows `staff.locked_until`; a new staff PIN → 201 clears it (`locked_until: null`) and login works → 204 |
-| `12-sessions/` | `DELETE /door/devices/{id}`, `GET /door/bundle`, `POST /door/login`, `POST /auth/logout`, `GET /org` | revoke → 204; revoked device's session → 401 and its login → 401; logout → 204 + expired cookie; old cookie → 401 |
+| `12-retention/` | `GET/PUT /org/retention`, `GET /events/{id}/privacy`, `POST /events/{id}/purge`, `POST /events`, `POST …/lists`, `POST/GET …/guests`, `GET …/guests/export.csv` | default 30 days, `upcoming`/`recent` arrays; 0 and 366 → 422 `field: retention_days`; 60 → 200; privacy of the main event: `purge_after` = end + 60 days, `purged_at: null`, `personal_rows` > 0; erase now for a running event → 409 `event_not_ended`; on a **separate event that ended three days ago**: wrong-case title → 422 `field: confirm`; typed title → 200 `trigger: manual`, counts; guests come back with `purged: true` and empty name/email/phone/note, list/status/+N kept, no trace of names or contacts; CSV export, new guests and a second erase → 409 `event_purged`; privacy `personal_rows: 0`; settings `recent` lists it; retention set back to 30 |
+| `13-sessions/` | `DELETE /door/devices/{id}`, `GET /door/bundle`, `POST /door/login`, `POST /auth/logout`, `GET /org` | revoke → 204; revoked device's session → 401 and its login → 401; logout → 204 + expired cookie; old cookie → 401 |
 
 ## Not covered
 
@@ -84,6 +85,11 @@ single requests.
   to keep the flow short. Role denials are covered with the door principal.
 - **Cross-device conflicts** (`conflict: true`) need two door devices with
   separate sessions; covered by `door_integration_test.go`.
+- **Retention job and step-up for erase now**: the hourly job and
+  `promoter purge` need a movable clock, and `reauthentication_required`
+  needs a sign-in older than 15 minutes; both are covered by
+  `retention_integration_test.go`, as are door bundle/adds/PIN and import
+  refusals after a purge.
 - **Manager PIN lockout** (5 attempts / 15 min) is not driven to the limit,
   so later tests keep working (the staff PIN lockout is, on its own event).
 - Venue update/archive, event status/stages/lineup/exports, standing lists,
