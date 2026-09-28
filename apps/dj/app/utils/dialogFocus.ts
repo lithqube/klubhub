@@ -9,6 +9,13 @@ import { watch, type Ref, type WatchSource } from 'vue'
 type ElRef = Ref<unknown>
 
 function elementOf(r: ElRef): HTMLElement | null {
+  // The retry chain below can still have a timer pending after the calling
+  // test file's jsdom environment is torn down (Vitest doesn't wait out
+  // real timers between files); at that point HTMLElement itself is gone,
+  // so checking `instanceof` would throw ReferenceError from inside an
+  // unrelated later test. Bail out instead — there is nothing to focus in
+  // a torn-down environment anyway.
+  if (typeof HTMLElement === 'undefined') return null
   const v = r.value as { $el?: unknown } | HTMLElement | null
   if (!v) return null
   if (v instanceof HTMLElement) return v
@@ -19,6 +26,7 @@ function elementOf(r: ElRef): HTMLElement | null {
 export function focusWhenReady(target: ElRef, tries = 10): void {
   if (typeof window === 'undefined') return
   const attempt = (left: number) => {
+    if (typeof HTMLElement === 'undefined') return
     const el = elementOf(target)
     if (el && el.isConnected) {
       el.focus({ preventScroll: true })
