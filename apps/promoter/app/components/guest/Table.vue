@@ -296,7 +296,7 @@ async function remove(g: Guest) {
               </template>
               <label>
                 <span class="sr-only">Status of {{ row.g.name }}</span>
-                <select class="hud-input" style="height:44px;min-width:120px;font-size:12px;" :value="row.g.status" @change="pickStatus(row.g, $event.target as HTMLSelectElement)">
+                <select class="hud-input" style="height:44px;font-size:12px;" :value="row.g.status" @change="pickStatus(row.g, $event.target as HTMLSelectElement)">
                   <option v-for="s in STATUSES" :key="s" :value="s">{{ STATUS_LABEL[s] }}</option>
                 </select>
               </label>
@@ -324,12 +324,12 @@ async function remove(g: Guest) {
   letter-spacing: .07em;
   color: var(--color-tertiary);
   padding: 6px 8px;
-  border-bottom: 1px solid var(--color-outline-variant);
+  border-bottom: 1px dashed var(--color-outline-variant);
 }
 .guest-table td {
   padding: 8px;
   vertical-align: middle;
-  border-bottom: 1px solid var(--color-outline-variant);
+  border-bottom: 1px dashed var(--color-outline-variant);
   min-width: 0;
 }
 .actions {
@@ -337,7 +337,10 @@ async function remove(g: Guest) {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
+}
+.actions select.hud-input {
+  min-width: 104px;
 }
 /* Real 44 px targets (no pseudo hit area), so neighbours never overlap. */
 .act {
@@ -362,11 +365,11 @@ async function remove(g: Guest) {
   font-size: 11px;
   letter-spacing: .05em;
   white-space: nowrap;
-  border: 1px solid currentColor;
+  border: 1px dashed currentColor;
 }
 .in-tag-in { color: var(--color-primary); }
 .in-tag-over { color: var(--color-error); }
-.in-tag-left { color: var(--color-on-surface-variant); border-style: dashed; }
+.in-tag-left { color: var(--color-on-surface-variant); }
 .erased {
   font-size: 14px;
   font-style: italic;
@@ -410,7 +413,7 @@ async function remove(g: Guest) {
   letter-spacing: .05em;
   color: var(--color-primary);
   background: var(--color-surface-container);
-  border: 1px solid var(--color-primary-dim);
+  border: 1px dashed var(--color-primary-dim);
   cursor: pointer;
 }
 .changed {
