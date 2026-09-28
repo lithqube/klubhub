@@ -48,6 +48,33 @@ describe('useAudienceStore', () => {
     expect(s.counts.unsubscribed).toBe(0)
   })
 
+  it('does not show a newly created contact when it does not match the active filter', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(url.endsWith('/segments')
+        ? []
+        : { contacts: [], counts: { all: 0, active: 0, unsubscribed: 0, bounced: 0, complained: 0 } }))
+    const s = useAudienceStore()
+    // Viewing the UNSUBSCRIBED tab...
+    await s.load({ status: 'unsubscribed' })
+    fetchMock.mockResolvedValue({ id: 'c3', name: 'New', status: 'active', source: 'csv' })
+    // ...adding a contact, which always defaults to active server-side.
+    await s.createContact({ name: 'New', email: '', phone: '', source: 'csv', consent: { basis: 'soft_opt_in', form_text: 'x' } })
+    // It must not appear in the unsubscribed-filtered list with the wrong
+    // badge, even though the tenant-wide counts still include it.
+    expect(s.contacts).toHaveLength(0)
+    expect(s.counts.all).toBe(1)
+    expect(s.counts.active).toBe(1)
+  })
+
+  it('shows a newly created contact when it matches the active filter', async () => {
+    fetchMock.mockImplementation((url: string) => Promise.resolve(url.endsWith('/segments') ? [] : page))
+    const s = useAudienceStore()
+    await s.load({ status: 'active' })
+    fetchMock.mockResolvedValue({ id: 'c3', name: 'New', status: 'active', source: 'csv' })
+    await s.createContact({ name: 'New', email: '', phone: '', source: 'csv', consent: { basis: 'soft_opt_in', form_text: 'x' } })
+    expect(s.contacts.map(c => c.id)).toContain('c3')
+  })
+
   it('unsubscribing reloads the page rather than guessing the new counts', async () => {
     fetchMock.mockImplementation((url: string, opts?: { method?: string }) => {
       if (opts?.method === 'POST') return Promise.resolve(undefined)

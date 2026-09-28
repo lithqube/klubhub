@@ -43,6 +43,14 @@ test.describe('audience CRM (mock API)', () => {
     await expect(row.getByRole('button', { name: 'UNSUBSCRIBE' })).toHaveCount(0);
   });
 
+  test('search matches by substring, not just an exact full name', async ({ page }) => {
+    await page.goto('/audience');
+    await hydrated(page);
+    await page.getByPlaceholder(/SEARCH NAME/).fill('voss');
+    await expect(page.getByText('Nadia Voss')).toBeVisible();
+    await expect(page.getByText('Priya Shah')).not.toBeVisible();
+  });
+
   test('saving a segment shows its live matching count', async ({ page }) => {
     await page.goto('/audience');
     await hydrated(page);

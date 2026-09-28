@@ -4,6 +4,8 @@ import { storeToRefs } from 'pinia'
 import { useAudienceStore } from '~/stores/audience'
 import type { ApiError } from '~/types/event'
 import { CONTACT_SOURCES, CONTACT_STATUSES, type Contact, type ContactInput, type ContactSource, type ContactStatus } from '~/types/audience'
+import { parseCsvRecords } from '~/utils/report'
+import { fold } from '~/utils/guests'
 
 useHead({ title: 'Audience' })
 
@@ -17,9 +19,25 @@ const q = ref('')
 await useAsyncData('audience', () => store.load())
 
 async function refresh() {
-  await store.load({ status: statusTab.value || undefined, source: sourceFilter.value || undefined, q: q.value || undefined })
+  await store.load({ status: statusTab.value || undefined, source: sourceFilter.value || undefined })
 }
 watch([statusTab, sourceFilter], refresh)
+
+/**
+ * Multi-word substring search across name/email/phone, run client-side
+ * over the already-loaded (status/source-filtered) page — mirrors the
+ * guest table's searchGuests. The server-side q filter (contactWhere on
+ * the Go side) is an exact blind-index match and can't support this: it
+ * exists for programmatic exact lookups, not the search box.
+ */
+const visibleContacts = computed(() => {
+  const words = fold(q.value).split(' ').filter(Boolean)
+  if (!words.length) return contacts.value
+  return contacts.value.filter((c) => {
+    const hay = fold(`${c.name} ${c.email} ${c.phone}`)
+    return words.every(w => hay.includes(w))
+  })
+})
 
 const badgeClass: Record<ContactStatus, string> = {
   active: 'badge-ready',
@@ -80,46 +98,23 @@ const importSaving = ref(false)
 const importNotice = ref('')
 
 /**
- * Splits one RFC 4180 CSV line into cells: a quoted cell may contain
- * commas and `""`-escaped quotes (e.g. `"Voss, Nadia"`), which a plain
- * `line.split(',')` would shift into the wrong columns.
+ * Maps parseCsvRecords' rows onto name/email/phone by header. Reuses the
+ * app's existing RFC 4180 parser (report.ts) rather than a local one: a
+ * quoted cell may contain commas, `""`-escaped quotes and even embedded
+ * newlines, none of which a per-line split would parse correctly.
  */
-function splitCsvLine(line: string): string[] {
-  const cells: string[] = []
-  let cell = ''
-  let quoted = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!
-    if (quoted) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') { cell += '"'; i++ } else { quoted = false }
-      } else {
-        cell += ch
-      }
-    } else if (ch === '"') {
-      quoted = true
-    } else if (ch === ',') {
-      cells.push(cell.trim())
-      cell = ''
-    } else {
-      cell += ch
-    }
-  }
-  cells.push(cell.trim())
-  return cells
-}
-
 function parseCsv(text: string): { name?: string, email?: string, phone?: string }[] {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (!lines.length) return []
-  const header = splitCsvLine(lines[0]!).map(h => h.toLowerCase())
-  const nameIdx = header.indexOf('name')
-  const emailIdx = header.indexOf('email')
-  const phoneIdx = header.indexOf('phone')
-  return lines.slice(1).map((line) => {
-    const cells = splitCsvLine(line)
-    return { name: nameIdx >= 0 ? cells[nameIdx] : undefined, email: emailIdx >= 0 ? cells[emailIdx] : undefined, phone: phoneIdx >= 0 ? cells[phoneIdx] : undefined }
-  })
+  const [header, ...rows] = parseCsvRecords(text).filter(r => r.some(c => c.trim() !== ''))
+  if (!header) return []
+  const norm = header.map(h => h.trim().toLowerCase())
+  const nameIdx = norm.indexOf('name')
+  const emailIdx = norm.indexOf('email')
+  const phoneIdx = norm.indexOf('phone')
+  return rows.map(cells => ({
+    name: nameIdx >= 0 ? cells[nameIdx]?.trim() : undefined,
+    email: emailIdx >= 0 ? cells[emailIdx]?.trim() : undefined,
+    phone: phoneIdx >= 0 ? cells[phoneIdx]?.trim() : undefined,
+  }))
 }
 
 async function runImport() {
@@ -221,7 +216,7 @@ async function removeSegment(id: string, name: string) {
       <section aria-labelledby="contacts-h" class="space-y-2">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <h2 id="contacts-h" class="section-lbl">CONTACTS</h2>
-          <input v-model="q" class="hud-input" placeholder="SEARCH NAME OR EMAIL" style="min-height:40px;max-width:220px;" @keyup.enter="refresh" @blur="refresh">
+          <input v-model="q" class="hud-input" placeholder="SEARCH NAME, EMAIL OR PHONE" style="min-height:40px;max-width:220px;">
         </div>
         <div role="tablist" aria-label="Contact status" style="display:flex;gap:4px;flex-wrap:wrap;">
           <button type="button" role="tab" :aria-selected="statusTab === ''" class="btn-hud btn-hud-xs" :class="statusTab === '' ? 'btn-hud-cta' : 'btn-hud-ghost'" @click="statusTab = ''">
@@ -237,8 +232,9 @@ async function removeSegment(id: string, name: string) {
 
         <p v-if="loading && !contacts.length" role="status" class="data-frag" style="font-size:11px;">LOADING…</p>
         <KhEmptyState v-else-if="!contacts.length" title="NO CONTACTS YET" hint="Add one, or import a CSV of past attendees." action-label="ADD CONTACT" @action="startAdd" />
+        <p v-else-if="!visibleContacts.length" role="status" class="data-frag" style="font-size:11px;">No contacts match "{{ q }}".</p>
         <ul v-else style="list-style:none;margin:0;padding:0;display:grid;gap:6px;">
-          <li v-for="c in contacts" :key="c.id" class="hud-card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;">
+          <li v-for="c in visibleContacts" :key="c.id" class="hud-card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;">
             <span style="min-width:0;">
               <span style="display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.name || c.email }}</span>
               <span class="data-frag" style="font-size:11px;">

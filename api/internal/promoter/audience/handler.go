@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -123,12 +124,20 @@ func clientConsent(r *http.Request, in *ConsentInput) {
 	}
 }
 
-// clientIP returns the connection's own remote address, never a
-// caller-supplied header: an authenticated audience.write caller could
-// otherwise put an arbitrary X-Forwarded-For value into a consent record.
-// There is no trusted-proxy layer in front of this service today; add one
-// here (and only trust it for known proxy hops) if that changes.
+// clientIP returns the caller's IP for a consent record: X-Real-IP when
+// present, otherwise the connection's own remote address. docs/PRODUCTION.md's
+// documented nginx config sets X-Real-IP from nginx's own view of the
+// connection (`proxy_set_header X-Real-IP $remote_addr;`), overwriting
+// whatever a client sent — so in that deployment it is the real client IP,
+// not an attacker-suppliable one. X-Forwarded-For is not trusted: it is a
+// client-appendable list, and this service does not know how many hops
+// (if any) to skip.
 func clientIP(r *http.Request) string {
+	if h := strings.TrimSpace(r.Header.Get("X-Real-IP")); h != "" {
+		if ip := net.ParseIP(h); ip != nil {
+			return ip.String()
+		}
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -195,7 +204,7 @@ func (h *Handler) importCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clientConsent(r, &in.Consent)
-	res, err := h.svc.ImportCSV(r.Context(), in.Rows, in.Consent)
+	res, err := h.svc.ImportCSV(r.Context(), in.Rows, in.Consent, actor(r))
 	respond(w, http.StatusOK, res, err)
 }
 
@@ -222,6 +231,10 @@ func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {
 	tw := &trackingWriter{w: w}
 	filter := ContactFilter{Status: q.Get("status"), Source: q.Get("source")}
 	if err := h.svc.ExportContacts(r.Context(), filter, tw); err != nil && !tw.wrote {
+		// Nothing reached the client yet: undo the CSV headers staged above
+		// so the JSON error body fail() writes isn't served as a file
+		// download named audience.csv.
+		w.Header().Del("Content-Disposition")
 		fail(w, err)
 	}
 }

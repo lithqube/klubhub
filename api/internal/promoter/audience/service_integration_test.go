@@ -184,7 +184,7 @@ func TestImportCSV_SkipsDuplicatesAndInvalidRows(t *testing.T) {
 		{Name: "Existing Again", Email: "existing@example.com"},
 		{Phone: "not a valid identity on its own without name or email"},
 	}
-	res, err := f.svc.ImportCSV(f.ctx, rows, consent(audience.BasisSoftOptIn))
+	res, err := f.svc.ImportCSV(f.ctx, rows, consent(audience.BasisSoftOptIn), "local:test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestImportCSV_RejectsBatchTooLarge(t *testing.T) {
 	for i := range rows {
 		rows[i] = audience.ImportRow{Email: "x@example.com"}
 	}
-	_, err := f.svc.ImportCSV(f.ctx, rows, consent(audience.BasisSoftOptIn))
+	_, err := f.svc.ImportCSV(f.ctx, rows, consent(audience.BasisSoftOptIn), "local:test")
 	var inv *audience.InvalidError
 	if !errors.As(err, &inv) {
 		t.Fatalf("want an InvalidError over the batch, got %v", err)
@@ -286,5 +286,134 @@ func TestSegmentFilter_RejectsUnknownStatusAndSource(t *testing.T) {
 	var inv *audience.InvalidError
 	if !errors.As(err, &inv) || inv.Field != "filter.status" {
 		t.Fatalf("want an InvalidError on filter.status, got %v", err)
+	}
+}
+
+func TestUpdateContact_RoundTrips(t *testing.T) {
+	f := setup(t)
+	c, err := f.svc.CreateContact(f.ctx, audience.ContactInput{
+		Name: "Nadia Voss", Email: "nadia@example.com", Source: audience.SourceFollow, Consent: consent(audience.BasisConsent),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.SetStatus(f.ctx, c.ID, audience.StatusInput{Status: audience.StatusBounced}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := f.svc.UpdateContact(f.ctx, c.ID, audience.ContactInput{Name: "Nadia V.", Email: c.Email, Source: c.Source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The UPDATE only touches identity columns, but the response must carry
+	// the full contact — status, consent and timestamps — not just what it
+	// wrote, or the frontend store (which merges this over its cached copy)
+	// would blank them out.
+	if updated.Name != "Nadia V." {
+		t.Fatalf("want the new name, got %q", updated.Name)
+	}
+	if updated.Status != audience.StatusBounced {
+		t.Fatalf("want the status set before this update preserved, got %q", updated.Status)
+	}
+	if updated.ConsentBasis != audience.BasisConsent || updated.ConsentRecordedAt.IsZero() {
+		t.Fatalf("want the original consent record preserved, got %+v", updated)
+	}
+	if updated.CreatedAt.IsZero() || updated.UpdatedAt.IsZero() {
+		t.Fatalf("want non-zero timestamps, got %+v", updated)
+	}
+}
+
+func TestUpdateContact_DuplicateEmailIsRejected(t *testing.T) {
+	f := setup(t)
+	if _, err := f.svc.CreateContact(f.ctx, audience.ContactInput{
+		Name: "Lars", Email: "lars@example.com", Source: audience.SourceRSVP, Consent: consent(audience.BasisConsent),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	other, err := f.svc.CreateContact(f.ctx, audience.ContactInput{
+		Name: "Priya", Email: "priya@example.com", Source: audience.SourceRSVP, Consent: consent(audience.BasisConsent),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Editing "other" to Lars's email must be rejected as a conflict, not
+	// misreported as the contact being edited having vanished.
+	_, err = f.svc.UpdateContact(f.ctx, other.ID, audience.ContactInput{Name: other.Name, Email: "lars@example.com", Source: other.Source})
+	if !errors.Is(err, audience.ErrDuplicate) {
+		t.Fatalf("want ErrDuplicate, got %v", err)
+	}
+}
+
+func TestUpdateContact_UnknownContact(t *testing.T) {
+	f := setup(t)
+	_, err := f.svc.UpdateContact(f.ctx, uuid.New(), audience.ContactInput{Name: "Nobody", Source: audience.SourceCSV})
+	if !errors.Is(err, audience.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteContact_AuditsAsAllowed(t *testing.T) {
+	f := setup(t)
+	c, err := f.svc.CreateContact(f.ctx, audience.ContactInput{
+		Name: "Tomas", Source: audience.SourceDoor, Consent: consent(audience.BasisSoftOptIn),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.DeleteContact(f.ctx, c.ID, "local:staff"); err != nil {
+		t.Fatal(err)
+	}
+	// A successful, legitimate deletion must not be logged as if it were
+	// denied — that would corrupt the compliance audit trail.
+	var decision string
+	if err := testDB.Owner.QueryRow(context.Background(),
+		`SELECT decision FROM audit_log WHERE action = 'audience.contact_deleted' AND tenant_id = $1`, f.org).Scan(&decision); err != nil {
+		t.Fatal(err)
+	}
+	if decision != "allow" {
+		t.Fatalf("want decision=allow, got %q", decision)
+	}
+}
+
+func TestImportCSV_AuditsAsAllowed(t *testing.T) {
+	f := setup(t)
+	res, err := f.svc.ImportCSV(f.ctx, []audience.ImportRow{{Name: "Fresh", Email: "fresh@example.com"}}, consent(audience.BasisSoftOptIn), "local:staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Added != 1 {
+		t.Fatalf("got %+v", res)
+	}
+	var decision, actorID string
+	if err := testDB.Owner.QueryRow(context.Background(),
+		`SELECT decision, actor_id FROM audit_log WHERE action = 'audience.imported' AND tenant_id = $1`, f.org).Scan(&decision, &actorID); err != nil {
+		t.Fatal(err)
+	}
+	if decision != "allow" {
+		t.Fatalf("want decision=allow, got %q", decision)
+	}
+	if actorID != "local:staff" {
+		t.Fatalf("want the import's actor recorded, got %q", actorID)
+	}
+}
+
+func TestImportCSV_DuplicateWithinBatch(t *testing.T) {
+	f := setup(t)
+	rows := []audience.ImportRow{
+		{Name: "First", Email: "same@example.com"},
+		{Name: "Second", Email: "same@example.com"},
+	}
+	res, err := f.svc.ImportCSV(f.ctx, rows, consent(audience.BasisSoftOptIn), "local:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Added != 1 || res.Duplicates != 1 {
+		t.Fatalf("want one added and one duplicate within the same batch, got %+v", res)
+	}
+	page, err := f.svc.ListContacts(f.ctx, audience.ContactFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Counts.All != 1 {
+		t.Fatalf("want exactly one contact, got %d", page.Counts.All)
 	}
 }

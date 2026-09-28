@@ -3,7 +3,6 @@ package audience
 import (
 	"context"
 	"encoding/csv"
-	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -49,24 +48,17 @@ func (s *Service) emit(ctx context.Context, tx pgx.Tx, verb string, refs map[str
 	return events.Enqueue(ctx, tx, subject, ev)
 }
 
+// seal and open are thin adapters over the shared envelope.SealString /
+// Keyring.OpenString (promoted there so this package and guest's identical
+// former copies can't drift apart) — kept as local functions so the many
+// call sites below don't all need the table/col bundled into a
+// envelope.Field by hand.
 func seal(dek *envelope.DEK, tenant uuid.UUID, table, col string, row uuid.UUID, val string) ([]byte, error) {
-	if val == "" {
-		return nil, nil
-	}
-	return dek.Seal(tenant, envelope.Field{Table: table, Column: col, RowID: row}, []byte(val))
+	return envelope.SealString(dek, tenant, envelope.Field{Table: table, Column: col, RowID: row}, val)
 }
 
 func (s *Service) open(ctx context.Context, tx pgx.Tx, table, col string, row uuid.UUID, sealed []byte) (string, error) {
-	if sealed == nil {
-		return "", nil
-	}
-	tenant := tenantOf(ctx)
-	dek, err := s.keys.ForSealed(ctx, tx, tenant, sealed)
-	if err != nil {
-		return "", err
-	}
-	plain, err := dek.Open(tenant, envelope.Field{Table: table, Column: col, RowID: row}, sealed)
-	return string(plain), err
+	return s.keys.OpenString(ctx, tx, tenantOf(ctx), envelope.Field{Table: table, Column: col, RowID: row}, sealed)
 }
 
 func emailIndex(dek *envelope.DEK, email string) []byte {
@@ -236,28 +228,13 @@ func (s *Service) ListContacts(ctx context.Context, filter ContactFilter) (*Page
 			return err
 		}
 
-		where, args, err := s.contactWhere(ctx, tx, tenant, filter)
-		if err != nil {
-			return err
-		}
-		query := `SELECT ` + contactCols + ` FROM audience_contacts ` + where + ` ORDER BY created_at DESC LIMIT 5000`
-		rows, err := tx.Query(ctx, query, args...)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			r, err := scanRow(rows)
-			if err != nil {
-				return err
-			}
-			c, err := s.decrypt(ctx, tx, r)
-			if err != nil {
-				return err
-			}
+		if err := s.forEachContact(ctx, tx, tenant, filter, 5000, func(c Contact) error {
 			page.Contacts = append(page.Contacts, c)
+			return nil
+		}); err != nil {
+			return err
 		}
-		return rows.Err()
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -265,8 +242,8 @@ func (s *Service) ListContacts(ctx context.Context, filter ContactFilter) (*Page
 	return &page, nil
 }
 
-// contactWhere builds the WHERE clause and args shared by ListContacts and
-// ExportContacts, so the two never drift on which filters they honour.
+// contactWhere builds the WHERE clause and args shared by every contact
+// query, so they never drift on which filters they honour.
 func (s *Service) contactWhere(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, filter ContactFilter) (string, []any, error) {
 	where := `WHERE tenant_id = $1`
 	args := []any{tenant}
@@ -289,43 +266,54 @@ func (s *Service) contactWhere(ctx context.Context, tx pgx.Tx, tenant uuid.UUID,
 	return where, args, nil
 }
 
+// forEachContact runs fn once per contact matching filter, in creation
+// order, decrypted. limit caps the row count (0 = unlimited). ListContacts
+// (limit 5000, for the table view) and ExportContacts (unlimited: an org
+// can hold up to MaxPerOrg contacts, and a silent truncation is worse than
+// a slow export) share this one query/scan/decrypt path instead of two
+// that would otherwise have to be kept in sync by hand.
+func (s *Service) forEachContact(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, filter ContactFilter, limit int, fn func(Contact) error) error {
+	where, args, err := s.contactWhere(ctx, tx, tenant, filter)
+	if err != nil {
+		return err
+	}
+	query := `SELECT ` + contactCols + ` FROM audience_contacts ` + where + ` ORDER BY created_at DESC`
+	if limit > 0 {
+		query += ` LIMIT ` + strconv.Itoa(limit)
+	}
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		r, err := scanRow(rows)
+		if err != nil {
+			return err
+		}
+		c, err := s.decrypt(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		if err := fn(c); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 // ExportContacts streams every contact matching filter as CSV directly to
-// w. Unlike ListContacts (capped at 5000 rows for the table view),
-// this has no limit: an org can hold up to MaxPerOrg (100000) contacts,
-// and an export that silently dropped the tail would be worse than a slow
-// one. Rows are written one at a time rather than collected into a slice
-// first.
+// w, one row at a time rather than collecting them into a slice first.
 func (s *Service) ExportContacts(ctx context.Context, filter ContactFilter, w io.Writer) error {
 	return s.db.WithTenant(ctx, tenantOf(ctx), func(tx pgx.Tx) error {
 		tenant := tenantOf(ctx)
-		where, args, err := s.contactWhere(ctx, tx, tenant, filter)
-		if err != nil {
-			return err
-		}
-		query := `SELECT ` + contactCols + ` FROM audience_contacts ` + where + ` ORDER BY created_at DESC`
-		rows, err := tx.Query(ctx, query, args...)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
 		cw := csv.NewWriter(w)
 		if err := cw.Write(ExportHeader); err != nil {
 			return err
 		}
-		for rows.Next() {
-			r, err := scanRow(rows)
-			if err != nil {
-				return err
-			}
-			c, err := s.decrypt(ctx, tx, r)
-			if err != nil {
-				return err
-			}
-			if err := cw.Write(contactCSVRow(c)); err != nil {
-				return err
-			}
-		}
-		if err := rows.Err(); err != nil {
+		if err := s.forEachContact(ctx, tx, tenant, filter, 0, func(c Contact) error {
+			return cw.Write(contactCSVRow(c))
+		}); err != nil {
 			return err
 		}
 		cw.Flush()
@@ -373,7 +361,19 @@ func (s *Service) UpdateContact(ctx context.Context, id uuid.UUID, in ContactInp
 			return err
 		}
 		defer rows.Close()
-		if !rows.Next() {
+		hasRow := rows.Next()
+		// pgx only surfaces an error from actually running the statement
+		// (e.g. this UPDATE's unique-index violation) via rows.Err() once
+		// Next() has returned false — Query()'s own error return above
+		// covers only sending the query, not executing it. Without this
+		// check, a duplicate-email update was misreported as ErrNotFound.
+		if err := rows.Err(); err != nil {
+			if isUniqueViolation(err) {
+				return ErrDuplicate
+			}
+			return err
+		}
+		if !hasRow {
 			return ErrNotFound
 		}
 		// Status, consent and timestamps are untouched by this UPDATE but
@@ -425,7 +425,7 @@ func (s *Service) DeleteContact(ctx context.Context, id uuid.UUID, actor string)
 			return ErrNotFound
 		}
 		if err := audit.Record(ctx, tx, tenant, audit.Entry{
-			ActorID: actor, Action: "audience.contact_deleted", Resource: id.String(),
+			ActorID: actor, Action: "audience.contact_deleted", Resource: id.String(), Allowed: true,
 		}); err != nil {
 			return err
 		}
@@ -440,7 +440,7 @@ func (s *Service) DeleteContact(ctx context.Context, id uuid.UUID, actor string)
 // carry. A row whose email already exists is counted as a duplicate and
 // skipped, not overwritten — an import must not silently change an
 // existing contact's identity fields.
-func (s *Service) ImportCSV(ctx context.Context, rows []ImportRow, consent ConsentInput) (*ImportResult, error) {
+func (s *Service) ImportCSV(ctx context.Context, rows []ImportRow, consent ConsentInput, actor string) (*ImportResult, error) {
 	if err := consent.validate(); err != nil {
 		return nil, err
 	}
@@ -454,59 +454,111 @@ func (s *Service) ImportCSV(ctx context.Context, rows []ImportRow, consent Conse
 		if err != nil {
 			return err
 		}
+
+		// Validate every row and dedupe within the batch itself first —
+		// entirely in memory, no DB round trip — before checking which of
+		// the survivors already exist.
+		type candidate struct {
+			in    ContactInput
+			id    uuid.UUID
+			email []byte // this row's email_bidx, or nil for a name-only row
+		}
+		candidates := make([]candidate, 0, len(rows))
+		var emails [][]byte
+		seen := map[string]bool{}
 		for _, r := range rows {
 			in := ContactInput{Name: r.Name, Email: r.Email, Phone: r.Phone, Source: SourceCSV, Status: StatusActive, Consent: consent}
 			if err := in.validate(true); err != nil {
 				result.Invalid++
 				continue
 			}
+			var email []byte
 			if in.Email != "" {
-				var exists bool
-				err := tx.QueryRow(ctx, `SELECT true FROM audience_contacts WHERE tenant_id = $1 AND email_bidx = $2`,
-					tenant, emailIndex(dek, in.Email)).Scan(&exists)
-				if err == nil {
+				email = emailIndex(dek, in.Email)
+				if seen[string(email)] {
 					result.Duplicates++
 					continue
-				} else if !errors.Is(err, pgx.ErrNoRows) {
+				}
+				seen[string(email)] = true
+				emails = append(emails, email)
+			}
+			candidates = append(candidates, candidate{in: in, id: uuid.New(), email: email})
+		}
+
+		// One query for the whole batch instead of one dedupe SELECT per
+		// row: which of these emails are already contacts in this tenant.
+		existing := map[string]bool{}
+		if len(emails) > 0 {
+			erows, err := tx.Query(ctx, `SELECT email_bidx FROM audience_contacts WHERE tenant_id = $1 AND email_bidx = ANY($2)`, tenant, emails)
+			if err != nil {
+				return err
+			}
+			for erows.Next() {
+				var b []byte
+				if err := erows.Scan(&b); err != nil {
+					erows.Close()
 					return err
 				}
+				existing[string(b)] = true
 			}
-			id := uuid.New()
-			nameEnc, err := seal(dek, tenant, "audience_contacts", "name_enc", id, in.Name)
+			erows.Close()
+			if err := erows.Err(); err != nil {
+				return err
+			}
+		}
+
+		// Seal and queue every surviving row as one pipelined batch instead
+		// of one INSERT per row.
+		batch := &pgx.Batch{}
+		queued := 0
+		for _, c := range candidates {
+			if c.email != nil && existing[string(c.email)] {
+				result.Duplicates++
+				continue
+			}
+			nameEnc, err := seal(dek, tenant, "audience_contacts", "name_enc", c.id, c.in.Name)
 			if err != nil {
 				return err
 			}
-			emailEnc, err := seal(dek, tenant, "audience_contacts", "email_enc", id, in.Email)
+			emailEnc, err := seal(dek, tenant, "audience_contacts", "email_enc", c.id, c.in.Email)
 			if err != nil {
 				return err
 			}
-			phoneEnc, err := seal(dek, tenant, "audience_contacts", "phone_enc", id, in.Phone)
+			phoneEnc, err := seal(dek, tenant, "audience_contacts", "phone_enc", c.id, c.in.Phone)
 			if err != nil {
 				return err
 			}
-			ipEnc, err := seal(dek, tenant, "audience_contacts", "consent_ip_enc", id, consent.IP)
+			ipEnc, err := seal(dek, tenant, "audience_contacts", "consent_ip_enc", c.id, consent.IP)
 			if err != nil {
 				return err
 			}
-			if _, err := tx.Exec(ctx, `INSERT INTO audience_contacts
+			batch.Queue(`INSERT INTO audience_contacts
 				(id, tenant_id, name_enc, email_enc, phone_enc, name_bidx, email_bidx, status, source,
 				 consent_basis, consent_recorded_at, consent_ip_enc, consent_form_text, double_opt_in_confirmed_at)
 				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-				id, tenant, nameEnc, emailEnc, phoneEnc, nameIndex(dek, in.Name), emailIndex(dek, in.Email),
-				in.Status, in.Source, consent.Basis, consent.RecordedAt, ipEnc, consent.FormText, consent.DoubleOptInAt); err != nil {
-				if isUniqueViolation(err) {
-					result.Duplicates++
-					continue
+				c.id, tenant, nameEnc, emailEnc, phoneEnc, nameIndex(dek, c.in.Name), c.email,
+				c.in.Status, c.in.Source, consent.Basis, consent.RecordedAt, ipEnc, consent.FormText, consent.DoubleOptInAt)
+			queued++
+		}
+		if queued > 0 {
+			br := tx.SendBatch(ctx, batch)
+			for i := 0; i < queued; i++ {
+				if _, err := br.Exec(); err != nil {
+					br.Close()
+					return err
 				}
+				result.Added++
+			}
+			if err := br.Close(); err != nil {
 				return err
 			}
-			result.Added++
 		}
+
 		if result.Added == 0 {
 			return nil
 		}
 		return audit.Record(ctx, tx, tenant, audit.Entry{
-			Action: "audience.imported", Resource: strconv.Itoa(result.Added) + " contacts",
+			ActorID: actor, Action: "audience.imported", Resource: strconv.Itoa(result.Added) + " contacts", Allowed: true,
 		})
 	})
 	if err != nil {

@@ -34,6 +34,18 @@ export const useAudienceStore = defineStore('audience', () => {
     }
   }
 
+  /** Whether a contact would appear in a page loaded with filter f. Used to
+   * decide if a locally-created contact belongs in the currently-shown
+   * list; q is an exact-match server-side lookup (see contactWhere on the
+   * Go side) that can't be replicated here, so an active search always
+   * defers to the next reload instead of guessing. */
+  function matchesFilter(c: Contact, f: Filter): boolean {
+    if (f.q) return false
+    if (f.status && c.status !== f.status) return false
+    if (f.source && c.source !== f.source) return false
+    return true
+  }
+
   function query(f: Filter): string {
     const q = new URLSearchParams()
     if (f.status) q.set('status', f.status)
@@ -66,7 +78,15 @@ export const useAudienceStore = defineStore('audience', () => {
 
   async function createContact(input: ContactInput): Promise<Contact> {
     const c = await call(() => apiFetch<Contact>('/api/v1/audience/contacts', { method: 'POST', body: input }))
-    contacts.value = [c, ...contacts.value]
+    // Only show it in the current list if it actually matches the active
+    // filter — otherwise (e.g. adding while viewing the UNSUBSCRIBED tab,
+    // where a new contact always defaults to active) it would appear with
+    // the wrong badge among contacts that shouldn't be there.
+    if (matchesFilter(c, lastFilter)) {
+      contacts.value = [c, ...contacts.value]
+    }
+    // Counts are tenant-wide, not narrowed by the filter (mirrors the Go
+    // side's ListContacts convention), so they're bumped either way.
     // Explicit per-status bump, not a dynamic key: c.status is a narrow
     // union, but indexed access on Counts still resolves to
     // `number | undefined` — mirrors the Go Counts.add() switch.
