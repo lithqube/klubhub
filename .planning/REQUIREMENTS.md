@@ -122,16 +122,16 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 
 ### Finance Tracker (FIN)
 
-- [ ] **FIN-01**: User can log income entries with amount, currency, category, date, description, and optional gig link
-- [ ] **FIN-02**: User can log expense entries with amount, currency, category, date, and notes
-- [ ] **FIN-03**: When a gig's `payment_status` transitions to `paid`, system auto-creates an income entry flagged as `auto_generated`
-- [ ] **FIN-04**: If gig fee changes after auto-creation, system prompts user to update the linked income entry (no silent modification)
-- [ ] **FIN-05**: If gig reverts from `paid`, system prompts user to delete, void, or keep the linked income entry
-- [ ] **FIN-06**: Monthly and yearly summary views show totals grouped by currency; no cross-currency aggregation
-- [ ] **FIN-07**: User can calculate profit/loss per gig, per month, and per year
-- [ ] **FIN-08**: User can generate a PDF invoice from gig data with auto-incrementing invoice number (`{PREFIX}-{YYYY}-{NNN}`); prefix configurable in settings
-- [ ] **FIN-09**: Multi-currency summary display groups totals by currency code with no automatic conversion
-- [ ] **FIN-10**: Tax/VAT calculation is explicitly not implemented; Finance module UI documents this limitation
+- [x] **FIN-01**: User can log income entries with amount, currency, category, date, description, and optional gig link
+- [x] **FIN-02**: User can log expense entries with amount, currency, category, date, and notes
+- [x] **FIN-03**: When a gig's `payment_status` transitions to `paid`, system auto-creates an income entry flagged as `auto_generated`
+- [x] **FIN-04**: If gig fee changes after auto-creation, system prompts user to update the linked income entry (no silent modification). Prompt state is persisted as a reconciliation (`fee_changed`) so the decision survives reloads.
+- [x] **FIN-05**: If gig reverts from `paid`, system prompts user to delete, void, or keep the linked income entry. Prompt state is persisted as a reconciliation (`payment_reversed`) so the decision survives reloads.
+- [x] **FIN-06**: Monthly and yearly summary views show totals grouped by currency; no cross-currency aggregation
+- [x] **FIN-07**: User can calculate profit/loss per gig, per month, and per year
+- [x] **FIN-08**: User can generate a PDF invoice from gig data with auto-incrementing invoice number (`{PREFIX}-{YYYY}-{NNN}`); prefix configurable in settings
+- [x] **FIN-09**: Multi-currency summary display groups totals by currency code with no automatic conversion
+- [ ] **FIN-10**: Tax/VAT calculation is explicitly not implemented; Finance module UI documents this limitation. The Earnings panel never computes or displays tax/VAT amounts (no rates, no breakdowns, no per-line tax).
 
 ### Release Planner (REL)
 

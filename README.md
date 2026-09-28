@@ -53,7 +53,7 @@ You get:
 | 3 | **EPK / Press Kit Builder** | ✅ Complete | Bio, press photos, tech rider, PDF export (go-pdf/fpdf) |
 | 4 | **Gig Tracker** | ✅ Complete | CRUD, status / payment workflows, venue & contact database, iCal feed, booking confirmation PDF |
 | 4.5 | **Rider Templates** | 🔜 Planned | Named tech/hospitality templates attachable to gigs with per-gig overrides |
-| 5 | **Finance Tracker** | ✅ Shipped (Phase 5) | Invoices (draft → issued → paid), deposits + partial payments, event agreements with signing workflow, EU/US-ready invoicing (customer details, VAT treatment incl. reverse charge, credit notes, artist withholding), PDF invoice rendering ([go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf)), transactional email via [Plunk](https://github.com/useplunk/plunk) (hosted or self-hosted). See [`docs/INVOICING.md`](./docs/INVOICING.md) and [`docs/release-notes/v1.1.0-phase5.md`](./docs/release-notes/v1.1.0-phase5.md). |
+| 5 | **Finance Tracker** | ✅ Shipped (Phase 5) | Income & expense ledger (multi-currency, no auto-conversion), per-gig / per-month / per-year P&L, gig-linked auto-income on `payment_status → paid`, persistent reconciliation prompts when a gig fee/currency changes or the gig reverts from paid, in-app dialogs for FIN-04 / FIN-05, plus invoices (draft → issued → paid), deposits + partial payments, event agreements with signing workflow, EU/US-ready invoicing (customer details, VAT treatment incl. reverse charge, credit notes, artist withholding), PDF invoice rendering ([go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf)), transactional email via [Plunk](https://github.com/useplunk/plunk) (hosted or self-hosted). **Tax / VAT calculation is explicitly not implemented (FIN-10).** See [`docs/INVOICING.md`](./docs/INVOICING.md) and [`docs/release-notes/v1.1.0-phase5.md`](./docs/release-notes/v1.1.0-phase5.md). |
 | 6 | **Release Planner** | 🔜 Planned | Release status workflow, promo checklist, deadline tracking |
 | 7 | **Tour Manager** | 🔜 Planned | Tour groups, per-stop logistics, budget aggregation |
 | 8 | **Unified Dashboard** | 🔜 Planned | Cross-module overview, career analytics |
@@ -247,7 +247,7 @@ Back up both Postgres and Garage, along with the private configuration needed to
 The full v1 release plan lives in [`docs/v1-release-plan.md`](./docs/v1-release-plan.md).
 At a glance:
 
-- **Now:** finishing Phase 5 — invoices, payments, agreements and PDF/Plunk email shipped in v1.1.0; income/expense tracking (earnings) is the remaining piece
+- **Now:** Phase 5 — Finance Tracker is fully shipped in v1.1.0: invoicing, payments, agreements, PDF/Plunk email, plus the income/expense ledger (multi-currency summaries, P&L, gig-linked auto-income, FIN-04/05 reconciliation prompts)
 - **Next:** Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard)
 
 Per-phase status is tracked in [`CHANGELOG.md`](./CHANGELOG.md) and the
@@ -281,7 +281,7 @@ The frontend can run in two modes:
 | `/social` Scheduler | ✅ | ✅ GET | ✅ CRUD, schedule, publish, worker |
 | `/epk` Press Kit | ✅ | ✅ GET/PUT | ✅ CRUD, photo upload, PDF export |
 | `/gigs` Gig Tracker | ✅ | Static | ✅ CRUD, iCal feed, booking confirmation PDF |
-| `/finance` Finance | ✅ | ✅ | ✅ invoicing, payments, agreements, email outbox (shipped in v1.1.0); the Earnings panel (income/expense log) is not yet wired |
+| `/finance` Finance | ✅ | ✅ | ✅ invoicing, payments, agreements, email outbox; the Earnings panel is wired (income/expense ledger, multi-currency summaries, P&L, gig-linked auto-income + reconciliation prompts) |
 
 ---
 
