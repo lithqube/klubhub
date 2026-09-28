@@ -19,7 +19,7 @@ function onTechRiderChange(value: string) {
  * for anything these don't cover (stage plot, power, hospitality). */
 const RIDER_CHIPS = ['2× CDJ-3000', 'DJM-A9 or better', 'Monitor wedges ×2', 'XLR line out', 'Own controller allowed', 'Booth PA check on arrival']
 function insertChip(text: string) {
-  const next = techRider.value.trim() ? `${techRider.value.trim()}, ${text}` : text
+  const next = techRider.value.trim() ? `${techRider.value}, ${text}` : text
   techRider.value = next
   onTechRiderChange(next)
 }

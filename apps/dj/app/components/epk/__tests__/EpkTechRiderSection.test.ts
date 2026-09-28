@@ -50,6 +50,14 @@ describe('EpkTechRiderSection', () => {
     expect(mockScheduleSave).toHaveBeenCalledWith({ techRider: '2× CDJ-3000' })
   })
 
+  it('clicking a chip preserves existing whitespace/line breaks instead of trimming them', async () => {
+    mockStore.techRider = 'Line one\nLine two  '
+    const wrapper = mount(EpkTechRiderSection)
+    await nextTick()
+    await wrapper.findAll('.social-chip')[0]!.trigger('click')
+    expect(mockStore.techRider).toBe('Line one\nLine two  , 2× CDJ-3000')
+  })
+
   it('clicking a chip on a non-empty rider appends it with a comma', async () => {
     mockStore.techRider = 'DJM-A9 or better'
     const wrapper = mount(EpkTechRiderSection)

@@ -61,8 +61,17 @@ const pii = computed(() => looksLikeContact(f.techNotes))
 /** Common installed gear, for a one-tap start — tech_notes stays free text
  * underneath for anything these don't cover (load-in, power, quirks). */
 const TECH_CHIPS = ['2× CDJ-3000', 'DJM-V10', 'DJM-A9', 'Turntables', 'Funktion-One', 'House PA']
+// The server rejects tech_notes over 5000 chars (event/service.go); refuse
+// the insert rather than silently producing a value submit() can't save.
+const techNotesOverLimit = ref(false)
+watch(() => f.techNotes, (v) => { if (v.length <= 5000) techNotesOverLimit.value = false })
 function insertTechChip(text: string) {
-  f.techNotes = f.techNotes.trim() ? `${f.techNotes.trim()}, ${text}` : text
+  const next = f.techNotes.trim() ? `${f.techNotes}, ${text}` : text
+  if (next.length > 5000) {
+    techNotesOverLimit.value = true
+    return
+  }
+  f.techNotes = next
 }
 
 function move(i: number, d: -1 | 1) {
@@ -169,8 +178,9 @@ const PROTECTED: { key: keyof VenueProtected, label: string, flag: 'address' | '
           <span id="tech-h" class="section-lbl">TECH NOTES</span>
           <textarea id="vf-tech_notes" v-model="f.techNotes" class="hud-textarea" rows="4" maxlength="5000" placeholder="Decks, mixer, sound system, load-in" aria-describedby="tech-hint" />
         </label>
-        <p id="tech-hint" style="margin:6px 0 0;font-size:12px;" :style="pii ? 'color:var(--color-secondary);font-weight:600;' : 'color:var(--color-on-surface-variant);'" aria-live="polite">
-          <template v-if="pii">This looks like {{ pii === 'email' ? 'an email address' : 'a phone number' }}. Tech notes are not encrypted: put contacts in the protected fields below.</template>
+        <p id="tech-hint" style="margin:6px 0 0;font-size:12px;" :style="techNotesOverLimit ? 'color:var(--color-error);font-weight:600;' : pii ? 'color:var(--color-secondary);font-weight:600;' : 'color:var(--color-on-surface-variant);'" aria-live="polite">
+          <template v-if="techNotesOverLimit">That would be over the 5000-character limit — nothing was added.</template>
+          <template v-else-if="pii">This looks like {{ pii === 'email' ? 'an email address' : 'a phone number' }}. Tech notes are not encrypted: put contacts in the protected fields below.</template>
           <template v-else>Internal. Shared with your team, never exported. Not encrypted.</template>
         </p>
       </section>
