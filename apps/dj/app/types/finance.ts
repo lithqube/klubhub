@@ -218,3 +218,146 @@ export interface InvoiceGigOption {
   fee_amount: number
   fee_currency: string
 }
+
+// ── Phase 5 earnings (FIN-01…FIN-10) ──────────────────────────────────────
+//
+// Money is always integer minor units (`*_minor`). Currencies are 3-letter
+// ISO 4217 codes (uppercased). Entry dates are YYYY-MM-DD; reconciliation
+// timestamps are RFC 3339 nanosecond strings.
+//
+// FIN-10 keeps tax / VAT out of scope: the UI does not compute or display
+// any tax/VAT amounts, and this comment block is the authoritative note.
+
+export type EntryKind = 'income' | 'expense'
+export type EntryStatus = 'active' | 'voided'
+export type EntrySource = 'manual' | 'gig_payment' | 'invoice_payment'
+export type SummaryScope = 'month' | 'year'
+export type ProfitLossScope = 'gig' | 'month' | 'year'
+
+/** A single ledger entry (income or expense). Multi-currency: never converted. */
+export interface Entry {
+  id: string
+  kind: EntryKind
+  amount_minor: number
+  currency: string
+  category: string
+  entry_date: string
+  description: string
+  notes: string
+  gig_id: string | null
+  status: EntryStatus
+  auto_generated: boolean
+  source_kind: EntrySource
+  source_id: string | null
+  source_amount_minor: number | null
+  source_currency: string | null
+  source_description: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+/** Server-side filter accepted by GET /api/v1/finance/entries. Empty fields drop. */
+export interface EntryFilter {
+  kind?: EntryKind
+  status?: EntryStatus
+  currency?: string
+  category?: string
+  gig_id?: string
+  from?: string
+  to?: string
+}
+
+/** Currency-grouped totals — multi-currency without conversion (FIN-09). */
+export interface EntryTotals {
+  currency: string
+  income_minor: number
+  expense_minor: number
+}
+
+/** Profit/loss per currency (FIN-07). */
+export interface ProfitLossTotals {
+  currency: string
+  income_minor: number
+  expense_minor: number
+  profit_loss_minor: number
+}
+
+/** Mutable body for POST /api/v1/finance/entries. */
+export interface EntryCreateInput {
+  kind: EntryKind
+  amount_minor: number
+  currency: string
+  category: string
+  entry_date: string
+  description?: string
+  notes?: string
+  gig_id?: string | null
+}
+
+/** Mutable body for PUT /api/v1/finance/entries/{id} — requires updated_at token. */
+export interface EntryUpdateInput {
+  kind: EntryKind
+  amount_minor: number
+  currency: string
+  category: string
+  entry_date: string
+  description?: string
+  notes?: string
+  gig_id?: string | null
+  updated_at: string
+}
+
+/** DELETE /api/v1/finance/entries/{id} body — requires updated_at token. */
+export interface EntryDeleteInput {
+  updated_at: string
+}
+
+/** POST /api/v1/finance/entries/{id}/void body — requires updated_at token. */
+export interface EntryVoidInput {
+  updated_at: string
+}
+
+// ── Reconciliations (FIN-04 / FIN-05) ────────────────────────────────────
+
+export type ReconciliationReason = 'fee_changed' | 'currency_changed' | 'payment_reversed'
+export type ReconciliationAction = 'update' | 'delete' | 'void' | 'keep'
+export type ReconciliationStatus = 'pending' | 'resolved'
+
+/** Durable decision surfaced when a gig update or payment revert rewrites the source snapshot. */
+export interface EntryReconciliation {
+  id: string
+  gig_id: string
+  entry_id: string
+  reason: ReconciliationReason
+  allowed_actions: ReconciliationAction[]
+  gig_amount_minor: number
+  gig_currency: string
+  gig_payment_status: string
+  entry_updated_at: string
+  status: ReconciliationStatus
+  resolution: ReconciliationAction | null
+  created_at: string
+  updated_at: string
+  resolved_at: string | null
+}
+
+/** Body for POST /api/v1/finance/reconciliations/{id}/resolve. */
+export interface ResolveReconciliationInput {
+  action: ReconciliationAction
+  updated_at: string
+}
+
+/**
+ * Compact reconciliation metadata returned inline with a gig update response
+ * when the transition processor raises a prompt in the same write. The UI
+ * mirrors the durable GET against this for the freshly-created case; the
+ * GET remains the source of truth after a page refresh.
+ */
+export interface GigFinanceReconciliation {
+  id: string
+  entry_id: string
+  reason: ReconciliationReason
+  allowed_actions: ReconciliationAction[]
+  updated_at: string
+}

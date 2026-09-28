@@ -2,7 +2,20 @@
 // (docs/INVOICING.md). One instance backs the Nitro dev mocks, another the
 // browser demo; the demo persists it with toJSON()/load().
 
-import type { Invoice, InvoiceLine, IssueProblem, Party, Payment, TaxSuggestion } from '../../app/types/finance'
+import type {
+  Entry,
+  EntryKind,
+  EntryReconciliation,
+  EntrySource,
+  Invoice,
+  InvoiceLine,
+  IssueProblem,
+  Party,
+  Payment,
+  ReconciliationAction,
+  ReconciliationReason,
+  TaxSuggestion,
+} from '../../app/types/finance'
 import { applyBps, addDays, DEFAULT_SUPPLIER, EU, party, suggest, uuid, type Supplier } from './rules'
 
 /** What the finance mock needs to know about a gig to bill it. */
@@ -22,8 +35,15 @@ export interface FinanceSnapshot {
   lines: Record<string, InvoiceLine[]>
   payments: Payment[]
   series: Record<string, number>
+  entries: StoredEntry[]
+  reconciliations: StoredReconciliation[]
+  seriesEntries: Record<string, number>
   clock: number
 }
+
+/** Stored shape omits the server-computed fields to keep load()/JSON clean. */
+export type StoredEntry = Omit<Entry, never>
+export type StoredReconciliation = Omit<EntryReconciliation, never>
 
 export interface FinanceMockOptions {
   /** Resolves a gig id; unknown ids get placeholder fee info. */
@@ -38,6 +58,10 @@ export class FinanceMockDb {
   readonly lines = new Map<string, InvoiceLine[]>()
   readonly payments = new Map<string, Payment>()
   readonly series = new Map<string, number>()
+  /** Phase 5: earnings ledger + durable finance reconciliations. */
+  readonly entries = new Map<string, StoredEntry>()
+  readonly reconciliations = new Map<string, StoredReconciliation>()
+  readonly seriesEntries = new Map<string, number>()
   readonly supplier: Supplier
   private clock: number
   private readonly lookupGig: FinanceMockOptions['lookupGig']
@@ -242,6 +266,9 @@ export class FinanceMockDb {
       lines: Object.fromEntries(this.lines),
       payments: [...this.payments.values()],
       series: Object.fromEntries(this.series),
+      entries: [...this.entries.values()],
+      reconciliations: [...this.reconciliations.values()],
+      seriesEntries: Object.fromEntries(this.seriesEntries),
       clock: this.clock,
     })
   }
@@ -252,10 +279,245 @@ export class FinanceMockDb {
     this.lines.clear()
     this.payments.clear()
     this.series.clear()
+    this.entries.clear()
+    this.reconciliations.clear()
+    this.seriesEntries.clear()
     for (const i of s.invoices ?? []) this.invoices.set(i.id, i)
     for (const [k, v] of Object.entries(s.lines ?? {})) this.lines.set(k, v)
     for (const p of s.payments ?? []) this.payments.set(p.id, p)
     for (const [k, v] of Object.entries(s.series ?? {})) this.series.set(k, v)
+    for (const e of s.entries ?? []) this.entries.set(e.id, e)
+    for (const r of s.reconciliations ?? []) this.reconciliations.set(r.id, r)
+    for (const [k, v] of Object.entries(s.seriesEntries ?? {})) this.seriesEntries.set(k, v)
     this.clock = Math.max(this.clock, s.clock ?? 0)
+  }
+
+  // ── Phase 5: earnings + reconciliations ──────────────────────────────────
+
+  /** Creates a manual entry the same way the Go service does. */
+  addEntry(input: {
+    id?: string
+    kind: EntryKind
+    amount_minor: number
+    currency: string
+    category: string
+    entry_date: string
+    description?: string
+    notes?: string
+    gig_id?: string | null
+    source_kind?: EntrySource
+    source_id?: string | null
+    source_amount_minor?: number | null
+    source_currency?: string | null
+    source_description?: string
+    auto_generated?: boolean
+  }): StoredEntry {
+    const now = this.stamp()
+    const e: StoredEntry = {
+      id: input.id ?? uuid(),
+      kind: input.kind,
+      amount_minor: input.amount_minor,
+      currency: input.currency,
+      category: input.category,
+      entry_date: input.entry_date,
+      description: input.description ?? '',
+      notes: input.notes ?? '',
+      gig_id: input.gig_id ?? null,
+      status: 'active',
+      auto_generated: input.auto_generated ?? false,
+      source_kind: input.source_kind ?? 'manual',
+      source_id: input.source_id ?? null,
+      source_amount_minor: input.source_amount_minor ?? null,
+      source_currency: input.source_currency ?? null,
+      source_description: input.source_description ?? '',
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+    }
+    this.entries.set(e.id, e)
+    return e
+  }
+
+  /**
+   * Active gig-payment income lookup. Mirrors the Go partial unique index on
+   * (gig_id) WHERE source_kind='gig_payment' AND status='active' AND
+   * deleted_at IS NULL — at most one auto-generated income per gig.
+   */
+  findActiveGigIncome(gigId: string): StoredEntry | null {
+    for (const e of this.entries.values()) {
+      if (e.deleted_at || e.status !== 'active') continue
+      if (e.source_kind !== 'gig_payment' || e.gig_id !== gigId) continue
+      if (e.kind !== 'income' || !e.auto_generated) continue
+      return e
+    }
+    return null
+  }
+
+  /** Calls findActiveGigIncome then creates one if missing. Idempotent. */
+  upsertGigIncome(snap: {
+    gigId: string
+    amount_minor: number
+    currency: string
+    entry_date: string
+    description: string
+  }): { entry: StoredEntry; created: boolean } {
+    const existing = this.findActiveGigIncome(snap.gigId)
+    if (existing) {
+      const same =
+        existing.amount_minor === snap.amount_minor &&
+        existing.currency === snap.currency &&
+        existing.entry_date === snap.entry_date &&
+        existing.description === snap.description
+      if (same) return { entry: existing, created: false }
+    }
+    const entry = this.addEntry({
+      kind: 'income',
+      amount_minor: snap.amount_minor,
+      currency: snap.currency,
+      category: 'gig_fee',
+      entry_date: snap.entry_date,
+      description: snap.description,
+      gig_id: snap.gigId,
+      source_kind: 'gig_payment',
+      source_id: snap.gigId,
+      source_amount_minor: snap.amount_minor,
+      source_currency: snap.currency,
+      source_description: `gig:${snap.gigId}`,
+      auto_generated: true,
+    })
+    return { entry, created: true }
+  }
+
+  /** Upserts a pending reconciliation row for one gig. At most one per gig. */
+  upsertReconciliation(input: {
+    gig_id: string
+    entry_id: string
+    reason: ReconciliationReason
+    allowed_actions: ReconciliationAction[]
+    gig_amount_minor: number
+    gig_currency: string
+    gig_payment_status: string
+    entry_updated_at: string
+  }): StoredReconciliation | null {
+    for (const r of this.reconciliations.values()) {
+      if (r.gig_id !== input.gig_id) continue
+      if (r.status !== 'pending') continue
+      // Refresh the existing row in place — there is at most one pending
+      // per gig, mirroring the partial index in the migration.
+      r.reason = input.reason
+      r.allowed_actions = input.allowed_actions
+      r.gig_amount_minor = input.gig_amount_minor
+      r.gig_currency = input.gig_currency
+      r.gig_payment_status = input.gig_payment_status
+      r.entry_updated_at = input.entry_updated_at
+      r.updated_at = this.stamp()
+      return r
+    }
+    const now = this.stamp()
+    const row: StoredReconciliation = {
+      id: uuid(),
+      gig_id: input.gig_id,
+      entry_id: input.entry_id,
+      reason: input.reason,
+      allowed_actions: input.allowed_actions,
+      gig_amount_minor: input.gig_amount_minor,
+      gig_currency: input.gig_currency,
+      gig_payment_status: input.gig_payment_status,
+      entry_updated_at: input.entry_updated_at,
+      status: 'pending',
+      resolution: null,
+      created_at: now,
+      updated_at: now,
+      resolved_at: null,
+    }
+    this.reconciliations.set(row.id, row)
+    return row
+  }
+
+  /** Acknowledges every pending reconciliation for gigID as resolved: 'keep'. */
+  acknowledgeReconciliations(gigId: string): void {
+    for (const r of this.reconciliations.values()) {
+      if (r.gig_id !== gigId || r.status !== 'pending') continue
+      r.status = 'resolved'
+      r.resolution = 'keep'
+      r.updated_at = this.stamp()
+      r.resolved_at = r.updated_at
+    }
+  }
+
+  /**
+   * Drives the gig-payment transition side of Phase 5. Replicates the Go
+   * processor's behaviour without touching the gigs mock: callers (demo /
+   * dev) detect fee or currency shifts when a paid gig is updated or its
+   * payment reverts, and either insert a fresh auto-generated entry or
+   * raise a reconciliation prompt.
+   */
+  processGigPaymentTransition(snap: {
+    gig_id: string
+    amount_minor: number
+    currency: string
+    entry_date: string
+    description: string
+    /** 'paid' on both sides of the update — no transition, no prompt. */
+    prev_payment_status?: string
+    next_payment_status?: string
+  }): { metadata: { id: string; entry_id: string; reason: ReconciliationReason; allowed_actions: ReconciliationAction[]; updated_at: string } | null } {
+    const prev = snap.prev_payment_status ?? 'unpaid'
+    const next = snap.next_payment_status ?? 'paid'
+    const becamePaid = prev !== 'paid' && next === 'paid'
+    const leftPaid = prev === 'paid' && next !== 'paid'
+
+    if (becamePaid) {
+      const existing = this.findActiveGigIncome(snap.gig_id)
+      const { created } = this.upsertGigIncome({
+        gigId: snap.gig_id,
+        amount_minor: snap.amount_minor,
+        currency: snap.currency,
+        entry_date: snap.entry_date,
+        description: snap.description,
+      })
+      if (!created && existing) {
+        // snapshot matched; nothing to surface.
+      }
+      this.acknowledgeReconciliations(snap.gig_id)
+      return { metadata: null }
+    }
+
+    const entry = this.findActiveGigIncome(snap.gig_id)
+    if (!entry) return { metadata: null }
+
+    let reason: ReconciliationReason | null = null
+    if (leftPaid) reason = 'payment_reversed'
+    else if (entry.source_currency != null && entry.source_currency !== snap.currency) reason = 'currency_changed'
+    else if (entry.source_amount_minor != null && entry.source_amount_minor !== snap.amount_minor) reason = 'fee_changed'
+
+    if (!reason) {
+      this.acknowledgeReconciliations(snap.gig_id)
+      return { metadata: null }
+    }
+    const allowed: ReconciliationAction[] =
+      reason === 'payment_reversed'
+        ? ['delete', 'void', 'keep']
+        : ['update', 'keep']
+    const row = this.upsertReconciliation({
+      gig_id: snap.gig_id,
+      entry_id: entry.id,
+      reason,
+      allowed_actions: allowed,
+      gig_amount_minor: snap.amount_minor,
+      gig_currency: snap.currency,
+      gig_payment_status: next,
+      entry_updated_at: entry.updated_at,
+    })
+    if (!row) return { metadata: null }
+    return {
+      metadata: {
+        id: row.id,
+        entry_id: row.entry_id,
+        reason: row.reason,
+        allowed_actions: row.allowed_actions,
+        updated_at: row.updated_at,
+      },
+    }
   }
 }

@@ -7,8 +7,10 @@ import type { Tracklist as TracklistType } from '../../types/tracklist'
 import VenueAutocomplete from './VenueAutocomplete.vue'
 import ContactAutocomplete from './ContactAutocomplete.vue'
 import { useInvoiceStore, toFinanceError } from '../../stores/invoice'
+import { useEarningsStore } from '../../stores/earnings'
 import { isActiveInvoice, invoiceNumberLabel, statusLabel } from '../../utils/invoiceDisplay'
 import { formatMinor } from '../../utils/money'
+import EntryReconciliationDialog from '../finance/EntryReconciliationDialog.vue'
 
 const gigStore = useGigStore()
 const tracklistStore = useTracklistStore()
@@ -173,6 +175,8 @@ const copyResults = ref<Gig[]>([])
 const showCancelConfirm = ref(false)
 const isSaving = ref(false)
 const saveError = ref<string | null>(null)
+// FIN-04 / FIN-05: gig id of a freshly raised finance reconciliation.
+const pendingReconciliationGigId = ref<string | null>(null)
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'DKK', 'SEK', 'NOK']
 const STATUS_OPTIONS: GigStatus[] = ['inquiry', 'confirmed', 'advanced', 'played', 'cancelled']
@@ -217,6 +221,12 @@ function initForm() {
 watch(() => props.open, (val) => {
   if (val) initForm()
 })
+
+// Reset any pending finance reconciliation marker when the dialog opens;
+// a fresh save below will set it again if the API responds with one.
+watch(() => [props.open, props.gig?.id] as const, ([open]) => {
+  if (open) pendingReconciliationGigId.value = null
+}, { immediate: true })
 
 watch(() => props.gig, () => {
   initForm()
@@ -275,6 +285,7 @@ async function doSave() {
     return
   }
 
+  const earningsStore = useEarningsStore()
   isSaving.value = true
   try {
     const gigData: GigCreate = {
@@ -308,6 +319,22 @@ async function doSave() {
     if (!result) {
       saveError.value = 'Could not save the gig. Check the fields and try again.'
       return
+    }
+
+    // FIN-04 / FIN-05: the gig PUT response can carry a finance
+    // reconciliation prompt when fee/currency/payment changed while the
+    // gig is paid. Forward it to the earnings store which prompts on the
+    // finance page; the store also remembers the gig id so the prompt
+    // survives a refresh via the durable GET.
+    if (result.finance_reconciliation) {
+      earningsStore.rememberReconciliationMetadata(result.finance_reconciliation)
+      pendingReconciliationGigId.value = result.id
+    } else if (isEdit.value && props.gig?.id) {
+      // No fresh prompt: pull the durable GET so a prompt from a prior
+      // save still surfaces when the user opens the gig again.
+      await earningsStore.fetchReconciliationForGig(props.gig.id)
+      const fromGet = earningsStore.getPendingReconciliationForGig(props.gig.id) as { id?: string } | null
+      if (fromGet && fromGet.id) pendingReconciliationGigId.value = props.gig.id
     }
 
     emit('saved')
@@ -673,6 +700,17 @@ function close() {
         </div>
       </Transition>
     </Teleport>
+
+    <!-- FIN-04 / FIN-05: surface a finance reconciliation prompt when the gig
+         update changed fee/currency/payment for a paid gig, or when a durable
+         pending reconciliation exists for the gig being edited. -->
+    <EntryReconciliationDialog
+      v-if="pendingReconciliationGigId"
+      :gig-id="pendingReconciliationGigId"
+      :metadata="earningsStore.takeLastReconciliationMetadata()"
+      @resolved="pendingReconciliationGigId = null"
+      @dismissed="pendingReconciliationGigId = null"
+    />
   </Teleport>
 </template>
 

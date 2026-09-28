@@ -86,3 +86,22 @@ export function inlineErrorMessage(err: { code: string; message: string }): stri
       return err.message || 'Something went wrong. Try again.'
   }
 }
+
+/**
+ * Validates a YYYY-MM-DD entry date. Catches impossible calendar dates
+ * (Feb 30, month 13, day 31 of a 30-day month) that Date.parse silently
+ * rolls over to a nearby valid day. Returns '' when valid.
+ */
+export function entryDateError(raw: string): string {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return 'Use YYYY-MM-DD.'
+  const [y, m, d] = raw.split('-').map(Number) as [number, number, number]
+  if (!y || !m || !d) return 'Use a real date.'
+  const parsed = new Date(Date.UTC(y, m - 1, d))
+  if (
+    Number.isNaN(parsed.getTime())
+    || parsed.getUTCFullYear() !== y
+    || parsed.getUTCMonth() + 1 !== m
+    || parsed.getUTCDate() !== d
+  ) return 'Use a real calendar date.'
+  return ''
+}
