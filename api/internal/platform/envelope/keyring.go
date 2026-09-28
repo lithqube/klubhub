@@ -70,6 +70,32 @@ func (r *Keyring) ForSealed(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, se
 	return r.Version(ctx, tx, tenant, v)
 }
 
+// SealString seals val for field f under dek, or returns nil for an empty
+// string. Every domain package that writes an optional sealed column
+// (guest, audience, ...) needs exactly this "" -> nil convenience around
+// DEK.Seal; sharing it here keeps them from drifting apart.
+func SealString(dek *DEK, tenant uuid.UUID, f Field, val string) ([]byte, error) {
+	if val == "" {
+		return nil, nil
+	}
+	return dek.Seal(tenant, f, []byte(val))
+}
+
+// OpenString resolves the DEK a sealed value was written with (via keys)
+// and decrypts it for field f, or returns "" when sealed is nil. The
+// counterpart to SealString, for the same reason.
+func (r *Keyring) OpenString(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, f Field, sealed []byte) (string, error) {
+	if sealed == nil {
+		return "", nil
+	}
+	dek, err := r.ForSealed(ctx, tx, tenant, sealed)
+	if err != nil {
+		return "", err
+	}
+	plain, err := dek.Open(tenant, f, sealed)
+	return string(plain), err
+}
+
 // Version returns a specific DEK version (active or retired).
 func (r *Keyring) Version(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, version uint32) (*DEK, error) {
 	if dek := r.cached(tenant, version); dek != nil {

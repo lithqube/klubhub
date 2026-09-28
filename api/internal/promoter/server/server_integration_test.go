@@ -27,6 +27,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
+	"github.com/klubhub/dj/api/internal/promoter/audience"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
 	"github.com/klubhub/dj/api/internal/promoter/report"
@@ -110,6 +111,7 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 		Log: zerolog.Nop(), DB: db, Authz: engine, Authn: svc,
 		Identity: identity.NewHandler(svc), Origins: []string{origin},
 		Events: event.NewHandler(events), Guests: guest.NewHandler(guests),
+		Audience:  audience.NewHandler(audience.NewService(db, keys, nil)),
 		Door:      door.NewHandler(door.NewService(db, keys, svc, nil)),
 		Reports:   report.NewHandler(report.NewService(db, keys, nil)),
 		Retention: retention.NewHandler(retention.NewService(db, nil)),
@@ -149,6 +151,18 @@ func TestEveryRouteHasAPolicyDecision(t *testing.T) {
 		{Method: http.MethodPost, Pattern: "/api/v1/ban-list", Action: "guestlist.write"},
 		{Method: http.MethodPut, Pattern: "/api/v1/ban-list/{entryID}", Action: "guestlist.write"},
 		{Method: http.MethodDelete, Pattern: "/api/v1/ban-list/{entryID}", Action: "guestlist.write"},
+		// P3.1 audience CRM.
+		{Method: http.MethodGet, Pattern: "/api/v1/audience/contacts", Action: "audience.read"},
+		{Method: http.MethodPost, Pattern: "/api/v1/audience/contacts", Action: "audience.write"},
+		{Method: http.MethodPut, Pattern: "/api/v1/audience/contacts/{contactID}", Action: "audience.write"},
+		{Method: http.MethodPost, Pattern: "/api/v1/audience/contacts/{contactID}/status", Action: "audience.write"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/audience/contacts/{contactID}", Action: "audience.write"},
+		{Method: http.MethodPost, Pattern: "/api/v1/audience/contacts/import", Action: "audience.write"},
+		{Method: http.MethodGet, Pattern: "/api/v1/audience/contacts/export.csv", Action: "audience.export"},
+		{Method: http.MethodGet, Pattern: "/api/v1/audience/segments", Action: "audience.read"},
+		{Method: http.MethodPost, Pattern: "/api/v1/audience/segments", Action: "audience.write"},
+		{Method: http.MethodPut, Pattern: "/api/v1/audience/segments/{segmentID}", Action: "audience.write"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/audience/segments/{segmentID}", Action: "audience.write"},
 	} {
 		got, ok := lastRegistry.Lookup(want.Method, want.Pattern)
 		if !ok || got.Public || got.Action != want.Action {

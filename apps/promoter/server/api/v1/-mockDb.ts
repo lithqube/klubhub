@@ -13,6 +13,12 @@ import type {
   GuestStatus, ImportField, ImportPreset, ImportResult, ListInput, OverviewRow, StandingList, Ticket, TicketStatus,
 } from '~/types/guest'
 import type { Organization, OrgProfile } from '~/types/org'
+import type {
+  Contact as AudienceContact, ContactInput as AudienceContactInput, ContactSource as AudienceContactSource,
+  ContactStatus as AudienceContactStatus, ConsentBasis as AudienceConsentBasis, ConsentInput as AudienceConsentInput,
+  Counts as AudienceCounts, ImportResult as AudienceImportResult, Page as AudiencePage, Segment as AudienceSegment,
+  SegmentFilter as AudienceSegmentFilter,
+} from '~/types/audience'
 import {
   allocationState, arrivalsFrom, countByStatus, cutoffInstant, fold, headsHeld, holdsQuota, LIST_TYPES, STATUSES,
 } from '~/utils/guests'
@@ -1244,3 +1250,201 @@ function seedPurged() {
   purge(e.id, 'schedule', new Date(Date.parse(e.ends_at) + 30 * DAY).toISOString())
 }
 seedPurged()
+
+// ---------------------------------------------------------------- P3.1: audience CRM ---
+
+interface AudienceContactRow {
+  id: string
+  name: string
+  email: string
+  phone: string
+  status: AudienceContactStatus
+  source: AudienceContactSource
+  consent_basis: AudienceConsentBasis
+  consent_recorded_at: string
+  consent_form_text: string
+  double_opt_in_confirmed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+const AUDIENCE_STATUSES: AudienceContactStatus[] = ['active', 'unsubscribed', 'bounced', 'complained']
+const AUDIENCE_SOURCES: AudienceContactSource[] = ['rsvp', 'follow', 'notify_me', 'csv', 'door']
+
+export const audienceContactRows: AudienceContactRow[] = [
+  {
+    id: 'ac-1', name: 'Nadia Voss', email: 'nadia@example.com', phone: '',
+    status: 'active', source: 'rsvp', consent_basis: 'consent', consent_recorded_at: iso(-40),
+    consent_form_text: 'Sign up to hear about future nights', double_opt_in_confirmed_at: iso(-40, 0, 5),
+    created_at: iso(-40), updated_at: iso(-40),
+  },
+  {
+    id: 'ac-2', name: 'Lars Berg', email: 'lars@example.com', phone: '',
+    status: 'active', source: 'follow', consent_basis: 'consent', consent_recorded_at: iso(-20),
+    consent_form_text: 'Follow the collective', double_opt_in_confirmed_at: iso(-20, 0, 3),
+    created_at: iso(-20), updated_at: iso(-20),
+  },
+  {
+    id: 'ac-3', name: 'Priya Shah', email: 'priya@example.com', phone: '',
+    status: 'unsubscribed', source: 'csv', consent_basis: 'soft_opt_in', consent_recorded_at: iso(-90),
+    consent_form_text: 'Imported past-customer list', double_opt_in_confirmed_at: null,
+    created_at: iso(-90), updated_at: iso(-5),
+  },
+]
+
+export const audienceSegmentRows: { id: string, name: string, filter: AudienceSegmentFilter }[] = [
+  { id: 'as-1', name: "RSVP'd", filter: { source: 'rsvp' } },
+]
+
+function audienceContactView(r: AudienceContactRow) {
+  return { ...r, consent_ip: undefined }
+}
+
+function audienceMatches(f: { status?: string, source?: string, q?: string }, r: AudienceContactRow): boolean {
+  if (f.status && r.status !== f.status) return false
+  if (f.source && r.source !== f.source) return false
+  if (f.q) {
+    const q = f.q.toLowerCase()
+    if (!r.name.toLowerCase().includes(q) && !r.email.toLowerCase().includes(q)) return false
+  }
+  return true
+}
+
+export function audienceCounts(): AudienceCounts {
+  const c: AudienceCounts = { all: 0, active: 0, unsubscribed: 0, bounced: 0, complained: 0 }
+  for (const r of audienceContactRows) {
+    c.all++
+    c[r.status]++
+  }
+  return c
+}
+
+export function audiencePage(filter: { status?: string, source?: string, q?: string }): AudiencePage {
+  return {
+    contacts: audienceContactRows.filter(r => audienceMatches(filter, r)).map(audienceContactView),
+    counts: audienceCounts(),
+  }
+}
+
+function validateAudienceInput(b: AudienceContactInput): AudienceContactInput {
+  b.name = (b.name ?? '').trim()
+  b.email = (b.email ?? '').trim()
+  if (!b.name && !b.email) throw invalidField('name', 'a contact needs a name or an email')
+  if (!AUDIENCE_SOURCES.includes(b.source)) throw invalidField('source', AUDIENCE_SOURCES.join(', '))
+  if (!b.consent || !['consent', 'soft_opt_in'].includes(b.consent.basis)) throw invalidField('consent.basis', 'consent, soft_opt_in')
+  return b
+}
+
+export function createAudienceContact(b: AudienceContactInput): AudienceContact {
+  validateAudienceInput(b)
+  if (b.email && audienceContactRows.some(r => r.email === b.email)) throw guestErr(409, { error: 'duplicate' })
+  const now = new Date().toISOString()
+  const row: AudienceContactRow = {
+    id: newId('ac'), name: b.name, email: b.email, phone: b.phone ?? '',
+    status: b.status ?? 'active', source: b.source,
+    consent_basis: b.consent.basis, consent_recorded_at: b.consent.recorded_at ?? now,
+    consent_form_text: b.consent.form_text ?? '', double_opt_in_confirmed_at: b.consent.double_opt_in_confirmed_at ?? null,
+    created_at: now, updated_at: now,
+  }
+  audienceContactRows.push(row)
+  return audienceContactView(row)
+}
+
+export function updateAudienceContact(id: string, b: AudienceContactInput): AudienceContact {
+  const r = audienceContactRows.find(c => c.id === id)
+  if (!r) throw guestErr(404, { error: 'not_found' })
+  validateAudienceInput({ ...b, consent: b.consent ?? { basis: r.consent_basis, form_text: r.consent_form_text } })
+  r.name = b.name
+  r.email = b.email
+  r.phone = b.phone ?? ''
+  r.source = b.source
+  r.updated_at = new Date().toISOString()
+  return audienceContactView(r)
+}
+
+export function setAudienceStatus(id: string, status: AudienceContactStatus) {
+  const r = audienceContactRows.find(c => c.id === id)
+  if (!r) throw guestErr(404, { error: 'not_found' })
+  if (!AUDIENCE_STATUSES.includes(status)) throw invalidField('status', AUDIENCE_STATUSES.join(', '))
+  r.status = status
+  r.updated_at = new Date().toISOString()
+}
+
+export function deleteAudienceContact(id: string) {
+  const i = audienceContactRows.findIndex(c => c.id === id)
+  if (i < 0) throw guestErr(404, { error: 'not_found' })
+  audienceContactRows.splice(i, 1)
+}
+
+export function importAudienceCSV(rows: { name?: string, email?: string, phone?: string }[], consent: AudienceConsentInput): AudienceImportResult {
+  const result: AudienceImportResult = { added: 0, updated: 0, duplicates: 0, invalid: 0 }
+  for (const row of rows) {
+    const name = (row.name ?? '').trim()
+    const email = (row.email ?? '').trim()
+    if (!name && !email) {
+      result.invalid++
+      continue
+    }
+    if (email && audienceContactRows.some(r => r.email === email)) {
+      result.duplicates++
+      continue
+    }
+    const now = new Date().toISOString()
+    audienceContactRows.push({
+      id: newId('ac'), name, email, phone: row.phone ?? '',
+      status: 'active', source: 'csv',
+      consent_basis: consent.basis, consent_recorded_at: consent.recorded_at ?? now,
+      consent_form_text: consent.form_text ?? '', double_opt_in_confirmed_at: consent.double_opt_in_confirmed_at ?? null,
+      created_at: now, updated_at: now,
+    })
+    result.added++
+  }
+  return result
+}
+
+function audienceSegmentMatching(filter: AudienceSegmentFilter): number {
+  return audienceContactRows.filter((r) => {
+    if (filter.status && r.status !== filter.status) return false
+    if (filter.source && r.source !== filter.source) return false
+    if (filter.since_days) {
+      const cutoff = Date.now() - filter.since_days * DAY
+      if (Date.parse(r.created_at) < cutoff) return false
+    }
+    return true
+  }).length
+}
+
+function audienceSegmentView(s: { id: string, name: string, filter: AudienceSegmentFilter }): AudienceSegment {
+  const now = new Date().toISOString()
+  return { id: s.id, name: s.name, filter: s.filter, matching: audienceSegmentMatching(s.filter), created_at: now, updated_at: now }
+}
+
+export function listAudienceSegments(): AudienceSegment[] {
+  return audienceSegmentRows.map(audienceSegmentView)
+}
+
+export function createAudienceSegment(b: { name: string, filter: AudienceSegmentFilter }): AudienceSegment {
+  const name = (b.name ?? '').trim()
+  if (!name) throw invalidField('name', 'required')
+  if (audienceSegmentRows.some(s => s.name === name)) throw guestErr(409, { error: 'segment_exists' })
+  const row = { id: newId('as'), name, filter: b.filter ?? {} }
+  audienceSegmentRows.push(row)
+  return audienceSegmentView(row)
+}
+
+export function updateAudienceSegment(id: string, b: { name: string, filter: AudienceSegmentFilter }): AudienceSegment {
+  const s = audienceSegmentRows.find(x => x.id === id)
+  if (!s) throw guestErr(404, { error: 'not_found' })
+  const name = (b.name ?? '').trim()
+  if (!name) throw invalidField('name', 'required')
+  if (audienceSegmentRows.some(x => x.name === name && x.id !== id)) throw guestErr(409, { error: 'segment_exists' })
+  s.name = name
+  s.filter = b.filter ?? {}
+  return audienceSegmentView(s)
+}
+
+export function deleteAudienceSegment(id: string) {
+  const i = audienceSegmentRows.findIndex(s => s.id === id)
+  if (i < 0) throw guestErr(404, { error: 'not_found' })
+  audienceSegmentRows.splice(i, 1)
+}
