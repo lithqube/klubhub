@@ -200,4 +200,26 @@ describe('useEarningsStore', () => {
     await store.fetchEntries({ kind: 'income', currency: 'EUR' })
     expect(store.filterSnapshot).toEqual({ kind: 'income', currency: 'EUR' })
   })
+
+  // FIN-04 #7 follow-up: pending reconciliation metadata must be keyed
+  // by gig id (06cf84b re-keyed the map away from `_last`); pin that
+  // contract so a regression to the global-slot pattern is caught at
+  // the store boundary.
+  it('rememberReconciliationMetadata stores under the gig id, not `_last`', () => {
+    const store = useEarningsStore()
+    store.rememberReconciliationMetadata('gig-1', makeReconciliation({ id: 'rec-1' }))
+    store.rememberReconciliationMetadata('gig-2', makeReconciliation({ id: 'rec-2' }))
+    expect(store.pendingReconciliationsByGig['gig-1']?.id).toBe('rec-1')
+    expect(store.pendingReconciliationsByGig['gig-2']?.id).toBe('rec-2')
+    expect((store.pendingReconciliationsByGig as Record<string, unknown>)['_last']).toBeUndefined()
+  })
+
+  it('getPendingReconciliationForGig only returns the metadata for that gig', () => {
+    const store = useEarningsStore()
+    store.rememberReconciliationMetadata('gig-1', makeReconciliation({ id: 'rec-1' }))
+    store.rememberReconciliationMetadata('gig-2', makeReconciliation({ id: 'rec-2' }))
+    expect((store.getPendingReconciliationForGig('gig-1') as { id: string } | null)?.id).toBe('rec-1')
+    expect((store.getPendingReconciliationForGig('gig-2') as { id: string } | null)?.id).toBe('rec-2')
+    expect(store.getPendingReconciliationForGig('gig-3')).toBeNull()
+  })
 })

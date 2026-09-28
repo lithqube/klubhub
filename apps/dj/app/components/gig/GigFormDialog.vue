@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useGigStore } from '../../stores/gig'
 import { useTracklistStore } from '../../stores/tracklist'
-import { ref, computed, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import type { Gig, GigCreate, Venue, Contact, GigStatus, PaymentStatus } from '../../types/gig'
 import type { GigFinanceReconciliation } from '../../types/finance'
 import type { Tracklist as TracklistType } from '../../types/tracklist'
