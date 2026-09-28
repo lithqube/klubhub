@@ -61,13 +61,18 @@ const pii = computed(() => looksLikeContact(f.techNotes))
 /** Common installed gear, for a one-tap start — tech_notes stays free text
  * underneath for anything these don't cover (load-in, power, quirks). */
 const TECH_CHIPS = ['2× CDJ-3000', 'DJM-V10', 'DJM-A9', 'Turntables', 'Funktion-One', 'House PA']
-// The server rejects tech_notes over 5000 chars (event/service.go); refuse
-// the insert rather than silently producing a value submit() can't save.
+// The server rejects tech_notes over 5000 bytes (event/service.go uses Go's
+// len(), which counts UTF-8 bytes, not JS's UTF-16 "characters" — the × in
+// "2× CDJ-3000" alone is 2 bytes but 1 JS character, so comparing
+// next.length against 5000 would under-count and let an over-limit value
+// through). Refuse the insert rather than silently producing a value
+// submit() can't save.
+const byteLength = (s: string) => new TextEncoder().encode(s).length
 const techNotesOverLimit = ref(false)
-watch(() => f.techNotes, (v) => { if (v.length <= 5000) techNotesOverLimit.value = false })
+watch(() => f.techNotes, (v) => { if (byteLength(v) <= 5000) techNotesOverLimit.value = false })
 function insertTechChip(text: string) {
   const next = f.techNotes.trim() ? `${f.techNotes}, ${text}` : text
-  if (next.length > 5000) {
+  if (byteLength(next) > 5000) {
     techNotesOverLimit.value = true
     return
   }
