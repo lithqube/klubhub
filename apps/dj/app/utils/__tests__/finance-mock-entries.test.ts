@@ -234,4 +234,17 @@ describe('finance-mock entry ops', () => {
     expect(other.entries.size).toBe(1)
     expect(other.reconciliations.size).toBe(1)
   })
+  // FIN-04 #10 follow-up: 06cf84b fixed the inverted predicate in
+  // listEntries. Pin the kind filter path explicitly so a future
+  // regression to "return entries that don't match" fails at this
+  // boundary instead of surfacing only as a silent empty list at runtime.
+  it('listEntries returns matching entries when a kind filter is applied', () => {
+    const db = freshDb()
+    db.addEntry({ kind: 'income', amount_minor: 1, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-15', description: 'income1' })
+    db.addEntry({ kind: 'expense', amount_minor: 1, currency: 'EUR', category: 'gear', entry_date: '2026-09-15', description: '', notes: 'expense1' })
+    db.addEntry({ kind: 'income', amount_minor: 1, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-15', description: 'income2' })
+    const r = ops.listEntries(db, { kind: 'income' })
+    const data = (r.body as { data: Array<{ description: string }> }).data
+    expect(data.map((d) => d.description).sort()).toEqual(['income1', 'income2'])
+  })
 })
