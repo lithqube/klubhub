@@ -3,6 +3,7 @@ package finance
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -142,7 +143,13 @@ func splitBytes(s string, sep byte) []string {
 // false on failure.
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return false
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return false
 	}

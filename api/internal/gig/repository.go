@@ -163,6 +163,40 @@ func (r *Repository) Create(ctx context.Context, g *GigCreate) (*Gig, error) {
 // Update applies non-nil changes from u to the gig identified by id.
 // Returns ErrConflict if updated_at does not match (optimistic concurrency).
 func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *GigUpdate) (*Gig, error) {
+	return r.UpdateWithPaymentTransition(ctx, id, u, nil)
+}
+
+// UpdateWithPaymentTransition applies a gig update and its finance transition
+// hook atomically. Hook errors roll the gig write back.
+func (r *Repository) UpdateWithPaymentTransition(ctx context.Context, id uuid.UUID, u *GigUpdate, processor PaymentTransitionProcessor) (*Gig, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	before, err := getGigByID(ctx, tx, id, true)
+	if err != nil {
+		return nil, err
+	}
+	after, err := updateGig(ctx, tx, id, u)
+	if err != nil {
+		return nil, err
+	}
+	if processor != nil {
+		decision, err := processor.ProcessGigPaymentTransition(ctx, tx, PaymentSnapshotFromGig(before), PaymentSnapshotFromGig(after))
+		if err != nil {
+			return nil, err
+		}
+		after.FinanceReconciliation = decision
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return after, nil
+}
+
+func updateGig(ctx context.Context, db PaymentTransitionTx, id uuid.UUID, u *GigUpdate) (*Gig, error) {
 	setClauses := []string{}
 	args := []interface{}{}
 	argID := 1
@@ -249,8 +283,7 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *GigUpdate) (*G
 	}
 
 	if len(setClauses) == 0 {
-		// Nothing to update; fetch and return current state
-		return r.GetByID(ctx, id)
+		return getGigByID(ctx, db, id, false)
 	}
 
 	// Optimistic concurrency check
@@ -261,7 +294,7 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *GigUpdate) (*G
 		WHERE id = $` + strconv.Itoa(argID) + ` AND deleted_at IS NULL AND updated_at = $` + strconv.Itoa(argID+1)
 	args = append(args, id, u.UpdatedAt)
 
-	tag, err := r.pool.Exec(ctx, query, args...)
+	tag, err := db.Exec(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +302,29 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, u *GigUpdate) (*G
 		return nil, ErrConflict
 	}
 
-	return r.GetByID(ctx, id)
+	return getGigByID(ctx, db, id, false)
+}
+
+func getGigByID(ctx context.Context, db PaymentTransitionTx, id uuid.UUID, forUpdate bool) (*Gig, error) {
+	var g Gig
+	query := `SELECT id, date, venue, city, country, event_name,
+		promoter_name, promoter_email, promoter_phone, fee_amount, fee_currency,
+		set_length_minutes, notes, status, payment_status, gig_reader_venue_id,
+		gig_reader_contact_id, created_at, updated_at, deleted_at
+		FROM gigs WHERE id=$1 AND deleted_at IS NULL`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+	err := db.QueryRow(ctx, query, id).Scan(
+		&g.ID, &g.Date, &g.Venue, &g.City, &g.Country, &g.EventName,
+		&g.PromoterName, &g.PromoterEmail, &g.PromoterPhone, &g.FeeAmount,
+		&g.FeeCurrency, &g.SetLengthMinutes, &g.Notes, &g.Status, &g.PaymentStatus,
+		&g.GigReaderVenueID, &g.GigReaderContactID, &g.CreatedAt, &g.UpdatedAt, &g.DeletedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &g, err
 }
 
 // SoftDelete sets deleted_at on a gig.

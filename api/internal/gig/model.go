@@ -55,6 +55,7 @@ type Gig struct {
 	CreatedAt            time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt            time.Time       `json:"updated_at" db:"updated_at"`
 	DeletedAt            *time.Time      `json:"deleted_at" db:"deleted_at"` // soft delete
+	FinanceReconciliation *PaymentReconciliationMetadata `json:"finance_reconciliation,omitempty" db:"-"`
 }
 
 // GigCreate contains fields required to create a new gig

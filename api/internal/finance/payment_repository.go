@@ -4,20 +4,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/klubhub/dj/api/internal/gig"
+	"github.com/shopspring/decimal"
 )
 
 // PaymentRepository persists Payment rows.
 type PaymentRepository struct {
-	pool *pgxpool.Pool
+	pool         *pgxpool.Pool
+	transitions  gig.PaymentTransitionProcessor
 }
 
-// NewPaymentRepository returns a PaymentRepository backed by pool.
+// NewPaymentRepository returns a PaymentRepository backed by pool. No
+// transition processor is wired — callers that need FIN-03/04/05 hook
+// integration must use NewPaymentRepositoryWithTransitionProcessor.
 func NewPaymentRepository(pool *pgxpool.Pool) *PaymentRepository {
 	return &PaymentRepository{pool: pool}
+}
+
+// NewPaymentRepositoryWithTransitionProcessor wires the shared
+// gig-payment transition processor so the invoice-driven sync path
+// participates in FIN-03/04/05 alongside the manual gig-update path.
+func NewPaymentRepositoryWithTransitionProcessor(pool *pgxpool.Pool, processor gig.PaymentTransitionProcessor) *PaymentRepository {
+	return &PaymentRepository{pool: pool, transitions: processor}
 }
 
 // Pool exposes the underlying pool for tests.
@@ -51,7 +64,7 @@ func (r *PaymentRepository) Create(ctx context.Context, invoiceID uuid.UUID, req
 		if err := checkPaymentBalance(ctx, tx, invoiceID); err != nil {
 			return err
 		}
-		return syncGigPaymentStatus(ctx, tx, invoiceID)
+		return syncGigPaymentStatusWith(ctx, tx, invoiceID, r.transitions)
 	})
 	if err != nil {
 		return nil, err
@@ -119,31 +132,78 @@ func checkPaymentBalance(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) er
 // syncGigPaymentStatus derives gigs.payment_status from the invoice balance
 // in the caller's transaction: 'paid' when received ≥ net payable,
 // 'deposit_paid' when received > 0, else 'unpaid' (received = completed
-// deposits + payments − completed refunds). The gig's updated_at (its
-// concurrency token) only moves when the status actually changes.
+// deposits + payments − completed refunds). When a transition processor
+// is wired, the before/after snapshots of the gig are run through it so
+// the invoice-driven sync path participates in FIN-03/04/05. The gig's
+// updated_at (its concurrency token) only moves when the status actually
+// changes; if the processor wires a different updated_at in the same tx
+// the gig-write happens after the sync so the processor sees the new
+// status as the "after" snapshot.
 func syncGigPaymentStatus(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) error {
-	_, err := tx.Exec(ctx, `
-		WITH bal AS (
-			SELECT i.gig_id,
-			       i.net_payable_minor AS net,
-			       COALESCE(SUM(CASE WHEN p.kind = 'refund' THEN -p.amount_minor ELSE p.amount_minor END)
-			                FILTER (WHERE p.status = 'completed'), 0) AS received
-			FROM invoices i
-			LEFT JOIN payments p ON p.invoice_id = i.id
-			WHERE i.id = $1
-			GROUP BY i.gig_id, i.net_payable_minor
-		), target AS (
-			SELECT gig_id,
-			       (CASE WHEN received >= net THEN 'paid'
-			             WHEN received > 0    THEN 'deposit_paid'
-			             ELSE 'unpaid' END)::payment_status AS status
-			FROM bal
-		)
-		UPDATE gigs g SET payment_status = target.status, updated_at = now()
-		FROM target
-		WHERE g.id = target.gig_id AND g.payment_status IS DISTINCT FROM target.status`, invoiceID)
-	if err != nil {
-		return fmt.Errorf("sync gig payment status: %w", err)
+	return syncGigPaymentStatusWith(ctx, tx, invoiceID, nil)
+}
+
+// syncGigPaymentStatusWith is the same as syncGigPaymentStatus but lets
+// the caller pass in an optional processor for FIN-03/04/05 integration.
+func syncGigPaymentStatusWith(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID, processor gig.PaymentTransitionProcessor) error {
+	// Compute the target status from the current balance. Read the gig
+	// before/after under the same transaction so the transition
+	// processor sees a consistent snapshot.
+	type gigRow struct {
+		id        uuid.UUID
+		date      time.Time
+		eventName string
+		venue     string
+		fee       decimal.Decimal
+		currency  string
+		before    gig.PaymentStatus
+	}
+	var before gigRow
+	if err := tx.QueryRow(ctx, `SELECT g.id, g.date, g.event_name, g.venue, g.fee_amount, g.fee_currency, g.payment_status
+		FROM gigs g JOIN invoices i ON i.gig_id = g.id WHERE i.id = $1`, invoiceID).
+		Scan(&before.id, &before.date, &before.eventName, &before.venue, &before.fee, &before.currency, &before.before); err != nil {
+		return fmt.Errorf("load gig for payment sync: %w", err)
+	}
+
+	var target gig.PaymentStatus
+	if err := tx.QueryRow(ctx, `WITH bal AS (
+		SELECT i.net_payable_minor AS net,
+		       COALESCE(SUM(CASE WHEN p.kind = 'refund' THEN -p.amount_minor ELSE p.amount_minor END)
+		                FILTER (WHERE p.status = 'completed'), 0) AS received
+		FROM invoices i
+		LEFT JOIN payments p ON p.invoice_id = i.id
+		WHERE i.id = $1
+		GROUP BY i.net_payable_minor
+	) SELECT (CASE WHEN received >= net THEN 'paid'
+	               WHEN received > 0    THEN 'deposit_paid'
+	               ELSE 'unpaid' END)::payment_status FROM bal`, invoiceID).Scan(&target); err != nil {
+		return fmt.Errorf("compute gig payment target: %w", err)
+	}
+
+	if target != before.before {
+		if _, err := tx.Exec(ctx, `UPDATE gigs SET payment_status=$2, updated_at=now()
+			WHERE id=$1`, before.id, target); err != nil {
+			return fmt.Errorf("update gig payment status: %w", err)
+		}
+	}
+
+	if processor == nil || target == before.before {
+		return nil
+	}
+
+	afterSnap := gig.PaymentSnapshot{
+		GigID:         before.id,
+		Date:          before.date,
+		EventName:     before.eventName,
+		Venue:         before.venue,
+		FeeAmount:     before.fee,
+		FeeCurrency:   before.currency,
+		PaymentStatus: target,
+	}
+	beforeSnap := afterSnap
+	beforeSnap.PaymentStatus = before.before
+	if _, err := processor.ProcessGigPaymentTransition(ctx, tx, beforeSnap, afterSnap); err != nil {
+		return fmt.Errorf("gig payment transition hook: %w", err)
 	}
 	return nil
 }
@@ -223,7 +283,7 @@ func (r *PaymentRepository) Update(ctx context.Context, id uuid.UUID, req Update
 		if err := checkPaymentBalance(ctx, tx, invoiceID); err != nil {
 			return err
 		}
-		return syncGigPaymentStatus(ctx, tx, invoiceID)
+		return syncGigPaymentStatusWith(ctx, tx, invoiceID, r.transitions)
 	})
 	if err != nil {
 		return nil, err
