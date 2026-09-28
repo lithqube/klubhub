@@ -256,13 +256,20 @@ func run() error {
 	contactRepo := contact.NewRepository(pool)
 	gigStorage := gig.NewStorageAdapter(storeClient)
 
-	gigSvc := gig.NewService(gigRepo, venueRepo, contactRepo, tracklistRepo, gigStorage)
+	// One shared transition processor is wired into both the gig
+	// repository (manual gig edit path) and the invoice-payment
+	// repository (syncGigPaymentStatus path). Running both write
+	// surfaces through the same processor is what guarantees one active
+	// generated income row per gig and durable finance_entry_reconciliations
+	// rows that survive a page refresh (FIN-03/04/05).
+	transitionProcessor := finance.NewGigPaymentTransitionProcessor(pool)
+	gigSvc := gig.NewServiceWithPaymentTransitionProcessor(gigRepo, venueRepo, contactRepo, tracklistRepo, gigStorage, transitionProcessor)
 	// Plan B.5: pass the calendar/PDF bearer secret from config into the
 	// gig handler. The previous signature used a single argument and the
 	// handler internally hard-coded the literal "ICAL_SECRET" as the
 	// expected value, which meant any caller that supplied
 	// `?secret=ICAL_SECRET` was accepted. The secret is now env-injected
-	// (config.ICAL_SECRET, required) and the handler fails closed on
+	// (config.ICALSecret, required) and the handler fails closed on
 	// empty/missing/placeholder values.
 	gigHandler := gig.NewHandler(gigSvc, cfg.ICALSecret)
 
@@ -283,7 +290,7 @@ func run() error {
 	// 9b. Wire finance module (billing profile, invoices, payments,
 	// agreements, email). Documents have no HTTP surface yet (nil → 503);
 	// the document service is still used by agreements to store PDFs.
-	financeHandler := buildFinanceHandler(cfg, pool, storeClient, logger)
+	financeHandler := buildFinanceHandler(cfg, pool, storeClient, transitionProcessor, logger)
 
 	// 10. Build router (internal http package aliased as apphttp).
 	router := apphttp.NewRouter(cfg, pool, storeClient, logger,
@@ -400,14 +407,20 @@ func runHealthcheck() int {
 // buildFinanceHandler composes the finance routes. Email is only mounted
 // when Plunk is fully configured; otherwise /finance/emails answers 503
 // instead of queuing mail that can never be delivered.
-func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, logger zerolog.Logger) *finance.Mux {
+func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger) *finance.Mux {
 	billingSvc := finance.NewService(finance.NewRepository(pool))
 	invoiceSvc := finance.NewInvoiceService(finance.NewInvoiceRepository(pool), billingSvc, finance.NewPGGigFeeProvider(pool))
-	paymentSvc := finance.NewPaymentService(finance.NewPaymentRepository(pool))
+	// The transition processor is shared with the gig service so the
+	// manual gig-edit path and the invoice-payment sync path see the
+	// same finance-entry state. Without sharing, two independent
+	// processors could each decide the same gig is "becoming paid"
+	// and double-book the income stream.
+	paymentSvc := finance.NewPaymentService(finance.NewPaymentRepositoryWithTransitionProcessor(pool, transitionProcessor))
 	docSvc := finance.NewDocumentService(finance.NewDocumentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)
 	tplRepo := finance.NewAgreementTemplateRepository(pool)
 	tplSvc := finance.NewAgreementTemplateService(tplRepo)
 	instSvc := finance.NewAgreementInstanceService(finance.NewAgreementInstanceRepository(pool), tplRepo, docSvc)
+	entrySvc := finance.NewEntryService(finance.NewEntryRepository(pool))
 
 	var emailHandler nethttp.Handler
 	if cfg.PlunkBaseURL != "" && cfg.PlunkProjectID != "" && cfg.PlunkAPIKey != "" {
@@ -432,6 +445,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 		finance.NewAgreementTemplateHandler(tplSvc),
 		finance.NewAgreementInstanceHandler(instSvc),
 		emailHandler,
+		finance.NewEntryHandler(entrySvc),
 	)
 }
 

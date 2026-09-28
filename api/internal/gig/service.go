@@ -32,16 +32,23 @@ type Service struct {
 	contactRepo    contactRepoIface
 	tracklistRepo  tracklistRepoIface
 	storage        PDFStorageClientIface
+	paymentTransitions PaymentTransitionProcessor
 }
 
 // NewService creates a new Service.
 func NewService(repo *Repository, venueRepo venueRepoIface, contactRepo contactRepoIface, tracklistRepo tracklistRepoIface, storage PDFStorageClientIface) *Service {
+	return NewServiceWithPaymentTransitionProcessor(repo, venueRepo, contactRepo, tracklistRepo, storage, nil)
+}
+
+// NewServiceWithPaymentTransitionProcessor wires the optional finance hook.
+func NewServiceWithPaymentTransitionProcessor(repo *Repository, venueRepo venueRepoIface, contactRepo contactRepoIface, tracklistRepo tracklistRepoIface, storage PDFStorageClientIface, processor PaymentTransitionProcessor) *Service {
 	return &Service{
 		repo:          repo,
 		venueRepo:     venueRepo,
 		contactRepo:   contactRepo,
 		tracklistRepo: tracklistRepo,
 		storage:       storage,
+		paymentTransitions: processor,
 	}
 }
 
@@ -209,7 +216,7 @@ func (s *Service) UpdateGig(ctx context.Context, id uuid.UUID, req *GigUpdate) (
 		return nil, ErrForbidden
 	}
 
-	return s.repo.Update(ctx, id, req)
+	return s.repo.UpdateWithPaymentTransition(ctx, id, req, s.paymentTransitions)
 }
 
 // DeleteGig soft-deletes a gig.

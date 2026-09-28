@@ -23,6 +23,22 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 5 — Finance: earnings ledger (FIN-01–07, FIN-09).** The
+  Finance page's Earnings panel now ships the full income / expense
+  ledger (FIN-01, FIN-02), gig-linked auto-income when a gig's
+  `payment_status` transitions to `paid` (FIN-03), persistent
+  reconciliation prompts when the source gig's fee or currency changes
+  or the gig reverts from paid (FIN-04, FIN-05), multi-currency
+  monthly/yearly summaries with no cross-currency conversion (FIN-06,
+  FIN-09) and per-gig / per-month / per-year P&L (FIN-07). New Go
+  endpoints under `/api/v1/finance/entries`, `/summary`, `/profit-loss`
+  and `/reconciliations`; new Pinia `useEarningsStore`; new
+  components `EarningsWorkspace`, `EntryFormDialog`, `EntryList`,
+  `EntrySummary`, `EntryProfitLoss`, `EntryReconciliationPanel` and
+  `EntryReconciliationDialog`. All ledger money is handled as integer
+  minor units in **JPY-aware** form (no fractional units, no float
+  math). FIN-10 stays explicitly out of scope: no tax/VAT amounts are
+  computed or shown anywhere in the Earnings panel.
 - **`dj-ci.yml`**: KlubHub DJ's own CI gate. Go vet and `-race` tests for
   the DJ packages (`gig`, `epk`, `finance`, `social`, `tracklist`, `ra`,
   `settings`, `artwork`, `contact`, `venue`, `cmd/api`), govulncheck

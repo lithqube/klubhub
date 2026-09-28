@@ -1,7 +1,7 @@
 // Builds the first-visit demo state. Dates are relative to `now`.
 
 import { FinanceMockDb } from '../../../shared/finance-mock/db'
-import { seedInvoices } from '../../../shared/finance-mock/seed'
+import { seedFinanceEntries, seedInvoices } from '../../../shared/finance-mock/seed'
 import type { DemoState } from '../types'
 import { financeLookup } from '../handlers/finance'
 import { seedAccount, seedEpk, seedPosts, seedSettings } from './content'
@@ -28,10 +28,12 @@ export function createSeedState(now: Date): DemoState {
     customers,
     venues,
     contacts,
-    finance: { invoices: [], lines: {}, payments: [], series: {}, clock: 0 },
+    finance: { invoices: [], lines: {}, payments: [], series: {}, entries: [], reconciliations: [], seriesEntries: {}, clock: 0 },
   }
   const db = new FinanceMockDb({ lookupGig: financeLookup(state), clockStart: now.getTime() - 60 * 86400_000 })
-  seedInvoices(db, (id) => state.gigs.find((g) => g.id === id)!.date.slice(0, 10))
+  const gigDate = (id: string) => state.gigs.find((g) => g.id === id)!.date.slice(0, 10)
+  seedInvoices(db, gigDate)
+  seedFinanceEntries(db, gigDate)
   state.finance = db.toJSON()
   return state
 }

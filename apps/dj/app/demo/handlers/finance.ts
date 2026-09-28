@@ -51,4 +51,15 @@ export function registerFinance(r: DemoRouter): void {
     .on('POST', `${B}/invoices/:id/payments`, (req, c) => res(ops.createPayment(c.finance, req.params.id!, body(req))))
     .on('GET', `${B}/payments/:id`, (req, c) => res(ops.getPayment(c.finance, req.params.id!)))
     .on('PUT', `${B}/payments/:id`, (req, c) => res(ops.updatePayment(c.finance, req.params.id!, body(req))))
+    // Phase 5: earnings ledger + reconciliations.
+    .on('GET', `${B}/entries`, (req, c) => res(ops.listEntries(c.finance, query(req))))
+    .on('POST', `${B}/entries`, (req, c) => res(ops.createEntry(c.finance, req.body as Record<string, unknown> | null)))
+    .on('GET', `${B}/entries/:id`, (req, c) => res(ops.getEntry(c.finance, req.params.id!)))
+    .on('PUT', `${B}/entries/:id`, (req, c) => res(ops.updateEntry(c.finance, req.params.id!, body(req))))
+    .on('DELETE', `${B}/entries/:id`, (req, c) => res(ops.deleteEntry(c.finance, req.params.id!, body(req))))
+    .on('POST', `${B}/entries/:id/void`, (req, c) => res(ops.voidEntry(c.finance, req.params.id!, body(req))))
+    .on('GET', `${B}/summary`, (req, c) => res(ops.summaryEntries(c.finance, query(req))))
+    .on('GET', `${B}/profit-loss`, (req, c) => res(ops.profitLossScope(c.finance, query(req))))
+    .on('GET', `${B}/reconciliations`, (req, c) => res(ops.getReconciliationByGig(c.finance, query(req))))
+    .on('POST', `${B}/reconciliations/:id/resolve`, (req, c) => res(ops.resolveReconciliation(c.finance, req.params.id!, body(req))))
 }

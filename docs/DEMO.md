@@ -32,7 +32,7 @@ are all zeros.
 | Social | A fictional Instagram account, `@sam.example`, is connected. Scheduled posts become "published" once their time passes, and **Retry** publishes a failed post at once. Nothing is sent to Instagram. |
 | EPK | Content autosaves. Photos are stored as data URLs, capped at 750 KB each and about 3 MB in total. PDF export produces a simple text PDF made in the browser. The full app renders a designed PDF on the server. |
 | Gigs | Full CRUD, links to venues, contacts and tracklists, and filters. The booking PDF is a generated text PDF. **Export iCal** downloads an `.ics` file, because a live feed URL needs a server. |
-| Finance | Every invoicing rule from the shared core applies: drafts from gigs, EU reverse charge, US invoices with withholding, issuing, payments, credit notes and corrections. The "Earnings" panel shows the same empty state as a production build. |
+| Finance | Every invoicing rule from the shared core applies: drafts from gigs, EU reverse charge, US invoices with withholding, issuing, payments, credit notes and corrections. The "Earnings" panel is fully wired: the income/expense ledger, multi-currency summaries (FIN-06 / FIN-09), per-gig / per-month / per-year P&L (FIN-07), gig-linked auto-income on `payment_status → paid` (FIN-03) and persistent FIN-04 / FIN-05 reconciliation prompts work from the same shared rules as the production app. No tax/VAT amounts are shown (FIN-10). |
 | Not included | Resident Advisor import (licensed feature, off), email sending, and multi-user access. |
 
 ## Build and preview locally

@@ -100,3 +100,74 @@ export function seedInvoices(db: FinanceMockDb, gigDate: (id: string) => string)
   credited.status = 'credited'
   credited.updated_at = db.stamp()
 }
+
+/**
+ * Phase 5 seed: a few extra finance entries in different currencies so the
+ * earnings UI has multi-currency data to sum and filter on. One
+ * auto-generated gig income is attached to the unbilled gig so FIN-03
+ * (paid gig → income) is exercised; the manual entries cover FIN-01 / 02.
+ */
+export function seedFinanceEntries(db: FinanceMockDb, gigDate: (id: string) => string): void {
+  const ids = FINANCE_GIG_IDS
+
+  // Auto-generated income for the US paid gig (FIN-03). The seeded demo
+  // invoice is issued; the income mirrors the gig's fee in USD.
+  const usDate = gigDate(ids.us)
+  const usFee = 250000
+  db.upsertGigIncome({
+    gigId: ids.us,
+    amount_minor: usFee,
+    currency: 'USD',
+    entry_date: usDate,
+    description: 'DJ performance — Gamma Hall — Sunday Party',
+  })
+
+  // Manual income: royalty-style recurring row.
+  db.addEntry({
+    kind: 'income',
+    amount_minor: 34000,
+    currency: 'EUR',
+    category: 'royalties',
+    entry_date: gigDate(ids.domestic),
+    description: 'Sample Records — Royalties Q1',
+  })
+
+  // Manual income in GBP (multi-currency: FIN-09).
+  db.addEntry({
+    kind: 'income',
+    amount_minor: 50000,
+    currency: 'GBP',
+    category: 'one_off',
+    entry_date: gigDate(ids.reverseCharge),
+    description: 'Guest mix — radio show',
+  })
+
+  // Manual expenses across the seeded months.
+  db.addEntry({
+    kind: 'expense',
+    amount_minor: 18000,
+    currency: 'EUR',
+    category: 'travel',
+    entry_date: gigDate(ids.domestic),
+    description: '',
+    notes: 'Travel & accommodation — Club Alpha weekend',
+  })
+  db.addEntry({
+    kind: 'expense',
+    amount_minor: 9500,
+    currency: 'EUR',
+    category: 'gear',
+    entry_date: gigDate(ids.reverseCharge),
+    description: '',
+    notes: 'USB drives + SD cards',
+  })
+  db.addEntry({
+    kind: 'expense',
+    amount_minor: 12000,
+    currency: 'USD',
+    category: 'gear',
+    entry_date: gigDate(ids.us),
+    description: '',
+    notes: 'Replacement headphones',
+  })
+}

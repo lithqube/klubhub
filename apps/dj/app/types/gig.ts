@@ -1,3 +1,5 @@
+import type { GigFinanceReconciliation } from './finance'
+
 export type GigStatus = 'inquiry' | 'confirmed' | 'advanced' | 'played' | 'cancelled'
 export type PaymentStatus = 'unpaid' | 'deposit_paid' | 'paid' | 'overdue' | 'waived'
 
@@ -28,6 +30,13 @@ export interface Gig {
   // The detail endpoint serializes linked tracklists as `tracklists` (not
   // `linked_tracklists`); the gig form reads them under that name.
   tracklists?: LinkedTracklist[]
+  /**
+   * Set by the gig PUT response when the finance transition processor raises
+   * a prompt in the same write. Mirrors the durable reconciliation row; the
+   * GET /api/v1/finance/reconciliations?gig_id=… endpoint is the source of
+   * truth after a page refresh.
+   */
+  finance_reconciliation?: GigFinanceReconciliation | null
 }
 
 export interface LinkedVenue {

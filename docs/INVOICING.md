@@ -1,7 +1,8 @@
 # Invoicing: data model, API contract and extension points
 
-Status: Phase 5.1. This document is the contract between the Go API
-(`api/internal/finance`) and the Nuxt app (`apps/dj/app/stores/invoice.ts`,
+Status: Phase 5.1 + earnings (Phase 5 second wave). This document is the
+contract between the Go API (`api/internal/finance`) and the Nuxt app
+(`apps/dj/app/stores/{invoice,earnings}.ts`,
 `apps/dj/server/api/v1/finance/**` mocks). Change both sides together.
 
 Scope today: EU and US invoicing for a single DJ (one billing profile).
@@ -21,6 +22,8 @@ invoices must be reviewed by an accountant for each launch market.
 | **Tax** | Stored per line (`invoice_lines.tax_bps`) so per-line rates can come later; today every line gets the invoice `tax_rate_bps`. `tax_breakdown` groups by rate. |
 | **Withholding** | Optional `withholding_rate_bps` applied to the **subtotal** (pre-VAT fee). `net_payable = total − withholding`. Balances, "paid" and gig payment status use **net payable**. |
 | **Money** | Integer minor units everywhere (`*_minor`), including summaries. |
+| **Invoice vs payment vs ledger entry** | An invoice is a *billable artefact* (kind, number, snapshot, totals, lines). A payment records money moving against an invoice (deposit / payment / refund). A ledger entry is a *financial record* in the income/expense log. They are independent: invoices do not write ledger entries; payments do not write ledger entries either. The single event that creates a revenue ledger entry is a gig's `payment_status` transitioning to `paid` (see §7). |
+| **Gig payment status** | Updated only by invoice payments reaching `received ≥ net_payable`. Completing an invoice's payments does **not** create a ledger entry on its own.
 
 ## 2. JSON shapes
 
@@ -89,6 +92,65 @@ interface Invoice {
 }
 
 interface IssueProblem { field: string; message: string } // field e.g. "customer.vat_id"
+
+// ── Earnings / ledger (Phase 5 second wave) ─────────────────────────────
+
+type EntryKind = 'income' | 'expense'
+type EntryStatus = 'active' | 'voided'
+type EntrySource = 'manual' | 'gig_payment' | 'invoice_payment'
+
+interface Entry {
+  id: string
+  kind: EntryKind
+  amount_minor: number
+  currency: string                // ISO 4217; FIN-09 — no cross-currency aggregation
+  category: string
+  entry_date: string              // YYYY-MM-DD
+  description: string
+  notes: string
+  gig_id: string | null           // optional link back to a gig
+  status: EntryStatus             // 'voided' is a soft reversal; original row kept
+  auto_generated: boolean         // true if created by a gig payment_status transition
+  source_kind: EntrySource
+  source_id: string | null        // gig or invoice that created it
+  source_amount_minor: number | null  // snapshot at creation time
+  source_currency: string | null
+  source_description: string
+  created_at: string
+  updated_at: string              // optimistic-concurrency token
+  deleted_at: string | null
+}
+
+interface EntryTotals {           // per currency — FIN-06 / FIN-09
+  currency: string
+  income_minor: number
+  expense_minor: number
+}
+
+interface ProfitLossTotals {      // per currency — FIN-07
+  currency: string
+  income_minor: number
+  expense_minor: number
+  profit_loss_minor: number
+}
+
+type ReconciliationReason = 'fee_changed' | 'currency_changed' | 'payment_reversed'
+type ReconciliationAction = 'update' | 'delete' | 'void' | 'keep'
+type ReconciliationStatus = 'pending' | 'resolved'
+
+interface EntryReconciliation {   // persistent FIN-04 / FIN-05 decision
+  id: string
+  entry_id: string
+  gig_id: string | null
+  reason: ReconciliationReason
+  status: ReconciliationStatus
+  detected_at: string             // when the source snapshot changed
+  resolved_at: string | null
+  resolved_action: ReconciliationAction | null
+  context: Record<string, unknown>  // fee before/after, currency, etc.
+  created_at: string
+  updated_at: string
+}
 ```
 
 Contacts gain the address/tax fields of `Party` (`address_line1`, `address_line2`,
@@ -153,6 +215,16 @@ rate / 10000); `net_payable = total − withholding`.
 | `POST /invoices/{id}/credit-note` | `{reason, updated_at}` | `201 {data: {credit_note, original}}` |
 | `POST /invoices/{id}/correct` | `{reason, updated_at}` | `201 {data: {credit_note, original, replacement}}` (replacement is a draft copy) |
 | `GET/POST /invoices/{id}/payments`, `GET/PUT /payments/{id}` | unchanged | balances use `net_payable_minor`; not allowed on credit notes |
+| `GET /entries?kind=&status=&currency=&category=&gig_id=&from=&to=` | | `{data: Entry[]}` newest first |
+| `POST /entries` | `{kind, amount_minor, currency, category, entry_date, description?, notes?, gig_id?}` | `201 {data: Entry}` |
+| `GET /entries/{id}` | | `{data: Entry}` |
+| `PUT /entries/{id}` | same as create + `updated_at` | `200 {data: Entry}` |
+| `DELETE /entries/{id}` | `{updated_at}` | soft delete; preserves history |
+| `POST /entries/{id}/void` | `{updated_at}` | sets `status: 'voided'`; keeps the row for audit |
+| `GET /summary?scope=month\|year&from=&to=` | | `{data: EntryTotals[]}` grouped by currency (FIN-06 / FIN-09) |
+| `GET /profit-loss?scope=gig\|month\|year&from=&to=&gig_id?` | | `{data: ProfitLossTotals[]}` grouped by currency (FIN-07) |
+| `GET /reconciliations?status=&reason=&gig_id=` | | `{data: EntryReconciliation[]}` (FIN-04 / FIN-05 queue) |
+| `POST /reconciliations/{id}/resolve` | `{action: 'update'\|'delete'\|'void'\|'keep'}` | `200 {data: EntryReconciliation}`; applies the chosen action to the linked entry |
 
 Errors: `400 validation_failed`, `404 not_found`, `409 conflict` (stale
 `updated_at`), `409 bad_state` (wrong status for the action), `422
@@ -211,12 +283,20 @@ received > 0, else `unpaid`) in the same transaction. The gig's
 - `app/types/finance.ts` — the shapes above.
 - `app/utils/money.ts` — parse/format minor units (no float math).
 - `app/utils/vatTreatment.ts` — labels and descriptions per treatment.
-- `app/stores/invoice.ts` — all `$fetch` calls; keeps `updated_at` per invoice.
+- `app/stores/invoice.ts` — all `$fetch` calls for invoices, payments and summaries; keeps `updated_at` per invoice.
+- `app/stores/earnings.ts` — all `$fetch` calls for the ledger: entries, summary, profit-loss and reconciliations.
 - `app/components/finance/` — `InvoiceList`, `InvoiceCreateDialog`,
   `InvoiceDetailSheet`, `InvoicePartyFields` (reusable for supplier later),
   `InvoiceTaxFields`, `InvoiceIssueChecklist`, `PaymentLedger`, `PaymentForm`,
-  `InvoiceConfirmDialog`.
-- `server/api/v1/finance/**` — in-memory mocks implementing this contract.
+  `InvoiceConfirmDialog`, plus the earnings components
+  `EarningsWorkspace`, `EntryFormDialog`, `EntryList`, `EntryProfitLoss`,
+  `EntryReconciliationDialog`, `EntryReconciliationPanel`, `EntrySummary`.
+- `server/api/v1/finance/**` — in-memory mocks implementing this contract
+  (invoices, payments, billing-profile, agreements, emails, entries,
+  summary, profit-loss, reconciliations).
+- `shared/finance-mock/` — pure-code implementation of the invoicing and
+  earnings rules, shared between the Nitro dev mocks and the browser-only
+  demo (`apps/dj/app/demo`).
 
 ## 6. Extension points (planned, not built)
 
@@ -229,3 +309,25 @@ received > 0, else `unpaid`) in the same transaction. The gig's
 | E-invoicing (EN 16931 UBL / Factur-X / Peppol) | new `Exporter` next to `PDFRenderer`, fed the same issued invoice + snapshots. |
 | PDF download endpoint | `GET /invoices/{id}/pdf` using `PDFRenderer` + `DocumentService` (store once at issue). |
 | Retention | issued invoices are immutable and never deleted; enforce in any future delete API. |
+
+## 7. Shared rule: gig payment_status → ledger
+
+The gig's `payment_status` is the single source of truth for "this gig was
+paid". To avoid duplicate revenue, the following invariant holds across the
+whole finance module:
+
+- A gig's `payment_status` transition (`unpaid` → `deposit_paid` → `paid`,
+  and the reverse) is consumed by **exactly one** income creator. Today
+  that creator is the gig-payment transition itself (`payment_status → paid`
+  produces one `Entry { kind: 'income', source_kind: 'gig_payment',
+  auto_generated: true }`, FIN-03).
+- Completing an invoice's payments updates `gigs.payment_status` but does
+  **not** write a ledger entry on its own — the gig transition has already
+  done that. `source_kind: 'invoice_payment'` is reserved for a future
+  flow that needs to attribute a payment independently of a gig.
+- Editing or voiding an invoice, or recording a refund, never creates or
+  mutates a ledger entry directly. The user resolves the resulting
+  `EntryReconciliation` (FIN-04 / FIN-05) explicitly via the reconciliation
+  dialog.
+- `Entry` totals, summaries and P&L are computed from ledger rows only.
+  Invoice balances and payment records are never summed into the ledger.

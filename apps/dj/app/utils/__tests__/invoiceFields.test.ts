@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   countryError,
+  entryDateError,
   fieldId,
   focusField,
   inlineErrorMessage,
@@ -56,6 +57,21 @@ describe('invoiceFields', () => {
     expect(inlineErrorMessage({ code: 'bad_state', message: 'x' })).toBeNull()
     expect(inlineErrorMessage({ code: 'exceeds_balance', message: 'x' })).toMatch(/balance/)
     expect(inlineErrorMessage({ code: 'validation_failed', message: 'validation failed: x' })).toBe('validation failed: x')
+  })
+
+  it('rejects impossible calendar dates that Date.parse would roll over', () => {
+    // Valid dates pass through.
+    expect(entryDateError('2026-09-15')).toBe('')
+    expect(entryDateError('2024-02-29')).toBe('')  // leap day
+    // Bad shape.
+    expect(entryDateError('')).toMatch(/YYYY-MM-DD/)
+    expect(entryDateError('2026-9-15')).toMatch(/YYYY-MM-DD/)
+    expect(entryDateError('2026/09/15')).toMatch(/YYYY-MM-DD/)
+    // Real but impossible days / months.
+    expect(entryDateError('2026-02-30')).toMatch(/calendar/)
+    expect(entryDateError('2025-02-29')).toMatch(/calendar/)  // not a leap year
+    expect(entryDateError('2026-13-01')).toMatch(/calendar/)
+    expect(entryDateError('2026-04-31')).toMatch(/calendar/)
   })
 })
 

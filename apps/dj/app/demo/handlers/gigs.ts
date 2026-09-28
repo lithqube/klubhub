@@ -5,6 +5,8 @@ import { uuid } from '../../../shared/finance-mock/rules'
 import type { Contact, Gig, GigStatus, PaymentStatus, Venue } from '../../types/gig'
 import { pdfBlob } from '../lib/pdf'
 import { gigsIcs } from '../lib/util'
+import { financeLookup } from './finance'
+import { parseMoney } from '../../utils/money'
 import type { DemoRouter } from '../router'
 import { apiError, json, noContent, notFound } from '../router'
 import type { DemoContext, DemoRequest, GigLinks } from '../types'
@@ -15,6 +17,43 @@ const FIELDS = [
   'venue', 'city', 'country', 'event_name', 'promoter_name', 'promoter_email', 'promoter_phone',
   'fee_currency', 'notes',
 ] as const
+
+/**
+ * Phase 5 FIN-04 / FIN-05: drive the finance transition side of a gig
+ * update inside the demo backend. Mirrors the Go processor in
+ * `api/internal/finance/gig_payment_transition.go`: looks up the gig's fee,
+ * snapshot, and date from the demo finance lookup, then forwards the
+ * before/after payment status to `processGigPaymentTransition` on the same
+ * FinanceMockDb that backs invoice routes. Returns the inline metadata
+ * payload (or null) shaped exactly like the Go `PaymentReconciliationMetadata`.
+ */
+function processGigPaymentTransitionInDemo(
+  c: DemoContext,
+  before: Gig,
+  after: Gig,
+): {
+  id: string
+  entry_id: string
+  reason: string
+  allowed_actions: string[]
+  updated_at: string
+} | null {
+  const lookup = financeLookup(c.state)
+  const feeLookup = lookup(after.id)
+  if (!feeLookup) return null
+  const amountMinor = parseMoney(String(after.fee_amount ?? 0), after.fee_currency || 'EUR') ?? 0
+  if (amountMinor <= 0) return null
+  const result = c.finance.processGigPaymentTransition({
+    gig_id: after.id,
+    amount_minor: amountMinor,
+    currency: after.fee_currency || 'EUR',
+    entry_date: feeLookup.date,
+    description: `DJ performance — ${feeLookup.label} (${feeLookup.date})`,
+    prev_payment_status: before.payment_status,
+    next_payment_status: after.payment_status,
+  })
+  return result.metadata
+}
 
 const body = (req: DemoRequest) => (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>
 const has = (q: URLSearchParams, k: string) => (q.get(k) ?? '') !== ''
@@ -145,12 +184,18 @@ export function registerGigs(r: DemoRouter): void {
     const b = body(req)
     if (typeof b.updated_at !== 'string' || !b.updated_at) return apiError(400, 'updated_at is required')
     if (b.updated_at !== g.updated_at) return apiError(409, 'gig was updated elsewhere; reload and try again')
+    const before = { ...g }
     const next = { ...g }
     const err = apply(next, b)
     if (err) return apiError(400, err)
     next.updated_at = c.now().toISOString()
     Object.assign(g, next)
-    return json(g)
+    // Phase 5 FIN-04 / FIN-05: drive the finance transition side of the gig
+    // update with the same logic the Go processor runs, then echo the inline
+    // `finance_reconciliation` payload that the real API returns when a
+    // pending decision is raised.
+    const metadata = processGigPaymentTransitionInDemo(c, before, g)
+    return metadata ? json({ ...g, finance_reconciliation: metadata }) : json(g)
   })
 
   r.on('DELETE', '/api/v1/gigs/:id', (req, c) => {

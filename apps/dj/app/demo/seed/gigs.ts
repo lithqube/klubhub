@@ -7,6 +7,7 @@ import type { Party } from '../../types/finance'
 import type { Contact, Gig, GigStatus, PaymentStatus, Venue } from '../../types/gig'
 import type { GigLinks } from '../types'
 import { daysFrom } from '../lib/util'
+import { minorToDecimalString } from '../../utils/money'
 import { DEMO_TRACKLIST_IDS } from './tracklists'
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -99,7 +100,7 @@ export function seedGigs(now: Date) {
   const stamp = daysFrom(now, -90, 12)
   const played: GigSpec[] = FINANCE_SEED_GIGS.map((g) => ({
     id: g.id, days: -g.daysAgo, venue: g.venue, event_name: g.event_name, city: g.city, country: g.country,
-    fee: g.fee_minor / 100, currency: g.currency, status: 'played', payment_status: PLAYED_PAYMENT[g.id] ?? 'unpaid',
+    fee: Number(minorToDecimalString(g.fee_minor, g.currency)), currency: g.currency, status: 'played', payment_status: PLAYED_PAYMENT[g.id] ?? 'unpaid',
     promoter: g.customer.legal_name, email: g.customer.email,
   }))
   const gigs = [...played, ...UPCOMING].map((s) => gigFrom(s, now)).sort((a, b) => b.date.localeCompare(a.date))

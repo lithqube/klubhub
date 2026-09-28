@@ -8,7 +8,7 @@ import type { H3Event } from 'h3'
 import { FinanceMockDb, type MockGig } from '../../../../shared/finance-mock/db'
 import type { MockResult } from '../../../../shared/finance-mock/rules'
 import { party } from '../../../../shared/finance-mock/rules'
-import { FINANCE_GIG_IDS, seedInvoices, seedMockGigs } from '../../../../shared/finance-mock/seed'
+import { FINANCE_GIG_IDS, seedFinanceEntries, seedInvoices, seedMockGigs } from '../../../../shared/finance-mock/seed'
 import { parseMoney } from '../../../../app/utils/money'
 
 export const GIG_IDS = FINANCE_GIG_IDS
@@ -23,6 +23,7 @@ export const db = new FinanceMockDb({
   clockStart: Date.parse(`${TODAY}T09:00:00Z`),
 })
 seedInvoices(db, (id) => gigs.get(id)!.date)
+seedFinanceEntries(db, (id) => gigs.get(id)!.date)
 
 /**
  * Learns a real gig (fee, currency, date, promoter) through the gig route,

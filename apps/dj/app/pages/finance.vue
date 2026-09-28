@@ -1,69 +1,103 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+// Finance page (FIN-01..FIN-10) — replaces the production empty state and
+// the dev mock preview with the real earnings UI. Invoices (Phase 4) stay
+// exactly where they were. The new finance store drives the entries list,
+// monthly/yearly summary, P&L panes, and reconciliation prompts.
+import { onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { TrendingUp, Download } from 'lucide-vue-next'
-import { useInvoiceStore } from '../stores/invoice'
 import InvoiceList from '../components/finance/InvoiceList.vue'
 import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
+import EarningsWorkspace from '../components/finance/EarningsWorkspace.vue'
+import EntryList from '../components/finance/EntryList.vue'
+import EntrySummary from '../components/finance/EntrySummary.vue'
+import EntryProfitLoss from '../components/finance/EntryProfitLoss.vue'
+import EntryReconciliationDialog from '../components/finance/EntryReconciliationDialog.vue'
+import EntryReconciliationPanel from '../components/finance/EntryReconciliationPanel.vue'
+import { useInvoiceStore } from '../stores/invoice'
+import { useEarningsStore } from '../stores/earnings'
+import type { Entry, EntryReconciliation } from '../types/finance'
 
 useHead({ title: 'Finance — KlubHub DJ' })
 
-const isDevOrStaging = import.meta.env.DEV || import.meta.env.MODE === 'staging'
+const invoiceStore = useInvoiceStore()
+const earningsStore = useEarningsStore()
+const { disabled: invoiceDisabled } = storeToRefs(invoiceStore)
+const { listLoaded: entriesLoaded } = storeToRefs(earningsStore)
 
-// Mock finance data (future phases will wire to API)
-const stats = {
-  mtd: '€3,400',
-  pending: '€1,200',
-  ytd: '€14,800',
-  nextPayout: 'APR 01, 2026',
+const voidingEntry = ref<Entry | null>(null)
+const deletingEntry = ref<Entry | null>(null)
+const reconDialogOpen = ref(false)
+const reconDialogGigId = ref<string | null>(null)
+
+function onEdit(entry: Entry): void {
+  earningsStore.openEdit(entry.id)
+}
+function onVoid(entry: Entry): void {
+  voidingEntry.value = entry
+}
+function onDelete(entry: Entry): void {
+  deletingEntry.value = entry
 }
 
-const barData = [
-  { label: 'OCT', value: 60 },
-  { label: 'NOV', value: 80 },
-  { label: 'DEC', value: 45 },
-  { label: 'JAN', value: 90 },
-  { label: 'FEB', value: 55 },
-  { label: 'MAR', value: 100 },
-]
+async function confirmVoid(): Promise<void> {
+  if (!voidingEntry.value) return
+  const e = voidingEntry.value
+  voidingEntry.value = null
+  try {
+    await earningsStore.voidEntry(e.id)
+  } catch {
+    // Already surfaced via the store's banner / inline error.
+  }
+}
+async function confirmDelete(): Promise<void> {
+  if (!deletingEntry.value) return
+  const e = deletingEntry.value
+  deletingEntry.value = null
+  try {
+    await earningsStore.deleteEntry(e.id)
+  } catch {
+    // Same.
+  }
+}
 
-const transactions = [
-  { id: 1, title: 'Club Alpha — Mainstage',           date: 'MAR 29', amount: '€1,200', type: 'income',  accentClass: 'accent-bar-ready' },
-  { id: 2, title: 'Club Beta — Resident Night',       date: 'MAR 8',  amount: '€800',  type: 'income',  accentClass: 'accent-bar-ready' },
-  { id: 3, title: 'Sample Records — Royalties Q1',    date: 'MAR 15', amount: '€340',  type: 'income',  accentClass: 'accent-bar-ready' },
-  { id: 4, title: 'Studio Session — Mixing Services', date: 'MAR 2',  amount: '€620',  type: 'income',  accentClass: 'accent-bar-ready' },
-  { id: 5, title: 'Travel & Accommodation',           date: 'MAR 27', amount: '-€180', type: 'expense', accentClass: 'accent-bar-published' },
-  { id: 6, title: 'Gear: USB Drives',                 date: 'MAR 10', amount: '-€95',  type: 'expense', accentClass: 'accent-bar-published' },
-]
-
-const invoiceStore = useInvoiceStore()
-const { disabled: invoiceDisabled } = storeToRefs(invoiceStore)
+function onReconciliationResolved(_rec: EntryReconciliation | { id: string; resolution: string }): void {
+  // Refresh summary + P&L so the page reflects the resolution immediately.
+  void earningsStore.refreshSummary()
+  void earningsStore.refreshProfitLoss()
+  reconDialogOpen.value = false
+}
+function onReconciliationDismissed(): void {
+  reconDialogOpen.value = false
+}
+function openReconciliationPanel(rec: EntryReconciliation): void {
+  reconDialogGigId.value = rec.gig_id
+  reconDialogOpen.value = true
+}
 
 onMounted(() => {
   void invoiceStore.fetchInvoices()
+  void earningsStore.fetchEntries()
+  void earningsStore.refreshSummary()
+  void earningsStore.refreshProfitLoss()
+})
+
+watch(entriesLoaded, (loaded) => {
+  if (!loaded) return
+  // Re-fetch summary/P&L once we know which gigs have data.
+  void earningsStore.refreshSummary()
+  void earningsStore.refreshProfitLoss()
 })
 </script>
 
 <template>
-  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-    <!-- Page header -->
+  <div class="finance-page" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
     <div class="page-header">
       <div>
         <div class="page-title">FINANCE</div>
-        <div class="page-sub">EARNINGS · INVOICES · TRANSACTIONS</div>
+        <div class="page-sub">EARNINGS · INVOICES · RECONCILIATIONS</div>
       </div>
-      <button 
-        class="btn-hud btn-hud-ghost" 
-        style="padding:0 14px;"
-        :disabled="true"
-        title="Coming soon - Phase 5"
-      >
-        <Download style="width:12px;height:12px;" aria-hidden="true" />
-        EXPORT CSV
-      </button>
     </div>
 
-    <!-- Scrollable body -->
     <div class="page-body">
       <!-- Invoices: real data in every mode (Go API, or the in-memory mocks in dev) -->
       <section aria-labelledby="finance-invoices-title">
@@ -82,120 +116,121 @@ onMounted(() => {
         <InvoiceList />
       </section>
 
-      <!-- Production: honest empty state -->
-      <div v-if="!isDevOrStaging" class="glass hud-card" style="padding:32px 24px;text-align:center;">
-        <TrendingUp style="width:48px;height:48px;color:var(--color-tertiary);margin:0 auto 16px;" aria-hidden="true" />
-        <div style="font-family:var(--font-command);font-size:18px;font-weight:600;color:var(--color-on-surface);margin-bottom:8px;">
-          EARNINGS — NOT YET WIRED
+      <!-- Earnings reconciliation prompts (FIN-04 / FIN-05). One dialog shared by every prompt. -->
+      <EntryReconciliationPanel @open="openReconciliationPanel" />
+
+      <!-- Earnings entries -->
+      <section aria-labelledby="finance-entries-title" class="finance-section">
+        <div class="finance-section-head">
+          <h2 id="finance-entries-title" class="section-lbl" style="margin:0;font-weight:600;">ENTRIES</h2>
+          <div class="finance-cta-group">
+            <button
+              type="button"
+              class="btn-hud btn-hud-cta btn-hud-xs"
+              @click="earningsStore.openCreate('income')"
+            >+ NEW INCOME</button>
+            <button
+              type="button"
+              class="btn-hud btn-hud-cta btn-hud-xs"
+              @click="earningsStore.openCreate('expense')"
+            >+ NEW EXPENSE</button>
+          </div>
         </div>
-        <div style="font-family:var(--font-data);font-size:13px;color:var(--color-on-surface-variant);max-width:400px;margin:0 auto 24px;">
-          Invoices and payments are live above. Earnings charts, transaction tracking and CSV export
-          are not wired yet, so no data is shown here.
-        </div>
-        <div style="font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);">
-          This page will be replaced when the finance module ships.
-        </div>
+        <EntryList @edit="onEdit" @void="onVoid" @delete="onDelete" />
+      </section>
+
+      <!-- Monthly / yearly summary (FIN-06) and profit / loss (FIN-07) panes. -->
+      <div class="finance-grid">
+        <section class="finance-cell" aria-labelledby="finance-summary-title">
+          <h2 id="finance-summary-title" class="section-lbl finance-cell-title">SUMMARY · FIN-06</h2>
+          <EntrySummary />
+        </section>
+        <section class="finance-cell" aria-labelledby="finance-pl-title">
+          <h2 id="finance-pl-title" class="section-lbl finance-cell-title">PROFIT &amp; LOSS · FIN-07</h2>
+          <EntryProfitLoss />
+        </section>
       </div>
 
-      <!-- Dev/Staging: labelled mock preview -->
-      <div v-else>
-        <div class="glass accent-bar-ready" style="margin:0 20px 14px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px dashed color-mix(in srgb, var(--color-primary) 40%, transparent);">
-          <span class="font-terminal tracking-terminal text-primary" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
-            ⚠ DEMO DATA — EARNINGS &amp; TRANSACTIONS NOT YET WIRED
-          </span>
-          <span class="font-terminal tracking-terminal text-primary quiet" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
-            This preview will not appear in production
-          </span>
-        </div>
-
-        <!-- Stats row -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;" class="stats-grid">
-          <div class="glass accent-bar-ready" style="padding:12px 14px;">
-            <div class="section-lbl" style="margin-bottom:4px;">EARNED — MAR</div>
-            <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-primary);letter-spacing:-.02em;text-shadow:0 0 30px rgba(150,248,255,.2);">{{ stats.mtd }}</div>
-          </div>
-          <div class="glass accent-bar-draft" style="padding:12px 14px;">
-            <div class="section-lbl" style="margin-bottom:4px;">PENDING</div>
-            <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-secondary);letter-spacing:-.02em;">{{ stats.pending }}</div>
-            <div class="spost-meta" style="margin-top:3px;">
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              PAYOUT {{ stats.nextPayout }}
-            </div>
-          </div>
-          <div class="glass" style="padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-              <div class="section-lbl">YTD TOTAL</div>
-              <TrendingUp style="width:12px;height:12px;color:var(--color-tertiary);opacity:.5;" />
-            </div>
-            <div style="font-family:var(--font-command);font-size:18px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;">{{ stats.ytd }}</div>
-          </div>
-        </div>
-
-        <!-- 2-col layout: chart + transactions -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" class="finance-grid">
-          <!-- Monthly earnings chart -->
-          <div>
-            <div class="section-lbl" style="margin-bottom:8px;">MONTHLY EARNINGS <span class="font-terminal tracking-terminal text-primary" style="font-size:7px;letter-spacing:.04em;text-transform:uppercase;">(MOCK)</span></div>
-            <div class="glass hud-card" style="padding:16px 14px;">
-              <div class="bar-chart" style="margin-bottom:8px;">
-                <div
-                  v-for="bar in barData"
-                  :key="bar.label"
-                  class="bar-col"
-                >
-                  <div
-                    class="bar"
-                    :style="{ height: bar.value + '%' }"
-                  />
-                  <div class="bar-lbl">{{ bar.label }}</div>
-                </div>
-              </div>
-              <div class="prog-track">
-                <div class="prog-fill" style="width:68%;" />
-              </div>
-              <div class="spost-meta" style="margin-top:5px;">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                68% OF MONTHLY TARGET
-              </div>
-            </div>
-          </div>
-
-          <!-- Recent transactions -->
-          <div>
-            <div class="section-lbl" style="margin-bottom:8px;">RECENT TRANSACTIONS <span class="font-terminal tracking-terminal text-primary" style="font-size:7px;letter-spacing:.04em;text-transform:uppercase;">(MOCK)</span></div>
-            <div class="glass" style="overflow:hidden;">
-              <div
-                v-for="tx in transactions"
-                :key="tx.id"
-                class="tx-row"
-                :class="tx.accentClass"
-              >
-                <div class="tx-info">
-                  <div class="tx-title">{{ tx.title }}</div>
-                  <div class="tx-meta">{{ tx.date }}</div>
-                </div>
-                <div
-                  class="tx-amount"
-                  :style="tx.type === 'income' ? 'color:var(--color-primary)' : 'color:var(--color-error)'"
-                >
-                  {{ tx.amount }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
+      <p class="finance-notice" role="note">
+        FIN-10 — No tax or VAT is computed anywhere on this page. Multi-currency totals are
+        grouped by code and never converted (FIN-09). Auto-generated income tied to a paid gig
+        (FIN-03) is read-only; void it instead of editing it.
+      </p>
     </div>
+
     <InvoiceWorkspace />
+    <EarningsWorkspace />
+
+    <!-- Void confirm — manual income/expense only. -->
+    <Teleport to="body">
+      <div
+        v-if="voidingEntry"
+        role="dialog"
+        aria-modal="true"
+        class="finance-confirm-overlay"
+        @click.self="voidingEntry = null"
+      >
+        <div class="glass finance-confirm">
+          <h3 class="finance-confirm-title">VOID THIS ENTRY?</h3>
+          <p class="finance-confirm-body">
+            Voiding keeps the row on the books but zeroes it out of totals. You can edit the
+            amount instead if you'd rather.
+          </p>
+          <div class="finance-confirm-actions">
+            <button type="button" class="btn-hud" @click="voidingEntry = null">CANCEL</button>
+            <button type="button" class="btn-hud btn-hud-violet" @click="confirmVoid">CONFIRM VOID</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+    <Teleport to="body">
+      <div
+        v-if="deletingEntry"
+        role="dialog"
+        aria-modal="true"
+        class="finance-confirm-overlay"
+        @click.self="deletingEntry = null"
+      >
+        <div class="glass finance-confirm">
+          <h3 class="finance-confirm-title">DELETE THIS ENTRY?</h3>
+          <p class="finance-confirm-body">This permanently removes the entry. Auto-generated entries cannot be deleted.</p>
+          <div class="finance-confirm-actions">
+            <button type="button" class="btn-hud" @click="deletingEntry = null">CANCEL</button>
+            <button type="button" class="btn-hud btn-hud-error" @click="confirmDelete">DELETE</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Reconciliation dialog — mounted once; opens for any pending gig. -->
+    <EntryReconciliationDialog
+      v-model:open="reconDialogOpen"
+      :gig-id="reconDialogGigId"
+      @resolved="onReconciliationResolved"
+      @dismissed="onReconciliationDismissed"
+    />
   </div>
 </template>
 
 <style scoped>
+.finance-page { gap: 12px; }
+.finance-section { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.finance-section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.finance-cta-group { display: inline-flex; gap: 6px; }
+.finance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.finance-cell { display: flex; flex-direction: column; gap: 6px; }
+.finance-cell-title { margin: 0; font-weight: 600; }
+.finance-notice { margin: 16px 0 0; padding: 10px 14px; font-family: var(--font-terminal); font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--color-tertiary); background: color-mix(in srgb, var(--color-tertiary) 8%, transparent); border-left: 3px solid var(--color-tertiary); }
+.finance-confirm-overlay { position: fixed; inset: 0; z-index: 250; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.85); }
+.finance-confirm { padding: 24px; max-width: 360px; text-align: center; background: var(--color-surface-container); display: flex; flex-direction: column; gap: 12px; }
+.finance-confirm-title { font-family: var(--font-command); font-size: 13px; font-weight: 700; margin: 0; letter-spacing: -.02em; text-transform: uppercase; }
+.finance-confirm-body { margin: 0; font-size: 12px; color: var(--color-on-surface-variant); }
+.finance-confirm-actions { display: flex; justify-content: center; gap: 8px; }
 .new-invoice-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 @media (max-width: 768px) {
-  .new-invoice-btn { min-height: 44px; height: 44px; }
-  .stats-grid  { grid-template-columns: 1fr !important; }
   .finance-grid { grid-template-columns: 1fr !important; }
+  .finance-section-head { flex-direction: column; align-items: stretch; }
+  .finance-cta-group { justify-content: flex-end; }
+  .finance-cta-group .btn-hud { min-height: 44px; }
 }
 </style>

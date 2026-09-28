@@ -22,6 +22,7 @@ type Mux struct {
 	agreementsTpl      http.Handler
 	agreementsInstance http.Handler
 	emails             http.Handler
+	entries            http.Handler
 }
 
 // NewMux composes the finance routes. Any handler may be nil — that
@@ -30,7 +31,7 @@ type Mux struct {
 func NewMux(
 	billing, invoices, payments, documents,
 	agreementsTpl, agreementsInstance,
-	emails http.Handler,
+	emails, entries http.Handler,
 ) *Mux {
 	return &Mux{
 		billing:            billing,
@@ -40,6 +41,7 @@ func NewMux(
 		agreementsTpl:      agreementsTpl,
 		agreementsInstance: agreementsInstance,
 		emails:             emails,
+		entries:            entries,
 	}
 }
 
@@ -85,6 +87,8 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case "emails":
 		m.dispatch(w, r, m.emails)
+	case "entries", "summary", "profit-loss", "reconciliations":
+		m.dispatch(w, r, m.entries)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "unknown finance resource: "+parts[0])
 	}

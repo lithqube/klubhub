@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+var _ func(http.Handler, http.Handler, http.Handler, http.Handler, http.Handler, http.Handler, http.Handler, http.Handler) *Mux = NewMux
+
 // TestMux_RewritesPath tests the route dispatcher that mounts all finance
 // handlers behind a single parent prefix stripper. PlunkSender is not used
 // here; this is a HTTP routing contract only.
@@ -27,6 +29,10 @@ func TestMux_RewritesPath(t *testing.T) {
 		{"/api/v1/finance/agreements/templates", "agreement"},
 		{"/api/v1/finance/agreements/instances", "agreement"},
 		{"/api/v1/finance/emails", "email"},
+		{"/api/v1/finance/entries", "entries"},
+		{"/api/v1/finance/summary", "entries"},
+		{"/api/v1/finance/profit-loss", "entries"},
+		{"/api/v1/finance/reconciliations", "entries"},
 	}
 
 	for _, tc := range cases {
@@ -40,6 +46,7 @@ func TestMux_RewritesPath(t *testing.T) {
 				echoHandler(&seenPath, "agreement-template"),
 				echoHandler(&seenPath, "agreement-instance"),
 				echoHandler(&seenPath, "email"),
+				echoHandler(&seenPath, "entries"),
 			)
 
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
@@ -76,6 +83,7 @@ func TestMux_DispatchesToOwningHandler(t *testing.T) {
 				echoHandler(&seen, "agreement-template"),
 				echoHandler(&seen, "agreement-instance"),
 				echoHandler(&seen, "email"),
+				echoHandler(&seen, "entries"),
 			)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
@@ -88,7 +96,7 @@ func TestMux_DispatchesToOwningHandler(t *testing.T) {
 
 // TestMux_NilHandlerReturns503 documents the partial-rollout behavior.
 func TestMux_NilHandlerReturns503(t *testing.T) {
-	mux := NewMux(nil, nil, nil, nil, nil, nil, nil)
+	mux := NewMux(nil, nil, nil, nil, nil, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/finance/invoices", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -106,7 +114,7 @@ func TestMux_NilHandlerReturns503(t *testing.T) {
 
 // TestMux_UnknownResourceReturns404 covers the negative dispatch paths.
 func TestMux_UnknownResourceReturns404(t *testing.T) {
-	mux := NewMux(nil, nil, nil, nil, nil, nil, nil)
+	mux := NewMux(nil, nil, nil, nil, nil, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/finance/this-does-not-exist", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)

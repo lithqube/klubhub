@@ -639,7 +639,7 @@ func TestIntegration_HTTPThroughChiMount(t *testing.T) {
 		NewHandler(NewService(NewRepository(testPool))),
 		NewInvoiceHandler(newTestInvoiceService()),
 		NewPaymentHandler(NewPaymentService(NewPaymentRepository(testPool))),
-		nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
 	)
 	router := chi.NewRouter()
 	router.Mount("/api/v1/finance", mux)
