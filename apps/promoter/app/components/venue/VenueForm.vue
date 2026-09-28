@@ -58,6 +58,13 @@ const errors = computed(() => {
 const show = (k: string) => (touched[k] || props.serverError?.field === k ? errors.value[k] : undefined)
 const pii = computed(() => looksLikeContact(f.techNotes))
 
+/** Common installed gear, for a one-tap start — tech_notes stays free text
+ * underneath for anything these don't cover (load-in, power, quirks). */
+const TECH_CHIPS = ['2× CDJ-3000', 'DJM-V10', 'DJM-A9', 'Turntables', 'Funktion-One', 'House PA']
+function insertTechChip(text: string) {
+  f.techNotes = f.techNotes.trim() ? `${f.techNotes.trim()}, ${text}` : text
+}
+
 function move(i: number, d: -1 | 1) {
   const j = i + d
   if (j < 0 || j >= f.rooms.length) return
@@ -155,6 +162,9 @@ const PROTECTED: { key: keyof VenueProtected, label: string, flag: 'address' | '
       </section>
 
       <section class="glass" style="padding:18px;" aria-labelledby="tech-h">
+        <div v-if="!readOnly" class="quick-chips" role="group" aria-label="Quick-insert equipment">
+          <button v-for="c in TECH_CHIPS" :key="c" type="button" class="chip-sm" @click="insertTechChip(c)">+ {{ c }}</button>
+        </div>
         <label>
           <span id="tech-h" class="section-lbl">TECH NOTES</span>
           <textarea id="vf-tech_notes" v-model="f.techNotes" class="hud-textarea" rows="4" maxlength="5000" placeholder="Decks, mixer, sound system, load-in" aria-describedby="tech-hint" />
@@ -205,3 +215,28 @@ const PROTECTED: { key: keyof VenueProtected, label: string, flag: 'address' | '
     </div>
   </form>
 </template>
+
+<style scoped>
+.quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.chip-sm {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  font-family: var(--font-terminal);
+  font-size: 11px;
+  letter-spacing: .05em;
+  color: var(--color-primary);
+  background: var(--color-surface-container);
+  border: 1px dashed var(--color-primary-dim);
+  cursor: pointer;
+}
+.chip-sm:hover {
+  border-color: var(--color-primary);
+}
+</style>
