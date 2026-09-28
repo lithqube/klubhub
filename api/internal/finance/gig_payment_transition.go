@@ -133,21 +133,34 @@ func (p *GigPaymentTransitionProcessor) ProcessGigPaymentTransition(ctx context.
 }
 
 func (p *GigPaymentTransitionProcessor) process(ctx context.Context, db gig.PaymentTransitionTx, before, after gig.PaymentSnapshot) (*gig.PaymentReconciliationMetadata, error) {
-	amountMinor, err := gigFeeToMinor(after.FeeAmount)
-	if err != nil {
-		return nil, err
-	}
-	currency := strings.ToUpper(after.FeeCurrency)
-	if !isCurrencyCode(currency) {
-		return nil, EntryValidationErrors{{Field: "fee_currency", Message: "must be an uppercase 3-letter code"}}
-	}
-
 	entry, err := getActiveGeneratedGigIncome(ctx, db, after.GigID)
 	if err != nil && !errors.Is(err, ErrEntryNotFound) {
 		return nil, err
 	}
 	becamePaid := before.PaymentStatus != gig.PaymentStatusPaid && after.PaymentStatus == gig.PaymentStatusPaid
 	leftPaid := before.PaymentStatus == gig.PaymentStatusPaid && after.PaymentStatus != gig.PaymentStatusPaid
+
+	// Nothing for this processor to do: no generated entry exists yet, and
+	// this write isn't the one that would create one. Most gig writes (a
+	// venue edit, a notes change, a zero-fee gig) take this path — don't
+	// validate a fee that isn't being turned into money.
+	if entry == nil && !becamePaid {
+		return nil, nil
+	}
+
+	currency := strings.ToUpper(after.FeeCurrency)
+	amountMinor, err := gigFeeToMinor(after.FeeAmount, currency)
+	if err != nil {
+		if entry == nil {
+			// A zero/invalid fee can't fund the first income row; nothing to
+			// reconcile against yet, so this isn't a failure of the write.
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !isCurrencyCode(currency) {
+		return nil, EntryValidationErrors{{Field: "fee_currency", Message: "must be an uppercase 3-letter code"}}
+	}
 
 	if becamePaid && (entry == nil || errors.Is(err, ErrEntryNotFound)) {
 		if _, err := createGeneratedGigIncome(ctx, db, after, amountMinor, currency); err != nil {
@@ -174,6 +187,13 @@ func (p *GigPaymentTransitionProcessor) process(ctx context.Context, db gig.Paym
 	case entry.SourceAmountMinor != nil && *entry.SourceAmountMinor != amountMinor:
 		reason = ReconciliationReasonFeeChanged
 	default:
+		if after.PaymentStatus != gig.PaymentStatusPaid {
+			// A payment_reversed decision may still be pending from an
+			// earlier save (the gig left "paid" on that write, this one
+			// doesn't touch fee/currency/status again) — leave it for the
+			// user instead of silently acknowledging it here.
+			return nil, nil
+		}
 		// Nothing changed about the snapshot the user was originally
 		// prompted for; just refresh the acknowledged state.
 		if err := resolvePendingAsAcknowledged(ctx, db, after.GigID); err != nil {
@@ -200,24 +220,61 @@ func (p *GigPaymentTransitionProcessor) process(ctx context.Context, db gig.Paym
 }
 
 // ErrGigFeeMinorUnitPrecision is returned when a gig fee carries more
-// than two decimal places, since finance stores money in integer minor
-// units.
-var ErrGigFeeMinorUnitPrecision = errors.New("gig fee must have at most two decimal places")
+// fractional digits than its currency's minor unit allows, since finance
+// stores money in integer minor units.
+var ErrGigFeeMinorUnitPrecision = errors.New("gig fee has more decimal places than its currency allows")
+
+// zeroDecimalCurrencies and threeDecimalCurrencies are ISO 4217 exceptions
+// to the usual 2-digit minor unit, mirroring what the frontend gets from
+// Intl.NumberFormat(...).resolvedOptions().maximumFractionDigits
+// (apps/dj/app/utils/money.ts currencyDigits) — a Go equivalent, since
+// there is no Intl here.
+var zeroDecimalCurrencies = map[string]bool{
+	"BIF": true, "CLP": true, "DJF": true, "GNF": true, "ISK": true, "JPY": true,
+	"KMF": true, "KRW": true, "PYG": true, "RWF": true, "UGX": true, "VND": true,
+	"VUV": true, "XAF": true, "XOF": true, "XPF": true,
+}
+
+var threeDecimalCurrencies = map[string]bool{
+	"BHD": true, "IQD": true, "JOD": true, "KWD": true, "LYD": true, "OMR": true, "TND": true,
+}
+
+// currencyMinorDigits returns how many fractional digits currency's minor
+// unit has (JPY 0, BHD 3, everything else 2 — the common case).
+func currencyMinorDigits(currency string) int {
+	switch {
+	case zeroDecimalCurrencies[currency]:
+		return 0
+	case threeDecimalCurrencies[currency]:
+		return 3
+	default:
+		return 2
+	}
+}
 
 // gigFeeToMinor converts a gig fee (decimal major units) into integer
-// minor units. The gig table stores DECIMAL(12,2); we accept up to two
-// fractional digits and reject anything finer so we never silently
-// truncate user money.
-func gigFeeToMinor(value decimal.Decimal) (int64, error) {
+// minor units, scaled by currency's own minor-unit exponent rather than
+// always by 100 — a flat ×100 overstates a JPY fee 100×. We accept up to
+// that many fractional digits and reject anything finer so we never
+// silently truncate user money.
+func gigFeeToMinor(value decimal.Decimal, currency string) (int64, error) {
 	if !value.IsPositive() {
 		return 0, ErrGigFeeMinorUnitPrecision
 	}
-	// shopspring/decimal exposes Exponent(); bail out on more than 2
-	// fractional digits.
-	if value.Exponent() < -2 {
+	digits := int32(currencyMinorDigits(currency))
+	scale := decimal.New(1, digits)
+	scaled := value.Mul(scale)
+	// The gig table stores fee_amount as DECIMAL(12,2), so a value read
+	// back from Postgres always carries exponent -2 (e.g. JPY 500 comes
+	// back as "500.00"), regardless of what the currency actually allows —
+	// checking Exponent() directly would reject every non-2-decimal
+	// currency read from the DB. Checking whether the *scaled* value is a
+	// whole number instead catches real over-precision (e.g. ¥500.50)
+	// without being fooled by DB zero-padding.
+	if !scaled.IsInteger() {
 		return 0, ErrGigFeeMinorUnitPrecision
 	}
-	return value.Mul(decimal.NewFromInt(100)).BigInt().Int64(), nil
+	return scaled.BigInt().Int64(), nil
 }
 
 // getActiveGeneratedGigIncome returns the single active auto-generated

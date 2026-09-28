@@ -1,4 +1,4 @@
 import * as ops from '../../../../shared/finance-mock/ops'
-import { db, send } from '../-mockDb'
+import { db, send } from './-mockDb'
 
 export default defineEventHandler((event) => send(event, ops.summaryEntries(db, getQuery(event))))

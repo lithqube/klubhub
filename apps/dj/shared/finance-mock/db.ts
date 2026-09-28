@@ -467,23 +467,25 @@ export class FinanceMockDb {
     const becamePaid = prev !== 'paid' && next === 'paid'
     const leftPaid = prev === 'paid' && next !== 'paid'
 
-    if (becamePaid) {
-      const existing = this.findActiveGigIncome(snap.gig_id)
-      const { created } = this.upsertGigIncome({
+    const entry = this.findActiveGigIncome(snap.gig_id)
+
+    // Mirrors the Go processor: only create the first income row here —
+    // once one exists, every later write (even one that also happens to
+    // flip the gig to paid, e.g. a "keep"-resolved reversal paid again)
+    // goes through the same reason-detection below instead of blindly
+    // inserting a second active row for the same gig.
+    if (becamePaid && !entry) {
+      this.upsertGigIncome({
         gigId: snap.gig_id,
         amount_minor: snap.amount_minor,
         currency: snap.currency,
         entry_date: snap.entry_date,
         description: snap.description,
       })
-      if (!created && existing) {
-        // snapshot matched; nothing to surface.
-      }
       this.acknowledgeReconciliations(snap.gig_id)
       return { metadata: null }
     }
 
-    const entry = this.findActiveGigIncome(snap.gig_id)
     if (!entry) return { metadata: null }
 
     let reason: ReconciliationReason | null = null
@@ -492,7 +494,11 @@ export class FinanceMockDb {
     else if (entry.source_amount_minor != null && entry.source_amount_minor !== snap.amount_minor) reason = 'fee_changed'
 
     if (!reason) {
-      this.acknowledgeReconciliations(snap.gig_id)
+      // A payment_reversed decision may still be pending from an earlier
+      // save (the gig left "paid" then, this write doesn't touch fee/
+      // currency/status again) — leave it for the user instead of
+      // silently acknowledging it while the gig is still unpaid.
+      if (next === 'paid') this.acknowledgeReconciliations(snap.gig_id)
       return { metadata: null }
     }
     const allowed: ReconciliationAction[] =

@@ -106,6 +106,21 @@ describe('finance-mock entry ops', () => {
     expect(body.data.USD?.income_minor).toBe(250_000)
   })
 
+  it('listEntries returns every active entry with no filter, and only matches with one', () => {
+    const db = freshDb()
+    db.addEntry({ kind: 'income', amount_minor: 100_000, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-15', description: 'eur gig' })
+    db.addEntry({ kind: 'income', amount_minor: 250_000, currency: 'USD', category: 'gig_fee', entry_date: '2026-09-16', description: 'us gig' })
+
+    const all = ops.listEntries(db, {})
+    expect(all.status).toBe(200)
+    expect((all.body as { data: unknown[] }).data).toHaveLength(2)
+
+    const filtered = ops.listEntries(db, { currency: 'USD' })
+    const rows = (filtered.body as { data: { currency: string }[] }).data
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.currency).toBe('USD')
+  })
+
   it('profitLossScope computes currency-grouped profit / loss', () => {
     const db = freshDb()
     db.addEntry({ kind: 'income', amount_minor: 100_000, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-15', description: '1' })

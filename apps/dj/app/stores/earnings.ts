@@ -271,25 +271,26 @@ export const useEarningsStore = defineStore('earnings', () => {
     }
   }
 
-  function rememberReconciliationMetadata(metadata: GigFinanceReconciliation | null | undefined): void {
+  /** Records metadata from a gig update's response, keyed by gigId (the
+   * caller knows which gig it just saved — the Go response itself only
+   * carries the reconciliation/entry ids, not the gig id). */
+  function rememberReconciliationMetadata(gigId: string, metadata: GigFinanceReconciliation | null | undefined): void {
     if (!metadata || !metadata.id) return
-    pendingReconciliationsByGig.value[metadata.id] = metadata  // canonical store by reconciliation id
-    // Also index by gig_id for the page-level surface.
-    // The Go response carries the gig_id only through `id`/`entry_id` —
-    // the caller resolves it (GigFormDialog knows the gig).
-    pendingReconciliationsByGig.value['_last'] = metadata
+    pendingReconciliationsByGig.value[gigId] = metadata
   }
 
-  /** Pull the metadata attached to the last gig update response, if any. */
-  function takeLastReconciliationMetadata(): GigFinanceReconciliation | null {
-    const last = pendingReconciliationsByGig.value['_last']
-    Reflect.deleteProperty(pendingReconciliationsByGig.value, "_last")
-    return last ?? null
+  /** Pulls the metadata remembered for gigId, if any, and forgets it —
+   * meant to be read once per prompt render, not on every re-render. */
+  function takeReconciliationMetadata(gigId: string): GigFinanceReconciliation | null {
+    const pending = pendingReconciliationsByGig.value[gigId]
+    Reflect.deleteProperty(pendingReconciliationsByGig.value, gigId)
+    return pending ?? null
   }
 
   async function resolveReconciliation(
     id: string,
     input: ResolveReconciliationInput,
+    gigId?: string,
   ): Promise<unknown> {
     try {
       const res = await request<unknown>(`${BASE}/reconciliations/${id}/resolve`, {
@@ -298,8 +299,9 @@ export const useEarningsStore = defineStore('earnings', () => {
       })
       const data = unwrap<unknown>(res)
       // Refresh both the in-memory reconciliation cache and entries list so
-      // every consumer reflects the resolution immediately.
-      Reflect.deleteProperty(pendingReconciliationsByGig.value, id)
+      // every consumer reflects the resolution immediately. The cache is
+      // keyed by gigId, not the reconciliation's own id.
+      if (gigId) Reflect.deleteProperty(pendingReconciliationsByGig.value, gigId)
       await fetchEntries(filterSnapshot.value)
       return data
     } catch (e) {
@@ -407,11 +409,11 @@ export const useEarningsStore = defineStore('earnings', () => {
     }
   }
 
-  /** Returns reconciliation metadata stored after the last gig update response. */
+  /** Returns reconciliation metadata for gigId: from the last gig update
+   * response if one is cached, else the durable GET (after a refresh). */
   function getPendingReconciliationForGig(gigId: string): unknown {
-    const last = pendingReconciliationsByGig.value['_last']
-    if (last && last.id) return last
-    // Fall back to the cached GET (after page refresh).
+    const pending = pendingReconciliationsByGig.value[gigId]
+    if (pending && pending.id) return pending
     return reconciliationByGig.value[gigId] ?? null
   }
 
@@ -433,7 +435,7 @@ export const useEarningsStore = defineStore('earnings', () => {
     // actions
     fetchEntries, fetchEntry, refreshSummary, refreshProfitLoss,
     fetchReconciliationForGig, resolveReconciliation, rememberReconciliationMetadata,
-    takeLastReconciliationMetadata, getPendingReconciliationForGig, clearReconciliationForGig,
+    takeReconciliationMetadata, getPendingReconciliationForGig, clearReconciliationForGig,
     createEntry, updateEntry, deleteEntry, voidEntry,
     setFilter, clearFilter, filterAsEntryFilter,
     openCreate, openEdit, setCreateOpen,

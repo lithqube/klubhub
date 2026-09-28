@@ -3,6 +3,7 @@ import { useGigStore } from '../../stores/gig'
 import { useTracklistStore } from '../../stores/tracklist'
 import { ref, computed, watch } from 'vue'
 import type { Gig, GigCreate, Venue, Contact, GigStatus, PaymentStatus } from '../../types/gig'
+import type { GigFinanceReconciliation } from '../../types/finance'
 import type { Tracklist as TracklistType } from '../../types/tracklist'
 import VenueAutocomplete from './VenueAutocomplete.vue'
 import ContactAutocomplete from './ContactAutocomplete.vue'
@@ -14,6 +15,7 @@ import EntryReconciliationDialog from '../finance/EntryReconciliationDialog.vue'
 
 const gigStore = useGigStore()
 const tracklistStore = useTracklistStore()
+const earningsStore = useEarningsStore()
 
 const props = defineProps<{
   open: boolean
@@ -175,8 +177,12 @@ const copyResults = ref<Gig[]>([])
 const showCancelConfirm = ref(false)
 const isSaving = ref(false)
 const saveError = ref<string | null>(null)
-// FIN-04 / FIN-05: gig id of a freshly raised finance reconciliation.
+// FIN-04 / FIN-05: gig id of a freshly raised finance reconciliation, and
+// the metadata to show for it. Both live at setup scope, not inside
+// doSave, so the template (which renders the dialog below) can read them —
+// a script-setup component only exposes top-level bindings to its template.
 const pendingReconciliationGigId = ref<string | null>(null)
+const pendingReconciliationMetadata = ref<GigFinanceReconciliation | null>(null)
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'DKK', 'SEK', 'NOK']
 const STATUS_OPTIONS: GigStatus[] = ['inquiry', 'confirmed', 'advanced', 'played', 'cancelled']
@@ -225,7 +231,7 @@ watch(() => props.open, (val) => {
 // Reset any pending finance reconciliation marker when the dialog opens;
 // a fresh save below will set it again if the API responds with one.
 watch(() => [props.open, props.gig?.id] as const, ([open]) => {
-  if (open) pendingReconciliationGigId.value = null
+  if (open) { pendingReconciliationGigId.value = null; pendingReconciliationMetadata.value = null }
 }, { immediate: true })
 
 watch(() => props.gig, () => {
@@ -285,7 +291,6 @@ async function doSave() {
     return
   }
 
-  const earningsStore = useEarningsStore()
   isSaving.value = true
   try {
     const gigData: GigCreate = {
@@ -327,14 +332,18 @@ async function doSave() {
     // finance page; the store also remembers the gig id so the prompt
     // survives a refresh via the durable GET.
     if (result.finance_reconciliation) {
-      earningsStore.rememberReconciliationMetadata(result.finance_reconciliation)
+      earningsStore.rememberReconciliationMetadata(result.id, result.finance_reconciliation)
+      pendingReconciliationMetadata.value = result.finance_reconciliation
       pendingReconciliationGigId.value = result.id
     } else if (isEdit.value && props.gig?.id) {
       // No fresh prompt: pull the durable GET so a prompt from a prior
       // save still surfaces when the user opens the gig again.
       await earningsStore.fetchReconciliationForGig(props.gig.id)
-      const fromGet = earningsStore.getPendingReconciliationForGig(props.gig.id) as { id?: string } | null
-      if (fromGet && fromGet.id) pendingReconciliationGigId.value = props.gig.id
+      const fromGet = earningsStore.getPendingReconciliationForGig(props.gig.id) as GigFinanceReconciliation | null
+      if (fromGet && fromGet.id) {
+        pendingReconciliationMetadata.value = fromGet
+        pendingReconciliationGigId.value = props.gig.id
+      }
     }
 
     emit('saved')
@@ -706,8 +715,9 @@ function close() {
          pending reconciliation exists for the gig being edited. -->
     <EntryReconciliationDialog
       v-if="pendingReconciliationGigId"
+      :open="true"
       :gig-id="pendingReconciliationGigId"
-      :metadata="earningsStore.takeLastReconciliationMetadata()"
+      :metadata="pendingReconciliationMetadata"
       @resolved="pendingReconciliationGigId = null"
       @dismissed="pendingReconciliationGigId = null"
     />

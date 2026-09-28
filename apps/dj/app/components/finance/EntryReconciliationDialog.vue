@@ -112,9 +112,10 @@ const rec = computed<ResolvedReconciliation | null>(() => {
 
 /**
  * Fetch the reconciliation row for `gigId` so `cfg` populates as soon as the
- * dialog is opened. The parent owns `open` via v-model:open and flips it
- * after the panel emits — we never auto-open here because that would
- * override the parent's explicit decision.
+ * dialog is opened. This never sets `open` itself: the parent decides when
+ * to show this dialog (it only mounts/passes `open` once there's actually
+ * something to reconcile, whether from a fresh gig-update response or a
+ * durable GET) and this component just loads the data for that decision.
  */
 const fetchAndOpen = async (): Promise<void> => {
   if (!props.gigId) return
@@ -122,7 +123,6 @@ const fetchAndOpen = async (): Promise<void> => {
 }
 
 watch(() => props.gigId, (id) => { if (id) void fetchAndOpen() }, { immediate: true })
-watch(() => props.metadata, (m) => { if (m && m.id) open.value = true }, { immediate: true })
 
 const cfg = computed(() => {
   const r = rec.value
@@ -155,7 +155,7 @@ async function resolve(action: ReconciliationAction): Promise<void> {
     const updated = await store.resolveReconciliation(r.id, {
       action,
       updated_at: r.updated_at,
-    } as never)
+    } as never, props.gigId ?? undefined)
     emit('resolved', updated as EntryReconciliation)
     open.value = false
     if (props.gigId) store.clearReconciliationForGig(props.gigId)

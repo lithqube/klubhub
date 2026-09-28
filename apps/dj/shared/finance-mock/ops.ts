@@ -427,9 +427,7 @@ function applyFilter(entries: StoredEntry[], f: EntryFilter): StoredEntry[] {
 export function listEntries(db: FinanceMockDb, q: Query): MockResult {
   const { filter, errors } = coerceFilter(q)
   if (errors.length) return badRequest(errors)
-  const rows = [...db.entries.values()]
-    .filter((e) => !e.deleted_at)
-    .filter((e) => !applyFilter([e], filter).length)
+  const rows = applyFilter([...db.entries.values()].filter((e) => !e.deleted_at), filter)
     .sort((a, b) => b.entry_date.localeCompare(a.entry_date))
     .slice(0, 200)
   return ok({ data: rows as Entry[] })

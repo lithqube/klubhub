@@ -78,17 +78,28 @@ function canDelete(e: Entry): boolean {
   return !e.auto_generated && e.status === 'active'
 }
 
+// setFilter only updates filter (what the controls show as selected);
+// filteredEntries reads filterSnapshot, which only fetchEntries advances —
+// so every control here must also refetch, or the chips/selects change
+// while the rows underneath stay on the old filter.
+function applyFilters(): void {
+  void store.fetchEntries(store.filterAsEntryFilter())
+}
 function setKind(k: '' | EntryKind): void {
   store.setFilter('kind', k as typeof filter.value.kind)
+  applyFilters()
 }
 function setStatus(s: '' | EntryStatus): void {
   store.setFilter('status', s as typeof filter.value.status)
+  applyFilters()
 }
 function setCurrency(c: string): void {
   store.setFilter('currency', c)
+  applyFilters()
 }
 function clearFilters(): void {
   store.clearFilter()
+  applyFilters()
 }
 </script>
 

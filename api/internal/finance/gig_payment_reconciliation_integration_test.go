@@ -240,6 +240,65 @@ func TestIntegration_ReconciliationUpdateKeepRefreshAndStaleConflict(t *testing.
 	}
 }
 
+func TestIntegration_ZeroFeeGigEditDoesNotFail(t *testing.T) {
+	resetGigPaymentReconciliationState(t)
+	processor := NewGigPaymentTransitionProcessor(testPool)
+	// A gig's fee_amount defaults to 0 (migration 005_gigs.sql); every
+	// other write to it (a notes edit here) must not run the fee/currency
+	// validation the paid-transition path needs — gigFeeToMinor rejects
+	// any non-positive amount, and there is no active entry yet to fund.
+	svc, created := createTransitionGig(t, processor, "0", "EUR")
+	notes := "Load-in at 22:00"
+	updated := updateTransitionGig(t, svc, created, func(u *gig.GigUpdate) { u.Notes = &notes })
+	if updated.Notes != notes {
+		t.Fatalf("notes edit should have saved, got %+v", updated)
+	}
+	if generatedIncomeCount(t, created.ID, false) != 0 {
+		t.Fatalf("a zero-fee, unpaid gig must not generate income")
+	}
+}
+
+func TestIntegration_UnrelatedEditDoesNotAcknowledgePendingReversal(t *testing.T) {
+	resetGigPaymentReconciliationState(t)
+	ctx := context.Background()
+	processor := NewGigPaymentTransitionProcessor(testPool)
+	svc, created := createTransitionGig(t, processor, "99.99", "GBP")
+	paid := gig.PaymentStatusPaid
+	paidGig := updateTransitionGig(t, svc, created, func(u *gig.GigUpdate) { u.PaymentStatus = &paid })
+	unpaid := gig.PaymentStatusUnpaid
+	reverted := updateTransitionGig(t, svc, paidGig, func(u *gig.GigUpdate) { u.PaymentStatus = &unpaid })
+	if reverted.FinanceReconciliation == nil || reverted.FinanceReconciliation.Reason != string(ReconciliationReasonPaymentReversed) {
+		t.Fatalf("reversal metadata = %+v", reverted.FinanceReconciliation)
+	}
+
+	// An unrelated edit while the gig is still unpaid (fee/currency
+	// unchanged, entry still active) must not silently acknowledge the
+	// still-pending payment_reversed decision — the user hasn't answered
+	// it yet.
+	notes := "Rebooked pending refund"
+	edited := updateTransitionGig(t, svc, reverted, func(u *gig.GigUpdate) { u.Notes = &notes })
+	if edited.FinanceReconciliation != nil {
+		t.Fatalf("an unrelated edit must not raise a new decision: %+v", edited.FinanceReconciliation)
+	}
+	decision, err := NewEntryService(NewEntryRepository(testPool)).GetPendingReconciliationByGig(ctx, created.ID)
+	if err != nil || decision.Reason != ReconciliationReasonPaymentReversed || decision.Status != ReconciliationStatusPending {
+		t.Fatalf("the payment_reversed decision must still be pending, got %+v err=%v", decision, err)
+	}
+}
+
+func TestIntegration_JPYFeeUsesZeroDecimalMinorUnits(t *testing.T) {
+	resetGigPaymentReconciliationState(t)
+	processor := NewGigPaymentTransitionProcessor(testPool)
+	// JPY has no minor unit: ¥50,000 is 50000 minor units, not 5,000,000.
+	svc, created := createTransitionGig(t, processor, "50000", "JPY")
+	paid := gig.PaymentStatusPaid
+	updateTransitionGig(t, svc, created, func(u *gig.GigUpdate) { u.PaymentStatus = &paid })
+	entry := activeGeneratedIncome(t, created.ID)
+	if entry.AmountMinor != 50000 || entry.Currency != "JPY" {
+		t.Fatalf("JPY entry = %+v, want amount_minor=50000", entry)
+	}
+}
+
 func TestIntegration_InvoicePaymentSyncUsesSameTransitionProcessorWithoutDuplicates(t *testing.T) {
 	resetGigPaymentReconciliationState(t)
 	t.Cleanup(func() {
