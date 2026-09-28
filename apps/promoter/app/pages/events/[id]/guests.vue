@@ -118,9 +118,9 @@ function openPanel(p: 'add' | 'bulk' | 'list' | 'import') {
   <div v-if="current" class="space-y-3">
     <EventPrivacyBanner :event="current" :consequence="PURGED_CONSEQUENCE" consequence-id="purged-consequence" @purged="onPurged" />
     <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">
-      <p class="data-frag" style="font-size:11px;margin:0;" aria-label="Guest summary">
-        GOING {{ counts.going }} · {{ counts.going_heads }} HEADS<template v-if="current.capacity"> OF {{ current.capacity }} CAP.</template>
-        · TICKETS {{ counts.tickets }} · PENDING {{ counts.pending }} · LISTS {{ lists.length }}
+      <p class="summary-line" aria-label="Guest summary">
+        GOING <span class="metric">{{ counts.going }}</span> · <span class="metric">{{ counts.going_heads }}</span> HEADS<template v-if="current.capacity"> OF <span class="metric">{{ current.capacity }}</span> CAP.</template>
+        · TICKETS <span class="metric">{{ counts.tickets }}</span> · PENDING <span class="metric">{{ counts.pending }}</span> · LISTS <span class="metric">{{ lists.length }}</span>
       </p>
       <div style="display:flex;flex-wrap:wrap;gap:6px;">
         <template v-if="!purged">
@@ -178,6 +178,20 @@ function openPanel(p: 'add' | 'bulk' | 'list' | 'import') {
 </template>
 
 <style scoped>
+.summary-line {
+  margin: 0;
+  font-family: var(--font-terminal);
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--color-tertiary);
+}
+.summary-line .metric {
+  font-family: var(--font-command);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  font-variant-numeric: tabular-nums;
+}
 .notice {
   padding: 10px 14px;
   border-left: 3px solid var(--color-primary);
