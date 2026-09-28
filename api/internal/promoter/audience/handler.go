@@ -3,6 +3,8 @@ package audience
 import (
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"time"
 
@@ -121,11 +123,20 @@ func clientConsent(r *http.Request, in *ConsentInput) {
 	}
 }
 
+// clientIP returns the connection's own remote address, never a
+// caller-supplied header: an authenticated audience.write caller could
+// otherwise put an arbitrary X-Forwarded-For value into a consent record.
+// There is no trusted-proxy layer in front of this service today; add one
+// here (and only trust it for known proxy hops) if that changes.
 func clientIP(r *http.Request) string {
-	if h := r.Header.Get("X-Forwarded-For"); h != "" {
-		return h
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
 	}
-	return r.RemoteAddr
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.String()
+	}
+	return ""
 }
 
 func (h *Handler) createContact(w http.ResponseWriter, r *http.Request) {
@@ -188,16 +199,31 @@ func (h *Handler) importCSV(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, res, err)
 }
 
+// trackingWriter notices whether anything has reached the client yet, so
+// exportCSV can still answer with a proper error status if the export
+// fails before the first CSV byte is written (after that, the 200 status
+// is already committed and there is nothing more to do on a write error).
+type trackingWriter struct {
+	w     io.Writer
+	wrote bool
+}
+
+func (t *trackingWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		t.wrote = true
+	}
+	return t.w.Write(p)
+}
+
 func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	page, err := h.svc.ListContacts(r.Context(), ContactFilter{Status: q.Get("status"), Source: q.Get("source")})
-	if err != nil {
-		fail(w, err)
-		return
-	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="audience.csv"`)
-	_ = WriteCSV(w, page.Contacts) // header already sent; nothing more to do on a write error
+	tw := &trackingWriter{w: w}
+	filter := ContactFilter{Status: q.Get("status"), Source: q.Get("source")}
+	if err := h.svc.ExportContacts(r.Context(), filter, tw); err != nil && !tw.wrote {
+		fail(w, err)
+	}
 }
 
 // -------------------------------------------------------------- segments --

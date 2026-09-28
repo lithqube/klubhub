@@ -13,6 +13,7 @@ package audience
 
 import (
 	"fmt"
+	"net"
 	"net/mail"
 	"regexp"
 	"slices"
@@ -85,6 +86,8 @@ func (c *ConsentInput) validate() error {
 		return invalid("consent.basis", strings.Join(bases, ", "))
 	case c.RecordedAt.IsZero():
 		return invalid("consent.recorded_at", "required")
+	case c.IP != "" && net.ParseIP(c.IP) == nil:
+		return invalid("consent.ip", "not an IP address")
 	case len(c.FormText) > maxFormTextLen:
 		return invalid("consent.form_text", fmt.Sprintf("at most %d characters", maxFormTextLen))
 	}

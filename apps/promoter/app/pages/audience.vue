@@ -79,15 +79,45 @@ const importFormText = ref('')
 const importSaving = ref(false)
 const importNotice = ref('')
 
+/**
+ * Splits one RFC 4180 CSV line into cells: a quoted cell may contain
+ * commas and `""`-escaped quotes (e.g. `"Voss, Nadia"`), which a plain
+ * `line.split(',')` would shift into the wrong columns.
+ */
+function splitCsvLine(line: string): string[] {
+  const cells: string[] = []
+  let cell = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!
+    if (quoted) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cell += '"'; i++ } else { quoted = false }
+      } else {
+        cell += ch
+      }
+    } else if (ch === '"') {
+      quoted = true
+    } else if (ch === ',') {
+      cells.push(cell.trim())
+      cell = ''
+    } else {
+      cell += ch
+    }
+  }
+  cells.push(cell.trim())
+  return cells
+}
+
 function parseCsv(text: string): { name?: string, email?: string, phone?: string }[] {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
   if (!lines.length) return []
-  const header = lines[0]!.split(',').map(h => h.trim().toLowerCase())
+  const header = splitCsvLine(lines[0]!).map(h => h.toLowerCase())
   const nameIdx = header.indexOf('name')
   const emailIdx = header.indexOf('email')
   const phoneIdx = header.indexOf('phone')
   return lines.slice(1).map((line) => {
-    const cells = line.split(',').map(c => c.trim())
+    const cells = splitCsvLine(line)
     return { name: nameIdx >= 0 ? cells[nameIdx] : undefined, email: emailIdx >= 0 ? cells[emailIdx] : undefined, phone: phoneIdx >= 0 ? cells[phoneIdx] : undefined }
   })
 }

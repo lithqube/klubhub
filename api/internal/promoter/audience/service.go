@@ -2,7 +2,9 @@ package audience
 
 import (
 	"context"
+	"encoding/csv"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -165,12 +167,15 @@ func (s *Service) CreateContact(ctx context.Context, in ContactInput) (*Contact,
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO audience_contacts
+		var createdAt, updatedAt time.Time
+		err = tx.QueryRow(ctx, `INSERT INTO audience_contacts
 			(id, tenant_id, name_enc, email_enc, phone_enc, name_bidx, email_bidx, status, source,
 			 consent_basis, consent_recorded_at, consent_ip_enc, consent_form_text, double_opt_in_confirmed_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			RETURNING created_at, updated_at`,
 			id, tenant, nameEnc, emailEnc, phoneEnc, nameIndex(dek, in.Name), emailIndex(dek, in.Email),
-			in.Status, in.Source, in.Consent.Basis, in.Consent.RecordedAt, ipEnc, in.Consent.FormText, in.Consent.DoubleOptInAt)
+			in.Status, in.Source, in.Consent.Basis, in.Consent.RecordedAt, ipEnc, in.Consent.FormText, in.Consent.DoubleOptInAt,
+		).Scan(&createdAt, &updatedAt)
 		if err != nil {
 			if isUniqueViolation(err) {
 				return ErrDuplicate
@@ -186,6 +191,7 @@ func (s *Service) CreateContact(ctx context.Context, in ContactInput) (*Contact,
 			ConsentBasis: in.Consent.Basis, ConsentRecordedAt: in.Consent.RecordedAt,
 			ConsentIP: in.Consent.IP, ConsentFormText: in.Consent.FormText,
 			DoubleOptInConfirmedAt: in.Consent.DoubleOptInAt,
+			CreatedAt:              createdAt, UpdatedAt: updatedAt,
 		}
 		return nil
 	})
@@ -230,25 +236,11 @@ func (s *Service) ListContacts(ctx context.Context, filter ContactFilter) (*Page
 			return err
 		}
 
-		query := `SELECT ` + contactCols + ` FROM audience_contacts WHERE tenant_id = $1`
-		args := []any{tenant}
-		if filter.Status != "" {
-			args = append(args, filter.Status)
-			query += ` AND status = $` + strconv.Itoa(len(args))
+		where, args, err := s.contactWhere(ctx, tx, tenant, filter)
+		if err != nil {
+			return err
 		}
-		if filter.Source != "" {
-			args = append(args, filter.Source)
-			query += ` AND source = $` + strconv.Itoa(len(args))
-		}
-		if filter.Q != "" {
-			dek, err := s.keys.Current(ctx, tx, tenant)
-			if err != nil {
-				return err
-			}
-			args = append(args, emailIndex(dek, filter.Q), nameIndex(dek, filter.Q))
-			query += ` AND (email_bidx = $` + strconv.Itoa(len(args)-1) + ` OR name_bidx = $` + strconv.Itoa(len(args)) + `)`
-		}
-		query += ` ORDER BY created_at DESC LIMIT 5000`
+		query := `SELECT ` + contactCols + ` FROM audience_contacts ` + where + ` ORDER BY created_at DESC LIMIT 5000`
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return err
@@ -271,6 +263,74 @@ func (s *Service) ListContacts(ctx context.Context, filter ContactFilter) (*Page
 		return nil, err
 	}
 	return &page, nil
+}
+
+// contactWhere builds the WHERE clause and args shared by ListContacts and
+// ExportContacts, so the two never drift on which filters they honour.
+func (s *Service) contactWhere(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, filter ContactFilter) (string, []any, error) {
+	where := `WHERE tenant_id = $1`
+	args := []any{tenant}
+	if filter.Status != "" {
+		args = append(args, filter.Status)
+		where += ` AND status = $` + strconv.Itoa(len(args))
+	}
+	if filter.Source != "" {
+		args = append(args, filter.Source)
+		where += ` AND source = $` + strconv.Itoa(len(args))
+	}
+	if filter.Q != "" {
+		dek, err := s.keys.Current(ctx, tx, tenant)
+		if err != nil {
+			return "", nil, err
+		}
+		args = append(args, emailIndex(dek, filter.Q), nameIndex(dek, filter.Q))
+		where += ` AND (email_bidx = $` + strconv.Itoa(len(args)-1) + ` OR name_bidx = $` + strconv.Itoa(len(args)) + `)`
+	}
+	return where, args, nil
+}
+
+// ExportContacts streams every contact matching filter as CSV directly to
+// w. Unlike ListContacts (capped at 5000 rows for the table view),
+// this has no limit: an org can hold up to MaxPerOrg (100000) contacts,
+// and an export that silently dropped the tail would be worse than a slow
+// one. Rows are written one at a time rather than collected into a slice
+// first.
+func (s *Service) ExportContacts(ctx context.Context, filter ContactFilter, w io.Writer) error {
+	return s.db.WithTenant(ctx, tenantOf(ctx), func(tx pgx.Tx) error {
+		tenant := tenantOf(ctx)
+		where, args, err := s.contactWhere(ctx, tx, tenant, filter)
+		if err != nil {
+			return err
+		}
+		query := `SELECT ` + contactCols + ` FROM audience_contacts ` + where + ` ORDER BY created_at DESC`
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		cw := csv.NewWriter(w)
+		if err := cw.Write(ExportHeader); err != nil {
+			return err
+		}
+		for rows.Next() {
+			r, err := scanRow(rows)
+			if err != nil {
+				return err
+			}
+			c, err := s.decrypt(ctx, tx, r)
+			if err != nil {
+				return err
+			}
+			if err := cw.Write(contactCSVRow(c)); err != nil {
+				return err
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		cw.Flush()
+		return cw.Error()
+	})
 }
 
 // UpdateContact replaces a contact's identity fields. It does not touch the
@@ -300,10 +360,11 @@ func (s *Service) UpdateContact(ctx context.Context, id uuid.UUID, in ContactInp
 		if err != nil {
 			return err
 		}
-		tag, err := tx.Exec(ctx, `UPDATE audience_contacts SET
+		rows, err := tx.Query(ctx, `UPDATE audience_contacts SET
 			name_enc = $3, email_enc = $4, phone_enc = $5, name_bidx = $6, email_bidx = $7,
 			source = $8, updated_at = now()
-			WHERE id = $1 AND tenant_id = $2`,
+			WHERE id = $1 AND tenant_id = $2
+			RETURNING `+contactCols,
 			id, tenant, nameEnc, emailEnc, phoneEnc, nameIndex(dek, in.Name), emailIndex(dek, in.Email), in.Source)
 		if err != nil {
 			if isUniqueViolation(err) {
@@ -311,11 +372,20 @@ func (s *Service) UpdateContact(ctx context.Context, id uuid.UUID, in ContactInp
 			}
 			return err
 		}
-		if tag.RowsAffected() == 0 {
+		defer rows.Close()
+		if !rows.Next() {
 			return ErrNotFound
 		}
-		out = Contact{ID: id, Name: in.Name, Email: in.Email, Phone: in.Phone, Source: in.Source}
-		return nil
+		// Status, consent and timestamps are untouched by this UPDATE but
+		// still returned here (not just the identity columns just written):
+		// the store merges this response over its cached copy, and a
+		// partial Contact would blank those fields out client-side.
+		r, err := scanRow(rows)
+		if err != nil {
+			return err
+		}
+		out, err = s.decrypt(ctx, tx, r)
+		return err
 	})
 	if err != nil {
 		return nil, err

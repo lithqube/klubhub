@@ -21,6 +21,10 @@ export const useAudienceStore = defineStore('audience', () => {
   const segments = ref<Segment[]>([])
   const loading = ref(false)
   const error = ref<ReturnType<typeof toApiError> | null>(null)
+  // Remembered so a reload after setStatus/importCSV can reapply whatever
+  // status/source/search the page had selected, instead of silently
+  // showing everyone while the filter controls still say otherwise.
+  let lastFilter: Filter = {}
 
   async function call<T>(fn: () => Promise<T>): Promise<T> {
     try {
@@ -39,8 +43,10 @@ export const useAudienceStore = defineStore('audience', () => {
     return s ? `?${s}` : ''
   }
 
-  /** Loads contacts matching filter and every saved segment. */
-  async function load(filter: Filter = {}): Promise<void> {
+  /** Loads contacts matching filter and every saved segment. Omitting
+   * filter reapplies whatever was last requested (see lastFilter). */
+  async function load(filter: Filter = lastFilter): Promise<void> {
+    lastFilter = filter
     loading.value = true
     error.value = null
     try {
@@ -87,7 +93,16 @@ export const useAudienceStore = defineStore('audience', () => {
 
   async function deleteContact(id: string): Promise<void> {
     await call(() => apiFetch(`/api/v1/audience/contacts/${id}`, { method: 'DELETE' }))
+    const removed = contacts.value.find(c => c.id === id)
     contacts.value = contacts.value.filter(c => c.id !== id)
+    if (!removed) return
+    counts.value.all -= 1
+    switch (removed.status) {
+      case 'active': counts.value.active -= 1; break
+      case 'unsubscribed': counts.value.unsubscribed -= 1; break
+      case 'bounced': counts.value.bounced -= 1; break
+      case 'complained': counts.value.complained -= 1; break
+    }
   }
 
   async function importCSV(rows: ImportRow[], consent: ContactInput['consent']): Promise<ImportResult> {
