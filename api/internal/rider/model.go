@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/klubhub/dj/api/internal/gig"
 )
 
 // Sentinel errors returned by the rider package.
@@ -25,6 +26,16 @@ var (
 	// otherwise invalid (e.g. blank template name).
 	ErrInvalidInput = errors.New("invalid rider input")
 )
+
+// GigReader is the subset of gig.GigReader the rider service uses to
+// resolve a gig's venue and date for PDF rendering. Declared in this
+// package (rather than depending on gig.GigReader in the service struct)
+// so the service struct's public interface stays minimal — only GetGig
+// is required today. Production wiring injects *gig.Service via
+// SetGigReader at boot.
+type GigReader interface {
+	GetGig(ctx context.Context, id uuid.UUID) (*gig.Gig, error)
+}
 
 // RiderTemplate is a reusable four-section rider owned by the user. Soft-
 // deleted templates remain in the table for forensics but are filtered from

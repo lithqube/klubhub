@@ -1,0 +1,453 @@
+package rider_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/klubhub/dj/api/internal/rider"
+)
+
+// ─── Mock service ───────────────────────────────────────────────────────────
+
+type mockService struct {
+	templates    []*rider.RiderTemplate
+	attachments  []*rider.RiderAttachment
+	pdfResult    *rider.ExportResult
+	pdfErr       error
+
+	// Error injection per method.
+	listTplErr       error
+	getTplErr        error
+	createTplErr     error
+	updateTplErr     error
+	deleteTplErr     error
+	getAttByGigErr   error
+	getAttErr        error
+	createAttErr     error
+	updateAttErr     error
+	deleteAttErr     error
+}
+
+func (m *mockService) ListTemplates(_ context.Context) ([]*rider.RiderTemplate, error) {
+	return m.templates, m.listTplErr
+}
+
+func (m *mockService) GetTemplate(_ context.Context, id uuid.UUID) (*rider.RiderTemplate, error) {
+	if m.getTplErr != nil {
+		return nil, m.getTplErr
+	}
+	for _, t := range m.templates {
+		if t.ID == id {
+			return t, nil
+		}
+	}
+	return nil, rider.ErrNotFound
+}
+
+func (m *mockService) CreateTemplate(_ context.Context, in rider.CreateTemplateInput) (*rider.RiderTemplate, error) {
+	if m.createTplErr != nil {
+		return nil, m.createTplErr
+	}
+	now := time.Now()
+	t := &rider.RiderTemplate{
+		ID: uuid.New(), Name: in.Name,
+		Technical: in.Technical, Hospitality: in.Hospitality,
+		Backline: in.Backline, OtherNotes: in.OtherNotes,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	m.templates = append(m.templates, t)
+	return t, nil
+}
+
+func (m *mockService) UpdateTemplate(_ context.Context, id uuid.UUID, in rider.UpdateTemplateInput) (*rider.RiderTemplate, error) {
+	if m.updateTplErr != nil {
+		return nil, m.updateTplErr
+	}
+	for _, t := range m.templates {
+		if t.ID == id {
+			if in.Name != nil {
+				t.Name = *in.Name
+			}
+			if in.RiderSectionValues != nil {
+				t.Technical = in.Technical
+				t.Hospitality = in.Hospitality
+				t.Backline = in.Backline
+				t.OtherNotes = in.OtherNotes
+			}
+			t.UpdatedAt = time.Now()
+			return t, nil
+		}
+	}
+	return nil, rider.ErrNotFound
+}
+
+func (m *mockService) DeleteTemplate(_ context.Context, id uuid.UUID) error {
+	if m.deleteTplErr != nil {
+		return m.deleteTplErr
+	}
+	for i, t := range m.templates {
+		if t.ID == id {
+			m.templates = append(m.templates[:i], m.templates[i+1:]...)
+			return nil
+		}
+	}
+	return rider.ErrNotFound
+}
+
+func (m *mockService) GetAttachmentByGig(_ context.Context, gigID uuid.UUID) (*rider.RiderAttachment, error) {
+	if m.getAttByGigErr != nil {
+		return nil, m.getAttByGigErr
+	}
+	for _, a := range m.attachments {
+		if a.GigID == gigID {
+			return a, nil
+		}
+	}
+	return nil, rider.ErrNotFound
+}
+
+func (m *mockService) GetAttachment(_ context.Context, id uuid.UUID) (*rider.RiderAttachment, error) {
+	if m.getAttErr != nil {
+		return nil, m.getAttErr
+	}
+	for _, a := range m.attachments {
+		if a.ID == id {
+			return a, nil
+		}
+	}
+	return nil, rider.ErrNotFound
+}
+
+func (m *mockService) CreateAttachment(_ context.Context, in rider.CreateAttachmentInput) (*rider.RiderAttachment, error) {
+	if m.createAttErr != nil {
+		return nil, m.createAttErr
+	}
+	if in.GigID == uuid.Nil {
+		return nil, rider.ErrInvalidInput
+	}
+	now := time.Now()
+	a := &rider.RiderAttachment{
+		ID: uuid.New(), GigID: in.GigID, TemplateID: in.TemplateID,
+		Technical: in.Technical, Hospitality: in.Hospitality,
+		Backline: in.Backline, OtherNotes: in.OtherNotes,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	m.attachments = append(m.attachments, a)
+	return a, nil
+}
+
+func (m *mockService) UpdateAttachment(_ context.Context, id uuid.UUID, in rider.UpdateAttachmentInput) (*rider.RiderAttachment, error) {
+	if m.updateAttErr != nil {
+		return nil, m.updateAttErr
+	}
+	for _, a := range m.attachments {
+		if a.ID == id {
+			if in.RiderSectionValues != nil {
+				a.Technical = in.Technical
+				a.Hospitality = in.Hospitality
+				a.Backline = in.Backline
+				a.OtherNotes = in.OtherNotes
+			}
+			a.UpdatedAt = time.Now()
+			return a, nil
+		}
+	}
+	return nil, rider.ErrNotFound
+}
+
+func (m *mockService) DeleteAttachment(_ context.Context, id uuid.UUID) error {
+	if m.deleteAttErr != nil {
+		return m.deleteAttErr
+	}
+	for i, a := range m.attachments {
+		if a.ID == id {
+			m.attachments = append(m.attachments[:i], m.attachments[i+1:]...)
+			return nil
+		}
+	}
+	return rider.ErrNotFound
+}
+
+func (m *mockService) GeneratePDF(_ context.Context, attachmentID uuid.UUID) (*rider.ExportResult, error) {
+	if m.pdfErr != nil {
+		return nil, m.pdfErr
+	}
+	if m.pdfResult != nil {
+		return m.pdfResult, nil
+	}
+	return &rider.ExportResult{
+		ID:          attachmentID,
+		DownloadURL: "https://garage.example/dl/" + attachmentID.String() + ".pdf",
+		CreatedAt:   time.Now(),
+	}, nil
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+func newHandlerRoutes(svc *mockService) http.Handler {
+	h := rider.NewHandler(svc, nil) // nil gig reader → placeholder venue/date in PDFs
+	return h.Routes()
+}
+
+func doRequest(t *testing.T, h http.Handler, method, path string, body interface{}) (*httptest.ResponseRecorder, []byte) {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		require.NoError(t, json.NewEncoder(&buf).Encode(body))
+	}
+	req := httptest.NewRequest(method, path, &buf)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec, rec.Body.Bytes()
+}
+
+// ─── Template handler tests ────────────────────────────────────────────────
+
+func TestHandler_ListTemplates_EmptyReturnsEmptyArray(t *testing.T) {
+	svc := &mockService{}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates", nil)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, string(body), `"data":[]`)
+}
+
+func TestHandler_CreateTemplate_ValidReturns201(t *testing.T) {
+	svc := &mockService{}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/templates", map[string]string{
+		"name": "Standard club", "technical": "2× CDJ", "hospitality": "water",
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &resp))
+	assert.Equal(t, "Standard club", resp.Data["name"])
+	assert.NotEmpty(t, resp.Data["id"])
+}
+
+func TestHandler_CreateTemplate_EmptyNameReturns422(t *testing.T) {
+	svc := &mockService{createTplErr: rider.ErrInvalidInput}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/templates", map[string]string{"name": ""})
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}
+
+func TestHandler_GetTemplate_ExistingReturns200(t *testing.T) {
+	id := uuid.New()
+	svc := &mockService{templates: []*rider.RiderTemplate{{ID: id, Name: "Test"}}}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates/"+id.String(), nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, string(body), `"Test"`)
+}
+
+func TestHandler_GetTemplate_MissingReturns404(t *testing.T) {
+	svc := &mockService{}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates/"+uuid.New().String(), nil)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestHandler_GetTemplate_InvalidUUIDReturns400(t *testing.T) {
+	svc := &mockService{}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates/not-a-uuid", nil)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_UpdateTemplate_PartialOnlyUpdatesNamedFields(t *testing.T) {
+	id := uuid.New()
+	svc := &mockService{templates: []*rider.RiderTemplate{{
+		ID: id, Name: "Original",
+		Technical: "tech-A", Hospitality: "hosp-A", Backline: "back-A", OtherNotes: "other-A",
+	}}}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(), map[string]interface{}{
+		"name":        "Renamed",
+		"technical":   "tech-B",
+		"hospitality": "hosp-A",
+		"backline":    "back-A",
+		"otherNotes":  "other-A",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &resp))
+	assert.Equal(t, "Renamed", resp.Data["name"])
+	assert.Equal(t, "tech-B", resp.Data["technical"])
+	assert.Equal(t, "hosp-A", resp.Data["hospitality"])
+}
+
+func TestHandler_DeleteTemplate_Returns204(t *testing.T) {
+	id := uuid.New()
+	svc := &mockService{templates: []*rider.RiderTemplate{{ID: id, Name: "X"}}}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodDelete, "/templates/"+id.String(), nil)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Empty(t, svc.templates)
+}
+
+func TestHandler_DeleteTemplate_MissingReturns404(t *testing.T) {
+	svc := &mockService{}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodDelete, "/templates/"+uuid.New().String(), nil)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// ─── Attachment handler tests ──────────────────────────────────────────────
+
+func TestHandler_CreateAttachment_WithTemplateID(t *testing.T) {
+	svc := &mockService{}
+	tplID := uuid.New()
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/attachments", map[string]interface{}{
+		"gigId":      uuid.New().String(),
+		"templateId": tplID.String(),
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &resp))
+	assert.Equal(t, tplID.String(), resp.Data["templateId"])
+}
+
+func TestHandler_CreateAttachment_WithoutTemplateID_NullInResponse(t *testing.T) {
+	svc := &mockService{}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/attachments", map[string]string{
+		"gigId": uuid.New().String(),
+	})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &resp))
+	assert.Nil(t, resp.Data["templateId"])
+}
+
+func TestHandler_CreateAttachment_InvalidGigIDReturns400(t *testing.T) {
+	svc := &mockService{}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/attachments", map[string]string{
+		"gigId": "not-a-uuid",
+	})
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_CreateAttachment_DuplicateGigReturns409(t *testing.T) {
+	svc := &mockService{createAttErr: rider.ErrConflict}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/attachments", map[string]string{
+		"gigId": uuid.New().String(),
+	})
+	assert.Equal(t, http.StatusConflict, rec.Code)
+}
+
+func TestHandler_GetAttachmentByGig_Returns200(t *testing.T) {
+	gigID := uuid.New()
+	attID := uuid.New()
+	svc := &mockService{attachments: []*rider.RiderAttachment{{
+		ID: attID, GigID: gigID, Technical: "tech",
+	}}}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/attachments/by-gig/"+gigID.String(), nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, string(body), `"tech"`)
+}
+
+func TestHandler_GetAttachmentByGig_MissingReturns200WithNull(t *testing.T) {
+	svc := &mockService{}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/attachments/by-gig/"+uuid.New().String(), nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, string(body), `"data":null`)
+}
+
+func TestHandler_DeleteAttachment_Returns204(t *testing.T) {
+	id := uuid.New()
+	svc := &mockService{attachments: []*rider.RiderAttachment{{ID: id}}}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodDelete, "/attachments/"+id.String(), nil)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+// ─── PDF endpoint ──────────────────────────────────────────────────────────
+
+func TestHandler_GeneratePDF_Returns201WithDownloadURL(t *testing.T) {
+	id := uuid.New()
+	svc := &mockService{pdfResult: &rider.ExportResult{
+		ID: id, DownloadURL: "https://garage/dl", CreatedAt: time.Now(),
+	}}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/attachments/"+id.String()+"/pdf", nil)
+	require.Equal(t, http.StatusCreated, rec.Code)
+	assert.Contains(t, string(body), `"downloadUrl"`)
+	assert.Contains(t, string(body), `"https://garage/dl"`)
+}
+
+func TestHandler_GeneratePDF_MissingAttachmentReturns404(t *testing.T) {
+	svc := &mockService{pdfErr: rider.ErrNotFound}
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/attachments/"+uuid.New().String()+"/pdf", nil)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// ─── Envelope shape tests ──────────────────────────────────────────────────
+
+// TestContract_ListUsesDataArrayEnvelope asserts the wire-format shape
+// (Pitfall H from go-backend-testing): list responses wrap the slice in
+// {"data": [...]}; single-object responses use {"data": {...}}; error
+// responses use {"error": "..."}.
+func TestContract_ListUsesDataArrayEnvelope(t *testing.T) {
+	svc := &mockService{templates: []*rider.RiderTemplate{{ID: uuid.New(), Name: "A"}}}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates", nil)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var env struct {
+		Data []map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &env))
+	require.Len(t, env.Data, 1)
+	assert.Equal(t, "A", env.Data[0]["name"])
+}
+
+func TestContract_SingleObjectUsesDataObjectEnvelope(t *testing.T) {
+	id := uuid.New()
+	svc := &mockService{templates: []*rider.RiderTemplate{{ID: id, Name: "Solo"}}}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates/"+id.String(), nil)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var env struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &env))
+	assert.Equal(t, "Solo", env.Data["name"])
+	assert.Equal(t, id.String(), env.Data["id"])
+}
+
+func TestContract_ErrorEnvelopeShape(t *testing.T) {
+	svc := &mockService{}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates/"+uuid.New().String(), nil)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	var env struct {
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(body, &env))
+	assert.NotEmpty(t, env.Error)
+}
+
+func TestContract_PDFReturnsBareEnvelope(t *testing.T) {
+	id := uuid.New()
+	svc := &mockService{pdfResult: &rider.ExportResult{
+		ID: id, DownloadURL: "https://garage/dl", CreatedAt: time.Now(),
+	}}
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/attachments/"+id.String()+"/pdf", nil)
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	var env struct {
+		ID          string `json:"id"`
+		DownloadURL string `json:"downloadUrl"`
+		CreatedAt   string `json:"createdAt"`
+	}
+	require.NoError(t, json.Unmarshal(body, &env))
+	assert.Equal(t, id.String(), env.ID)
+	assert.Equal(t, "https://garage/dl", env.DownloadURL)
+}

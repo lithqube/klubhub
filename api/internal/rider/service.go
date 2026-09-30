@@ -34,11 +34,22 @@ type Service struct {
 	repo     RepoIface
 	storage  StorageIface
 	settings SettingsIface
+	gigs     GigReader // optional; nil → placeholder venue/date in PDFs
 }
 
-// NewService constructs a Service with the given dependencies.
+// NewService constructs a Service with the given dependencies. gigs may
+// be nil — when it is, the PDF renderer uses "Unknown Venue" and
+// time.Now() placeholders.
 func NewService(repo RepoIface, storage StorageIface, settings SettingsIface) *Service {
 	return &Service{repo: repo, storage: storage, settings: settings}
+}
+
+// SetGigReader injects the gig reader used by GeneratePDF to resolve the
+// gig's venue and date. Called by main.go after construction because the
+// gig package depends on the rider repo, not the other way around — this
+// avoids a circular import at package init.
+func (s *Service) SetGigReader(reader GigReader) {
+	s.gigs = reader
 }
 
 // StorageBucket is the Garage bucket rider exports are stored under.
@@ -171,13 +182,9 @@ func (s *Service) GeneratePDF(ctx context.Context, attachmentID uuid.UUID) (*Exp
 		return nil, err
 	}
 
-	// Load venue + date via gig.GigReader (interface). We don't import
-	// the gig package directly to keep the boundary one-way; the
-	// concrete reader is wired in Plan 03 (or Plan 04 at main.go).
-	//
-	// For now, fall back to safe defaults if no reader is configured:
-	// "Unknown Venue" and time.Now(). This keeps the package compileable
-	// before Plan 03 wires the reader.
+	// Load venue + date via the injected GigReader. When no reader is
+	// configured (tests, mocked wiring), fall back to safe defaults so
+	// the renderer still produces a valid PDF.
 	venueName, venueCity, venueCountry, gigDate := s.lookupGigContext(ctx, att.GigID)
 
 	userSettings, err := s.settings.GetSettings(ctx)
@@ -209,12 +216,18 @@ func (s *Service) GeneratePDF(ctx context.Context, attachmentID uuid.UUID) (*Exp
 }
 
 // lookupGigContext returns (venueName, venueCity, venueCountry, gigDate)
-// for the gig this attachment belongs to. The default Service
-// implementation has no gig reader wired — it returns placeholder values
-// so the renderer compiles and the package is testable. Plan 03 replaces
-// this with a method on a GigReader-aware service variant.
-func (s *Service) lookupGigContext(_ context.Context, _ uuid.UUID) (name, city, country string, date time.Time) {
-	return "Unknown Venue", "", "", time.Now()
+// for the gig this attachment belongs to. When a GigReader is configured
+// it fetches the real gig; without one it returns placeholder values
+// ("Unknown Venue", now) so the renderer compiles and is testable.
+func (s *Service) lookupGigContext(ctx context.Context, gigID uuid.UUID) (name, city, country string, date time.Time) {
+	if s.gigs == nil {
+		return "Unknown Venue", "", "", time.Now()
+	}
+	g, err := s.gigs.GetGig(ctx, gigID)
+	if err != nil || g == nil {
+		return "Unknown Venue", "", "", time.Now()
+	}
+	return g.Venue, g.City, g.Country, g.Date
 }
 
 // isBlank is a small helper exported for the PDF renderer.
