@@ -55,6 +55,7 @@ func NewRouter(
 	venueHandler http.Handler,
 	contactHandler http.Handler,
 	financeHandler http.Handler,
+	riderHandler http.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -95,6 +96,12 @@ func NewRouter(
 	// finance.Mux parses the full /api/v1/finance/... path itself.
 	if financeHandler != nil {
 		r.Mount("/api/v1/finance", financeHandler)
+	}
+
+	// Rider templates: per-gig rider copies attached to gigs.
+	// rider.Mux parses the full /api/v1/rider/... path itself.
+	if riderHandler != nil {
+		r.Mount("/api/v1/rider", riderHandler)
 	}
 
 	if cfg.ServeFrontend {
