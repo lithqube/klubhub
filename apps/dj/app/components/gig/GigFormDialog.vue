@@ -12,6 +12,7 @@ import { useEarningsStore } from '../../stores/earnings'
 import { isActiveInvoice, invoiceNumberLabel, statusLabel } from '../../utils/invoiceDisplay'
 import { formatMinor } from '../../utils/money'
 import EntryReconciliationDialog from '../finance/EntryReconciliationDialog.vue'
+import RiderAttachmentInlineCard from '../rider/RiderAttachmentInlineCard.vue'
 
 const gigStore = useGigStore()
 const tracklistStore = useTracklistStore()
@@ -590,6 +591,11 @@ function close() {
                 style="width:100%;min-height:80px;"
                 placeholder="Additional notes..."
               />
+            </div>
+
+            <!-- Rider attachment (visible when status is advanced; only on edit) -->
+            <div v-if="isEdit && props.gig?.id && form.status === 'advanced'" data-testid="gig-form-rider-section">
+              <RiderAttachmentInlineCard :gig="props.gig!" />
             </div>
 
             <!-- Linked tracklists -->
