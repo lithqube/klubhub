@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 0.5-Garage-s3-storage
+current_phase: 4.5-rider-templates
 current_plan: not started
-status: completed
-last_updated: "2026-04-28T09:25:56.354Z"
+status: in_progress
+last_updated: "2026-09-30T10:00:00Z"
 progress:
   total_phases: 15
-  completed_phases: 6
-  total_plans: 35
-  completed_plans: 35
+  completed_phases: 8
+  total_plans: 42
+  completed_plans: 42
 ---
 
 # Session State
@@ -22,19 +22,35 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v1.0 milestone
-**Current phase:** 0.5-Garage-s3-storage
+**Current phase:** 4.5-rider-templates
 **Current plan:** not started
-**Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03
-**Status:** Phase 1.5.5 (Kinetic HUD UI migration) complete. Phase 0.5 (Garage S3 storage) is next — inserted phase to replace MinIO with Garage before Phase 4 (Gig Tracker) begins.
+**Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03, 04 (Gig Tracker), 05 (Finance Tracker), 0.5 (Garage S3)
+**Status:** Phase 5 (Finance Tracker) shipped 2026-09-28 via PR #34 (#35 follow-up tests). Phase 4 (Gig Tracker) shipped via PRs #17/#18 with GigReader interface for downstream modules. Now starting Phase 4.5 (Rider Templates) — RIDER-01..05 in REQUIREMENTS.md. Branch `feat/phase-4.5-rider-templates` cut from main @ 20a6fd8.
 
 ## Completed Phases Summary
 
 - **Phase 00 — Infrastructure**: 4/4 plans complete (2026-03-14)
+- **Phase 0.5 — Garage S3 Storage** (INSERTED): MinIO → Garage swap complete (2026-04-27)
 - **Phase 01 — Tracklist Image Generator**: 5/6 plans complete (01-06 text export pending) (2026-03-16)
 - **Phase 1.5 — Design System Foundation**: 7/7 plans complete (2026-03-22)
 - **Phase 1.5.5 — Kinetic HUD UI Migration**: full app redesign complete (2026-04-27)
 - **Phase 02 — Social Media Scheduler**: 7/7 plans complete (2026-03-22)
 - **Phase 03 — EPK / Press Kit Builder**: 7/7 plans complete (2026-03-23)
+- **Phase 04 — Gig Tracker**: 5/5 plans complete; shipped via PR #17/#18. GigReader interface defined in model.go (stable contract for Finance/Tour/EPK)
+- **Phase 05 — Finance Tracker**: shipped 2026-09-28 via PR #34 (FIN-01..07/09 earnings ledger) + #35 tests; follow-up invoices/agreements/email per .hermes/plans/2026-09-24_213014-phase-5-invoices-agreements-email.md
+
+## Phase 4.5 — Rider Templates (next, IN PROGRESS)
+
+Requirements (RIDER-01..05, REQUIREMENTS.md §Rider Templates):
+- RIDER-01: CRUD named rider templates with four sections (technical / hospitality / backline / other notes), each free-text
+- RIDER-02: On gig → `advanced` status, user can select a template; attachment creates a per-gig copy (not a live link)
+- RIDER-03: Override any section of the per-gig copy without modifying the source template
+- RIDER-04: Export per-gig rider as PDF via existing PDFGenerator; PDF includes DJ name, venue, date, all four sections
+- RIDER-05: PostgreSQL storage with soft deletion
+
+Depends on: Phase 04 (Gig Tracker) for gig transition hook + GigReader; Phase 0.5 (Garage) for PDF storage; Phase 03 (EPK) for existing PDFGenerator pattern.
+
+Scope question for plan: do RIDER templates live in the `gig` package (close to gigs) or a new `rider` package? Templates are independent of any single gig, so new package fits better — keeps gig service free of rider business logic.
 
 ## Phase 1.5.5 — Kinetic HUD UI Migration ✅
 

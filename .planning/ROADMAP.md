@@ -20,10 +20,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1.5.5: Kinetic HUD UI Migration** - INSERTED — Full pixel-perfect redesign to Kinetic HUD aesthetic; new Dashboard page; EPK split panel; Gigs/Finance pages (UI); 3-way theme switcher; mock data layer
 - [x] **Phase 2: Social Media Scheduler** - Instagram OAuth, timezone-aware post scheduling, retry with backoff, queue/calendar view
 - [x] **Phase 3: EPK / Press Kit Builder** - Artist bio, press photos, tech rider, PDF export with section control, export history
-- [ ] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, GigReader interface for downstream modules
-- [ ] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export
+- [x] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, GigReader interface for downstream modules
+- [x] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export (RIDER-01..05; IN PROGRESS 2026-09-30 on branch `feat/phase-4.5-rider-templates`)
 - [ ] **Phase 4.8: Bandsintown Sync** - INSERTED (optional) — Outbound event push to Bandsintown on gig confirmed
-- [ ] **Phase 5: Finance Tracker** - Income & expense ledger, multi-currency summaries, gig-linked auto-income, in-app FIN-04/05 reconciliation prompts, plus invoices/payments, versioned PDFs, event agreements and explicit email sends
+- [x] **Phase 5: Finance Tracker** - Income & expense ledger, multi-currency summaries, gig-linked auto-income, in-app FIN-04/05 reconciliation prompts, plus invoices/payments, versioned PDFs, event agreements and explicit email sends
 - [ ] **Phase 6: Release Planner** - Release CRUD with status workflow, deadline tracking, promo checklist with customizable default template
 - [ ] **Phase 7: Tour Manager** - Named tour groups of linked gigs, per-stop logistics, tour budget aggregate (OSS; collaboration is SaaS v2)
 - [ ] **Phase 8: Unified Dashboard** - Aggregated view of all modules: upcoming gigs, scheduled posts, recent tracklists, finance summary, release deadlines, career analytics
