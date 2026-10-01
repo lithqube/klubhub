@@ -509,8 +509,11 @@ func (h *Handler) handleGetPostImage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", info.ContentType)
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size))
-	// Cache for 1 hour since images are immutable once uploaded
-	w.Header().Set("Cache-Control", "public, max-age=3600")
+	// Images can be replaced via the upload route, so a shared cache
+	// must not serve stale or session-dependent responses. Force
+	// revalidation on every request while keeping the response
+	// private so shared caches do not store it.
+	w.Header().Set("Cache-Control", "private, no-cache")
 
 	_, _ = io.Copy(w, obj)
 }

@@ -118,14 +118,17 @@ func (r *Repository) UpsertContent(ctx context.Context, req UpsertEPKContentRequ
 }
 
 // InsertExport inserts a new epk_exports row and returns the created record.
-// Writes to the canonical garage_object_key column (migration 025). The
-// legacy minio_path column is left alone on insert — it stays in the
-// schema for one release cycle but is no longer the source of truth.
+// Writes the canonical key into BOTH the new garage_object_key column
+// (migration 025 source of truth) AND the legacy minio_path column.
+// The dual-write exists so that rolling migration 025 back (which
+// drops garage_object_key) leaves the previous release with a usable
+// object key in minio_path. The legacy column is dropped in a
+// follow-up release once v1 consumers have rolled out.
 func (r *Repository) InsertExport(ctx context.Context, garageObjectKey string) (*EPKExport, error) {
 	var e EPKExport
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO epk_exports (id, minio_path, garage_object_key, created_at)
-		VALUES (gen_random_uuid(), '', $1, now())
+		VALUES (gen_random_uuid(), $1, $1, now())
 		RETURNING id, garage_object_key, created_at`,
 		garageObjectKey,
 	).Scan(&e.ID, &e.GarageObjectKey, &e.CreatedAt)

@@ -90,13 +90,19 @@ func (r *Repository) UpdateAccountStatus(ctx context.Context, id uuid.UUID, stat
 }
 
 // CreatePost inserts a new scheduled post and returns it with DB-assigned fields.
+// Writes the canonical image key into BOTH the new image_storage_key
+// column (migration 024 source of truth) AND the legacy
+// image_minio_path column. The dual-write exists so rolling migration
+// 024 back (which drops image_storage_key) leaves the previous
+// release with a usable key in image_minio_path. The legacy column
+// is dropped in a follow-up release once v1 consumers roll out.
 func (r *Repository) CreatePost(ctx context.Context, post ScheduledPost) (*ScheduledPost, error) {
 	var result ScheduledPost
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO scheduled_posts
-			(account_id, status, post_type, caption, image_storage_key,
+			(account_id, status, post_type, caption, image_storage_key, image_minio_path,
 			 scheduled_at_utc, timezone_name, retry_count, next_retry_at, last_error, container_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, account_id, status, post_type, caption, image_storage_key,
 		          scheduled_at_utc, timezone_name, retry_count, next_retry_at,
 		          last_error, container_id, created_at, updated_at, deleted_at`,
@@ -171,11 +177,14 @@ func (r *Repository) ListPosts(ctx context.Context) ([]ScheduledPost, error) {
 }
 
 // UpdatePost updates caption, image path, scheduled time, and timezone of a post.
+// Dual-writes the new image to both image_storage_key (canonical) and
+// image_minio_path (legacy) during the rollback window — see the
+// dual-write rationale in CreatePost.
 func (r *Repository) UpdatePost(ctx context.Context, id uuid.UUID, caption, imagePath string, scheduledAt time.Time, tzName string) (*ScheduledPost, error) {
 	var result ScheduledPost
 	err := r.pool.QueryRow(ctx, `
 		UPDATE scheduled_posts
-		SET caption=$1, image_storage_key=$2, scheduled_at_utc=$3, timezone_name=$4, updated_at=NOW()
+		SET caption=$1, image_storage_key=$2, image_minio_path=$2, scheduled_at_utc=$3, timezone_name=$4, updated_at=NOW()
 		WHERE id=$5 AND deleted_at IS NULL
 		RETURNING id, account_id, status, post_type, caption, image_storage_key,
 		          scheduled_at_utc, timezone_name, retry_count, next_retry_at,
@@ -201,10 +210,13 @@ func (r *Repository) UpdatePost(ctx context.Context, id uuid.UUID, caption, imag
 // caller wants to attach or replace the image without touching the rest
 // of the post fields. The full UpdatePost requires caption + scheduled
 // time + timezone and is not appropriate here.
+// Dual-writes the new image to both image_storage_key (canonical) and
+// image_minio_path (legacy) during the rollback window — see the
+// dual-write rationale in CreatePost.
 func (r *Repository) UpdatePostImage(ctx context.Context, id uuid.UUID, imagePath string) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE scheduled_posts
-		SET image_storage_key=$1, updated_at=NOW()
+		SET image_storage_key=$1, image_minio_path=$1, updated_at=NOW()
 		WHERE id=$2 AND deleted_at IS NULL AND status='scheduled'`,
 		imagePath, id,
 	)
