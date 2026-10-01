@@ -256,8 +256,8 @@ func TestWorker_RateLimitStopsRemainingPosts(t *testing.T) {
 
 	repo := &mockWorkerRepo{
 		duePosts: []ScheduledPost{
-			{ID: post1, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageMinioPath: "img1.jpg"},
-			{ID: post2, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageMinioPath: "img2.jpg"},
+			{ID: post1, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageStorageKey: "img1.jpg"},
+			{ID: post2, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageStorageKey: "img2.jpg"},
 		},
 		account: &SocialAccount{
 			ID:          accID,
@@ -366,7 +366,7 @@ func TestWorker_SuccessfulPublish(t *testing.T) {
 
 	repo := &mockWorkerRepo{
 		duePosts: []ScheduledPost{
-			{ID: postID, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageMinioPath: "img.jpg"},
+			{ID: postID, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageStorageKey: "img.jpg"},
 		},
 		account: &SocialAccount{
 			ID:          accID,
@@ -418,7 +418,7 @@ func TestWorker_RetryWithAlreadyPublishedContainer(t *testing.T) {
 				RetryCount:     1, // retry
 				ContainerID:    &containerIDVal,
 				PostType:       PostTypeFeed,
-				ImageMinioPath: "img.jpg",
+				ImageStorageKey: "img.jpg",
 			},
 		},
 		account: &SocialAccount{
@@ -544,7 +544,7 @@ func TestWorker_PublishFailureSetsRetry(t *testing.T) {
 
 	repo := &mockWorkerRepo{
 		duePosts: []ScheduledPost{
-			{ID: postID, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageMinioPath: "img.jpg"},
+			{ID: postID, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageStorageKey: "img.jpg"},
 		},
 		account: &SocialAccount{
 			ID:          accID,

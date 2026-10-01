@@ -31,6 +31,7 @@ type serviceIface interface {
 	EditPost(ctx context.Context, id uuid.UUID, req EditPostRequest) (*ScheduledPost, error)
 	SoftDeletePost(ctx context.Context, id uuid.UUID) error
 	RetryPost(ctx context.Context, id uuid.UUID) error
+	UploadPostImage(ctx context.Context, id uuid.UUID, data []byte, mimeType string) (*PostImageResult, error)
 	ValidateImage(data []byte, postType PostType) error
 }
 
@@ -63,8 +64,86 @@ func (h *Handler) Routes() http.Handler {
 	r.Delete("/posts/{id}", h.handleDeletePost)
 	r.Post("/posts/{id}/retry", h.handleRetryPost)
 	r.Get("/posts/{id}/image", h.handleGetPostImage)
+	r.Post("/posts/{id}/image", h.handleUploadPostImage)
 
 	return r
+}
+
+// handleUploadPostImage accepts multipart/form-data with an "image_file"
+// field, validates the bytes, stores them in Garage via the Service,
+// and updates the post's image_storage_key.
+//
+// Error → status mapping:
+//   - 400: malformed multipart body or missing image_file field.
+//   - 404: postID does not exist (or has been soft-deleted).
+//   - 409: post is no longer scheduled (including a raced transition).
+//   - 413: request body exceeds the 12 MiB + 1 KB cap
+//     (ParseMultipartForm returns *http.MaxBytesError).
+//   - 422: image fails MIME / size / dimension validation
+//     (ErrInvalidMIME / ErrFileTooLarge / ErrInvalidDimensions).
+//   - 500: storage write, DB update, or other unexpected error.
+//
+// On success the response is {data: {path: "<garage-object-key>"}}.
+//
+// Note: this handler trusts the Service to do all storage + validation
+// work; it only parses the transport and translates errors to HTTP
+// status codes. The contract test
+// (TestUploadPostImageContract_ReturnsDataPathEnvelope) asserts the
+// success envelope shape.
+func (h *Handler) handleUploadPostImage(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid post ID")
+		return
+	}
+
+	// Plan B.6 lesson: ParseMultipartForm's maxMemory is a spill-to-disk
+	// threshold, NOT a request-size limit. Cap the transport first.
+	r.Body = http.MaxBytesReader(w, r.Body, 12<<20+1024)
+	if err := r.ParseMultipartForm(12 << 20); err != nil {
+		var capErr *http.MaxBytesError
+		if errors.As(err, &capErr) {
+			h.writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+		} else {
+			h.writeError(w, http.StatusBadRequest, "cannot parse multipart form")
+		}
+		return
+	}
+	defer r.MultipartForm.RemoveAll()
+
+	file, header, err := r.FormFile("image_file")
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "image_file field is required")
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to read image data")
+		return
+	}
+
+	mimeType := header.Header.Get("Content-Type")
+
+	result, err := h.svc.UploadPostImage(r.Context(), id, data, mimeType)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			h.writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, ErrEditBlocked):
+			h.writeError(w, http.StatusConflict, err.Error())
+		case errors.Is(err, ErrInvalidMIME),
+			errors.Is(err, ErrFileTooLarge),
+			errors.Is(err, ErrInvalidDimensions):
+			h.writeError(w, http.StatusUnprocessableEntity, err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
+		}
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": result})
 }
 
 // oauthStateCookieMaxAge matches the StateStore TTL (10 minutes). The
@@ -202,18 +281,37 @@ func (h *Handler) handleListPosts(w http.ResponseWriter, r *http.Request) {
 
 // handleCreatePost handles multipart form POST /posts.
 // Form fields: caption, post_type, scheduled_at, timezone_name, image_id
-// (legacy-named Garage object key) or image_file (upload).
+// (legacy-named Garage object key). Image bytes must be uploaded separately
+// to POST /posts/{id}/image; legacy inline uploads are rejected, not ignored.
 func (h *Handler) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 	// Plan B.6: ParseMultipartForm's maxMemory is NOT a total request
 	// limit; it spills larger payloads to disk. Cap the transport first.
 	r.Body = http.MaxBytesReader(w, r.Body, 12<<20+1024)
-	// Parse multipart (max 12 MB to accommodate 8 MB image + metadata)
+	// Preserve multipart metadata support for the frontend FormData caller.
 	if err := r.ParseMultipartForm(12 << 20); err != nil {
-		// Fall back to URL-encoded / JSON for tests
-		if err2 := r.ParseForm(); err2 != nil {
+		var capErr *http.MaxBytesError
+		if errors.As(err, &capErr) {
+			h.writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		// Only non-multipart requests may fall back to URL-encoded metadata.
+		// Do not silently accept a partial form after multipart parsing failed.
+		if !errors.Is(err, http.ErrNotMultipart) {
 			h.writeError(w, http.StatusBadRequest, "cannot parse request body")
 			return
 		}
+		if err2 := r.ParseForm(); err2 != nil {
+			if errors.As(err2, &capErr) {
+				h.writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			} else {
+				h.writeError(w, http.StatusBadRequest, "cannot parse request body")
+			}
+			return
+		}
+	}
+
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 
 	caption := r.FormValue("caption")
@@ -234,30 +332,18 @@ func (h *Handler) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := CreatePostRequest{
-		PostType:       postType,
-		Caption:        caption,
-		ImageMinioPath: imageID,
-		ScheduledAt:    scheduledAt,
-		TimezoneName:   timezoneName,
+		PostType:        postType,
+		Caption:         caption,
+		ImageStorageKey: imageID,
+		ScheduledAt:     scheduledAt,
+		TimezoneName:    timezoneName,
 	}
 
-	// Handle image file upload if present
-	if r.MultipartForm != nil {
-		file, _, err := r.FormFile("image_file")
-		if err == nil {
-			defer file.Close()
-			imageData, err := io.ReadAll(file)
-			if err != nil {
-				h.writeError(w, http.StatusInternalServerError, "failed to read image")
-				return
-			}
-			// Validate image inline
-			if err := h.svc.ValidateImage(imageData, postType); err != nil {
-				h.writeError(w, http.StatusUnprocessableEntity, err.Error())
-				return
-			}
-			req.ImageData = imageData
-		}
+	// Reject retired inline uploads before scheduling anything. Do not
+	// silently accept bytes that the dedicated upload pipeline must persist.
+	if r.MultipartForm != nil && len(r.MultipartForm.File["image_file"]) > 0 {
+		h.writeError(w, http.StatusUnprocessableEntity, "image_file uploads require POST /posts/{id}/image after creating the post")
+		return
 	}
 
 	// Parse account_id if provided
@@ -348,7 +434,11 @@ func (h *Handler) handleDeletePost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleRetryPost resets a failed post to scheduled status.
+// handleRetryPost resets a failed post to scheduled status and
+// returns the updated post wrapped in the standard {data: ...}
+// envelope. The service interface keeps RetryPost signature-free of
+// a post return value (it just resets state); the handler follows up
+// with GetPost so the wire response carries the full updated record.
 func (h *Handler) handleRetryPost(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -363,7 +453,16 @@ func (h *Handler) handleRetryPost(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	h.writeJSON(w, http.StatusOK, map[string]string{"status": "retrying"})
+	post, err := h.svc.GetPost(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, err.Error())
+		} else {
+			h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
+		}
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": post})
 }
 
 // handleGetPostImage streams the post's image from Garage S3.
@@ -384,7 +483,7 @@ func (h *Handler) handleGetPostImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if post.ImageMinioPath == "" {
+	if post.ImageStorageKey == "" {
 		h.writeError(w, http.StatusNotFound, "no image associated with this post")
 		return
 	}
@@ -395,7 +494,7 @@ func (h *Handler) handleGetPostImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	obj, err := h.storage.GetObject(ctx, h.storage.Bucket(), post.ImageMinioPath, minio.GetObjectOptions{})
+	obj, err := h.storage.GetObject(ctx, h.storage.Bucket(), post.ImageStorageKey, minio.GetObjectOptions{})
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, SanitizeTransportError(err.Error()))
 		return

@@ -94,18 +94,18 @@ func (r *Repository) CreatePost(ctx context.Context, post ScheduledPost) (*Sched
 	var result ScheduledPost
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO scheduled_posts
-			(account_id, status, post_type, caption, image_minio_path,
+			(account_id, status, post_type, caption, image_storage_key,
 			 scheduled_at_utc, timezone_name, retry_count, next_retry_at, last_error, container_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		RETURNING id, account_id, status, post_type, caption, image_minio_path,
+		RETURNING id, account_id, status, post_type, caption, image_storage_key,
 		          scheduled_at_utc, timezone_name, retry_count, next_retry_at,
 		          last_error, container_id, created_at, updated_at, deleted_at`,
-		post.AccountID, post.Status, post.PostType, post.Caption, post.ImageMinioPath,
+		post.AccountID, post.Status, post.PostType, post.Caption, post.ImageStorageKey,
 		post.ScheduledAtUTC.UTC(), post.TimezoneName, post.RetryCount,
 		post.NextRetryAt, post.LastError, post.ContainerID,
 	).Scan(
 		&result.ID, &result.AccountID, &result.Status, &result.PostType, &result.Caption,
-		&result.ImageMinioPath, &result.ScheduledAtUTC, &result.TimezoneName, &result.RetryCount,
+		&result.ImageStorageKey, &result.ScheduledAtUTC, &result.TimezoneName, &result.RetryCount,
 		&result.NextRetryAt, &result.LastError, &result.ContainerID,
 		&result.CreatedAt, &result.UpdatedAt, &result.DeletedAt,
 	)
@@ -119,14 +119,14 @@ func (r *Repository) CreatePost(ctx context.Context, post ScheduledPost) (*Sched
 func (r *Repository) GetPost(ctx context.Context, id uuid.UUID) (*ScheduledPost, error) {
 	var result ScheduledPost
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, account_id, status, post_type, caption, image_minio_path,
+		SELECT id, account_id, status, post_type, caption, image_storage_key,
 		       scheduled_at_utc, timezone_name, retry_count, next_retry_at,
 		       last_error, container_id, created_at, updated_at, deleted_at
 		FROM scheduled_posts
 		WHERE id=$1 AND deleted_at IS NULL`, id,
 	).Scan(
 		&result.ID, &result.AccountID, &result.Status, &result.PostType, &result.Caption,
-		&result.ImageMinioPath, &result.ScheduledAtUTC, &result.TimezoneName, &result.RetryCount,
+		&result.ImageStorageKey, &result.ScheduledAtUTC, &result.TimezoneName, &result.RetryCount,
 		&result.NextRetryAt, &result.LastError, &result.ContainerID,
 		&result.CreatedAt, &result.UpdatedAt, &result.DeletedAt,
 	)
@@ -142,7 +142,7 @@ func (r *Repository) GetPost(ctx context.Context, id uuid.UUID) (*ScheduledPost,
 // ListPosts returns all non-deleted posts ordered by scheduled_at_utc DESC.
 func (r *Repository) ListPosts(ctx context.Context) ([]ScheduledPost, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, account_id, status, post_type, caption, image_minio_path,
+		SELECT id, account_id, status, post_type, caption, image_storage_key,
 		       scheduled_at_utc, timezone_name, retry_count, next_retry_at,
 		       last_error, container_id, created_at, updated_at, deleted_at
 		FROM scheduled_posts
@@ -159,7 +159,7 @@ func (r *Repository) ListPosts(ctx context.Context) ([]ScheduledPost, error) {
 		var p ScheduledPost
 		if err := rows.Scan(
 			&p.ID, &p.AccountID, &p.Status, &p.PostType, &p.Caption,
-			&p.ImageMinioPath, &p.ScheduledAtUTC, &p.TimezoneName, &p.RetryCount,
+			&p.ImageStorageKey, &p.ScheduledAtUTC, &p.TimezoneName, &p.RetryCount,
 			&p.NextRetryAt, &p.LastError, &p.ContainerID,
 			&p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 		); err != nil {
@@ -175,15 +175,15 @@ func (r *Repository) UpdatePost(ctx context.Context, id uuid.UUID, caption, imag
 	var result ScheduledPost
 	err := r.pool.QueryRow(ctx, `
 		UPDATE scheduled_posts
-		SET caption=$1, image_minio_path=$2, scheduled_at_utc=$3, timezone_name=$4, updated_at=NOW()
+		SET caption=$1, image_storage_key=$2, scheduled_at_utc=$3, timezone_name=$4, updated_at=NOW()
 		WHERE id=$5 AND deleted_at IS NULL
-		RETURNING id, account_id, status, post_type, caption, image_minio_path,
+		RETURNING id, account_id, status, post_type, caption, image_storage_key,
 		          scheduled_at_utc, timezone_name, retry_count, next_retry_at,
 		          last_error, container_id, created_at, updated_at, deleted_at`,
 		caption, imagePath, scheduledAt.UTC(), tzName, id,
 	).Scan(
 		&result.ID, &result.AccountID, &result.Status, &result.PostType, &result.Caption,
-		&result.ImageMinioPath, &result.ScheduledAtUTC, &result.TimezoneName, &result.RetryCount,
+		&result.ImageStorageKey, &result.ScheduledAtUTC, &result.TimezoneName, &result.RetryCount,
 		&result.NextRetryAt, &result.LastError, &result.ContainerID,
 		&result.CreatedAt, &result.UpdatedAt, &result.DeletedAt,
 	)
@@ -194,6 +194,33 @@ func (r *Repository) UpdatePost(ctx context.Context, id uuid.UUID, caption, imag
 		return nil, err
 	}
 	return &result, nil
+}
+
+// UpdatePostImage updates only the image_storage_key on a post. Used by the
+// dedicated image-upload endpoint (POST /posts/{id}/image) where the
+// caller wants to attach or replace the image without touching the rest
+// of the post fields. The full UpdatePost requires caption + scheduled
+// time + timezone and is not appropriate here.
+func (r *Repository) UpdatePostImage(ctx context.Context, id uuid.UUID, imagePath string) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE scheduled_posts
+		SET image_storage_key=$1, updated_at=NOW()
+		WHERE id=$2 AND deleted_at IS NULL AND status='scheduled'`,
+		imagePath, id,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		// The guarded UPDATE is the atomic lifecycle check. A subsequent read
+		// distinguishes absent/deleted rows from a lifecycle conflict; it must
+		// never retry an unguarded write.
+		if _, err := r.GetPost(ctx, id); err != nil {
+			return err
+		}
+		return ErrEditBlocked
+	}
+	return nil
 }
 
 // UpdatePostStatus sets the status and optional error reason on a post.
@@ -269,7 +296,7 @@ func (r *Repository) ResetPostForRetry(ctx context.Context, id uuid.UUID) error 
 // status='scheduled' AND scheduled_at_utc <= now AND (next_retry_at IS NULL OR next_retry_at <= now).
 func (r *Repository) ListDuePosts(ctx context.Context) ([]ScheduledPost, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, account_id, status, post_type, caption, image_minio_path,
+		SELECT id, account_id, status, post_type, caption, image_storage_key,
 		       scheduled_at_utc, timezone_name, retry_count, next_retry_at,
 		       last_error, container_id, created_at, updated_at, deleted_at
 		FROM scheduled_posts
@@ -289,7 +316,7 @@ func (r *Repository) ListDuePosts(ctx context.Context) ([]ScheduledPost, error) 
 		var p ScheduledPost
 		if err := rows.Scan(
 			&p.ID, &p.AccountID, &p.Status, &p.PostType, &p.Caption,
-			&p.ImageMinioPath, &p.ScheduledAtUTC, &p.TimezoneName, &p.RetryCount,
+			&p.ImageStorageKey, &p.ScheduledAtUTC, &p.TimezoneName, &p.RetryCount,
 			&p.NextRetryAt, &p.LastError, &p.ContainerID,
 			&p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 		); err != nil {

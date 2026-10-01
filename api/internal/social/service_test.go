@@ -78,10 +78,22 @@ func (m *mockRepo) UpdatePost(_ context.Context, id uuid.UUID, caption, imagePat
 		return nil, social.ErrNotFound
 	}
 	p.Caption = caption
-	p.ImageMinioPath = imagePath
+	p.ImageStorageKey = imagePath
 	p.ScheduledAtUTC = scheduledAt
 	p.TimezoneName = tzName
 	return p, nil
+}
+
+func (m *mockRepo) UpdatePostImage(_ context.Context, id uuid.UUID, imagePath string) error {
+	p, ok := m.posts[id]
+	if !ok {
+		return social.ErrNotFound
+	}
+	if p.Status != social.PostStatusScheduled {
+		return social.ErrEditBlocked
+	}
+	p.ImageStorageKey = imagePath
+	return nil
 }
 
 func (m *mockRepo) UpdatePostStatus(_ context.Context, id uuid.UUID, status social.PostStatus, errReason string) error {
@@ -170,7 +182,7 @@ func TestSocialService_EditPost_BlockedWhenNotScheduled(t *testing.T) {
 		Status:         social.PostStatusPublished,
 		PostType:       social.PostTypeFeed,
 		Caption:        "published",
-		ImageMinioPath: "path",
+		ImageStorageKey: "path",
 		ScheduledAtUTC: time.Now().UTC(),
 		TimezoneName:   "UTC",
 	})

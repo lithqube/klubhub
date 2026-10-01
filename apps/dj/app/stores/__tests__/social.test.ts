@@ -19,7 +19,7 @@ const mockPost: ScheduledPost = {
   status: 'scheduled',
   postType: 'feed',
   caption: 'Test caption',
-  imageMinioPath: 'tracklists/img.png',
+  imageStorageKey: 'tracklists/img.png',
   scheduledAtUtc: '2026-10-24T21:45:00Z',
   timezoneName: 'Europe/Berlin',
   retryCount: 0,
@@ -46,7 +46,7 @@ const rawPost = {
   status: 'scheduled',
   post_type: 'feed',
   caption: 'Test caption',
-  image_minio_path: 'tracklists/img.png',
+  image_storage_key: 'tracklists/img.png',
   scheduled_at_utc: '2026-10-24T21:45:00Z',
   timezone_name: 'Europe/Berlin',
   retry_count: 0,
@@ -219,7 +219,7 @@ describe('useSocialStore', () => {
   });
 
   describe('createPost()', () => {
-    it('builds FormData with the exact snake_case handler field names', async () => {
+    it('builds FormData with the exact snake_case handler field names (no image_file)', async () => {
       const store = useSocialStore();
       const mockFetch = vi.fn().mockResolvedValue({ data: mockPost });
       // @ts-expect-error - mocking global $fetch
@@ -227,7 +227,6 @@ describe('useSocialStore', () => {
       // Mock loadPosts to avoid second fetch
       vi.spyOn(store, 'loadPosts').mockResolvedValue();
 
-      const file = new File(['image content'], 'test.jpg', { type: 'image/jpeg' });
       await store.createPost({
         postType: 'feed',
         caption: 'Test',
@@ -235,7 +234,6 @@ describe('useSocialStore', () => {
         timezoneName: 'Europe/Berlin',
         accountId: 'acc-1',
         imageId: 'existing-key',
-        imageFile: file,
       });
 
       expect(mockFetch).toHaveBeenCalledWith('/api/v1/social/posts', expect.objectContaining({
@@ -244,13 +242,14 @@ describe('useSocialStore', () => {
       }));
 
       const formData = mockFetch.mock.calls[0][1].body as FormData;
+      // C.1: createPost no longer carries image_file — uploads go
+      // through a separate uploadImage(postId, file) call.
       expect([...formData.keys()]).toEqual([
         'post_type',
         'caption',
         'scheduled_at',
         'timezone_name',
         'image_id',
-        'image_file',
         'account_id',
       ]);
       expect(formData.get('post_type')).toBe('feed');
@@ -258,10 +257,25 @@ describe('useSocialStore', () => {
       expect(formData.get('scheduled_at')).toBe('2026-10-24T23:45');
       expect(formData.get('timezone_name')).toBe('Europe/Berlin');
       expect(formData.get('image_id')).toBe('existing-key');
-      expect(formData.get('image_file')).toBe(file);
+      expect(formData.get('image_file')).toBeNull();
       expect(formData.get('account_id')).toBe('acc-1');
       expect(formData.get('postType')).toBeNull();
       expect(formData.get('imageFile')).toBeNull();
+    });
+
+    it('returns the new post id so callers can chain uploadImage()', async () => {
+      const store = useSocialStore();
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockResolvedValue({ data: mockPost });
+      vi.spyOn(store, 'loadPosts').mockResolvedValue();
+
+      const result = await store.createPost({
+        postType: 'feed',
+        caption: 'Test',
+        scheduledAt: '2026-10-24T23:45',
+        timezoneName: 'Europe/Berlin',
+      });
+      expect(result).toEqual({ id: 'post-1' });
     });
 
     it('refreshes posts after creating post (calls GET /api/v1/social/posts)', async () => {
@@ -282,7 +296,10 @@ describe('useSocialStore', () => {
       expect(mockFetch).toHaveBeenLastCalledWith('/api/v1/social/posts');
     });
 
-    it('shows the error and rejects when creation fails', async () => {
+    it('rejects (and lets the caller surface the error) when creation fails', async () => {
+      // submitCompose wraps the failure in pending.error; the store no
+      // longer shows a destructive toast in addition to the in-form
+      // message (regression guard for the D.3 double-error fix).
       const store = useSocialStore();
       const failure = new Error('upload failed');
       // @ts-expect-error - mocking global $fetch
@@ -294,7 +311,53 @@ describe('useSocialStore', () => {
         scheduledAt: '2026-10-24T23:45',
         timezoneName: 'Europe/Berlin',
       })).rejects.toBe(failure);
-      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+      expect(mockShowError).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('uploadImage()', () => {
+    it('POSTs image_file to /api/v1/social/posts/{id}/image and returns the path', async () => {
+      const store = useSocialStore();
+      const path = 'social/post-1/abc.jpg';
+      const mockFetch = vi.fn().mockResolvedValue({ data: { path } });
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+      vi.spyOn(store, 'loadPosts').mockResolvedValue();
+
+      const file = new File(['image bytes'], 'photo.jpg', { type: 'image/jpeg' });
+      const result = await store.uploadImage('post-1', file);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/social/posts/post-1/image',
+        expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+      );
+      const formData = mockFetch.mock.calls[0][1].body as FormData;
+      expect(formData.get('image_file')).toBe(file);
+      expect(result).toBe(path);
+    });
+
+    it('refreshes posts after a successful upload', async () => {
+      const store = useSocialStore();
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn()
+        .mockResolvedValueOnce({ data: { path: 'social/post-1/abc.jpg' } }) // POST upload
+        .mockResolvedValueOnce({ data: [mockPost] }); // GET loadPosts
+      const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+      await store.uploadImage('post-1', file);
+      expect(global.$fetch).toHaveBeenLastCalledWith('/api/v1/social/posts');
+    });
+
+    it('rejects (and lets the caller surface the error) when upload fails', async () => {
+      // submitCompose wraps the failure in pending.error; the store no
+      // longer shows a destructive toast in addition to the in-form
+      // message (regression guard for the D.3 double-error fix).
+      const store = useSocialStore();
+      const failure = new Error('upload failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+      const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+      await expect(store.uploadImage('post-1', file)).rejects.toBe(failure);
+      expect(mockShowError).not.toHaveBeenCalled();
     });
   });
 });
