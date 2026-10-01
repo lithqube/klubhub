@@ -85,11 +85,13 @@ func TestMigration025_EpkExportsGarageObjectKey_BackfillFromLegacy(t *testing.T)
 
 	// Phase 3: seed a legacy row via the legacy column.
 	const legacyPath = "epk/exports/legacy.pdf"
-	_, err = pool.Exec(ctx, `
-		INSERT INTO epk_exports (minio_path)
-		VALUES ($1)`,
-		legacyPath)
-	require.NoError(t, err)
+	var legacyID, emptyID string
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO epk_exports (minio_path) VALUES ($1) RETURNING id`, legacyPath,
+	).Scan(&legacyID))
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO epk_exports (minio_path) VALUES ('') RETURNING id`,
+	).Scan(&emptyID))
 
 	// Phase 4: apply migration 025 via goose. This is the real run
 	// path — the same .sql file is exercised here as the operator
@@ -105,7 +107,7 @@ func TestMigration025_EpkExportsGarageObjectKey_BackfillFromLegacy(t *testing.T)
 	var gotKey string
 	require.NoError(t, pool.QueryRow(ctx, `
 		SELECT garage_object_key FROM epk_exports
-		WHERE minio_path = $1`, legacyPath,
+		WHERE id = $1`, legacyID,
 	).Scan(&gotKey))
 	if gotKey != legacyPath {
 		t.Fatalf("backfill mismatch: garage_object_key=%q want %q", gotKey, legacyPath)
@@ -113,15 +115,10 @@ func TestMigration025_EpkExportsGarageObjectKey_BackfillFromLegacy(t *testing.T)
 
 	// Negative control: a row inserted with an empty legacy path must
 	// still get an empty (not NULL) garage_object_key after migration.
-	_, err = pool.Exec(ctx, `
-		INSERT INTO epk_exports (minio_path)
-		VALUES ('')`)
-	require.NoError(t, err)
 	var emptyKey string
 	require.NoError(t, pool.QueryRow(ctx, `
 		SELECT garage_object_key FROM epk_exports
-		WHERE minio_path = '' AND garage_object_key = ''
-		ORDER BY created_at DESC LIMIT 1`,
+		WHERE id = $1`, emptyID,
 	).Scan(&emptyKey))
 	if emptyKey != "" {
 		t.Fatalf("empty-path row should have empty garage_object_key, got %q", emptyKey)

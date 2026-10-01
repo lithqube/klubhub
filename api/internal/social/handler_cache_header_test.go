@@ -1,61 +1,59 @@
 package social_test
 
-// Smoke test for CodeRabbit comment 3: the GET /posts/{id}/image
-// handler must send a private, no-cache Cache-Control header.
-//
-// Background
-// ----------
-// The original handler set Cache-Control: public, max-age=3600 with
-// the comment "images are immutable once uploaded". After the
-// dedicated upload route (POST /posts/{id}/image), an image can be
-// replaced for the same post, so:
-//   1. The response is no longer immutable.
-//   2. The image bytes may carry session-dependent metadata via
-//      shared caches, so the response must be private.
-//
-// We assert the source-literal header value rather than exercising
-// the full storage path — the handler uses a concrete *storage.Client
-// (not an interface) and there is no minio testcontainer wired into
-// the social test package, so an end-to-end httptest through the
-// handler would require adding a heavy new testcontainer just to
-// observe one response header. The literal-string assertion is the
-// same style used in the migration_backfill_test.go drift guard and
-// catches a future regression of the literal value or the comment.
-
 import (
-	"os"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/klubhub/dj/api/internal/platform/config"
+	"github.com/klubhub/dj/api/internal/platform/storage"
+	"github.com/klubhub/dj/api/internal/social"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSocialHandler_GetPostImage_SendsPrivateNoCacheHeader(t *testing.T) {
-	// Read the source file directly so the assertion cannot drift
-	// from the file the operator deploys. This is a content-level
-	// regression guard, not a behavior test — see the file comment
-	// for why we don't drive it through httptest.
-	const srcPath = "handler.go"
-
-	body, err := os.ReadFile(srcPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", srcPath, err)
-	}
-	src := string(body)
-
-	const want = `"private, no-cache"`
-	if !strings.Contains(src, want) {
-		t.Fatalf("Cache-Control value regressed: missing %q in %s", want, srcPath)
-	}
-
-	// Anti-regression: the old value MUST NOT still be set anywhere
-	// in the file. Catches a partial revert that leaves both lines.
-	if strings.Contains(src, `"public, max-age=3600"`) {
-		t.Fatalf("stale Cache-Control value \"public, max-age=3600\" still present in %s", srcPath)
-	}
-
-	// The accompanying comment must also reflect the new contract so
-	// the next reader understands why we no longer cache public.
-	if !strings.Contains(src, "private") {
-		t.Fatalf("expected the surrounding comment in %s to reference "+
-			"the private response reasoning", srcPath)
-	}
+	const imageBody = "stored image bytes"
+	const objectKey = "social/post/image.png"
+	// Exercise the concrete S3 client against a local HTTP fixture, including
+	// bucket location, object metadata and the object body. No live storage needed.
+	s3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("location") {
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = io.WriteString(w, `<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/">us-east-1</LocationConstraint>`)
+			return
+		}
+		require.Equal(t, "/images/"+objectKey, r.URL.Path)
+		require.Contains(t, []string{http.MethodHead, http.MethodGet}, r.Method)
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Content-Length", fmt.Sprint(len(imageBody)))
+		w.Header().Set("Last-Modified", "Thu, 01 Oct 2026 12:00:00 GMT")
+		w.Header().Set("ETag", `"fixture"`)
+		if r.Method == http.MethodGet {
+			_, _ = io.WriteString(w, imageBody)
+		}
+	}))
+	defer s3.Close()
+	client, err := storage.New(&config.Config{
+		S3Endpoint: strings.TrimPrefix(s3.URL, "http://"), S3Bucket: "images",
+		S3AccessKey: "test-access", S3SecretKey: "test-secret",
+	})
+	require.NoError(t, err)
+	id := uuid.New()
+	svc := newHandlerMock()
+	svc.posts[id] = &social.ScheduledPost{ID: id, ImageStorageKey: objectKey}
+	handler := social.NewHandler(svc, client)
+	rec := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/posts/"+id.String()+"/image", nil))
+	response := rec.Result()
+	defer response.Body.Close()
+	require.Equal(t, http.StatusOK, response.StatusCode, rec.Body.String())
+	require.Equal(t, "private, no-cache", response.Header.Get("Cache-Control"))
+	require.Equal(t, "image/png", response.Header.Get("Content-Type"))
+	body, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	require.Equal(t, imageBody, string(body))
 }

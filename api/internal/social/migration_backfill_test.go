@@ -92,14 +92,20 @@ func TestMigration024_ScheduledPostsImageStorageKey_BackfillFromLegacy(t *testin
 
 	const legacyPath = "social/feed/abc.jpg"
 	const scheduledAt = "2026-10-01T09:00:00Z"
-	_, err = pool.Exec(ctx, `
+	var legacyID, emptyID string
+	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO scheduled_posts
 			(account_id, status, post_type, caption, image_minio_path,
 			 scheduled_at_utc, timezone_name)
 		VALUES ($1, 'scheduled', 'feed', 'legacy post', $2,
-		        $3, 'UTC')`,
-		accountID, legacyPath, scheduledAt)
-	require.NoError(t, err)
+		        $3, 'UTC') RETURNING id`,
+		accountID, legacyPath, scheduledAt).Scan(&legacyID))
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO scheduled_posts
+			(account_id, status, post_type, caption, image_minio_path,
+			 scheduled_at_utc, timezone_name)
+		VALUES ($1, 'draft', 'story', 'no-image', '', $2, 'UTC') RETURNING id`,
+		accountID, scheduledAt).Scan(&emptyID))
 
 	// Phase 4: apply migration 024 via goose. This is the real run
 	// path — the same .sql file is exercised here as the operator
@@ -115,7 +121,7 @@ func TestMigration024_ScheduledPostsImageStorageKey_BackfillFromLegacy(t *testin
 	var gotKey string
 	require.NoError(t, pool.QueryRow(ctx, `
 		SELECT image_storage_key FROM scheduled_posts
-		WHERE account_id = $1 AND caption = 'legacy post'`, accountID,
+		WHERE id = $1`, legacyID,
 	).Scan(&gotKey))
 	if gotKey != legacyPath {
 		t.Fatalf("backfill mismatch: image_storage_key=%q want %q", gotKey, legacyPath)
@@ -123,18 +129,10 @@ func TestMigration024_ScheduledPostsImageStorageKey_BackfillFromLegacy(t *testin
 
 	// Negative control: a row inserted with an empty legacy path must
 	// still get an empty (not NULL) image_storage_key after migration.
-	_, err = pool.Exec(ctx, `
-		INSERT INTO scheduled_posts
-			(account_id, status, post_type, caption, image_minio_path,
-			 scheduled_at_utc, timezone_name)
-		VALUES ($1, 'draft', 'story', 'no-image', '',
-		        $2, 'UTC')`,
-		accountID, scheduledAt)
-	require.NoError(t, err)
 	var emptyKey string
 	require.NoError(t, pool.QueryRow(ctx, `
 		SELECT image_storage_key FROM scheduled_posts
-		WHERE account_id = $1 AND caption = 'no-image'`, accountID,
+		WHERE id = $1`, emptyID,
 	).Scan(&emptyKey))
 	if emptyKey != "" {
 		t.Fatalf("empty-image row should have empty image_storage_key, got %q", emptyKey)
