@@ -3,6 +3,7 @@ package rider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,6 +33,14 @@ var (
 	ErrStaleUpdate = errors.New("rider record was changed since it was read")
 )
 
+// nameTakenError is returned when a template name is already used by another
+// live template (case-insensitive). It wraps ErrInvalidInput, so it maps to
+// 422: it is a problem with the submitted value, and must not look like the
+// 409 "changed elsewhere" conflict the editors treat specially.
+func nameTakenError(name string) error {
+	return fmt.Errorf("%w: a template named %q already exists", ErrInvalidInput, name)
+}
+
 // GigReader is the subset of gig.GigReader the rider service uses to
 // resolve a gig's venue and date for PDF rendering. Declared in this
 // package (rather than depending on gig.GigReader in the service struct)
@@ -46,14 +55,14 @@ type GigReader interface {
 // deleted templates remain in the table for forensics but are filtered from
 // every read path.
 type RiderTemplate struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Technical   string    `json:"technical"`
-	Hospitality string    `json:"hospitality"`
-	Backline    string    `json:"backline"`
-	OtherNotes  string    `json:"otherNotes"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          uuid.UUID  `json:"id"`
+	Name        string     `json:"name"`
+	Technical   string     `json:"technical"`
+	Hospitality string     `json:"hospitality"`
+	Backline    string     `json:"backline"`
+	OtherNotes  string     `json:"otherNotes"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 	DeletedAt   *time.Time `json:"deletedAt,omitempty"`
 }
 
@@ -122,7 +131,7 @@ type UpdateTemplateInput struct {
 // current four-section values into the new row at insert time; when nil,
 // the RiderSectionValues from this input are used as-is.
 type CreateAttachmentInput struct {
-	GigID      uuid.UUID `json:"gigId"`
+	GigID      uuid.UUID  `json:"gigId"`
 	TemplateID *uuid.UUID `json:"templateId,omitempty"`
 	RiderSectionValues
 }

@@ -53,6 +53,12 @@ describe('riderStatusLabel', () => {
     expect(result.tone).toBe('accent')
   })
 
+  it('a rider started from blank (no template) is a custom rider, not "from template"', () => {
+    const result = riderStatusLabel(baseAttachment({ templateId: null }), null)
+    expect(result.label).toBe('CUSTOM RIDER')
+    expect(result.label).not.toContain('FROM')
+  })
+
   it('falls back to "TEMPLATE" placeholder when template lookup missing', () => {
     const result = riderStatusLabel(baseAttachment({ templateId: 'tmpl-missing' }), null)
     expect(result.label).toBe('FROM TEMPLATE')

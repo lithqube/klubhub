@@ -3,6 +3,7 @@ package rider
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,16 +20,16 @@ type fakeRepo struct {
 	byGig       map[uuid.UUID]uuid.UUID // gigID → attachmentID (live only)
 
 	// Error injection for negative-path tests.
-	listErr       error
-	getTplErr     error
-	createTplErr  error
-	updateTplErr  error
-	deleteTplErr  error
-	getAttErr     error
-	getByGigErr   error
-	createAttErr  error
-	updateAttErr  error
-	deleteAttErr  error
+	listErr      error
+	getTplErr    error
+	createTplErr error
+	updateTplErr error
+	deleteTplErr error
+	getAttErr    error
+	getByGigErr  error
+	createAttErr error
+	updateAttErr error
+	deleteAttErr error
 }
 
 func newFakeRepo() *fakeRepo {
@@ -67,6 +68,9 @@ func (m *fakeRepo) CreateTemplate(_ context.Context, in CreateTemplateInput) (*R
 	if m.createTplErr != nil {
 		return nil, m.createTplErr
 	}
+	if m.nameInUse(in.Name, uuid.Nil) {
+		return nil, nameTakenError(in.Name)
+	}
 	now := time.Now()
 	t := &RiderTemplate{
 		ID:          uuid.New(),
@@ -95,6 +99,9 @@ func (m *fakeRepo) UpdateTemplate(_ context.Context, id uuid.UUID, in UpdateTemp
 		return nil, ErrStaleUpdate
 	}
 	if in.Name != nil {
+		if m.nameInUse(*in.Name, id) {
+			return nil, nameTakenError(*in.Name)
+		}
 		t.Name = *in.Name
 	}
 	// Mirror the real Repository's COALESCE semantics per field: a non-nil
@@ -114,7 +121,25 @@ func (m *fakeRepo) SoftDeleteTemplate(_ context.Context, id uuid.UUID) error {
 	}
 	now := time.Now()
 	t.DeletedAt = &now
+	// Like the real repository: attachments lose their template reference
+	// (content and updated_at untouched).
+	for _, a := range m.attachments {
+		if a.TemplateID != nil && *a.TemplateID == id {
+			a.TemplateID = nil
+		}
+	}
 	return nil
+}
+
+// nameInUse reports whether another live template (not `except`) already has
+// this name, case-insensitively: the rule of rider_templates_name_unique.
+func (m *fakeRepo) nameInUse(name string, except uuid.UUID) bool {
+	for id, t := range m.templates {
+		if id != except && t.DeletedAt == nil && strings.EqualFold(t.Name, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *fakeRepo) GetAttachmentByGig(_ context.Context, gigID uuid.UUID) (*RiderAttachment, error) {

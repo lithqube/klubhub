@@ -309,7 +309,8 @@ func run() error {
 	riderSettingsSvc := rider.NewSettingsServiceAdapter(settingsSvc)
 	riderSvc := rider.NewService(riderRepo, riderStorage, riderSettingsSvc)
 	riderSvc.SetGigReader(gigSvc)
-	riderHandler := rider.NewHandler(riderSvc, gigSvc)
+	riderSvc.SetBucket(cfg.S3Bucket)
+	riderHandler := rider.NewHandler(riderSvc)
 
 	// 10. Build router (internal http package aliased as apphttp).
 	router := apphttp.NewRouter(cfg, pool, storeClient, logger,

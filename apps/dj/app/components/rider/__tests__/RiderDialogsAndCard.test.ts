@@ -121,6 +121,20 @@ describe('RiderAttachmentCard', () => {
     expect(w.find('[data-testid="rider-status-gig-1"]').text()).toBe('FROM STANDARD CLUB')
   })
 
+  it('shows no "Invalid Date" line for an id-only gig (the /rider deep link), and shows date and venue for a full gig', async () => {
+    fetchMock().mockResolvedValueOnce(null)
+    const bare = mount(RiderAttachmentCard, { props: { gig } })
+    await flushPromises()
+    expect(bare.text()).not.toContain('Invalid Date')
+    expect(bare.text()).not.toContain('VENUE TBA')
+    expect(bare.text()).toContain('NO RIDER ATTACHED')
+
+    fetchMock().mockResolvedValueOnce(null)
+    const full = mount(RiderAttachmentCard, { props: { gig: { id: 'gig-2', date: '2026-10-04', venue: 'Tresor' } as Gig } })
+    await flushPromises()
+    expect(full.text()).toContain('TRESOR')
+  })
+
   it('does not refetch a gig that is already cached', async () => {
     const store = useRiderStore()
     store.attachmentsByGigId = { 'gig-1': null }

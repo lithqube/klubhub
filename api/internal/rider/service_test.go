@@ -30,6 +30,9 @@ type fakeStorage struct {
 	lastPutCT     string
 	deletedKeys   []string
 	deleteErr     error
+	// buckets seen by the non-Put calls (Put is lastPutBucket)
+	lastPresignBucket string
+	lastDeleteBucket  string
 }
 
 func (m *fakeStorage) PutObject(_ context.Context, bucket, key string, r io.Reader, _ int64, contentType string) error {
@@ -45,7 +48,8 @@ func (m *fakeStorage) PutObject(_ context.Context, bucket, key string, r io.Read
 	return nil
 }
 
-func (m *fakeStorage) PresignedGetObject(_ context.Context, _, key string, _ time.Duration) (string, error) {
+func (m *fakeStorage) PresignedGetObject(_ context.Context, bucket, key string, _ time.Duration) (string, error) {
+	m.lastPresignBucket = bucket
 	if m.presignErr != nil {
 		return "", m.presignErr
 	}
@@ -55,7 +59,8 @@ func (m *fakeStorage) PresignedGetObject(_ context.Context, _, key string, _ tim
 	return "https://garage.example.com/presigned/" + key, nil
 }
 
-func (m *fakeStorage) DeleteObject(_ context.Context, _, key string) error {
+func (m *fakeStorage) DeleteObject(_ context.Context, bucket, key string) error {
+	m.lastDeleteBucket = bucket
 	if m.deleteErr != nil {
 		return m.deleteErr
 	}

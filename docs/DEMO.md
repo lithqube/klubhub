@@ -15,10 +15,11 @@ are all zeros.
 
 | Piece | Where | What it does |
 |---|---|---|
-| Build flag | `apps/dj/nuxt.config.ts` | `NUXT_DEMO=1` sets `ssr: false` and `app.baseURL: '/demo/'` (override with `NUXT_APP_BASE_URL`). It adds `<meta name="robots" content="noindex">` and `runtimeConfig.public.demo = true`, and prerenders `/`, `/tracklist`, `/social`, `/epk`, `/gigs` and `/finance` as SPA shells (plus `200.html`/`404.html`). It uses an empty `serverDir`, so no Nitro routes, dev mocks or Playwright plugin are bundled, skips the production `NUXT_PUBLIC_API_BASE` guard and the proxy, and builds into `.nuxt-demo`/`.output-demo`. Edition features stay at their defaults (RA import off). |
+| Build flag | `apps/dj/nuxt.config.ts` | `NUXT_DEMO=1` sets `ssr: false` and `app.baseURL: '/demo/'` (override with `NUXT_APP_BASE_URL`). It adds `<meta name="robots" content="noindex">` and `runtimeConfig.public.demo = true`, and prerenders `/`, `/tracklist`, `/social`, `/epk`, `/gigs`, `/rider` and `/finance` as SPA shells (plus `200.html`/`404.html`). It uses an empty `serverDir`, so no Nitro routes, dev mocks or Playwright plugin are bundled, skips the production `NUXT_PUBLIC_API_BASE` guard and the proxy, and builds into `.nuxt-demo`/`.output-demo`. Edition features stay at their defaults (RA import off). |
 | Plugin | `apps/dj/app/plugins/00.demo.client.ts` | Runs first (`enforce: 'pre'`) and does nothing unless `runtimeConfig.public.demo` is set. In the demo it lazy-loads `app/demo` and installs the fetch shim, so normal builds never download the demo code. |
 | Fetch shim | `apps/dj/app/demo/fetch.ts` | Wraps `globalThis.fetch`. Same-origin requests to `<baseURL>api/v1/*` are answered in-process. Everything else (assets, fonts) passes through. The stores' `$fetch` calls go through it unchanged. |
-| Router and handlers | `apps/dj/app/demo/router.ts`, `handlers/*.ts` | Method + path patterns with one module per domain: settings, tracklists, social, epk, gigs (with venues and contacts), finance. Status codes and error bodies match the Go API: `{ "error": "..." }` in general, and `{ error, message, problems? }` for finance (see [`INVOICING.md`](./INVOICING.md)). |
+| Router and handlers | `apps/dj/app/demo/router.ts`, `handlers/*.ts` | Method + path patterns with one module per domain: settings, tracklists, social, epk, gigs (with venues and contacts), finance, rider. Status codes and error bodies match the Go API: `{ "error": "..." }` in general, and `{ error, message, problems? }` for finance (see [`INVOICING.md`](./INVOICING.md)) and rider (`{ error, message }`). |
+| Rider rules | `apps/dj/shared/rider-mock/` | The rider contract of `api/internal/rider` as pure code: `updatedAt` tokens on updates (422 missing, 409 stale), name and section limits, unique template names, one rider per live gig, and a deleted template detaching from its riders. The Nitro dev mocks under `apps/dj/server/api/v1/rider/` and the demo both use it. |
 | Finance rules | `apps/dj/shared/finance-mock/` | The invoicing contract (tax suggestion, numbering at issue, issue checks, credit notes, corrections, payments, balances) as pure code. The Nitro dev mocks under `apps/dj/server/api/v1/finance/` and the demo both use it, so there is one copy of the rules. |
 | Persistence | `apps/dj/app/demo/state.ts` | One JSON document under the `klubhub-demo:v1` key. It is seeded on the first visit. If storage is blocked or full, the demo keeps working in memory. Bump the key's version when the state shape changes incompatibly. |
 | Images | `apps/dj/app/utils/apiAssetUrl.ts` | `<img>` tags that point at the API (post images, storage proxy) go through `apiAssetUrl()`. The demo registers a resolver that returns a local data URL. Outside the demo, the path is returned unchanged. |
@@ -78,7 +79,7 @@ The workflow runs on changes to `apps/dj/**` so the demo tracks the app. See
 [`github-pages.md`](./github-pages.md).
 
 GitHub Pages serves only the site's root `404.html`, so an unknown path under
-`/demo/` does not fall back to the app. The six app pages each have their own
+`/demo/` does not fall back to the app. The seven app pages each have their own
 `index.html`, so direct links to them work.
 
 ## Updating the seed data

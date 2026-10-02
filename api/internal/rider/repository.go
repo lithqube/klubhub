@@ -77,7 +77,18 @@ func (r *Repository) CreateTemplate(ctx context.Context, in CreateTemplateInput)
 		          created_at, updated_at, deleted_at`,
 		in.Name, in.Technical, in.Hospitality, in.Backline, in.OtherNotes,
 	)
-	return scanTemplate(row)
+	t, err := scanTemplate(row)
+	if isNameTaken(err) {
+		return nil, nameTakenError(in.Name)
+	}
+	return t, err
+}
+
+// isNameTaken reports whether err is the unique violation on the live
+// template name index (rider_templates_name_unique).
+func isNameTaken(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "rider_templates_name_unique"
 }
 
 // UpdateTemplate performs a partial update. Each *string pointer drives a
@@ -103,6 +114,9 @@ func (r *Repository) UpdateTemplate(ctx context.Context, id uuid.UUID, in Update
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, r.missOrConflict(ctx, "rider_templates", id)
 	}
+	if isNameTaken(err) && in.Name != nil {
+		return nil, nameTakenError(*in.Name)
+	}
 	return t, err
 }
 
@@ -126,7 +140,13 @@ func (r *Repository) missOrConflict(ctx context.Context, table string, id uuid.U
 // calling this on an already-deleted template returns ErrNotFound because
 // the WHERE deleted_at IS NULL clause matches zero rows.
 func (r *Repository) SoftDeleteTemplate(ctx context.Context, id uuid.UUID) error {
-	tag, err := r.pool.Exec(ctx, `
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after Commit
+
+	tag, err := tx.Exec(ctx, `
 		UPDATE rider_templates
 		SET deleted_at = now()
 		WHERE id = $1 AND deleted_at IS NULL`, id)
@@ -136,7 +156,15 @@ func (r *Repository) SoftDeleteTemplate(ctx context.Context, id uuid.UUID) error
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	// Per-gig copies keep their content but lose the pointer to a template
+	// that no longer exists (the FK's SET NULL only fires on a hard delete).
+	// updated_at is deliberately left alone: template_id is not editable
+	// content, and bumping it would invalidate every open editor's token.
+	if _, err := tx.Exec(ctx,
+		`UPDATE rider_attachments SET template_id = NULL WHERE template_id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ─── Attachments ────────────────────────────────────────────────────────────

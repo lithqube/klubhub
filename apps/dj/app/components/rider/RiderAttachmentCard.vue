@@ -72,7 +72,7 @@ async function onAttached(): Promise<void> {
 const toneColor = computed(() => {
   switch (status.value.tone) {
     case 'accent':
-      return 'var(--green)'
+      return 'var(--color-secondary)'
     case 'amber':
       return 'var(--color-primary)'
     default:
@@ -85,7 +85,8 @@ const toneColor = computed(() => {
   <div data-testid="rider-attachment-card" class="glass-panel p-4 space-y-3">
     <div class="flex items-center justify-between">
       <div>
-        <p class="font-terminal text-tertiary text-xs uppercase tracking-terminal">
+        <!-- The /rider deep link passes only `{ id }`, so there is no date or venue to show. -->
+        <p v-if="gig.date" class="font-terminal text-tertiary text-xs uppercase tracking-terminal">
           {{ new Date(gig.date).toLocaleDateString() }} · {{ gig.venue?.toUpperCase() ?? 'VENUE TBA' }}
         </p>
         <p

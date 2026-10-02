@@ -267,3 +267,83 @@ func TestRenderRiderPDF_Emoji_DoesNotFailTheExport(t *testing.T) {
 		"fpdf rejects astral code points; they must be sanitised first")
 	assert.Equal(t, 1, pdfPages(buf.Bytes()))
 }
+
+// ─── Configured bucket ──────────────────────────────────────────────────────
+
+func TestService_UsesTheConfiguredBucketForEveryStorageCall(t *testing.T) {
+	svc, storage, att := exportSetup(t, nil)
+	svc.SetBucket("my-garage-bucket")
+
+	_, err := svc.GeneratePDF(context.Background(), att.ID)
+	require.NoError(t, err)
+	require.NoError(t, svc.DeleteAttachment(context.Background(), att.ID))
+
+	assert.Equal(t, "my-garage-bucket", storage.lastPutBucket)
+	assert.Equal(t, "my-garage-bucket", storage.lastPresignBucket)
+	assert.Equal(t, "my-garage-bucket", storage.lastDeleteBucket)
+}
+
+func TestService_DefaultsToTheStandardBucket_AndIgnoresAnEmptyOverride(t *testing.T) {
+	svc, storage, att := exportSetup(t, nil)
+	svc.SetBucket("") // an unset config value must not blank the bucket
+
+	_, err := svc.GeneratePDF(context.Background(), att.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StorageBucket, storage.lastPutBucket)
+}
+
+// ─── Unique template names ──────────────────────────────────────────────────
+
+func TestService_TemplateNames_AreUniqueCaseInsensitively(t *testing.T) {
+	svc := NewService(newFakeRepo(), &fakeStorage{}, &fakeSettings{})
+	ctx := context.Background()
+	first, err := svc.CreateTemplate(ctx, CreateTemplateInput{Name: "Standard club"})
+	require.NoError(t, err)
+
+	_, err = svc.CreateTemplate(ctx, CreateTemplateInput{Name: "standard CLUB"})
+	require.ErrorIs(t, err, ErrInvalidInput, "422, not the 409 the editors read as 'changed elsewhere'")
+	assert.NotErrorIs(t, err, ErrConflict)
+	assert.NotErrorIs(t, err, ErrStaleUpdate)
+	assert.Contains(t, err.Error(), "already exists")
+
+	other, err := svc.CreateTemplate(ctx, CreateTemplateInput{Name: "Festival"})
+	require.NoError(t, err)
+	taken := "STANDARD CLUB"
+	_, err = svc.UpdateTemplate(ctx, other.ID, UpdateTemplateInput{Name: &taken, UpdatedAt: other.UpdatedAt})
+	require.ErrorIs(t, err, ErrInvalidInput, "renaming into an existing name is refused too")
+
+	// Keeping your own name (e.g. changing only its capitalisation) is fine.
+	same := "STANDARD club"
+	_, err = svc.UpdateTemplate(ctx, first.ID, UpdateTemplateInput{Name: &same, UpdatedAt: first.UpdatedAt})
+	require.NoError(t, err)
+}
+
+func TestService_DeletedTemplate_FreesItsName(t *testing.T) {
+	svc := NewService(newFakeRepo(), &fakeStorage{}, &fakeSettings{})
+	ctx := context.Background()
+	tpl, _ := svc.CreateTemplate(ctx, CreateTemplateInput{Name: "Reusable"})
+	require.NoError(t, svc.DeleteTemplate(ctx, tpl.ID))
+	_, err := svc.CreateTemplate(ctx, CreateTemplateInput{Name: "reusable"})
+	require.NoError(t, err)
+}
+
+// ─── Deleting a template detaches it from its attachments ───────────────────
+
+func TestService_DeleteTemplate_ClearsTheReference_KeepsTheContent(t *testing.T) {
+	repo := newFakeRepo()
+	svc := NewService(repo, &fakeStorage{}, &fakeSettings{})
+	ctx := context.Background()
+	tpl, _ := svc.CreateTemplate(ctx, CreateTemplateInput{Name: "Source",
+		RiderSectionValues: RiderSectionValues{Technical: "2× CDJ-3000"}})
+	att, err := svc.CreateAttachment(ctx, CreateAttachmentInput{GigID: uuid.New(), TemplateID: &tpl.ID})
+	require.NoError(t, err)
+	require.NotNil(t, att.TemplateID)
+
+	require.NoError(t, svc.DeleteTemplate(ctx, tpl.ID))
+
+	got, err := svc.GetAttachment(ctx, att.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.TemplateID, "no pointer to a template that no longer exists")
+	assert.Equal(t, "2× CDJ-3000", got.Technical, "the per-gig copy keeps its content")
+	assert.True(t, got.UpdatedAt.Equal(att.UpdatedAt), "open editors' updatedAt tokens must stay valid")
+}

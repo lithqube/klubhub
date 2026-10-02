@@ -1,14 +1,11 @@
-import { deleteAttachment } from '../_state'
+import { db, unwrap } from '../_state'
 
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: 'invalid attachment id' })
   }
-  const ok = deleteAttachment(id)
-  if (!ok) {
-    throw createError({ statusCode: 404, statusMessage: 'attachment not found' })
-  }
+  unwrap(db.deleteAttachment(id))
   setResponseStatus(event, 204)
   return ''
 })

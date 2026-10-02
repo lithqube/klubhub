@@ -27,7 +27,7 @@ if (result.error || result.status !== 0) {
   console.error(`[demo] nuxt generate failed${result.error ? `: ${result.error.message}` : ''}`)
   process.exit(result.status || 1)
 }
-for (const page of ['index.html', '404.html', 'gigs/index.html', 'finance/index.html']) {
+for (const page of ['index.html', '404.html', 'gigs/index.html', 'rider/index.html', 'finance/index.html']) {
   if (!existsSync(join(generated, page))) {
     console.error(`[demo] expected ${page} in ${generated}`)
     process.exit(1)

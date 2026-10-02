@@ -38,13 +38,14 @@ type Service struct {
 	storage  StorageIface
 	settings SettingsIface
 	gigs     GigReader // optional; nil → placeholder venue/date in PDFs
+	bucket   string    // Garage bucket for exports; StorageBucket unless SetBucket
 }
 
 // NewService constructs a Service with the given dependencies. gigs may
 // be nil — when it is, the PDF renderer uses "Unknown Venue" and
 // time.Now() placeholders.
 func NewService(repo RepoIface, storage StorageIface, settings SettingsIface) *Service {
-	return &Service{repo: repo, storage: storage, settings: settings}
+	return &Service{repo: repo, storage: storage, settings: settings, bucket: StorageBucket}
 }
 
 // SetGigReader injects the gig reader used by GeneratePDF to resolve the
@@ -55,12 +56,21 @@ func (s *Service) SetGigReader(reader GigReader) {
 	s.gigs = reader
 }
 
-// StorageBucket is the Garage bucket rider exports are stored under.
-// Same constant name as epk.storageBucket for symmetry; kept local because
-// the rider package does not depend on epk.
+// SetBucket sets the Garage bucket rider PDFs are written to and read from.
+// main.go passes cfg.S3Bucket; without it a deployment that configures a
+// bucket other than the default would send rider PDFs to one that does not
+// exist. An empty name is ignored.
+func (s *Service) SetBucket(bucket string) {
+	if bucket != "" {
+		s.bucket = bucket
+	}
+}
+
+// StorageBucket is the default Garage bucket for rider exports, used unless
+// the deployment configures another (S3_BUCKET) via Service.SetBucket.
 const StorageBucket = "klubhub"
 
-// PDFPresignedExpiry is how long a generated rider PDF's download URL
+// PDFDownloadExpiry is how long a generated rider PDF's download URL
 // remains valid. 15 minutes matches the EPK export pattern.
 const PDFDownloadExpiry = 15 * time.Minute
 
@@ -203,7 +213,7 @@ func (s *Service) DeleteAttachment(ctx context.Context, id uuid.UUID) error {
 	// would otherwise outlive the rider it was made from. Best effort: the
 	// detach has already succeeded, so a storage failure is logged, not
 	// returned (and DeleteObject on a missing key is not an error in S3).
-	if err := s.storage.DeleteObject(ctx, StorageBucket, exportKey(id)); err != nil {
+	if err := s.storage.DeleteObject(ctx, s.bucket, exportKey(id)); err != nil {
 		slog.WarnContext(ctx, "rider: could not delete exported PDF", "attachment", id, "err", err)
 	}
 	return nil
@@ -249,11 +259,11 @@ func (s *Service) GeneratePDF(ctx context.Context, attachmentID uuid.UUID) (*Exp
 
 	key := exportKey(attachmentID)
 	pdfBytes := buf.Bytes()
-	if err := s.storage.PutObject(ctx, StorageBucket, key, bytes.NewReader(pdfBytes), int64(len(pdfBytes)), "application/pdf"); err != nil {
+	if err := s.storage.PutObject(ctx, s.bucket, key, bytes.NewReader(pdfBytes), int64(len(pdfBytes)), "application/pdf"); err != nil {
 		return nil, fmt.Errorf("store PDF: %w", err)
 	}
 
-	downloadURL, err := s.storage.PresignedGetObject(ctx, StorageBucket, key, PDFDownloadExpiry)
+	downloadURL, err := s.storage.PresignedGetObject(ctx, s.bucket, key, PDFDownloadExpiry)
 	if err != nil {
 		return nil, fmt.Errorf("presign PDF URL: %w", err)
 	}

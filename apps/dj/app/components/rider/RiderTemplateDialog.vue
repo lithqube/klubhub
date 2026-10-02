@@ -1,16 +1,22 @@
 <script setup lang="ts">
 // RiderTemplateDialog — create-new modal. Submit → store.createTemplate.
 
-import { ref, watch } from 'vue'
+import { ref, useId, watch } from 'vue'
+import { useModalA11y } from '~/composables/useModalA11y'
 import { useRiderStore } from '~/stores/rider'
-import { RIDER_NAME_MAX_CHARS } from '~/types/rider'
+import { RIDER_NAME_MAX_CHARS, type RiderTemplate } from '~/types/rider'
 import { riderErrorMessage } from '~/utils/riderErrors'
 import RiderSectionField from './RiderSectionField.vue'
 
 // `open` must be a declared prop: the template reads it, and an undeclared
 // attribute is not visible to the template, so the dialog never rendered.
 const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; created: [template: RiderTemplate] }>()
+
+const titleId = useId()
+const nameId = useId()
+const panel = ref<HTMLElement | null>(null)
+useModalA11y(() => props.open, panel, () => emit('close'))
 
 const store = useRiderStore()
 
@@ -43,13 +49,14 @@ async function onSubmit(): Promise<void> {
   }
   submitting.value = true
   try {
-    await store.createTemplate({
+    const created = await store.createTemplate({
       name: name.value.trim(),
       technical: technical.value,
       hospitality: hospitality.value,
       backline: backline.value,
       otherNotes: otherNotes.value,
     })
+    emit('created', created)
     emit('close')
   } catch (e: unknown) {
     error.value = riderErrorMessage(e, 'Could not create the template.')
@@ -66,20 +73,23 @@ async function onSubmit(): Promise<void> {
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
     role="dialog"
     aria-modal="true"
+    :aria-labelledby="titleId"
     @click.self="emit('close')"
   >
-    <div class="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4">
+    <div ref="panel" tabindex="-1" class="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4">
       <div class="flex items-center justify-between">
-        <h2 class="font-command font-bold uppercase text-on-surface text-lg tracking-command">
+        <h2 :id="titleId" class="font-command font-bold uppercase text-on-surface text-lg tracking-command">
           NEW TEMPLATE
         </h2>
-        <button type="button" class="btn-hud btn-hud-ghost" @click="emit('close')">✕</button>
+        <button type="button" class="btn-hud btn-hud-ghost" aria-label="Close" @click="emit('close')">✕</button>
       </div>
 
       <div>
-        <label class="section-lbl" style="display:block;margin-bottom:6px;">NAME</label>
+        <label :for="nameId" class="section-lbl" style="display:block;margin-bottom:6px;">NAME</label>
         <input
+          :id="nameId"
           v-model="name"
+          data-autofocus
           class="hud-input"
           style="width:100%;"
           placeholder="Standard club"
@@ -93,7 +103,7 @@ async function onSubmit(): Promise<void> {
       <RiderSectionField section="backline" v-model="backline" />
       <RiderSectionField section="otherNotes" v-model="otherNotes" />
 
-      <p v-if="error" class="text-error font-terminal text-xs uppercase">{{ error }}</p>
+      <p v-if="error" role="alert" class="text-error font-terminal text-xs uppercase">{{ error }}</p>
 
       <div class="flex justify-end gap-2">
         <button type="button" class="btn-hud btn-hud-ghost" @click="emit('close')">CANCEL</button>

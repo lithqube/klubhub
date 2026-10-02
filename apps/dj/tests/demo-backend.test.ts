@@ -218,3 +218,95 @@ describe('demo finance (shared finance-mock core)', () => {
     expect(got.body.lines).toHaveLength(1)
   })
 })
+
+describe('demo rider (shared rider-mock core)', () => {
+  const GIG = FINANCE_GIG_IDS.unbilled // any gig that exists in the seed
+
+  it('seeds the standard templates and serves them like the Go API', async () => {
+    const b = backend()
+    const list = await call(b, 'GET', '/api/v1/rider/templates')
+    expect(list.status).toBe(200)
+    expect((list.body.data as { name: string }[]).map((t) => t.name)).toEqual(['Boilerplate', 'Festival heavy', 'Standard club'])
+    const one = await call(b, 'GET', '/api/v1/rider/templates/tmpl-1')
+    expect(one.body.data).toMatchObject({ id: 'tmpl-1', name: 'Standard club' })
+    expect((await call(b, 'GET', '/api/v1/rider/templates/nope')).status).toBe(404)
+  })
+
+  it('rejects what the API rejects: stale/missing token, duplicate name, over-long text', async () => {
+    const b = backend()
+    const created = (await call(b, 'POST', '/api/v1/rider/templates', { name: 'Mine', technical: 't' }))
+    expect(created.status).toBe(201)
+    const t = created.body.data
+
+    expect((await call(b, 'POST', '/api/v1/rider/templates', { name: 'mine' })).body).toMatchObject({ error: 'validation_failed' })
+    expect((await call(b, 'PUT', `/api/v1/rider/templates/${t.id}`, { technical: 'x' })).status).toBe(422)
+    expect((await call(b, 'PUT', `/api/v1/rider/templates/${t.id}`, { technical: 'x', updatedAt: '1999-01-01T00:00:00.000Z' })).body).toMatchObject({ error: 'conflict' })
+    expect((await call(b, 'PUT', `/api/v1/rider/templates/${t.id}`, { technical: 'x'.repeat(20001), updatedAt: t.updatedAt })).status).toBe(422)
+
+    const ok = await call(b, 'PUT', `/api/v1/rider/templates/${t.id}`, { technical: 'new', updatedAt: t.updatedAt })
+    expect(ok.status).toBe(200)
+    expect(ok.body.data).toMatchObject({ technical: 'new', name: 'Mine' })
+    expect(ok.body.data.updatedAt > t.updatedAt).toBe(true)
+  })
+
+  it('attaches to a gig that exists, once; unknown gig is 404; by-gig is null before and after', async () => {
+    const b = backend()
+    expect((await call(b, 'GET', `/api/v1/rider/attachments/by-gig/${GIG}`)).body).toEqual({ data: null })
+
+    const unknown = await call(b, 'POST', '/api/v1/rider/attachments', { gigId: 'no-such-gig' })
+    expect(unknown.status).toBe(404)
+
+    const att = await call(b, 'POST', '/api/v1/rider/attachments', { gigId: GIG, templateId: 'tmpl-1' })
+    expect(att.status).toBe(201)
+    expect(att.body.data.technical).toContain('CDJ-3000') // a snapshot of the template
+    expect((await call(b, 'POST', '/api/v1/rider/attachments', { gigId: GIG })).status).toBe(409)
+    expect((await call(b, 'GET', `/api/v1/rider/attachments/by-gig/${GIG}`)).body.data.id).toBe(att.body.data.id)
+
+    expect((await call(b, 'DELETE', `/api/v1/rider/attachments/${att.body.data.id}`)).status).toBe(204)
+    expect((await call(b, 'GET', `/api/v1/rider/attachments/by-gig/${GIG}`)).body).toEqual({ data: null })
+  })
+
+  it('deleting a template detaches it from attachments but keeps their text', async () => {
+    const b = backend()
+    const att = (await call(b, 'POST', '/api/v1/rider/attachments', { gigId: GIG, templateId: 'tmpl-2' })).body.data
+    expect((await call(b, 'DELETE', '/api/v1/rider/templates/tmpl-2')).status).toBe(204)
+    const got = (await call(b, 'GET', `/api/v1/rider/attachments/${att.id}`)).body.data
+    expect(got.templateId).toBeNull()
+    expect(got.technical).toBe(att.technical)
+    expect(got.updatedAt).toBe(att.updatedAt)
+  })
+
+  it('exports a PDF as a bare {id, downloadUrl, createdAt} envelope with a blob URL', async () => {
+    const b = backend()
+    const att = (await call(b, 'POST', '/api/v1/rider/attachments', { gigId: GIG, templateId: 'tmpl-1' })).body.data
+    const res = await call(b, 'POST', `/api/v1/rider/attachments/${att.id}/pdf`)
+    expect(res.status).toBe(201)
+    expect(res.body).toMatchObject({ id: att.id, downloadUrl: expect.stringMatching(/^blob:/) })
+    expect(res.body.data).toBeUndefined()
+    expect((await call(b, 'POST', '/api/v1/rider/attachments/nope/pdf')).status).toBe(404)
+  })
+
+  it('rider state persists across reloads and reset restores the seed', async () => {
+    const storage = new MemoryStorage()
+    const b1 = backend(storage)
+    await call(b1, 'POST', '/api/v1/rider/templates', { name: 'Persisted' })
+    const b2 = backend(storage)
+    expect(((await call(b2, 'GET', '/api/v1/rider/templates')).body.data as { name: string }[]).map((t) => t.name)).toContain('Persisted')
+
+    b2.reset()
+    expect(((await call(b2, 'GET', '/api/v1/rider/templates')).body.data as unknown[]).length).toBe(3)
+  })
+
+  it('a demo state saved before rider existed loads and gets the seed (no crash)', async () => {
+    const storage = new MemoryStorage()
+    backend(storage) // writes a fresh state
+    const stored = JSON.parse(storage.data.get(STORAGE_KEY)!)
+    delete stored.rider
+    storage.data.set(STORAGE_KEY, JSON.stringify(stored))
+
+    const b = backend(storage)
+    const list = await call(b, 'GET', '/api/v1/rider/templates')
+    expect(list.status).toBe(200)
+    expect((list.body.data as unknown[]).length).toBe(3)
+  })
+})

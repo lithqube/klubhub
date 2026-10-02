@@ -22,26 +22,26 @@ import (
 // ─── Mock service ───────────────────────────────────────────────────────────
 
 type mockService struct {
-	templates    []*rider.RiderTemplate
-	attachments  []*rider.RiderAttachment
-	pdfResult    *rider.ExportResult
-	pdfErr       error
+	templates   []*rider.RiderTemplate
+	attachments []*rider.RiderAttachment
+	pdfResult   *rider.ExportResult
+	pdfErr      error
 
 	// What the handler actually passed to the service on the last update.
 	lastTplUpdate *rider.UpdateTemplateInput
 	lastAttUpdate *rider.UpdateAttachmentInput
 
 	// Error injection per method.
-	listTplErr       error
-	getTplErr        error
-	createTplErr     error
-	updateTplErr     error
-	deleteTplErr     error
-	getAttByGigErr   error
-	getAttErr        error
-	createAttErr     error
-	updateAttErr     error
-	deleteAttErr     error
+	listTplErr     error
+	getTplErr      error
+	createTplErr   error
+	updateTplErr   error
+	deleteTplErr   error
+	getAttByGigErr error
+	getAttErr      error
+	createAttErr   error
+	updateAttErr   error
+	deleteAttErr   error
 }
 
 func (m *mockService) ListTemplates(_ context.Context) ([]*rider.RiderTemplate, error) {
@@ -193,7 +193,7 @@ func (m *mockService) GeneratePDF(_ context.Context, attachmentID uuid.UUID) (*r
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func newHandlerRoutes(svc *mockService) http.Handler {
-	h := rider.NewHandler(svc, nil) // nil gig reader → placeholder venue/date in PDFs
+	h := rider.NewHandler(svc)
 	return h.Routes()
 }
 
@@ -393,7 +393,7 @@ func TestHandler_GeneratePDF_MissingAttachmentReturns404(t *testing.T) {
 // TestContract_ListUsesDataArrayEnvelope asserts the wire-format shape
 // (Pitfall H from go-backend-testing): list responses wrap the slice in
 // {"data": [...]}; single-object responses use {"data": {...}}; error
-// responses use {"error": "..."}.
+// responses use {"error": "<code>", "message": "<text>"}.
 func TestContract_ListUsesDataArrayEnvelope(t *testing.T) {
 	svc := &mockService{templates: []*rider.RiderTemplate{{ID: uuid.New(), Name: "A"}}}
 	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates", nil)
@@ -427,10 +427,12 @@ func TestContract_ErrorEnvelopeShape(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 
 	var env struct {
-		Error string `json:"error"`
+		Error   string `json:"error"`
+		Message string `json:"message"`
 	}
 	require.NoError(t, json.Unmarshal(body, &env))
-	assert.NotEmpty(t, env.Error)
+	assert.Equal(t, "not_found", env.Error, "a short machine-readable code")
+	assert.NotEmpty(t, env.Message, "and a human-readable message")
 }
 
 func TestContract_PDFReturnsBareEnvelope(t *testing.T) {
@@ -584,7 +586,6 @@ func TestHandler_UpdateAttachment_EmptyBody_ChangesNothing(t *testing.T) {
 	assert.Equal(t, rider.RiderSectionPatch{}, svc.lastAttUpdate.RiderSectionPatch)
 }
 
-
 // ─── updatedAt token (optimistic concurrency) ───────────────────────────────
 
 func TestHandler_UpdateTemplate_ForwardsUpdatedAtToken(t *testing.T) {
@@ -653,7 +654,6 @@ func TestHandler_Update_MalformedToken_Returns400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Nil(t, svc.lastTplUpdate, "a malformed request must not reach the service")
 }
-
 
 // ─── Request size cap, no leaked internals, safe mux JSON ───────────────────
 
@@ -744,4 +744,51 @@ func TestMux_ErrorBodyIsValidJSON_EvenWhenThePathContainsQuotes(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &parsed), "body: %s", rec.Body.String())
 	assert.Equal(t, "not_found", parsed["error"])
 	assert.Contains(t, parsed["message"], `"x\`)
+}
+
+func TestHandler_ErrorBodies_CarryACodeAndAMessage(t *testing.T) {
+	id := uuid.New()
+	huge := strings.Repeat("x", rider.MaxRequestBytes+1)
+	cases := []struct {
+		name     string
+		status   int
+		code     string
+		run      func() (*httptest.ResponseRecorder, []byte)
+		contains string
+	}{
+		{"not found", http.StatusNotFound, "not_found", func() (*httptest.ResponseRecorder, []byte) {
+			return doRequest(t, newHandlerRoutes(&mockService{}), http.MethodGet, "/templates/"+uuid.NewString(), nil)
+		}, "not found"},
+		{"bad uuid", http.StatusBadRequest, "bad_request", func() (*httptest.ResponseRecorder, []byte) {
+			return doRequest(t, newHandlerRoutes(&mockService{}), http.MethodGet, "/templates/not-a-uuid", nil)
+		}, ""},
+		{"validation", http.StatusUnprocessableEntity, "validation_failed", func() (*httptest.ResponseRecorder, []byte) {
+			svc := seededTemplateSvc(id)
+			svc.createTplErr = fmt.Errorf("%w: name is required", rider.ErrInvalidInput)
+			return doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/templates", map[string]interface{}{"name": ""})
+		}, "name is required"},
+		{"stale update", http.StatusConflict, "conflict", func() (*httptest.ResponseRecorder, []byte) {
+			svc := seededTemplateSvc(id)
+			svc.updateTplErr = rider.ErrStaleUpdate
+			return doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(), map[string]interface{}{"name": "n", "updatedAt": "2026-10-02T12:00:00Z"})
+		}, "changed since it was read"},
+		{"too large", http.StatusRequestEntityTooLarge, "payload_too_large", func() (*httptest.ResponseRecorder, []byte) {
+			return doRequest(t, newHandlerRoutes(&mockService{}), http.MethodPost, "/templates", map[string]interface{}{"name": "n", "technical": huge})
+		}, "too large"},
+		{"internal", http.StatusInternalServerError, "internal_error", func() (*httptest.ResponseRecorder, []byte) {
+			svc := &mockService{listTplErr: errors.New("boom")}
+			return doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates", nil)
+		}, "internal error"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec, body := tc.run()
+			require.Equal(t, tc.status, rec.Code)
+			var env map[string]string
+			require.NoError(t, json.Unmarshal(body, &env), string(body))
+			assert.Equal(t, tc.code, env["error"])
+			assert.NotEmpty(t, env["message"])
+			assert.Contains(t, env["message"], tc.contains)
+		})
+	}
 }

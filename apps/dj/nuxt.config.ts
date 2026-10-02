@@ -24,7 +24,7 @@ const isDemo = process.env.NUXT_DEMO === '1' || process.env.NUXT_DEMO === 'true'
 const demoBaseURL = process.env.NUXT_APP_BASE_URL || '/demo/'
 // App pages prerendered as SPA shells so deep links work on static hosting
 // (/render/* is the screenshot target and stays out of the demo).
-const DEMO_ROUTES = ['/', '/tracklist', '/social', '/epk', '/gigs', '/finance']
+const DEMO_ROUTES = ['/', '/tracklist', '/social', '/epk', '/gigs', '/rider', '/finance']
 
 if (process.env.NODE_ENV === 'production' && !isDemo) {
   if (!process.env.NUXT_PUBLIC_API_BASE) {

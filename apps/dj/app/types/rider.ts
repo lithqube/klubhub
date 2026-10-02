@@ -100,6 +100,11 @@ export function riderStatusLabel(
   if (!attachment) {
     return { label: 'NO RIDER ATTACHED', tone: 'muted' }
   }
+  // Started from blank (or its template was deleted and the link cleared):
+  // there is nothing to compare against, so say what it is.
+  if (attachment.templateId === null) {
+    return { label: 'CUSTOM RIDER', tone: 'accent' }
+  }
   // Override = the per-gig copy's content differs from its template. Not
   // timestamps: autosave rewrites all four sections, and an export or an
   // edit that restores the template text would otherwise read as "custom".

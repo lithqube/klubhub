@@ -176,7 +176,6 @@ func TestIntegration_UpdateAttachment_SingleSection_LeavesOthersAlone(t *testing
 	}
 }
 
-
 // seedGig inserts the minimal live gig a rider attachment can reference.
 func seedGig(t *testing.T) uuid.UUID {
 	t.Helper()
@@ -392,5 +391,86 @@ func TestIntegration_Constraints_CountCharactersNotBytes(t *testing.T) {
 	}
 	if len([]rune(tpl.Technical)) != MaxSectionChars {
 		t.Fatalf("section was truncated: %d characters", len([]rune(tpl.Technical)))
+	}
+}
+
+// ─── Unique names / template delete (real Postgres) ─────────────────────────
+
+func TestIntegration_TemplateNames_UniqueCaseInsensitive_AmongLiveTemplates(t *testing.T) {
+	repo := requireIntegration(t)
+	ctx := context.Background()
+	first := seedTemplate(t, repo, "Unique Club Rider")
+
+	for _, dup := range []string{"Unique Club Rider", "unique club rider", "UNIQUE CLUB RIDER"} {
+		_, err := repo.CreateTemplate(ctx, CreateTemplateInput{Name: dup})
+		if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "already exists") {
+			t.Fatalf("create %q: err = %v, want a 'name already exists' ErrInvalidInput", dup, err)
+		}
+	}
+
+	other := seedTemplate(t, repo, "Unique Festival Rider")
+	if _, err := repo.UpdateTemplate(ctx, other.ID, UpdateTemplateInput{Name: ptr("unique club RIDER"), UpdatedAt: other.UpdatedAt}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("rename into an existing name: err = %v, want ErrInvalidInput", err)
+	}
+	// The rejected rename changed nothing.
+	got, _ := repo.GetTemplate(ctx, other.ID)
+	if got.Name != "Unique Festival Rider" || !got.UpdatedAt.Equal(other.UpdatedAt) {
+		t.Fatalf("a refused rename modified the row: %+v", got)
+	}
+	// Keeping your own name (only the case differs) is allowed.
+	if _, err := repo.UpdateTemplate(ctx, first.ID, UpdateTemplateInput{Name: ptr("UNIQUE club rider"), UpdatedAt: first.UpdatedAt}); err != nil {
+		t.Fatalf("re-casing your own name: %v", err)
+	}
+
+	// A deleted template frees its name.
+	if err := repo.SoftDeleteTemplate(ctx, first.ID); err != nil {
+		t.Fatalf("SoftDeleteTemplate: %v", err)
+	}
+	if _, err := repo.CreateTemplate(ctx, CreateTemplateInput{Name: "unique club rider"}); err != nil {
+		t.Fatalf("a deleted template's name should be reusable: %v", err)
+	}
+}
+
+func TestIntegration_SoftDeleteTemplate_ClearsAttachmentReferences_WithoutTouchingTheirContentOrToken(t *testing.T) {
+	repo := requireIntegration(t)
+	ctx := context.Background()
+	tpl := seedTemplate(t, repo, "Detach Source")
+	withTpl, err := repo.CreateAttachment(ctx, CreateAttachmentInput{GigID: seedGig(t), TemplateID: &tpl.ID,
+		RiderSectionValues: RiderSectionValues{Technical: "keep me"}})
+	if err != nil {
+		t.Fatalf("CreateAttachment: %v", err)
+	}
+	other := seedTemplate(t, repo, "Unrelated Source")
+	unrelated, _ := repo.CreateAttachment(ctx, CreateAttachmentInput{GigID: seedGig(t), TemplateID: &other.ID})
+
+	if err := repo.SoftDeleteTemplate(ctx, tpl.ID); err != nil {
+		t.Fatalf("SoftDeleteTemplate: %v", err)
+	}
+
+	got, err := repo.GetAttachment(ctx, withTpl.ID)
+	if err != nil {
+		t.Fatalf("GetAttachment: %v", err)
+	}
+	if got.TemplateID != nil {
+		t.Fatalf("template_id = %v, want NULL after the template was deleted", got.TemplateID)
+	}
+	if got.Technical != "keep me" {
+		t.Fatalf("content changed: %q", got.Technical)
+	}
+	if !got.UpdatedAt.Equal(withTpl.UpdatedAt) {
+		t.Fatalf("updated_at moved (%v -> %v): every open editor's token would go stale", withTpl.UpdatedAt, got.UpdatedAt)
+	}
+	stillThere, _ := repo.GetAttachment(ctx, unrelated.ID)
+	if stillThere.TemplateID == nil || *stillThere.TemplateID != other.ID {
+		t.Fatalf("an unrelated attachment lost its template: %+v", stillThere.TemplateID)
+	}
+	// And the token still works for a save.
+	if _, err := repo.UpdateAttachment(ctx, withTpl.ID, UpdateAttachmentInput{
+		RiderSectionPatch: RiderSectionPatch{Technical: ptr("edited after template delete")}, UpdatedAt: got.UpdatedAt}); err != nil {
+		t.Fatalf("save with the pre-delete token: %v", err)
+	}
+
+	if err := repo.SoftDeleteTemplate(ctx, tpl.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second delete: err = %v, want ErrNotFound", err)
 	}
 }

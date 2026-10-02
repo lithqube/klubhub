@@ -3,7 +3,7 @@
 // textarea. Mirrors EpkTechRiderSection.vue's chip pattern. Used by
 // both RiderTemplateEditor and RiderAttachmentEditor.
 
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import Textarea from '#kui/components/ui/textarea/Textarea.vue'
 import { SECTION_CHIPS } from './chips'
 import { RIDER_SECTION_MAX_CHARS, type RiderSection } from '~/types/rider'
@@ -23,18 +23,22 @@ const textareaProxy = computed({
 })
 
 const chips = computed(() => SECTION_CHIPS[props.section] ?? [])
+const fieldId = useId()
 
+// Rider text is one requirement per line (the templates are written that
+// way), so a chip goes on its own line. Only trailing blanks are dropped:
+// leading whitespace and the user's own line breaks are theirs.
 function insertChip(text: string): void {
-  const trimmed = textareaProxy.value.trim()
-  textareaProxy.value = trimmed ? `${trimmed}, ${text}` : text
+  const current = textareaProxy.value.replace(/\s+$/, '')
+  textareaProxy.value = current ? `${current}\n${text}` : text
 }
 </script>
 
 <template>
   <div class="glass-panel p-4 space-y-4">
-    <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">
+    <label :for="fieldId" class="block text-xs tracking-terminal text-tertiary uppercase font-terminal">
       <slot name="label">{{ section.toUpperCase() }}</slot>
-    </p>
+    </label>
 
     <div v-if="chips.length" class="flex flex-wrap gap-2" role="group" :aria-label="`Quick-insert ${section}`">
       <button
@@ -50,6 +54,7 @@ function insertChip(text: string): void {
     </div>
 
     <Textarea
+      :id="fieldId"
       v-model="textareaProxy"
       :rows="6"
       :maxlength="RIDER_SECTION_MAX_CHARS"

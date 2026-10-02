@@ -33,16 +33,14 @@ type ServiceIface interface {
 
 // Handler is the HTTP layer for the rider package.
 type Handler struct {
-	svc       ServiceIface
-	gigReader GigReader
+	svc ServiceIface
 }
 
-// NewHandler creates a Handler backed by the given service. gigReader is
-// optional — when nil, the handler still works (PDFs render with
-// placeholder venue/date), but PDFs lack real gig metadata. Production
-// wiring (Plan 04) injects the real gig.Service.
-func NewHandler(svc ServiceIface, gigReader GigReader) *Handler {
-	return &Handler{svc: svc, gigReader: gigReader}
+// NewHandler creates a Handler backed by the given service. The gig details
+// for PDFs come from the service's own GigReader (Service.SetGigReader), not
+// from the handler.
+func NewHandler(svc ServiceIface) *Handler {
+	return &Handler{svc: svc}
 }
 
 // Routes returns an http.Handler with all rider routes registered.
@@ -331,8 +329,30 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeError writes {"error": "<code>", "message": "<text>"}, the shape the
+// finance API and rider.Mux use. The code is derived from the status so
+// clients can branch on it; message is for people.
 func (h *Handler) writeError(w http.ResponseWriter, status int, msg string) {
-	h.writeJSON(w, status, map[string]string{"error": msg})
+	h.writeJSON(w, status, map[string]string{"error": errorCode(status), "message": msg})
+}
+
+func errorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusRequestEntityTooLarge:
+		return "payload_too_large"
+	case http.StatusUnprocessableEntity:
+		return "validation_failed"
+	case http.StatusInternalServerError:
+		return "internal_error"
+	default:
+		return "error"
+	}
 }
 
 // ─── JSON shapes ────────────────────────────────────────────────────────────
@@ -357,11 +377,11 @@ func (r *createTemplateRequest) toSectionValues() RiderSectionValues {
 
 type updateTemplateRequest struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
-	Name        *string `json:"name"`
-	Technical   *string `json:"technical"`
-	Hospitality *string `json:"hospitality"`
-	Backline    *string `json:"backline"`
-	OtherNotes  *string `json:"otherNotes"`
+	Name        *string   `json:"name"`
+	Technical   *string   `json:"technical"`
+	Hospitality *string   `json:"hospitality"`
+	Backline    *string   `json:"backline"`
+	OtherNotes  *string   `json:"otherNotes"`
 }
 
 // sectionPatch forwards exactly the sections the client sent. A section that
@@ -396,10 +416,10 @@ func (r *createAttachmentRequest) toSectionValues() RiderSectionValues {
 
 type updateAttachmentRequest struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
-	Technical   *string `json:"technical"`
-	Hospitality *string `json:"hospitality"`
-	Backline    *string `json:"backline"`
-	OtherNotes  *string `json:"otherNotes"`
+	Technical   *string   `json:"technical"`
+	Hospitality *string   `json:"hospitality"`
+	Backline    *string   `json:"backline"`
+	OtherNotes  *string   `json:"otherNotes"`
 }
 
 // sectionPatch: see updateTemplateRequest.sectionPatch.

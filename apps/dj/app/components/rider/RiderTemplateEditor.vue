@@ -2,10 +2,11 @@
 // RiderTemplateEditor — name field + four RiderSectionField stack.
 // Calls useRiderAutosave with the template id so changes debounce.
 
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, ref, useId, watch } from 'vue'
 import { useRiderAutosave } from '~/composables/useRiderAutosave'
 import { useRiderStore } from '~/stores/rider'
 import { RIDER_NAME_MAX_CHARS, type RiderTemplate } from '~/types/rider'
+import { riderErrorMessage } from '~/utils/riderErrors'
 import RiderConflictNotice from './RiderConflictNotice.vue'
 import RiderSectionField from './RiderSectionField.vue'
 
@@ -18,7 +19,12 @@ const backline = ref(props.template.backline)
 const otherNotes = ref(props.template.otherNotes)
 
 const store = useRiderStore()
-const { scheduleSave, flush } = useRiderAutosave()
+const { scheduleSave, flush, cancel } = useRiderAutosave()
+const nameId = useId()
+// Set while a delete is under way so the unmount flush does not PUT to the
+// template we are deleting (it would 404 and leave a sticky "save failed").
+const deleting = ref(false)
+const deleteError = ref('')
 
 // Reset local state to the template's values when the parent swaps to a
 // different template (user clicks a different row in the list), and when the
@@ -64,7 +70,32 @@ function onSection(field: 'technical' | 'hospitality' | 'backline' | 'otherNotes
   )
 }
 
+async function onDelete(): Promise<void> {
+  if (!confirm(`Delete the template "${name.value || props.template.name}"? Riders already attached to gigs keep their own copy.`)) return
+  deleting.value = true
+  deleteError.value = ''
+  const target = { kind: 'template' as const, id: props.template.id }
+  try {
+    // Stop pending saves and let an in-flight one land before the DELETE.
+    await cancel(target)
+    await store.deleteTemplate(props.template.id)
+  } catch (e) {
+    // Still there: the text is still on screen, so queue it again instead of
+    // silently dropping the unsaved edits.
+    deleting.value = false
+    deleteError.value = riderErrorMessage(e, 'Could not delete the template.')
+    scheduleSave(target, {
+      name: name.value,
+      technical: technical.value,
+      hospitality: hospitality.value,
+      backline: backline.value,
+      otherNotes: otherNotes.value,
+    })
+  }
+}
+
 onBeforeUnmount(() => {
+  if (deleting.value) return
   void flush({ kind: 'template', id: props.template.id })
 })
 </script>
@@ -73,8 +104,19 @@ onBeforeUnmount(() => {
   <div class="space-y-4">
     <RiderConflictNotice :id="template.id" kind="template" />
     <div class="glass-panel p-4 space-y-2">
-      <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">TEMPLATE NAME</p>
+      <div class="flex items-center justify-between gap-2">
+        <label :for="nameId" class="text-xs tracking-terminal text-tertiary uppercase font-terminal">TEMPLATE NAME</label>
+        <button
+          type="button"
+          class="btn-hud btn-hud-ghost"
+          :disabled="deleting"
+          data-testid="rider-template-delete"
+          @click="onDelete"
+        >DELETE TEMPLATE</button>
+      </div>
+      <p v-if="deleteError" role="alert" class="text-xs text-error" data-testid="rider-template-delete-error">{{ deleteError }}</p>
       <input
+        :id="nameId"
         :value="name"
         class="hud-input"
         style="width:100%;"

@@ -65,27 +65,6 @@ describe('rider mock handlers: every module loads', () => {
   })
 })
 
-describe('validateRiderText', () => {
-  it('accepts values at the limits, counting characters rather than bytes', () => {
-    expect(state.validateRiderText({ name: 'é'.repeat(200), technical: 'é'.repeat(20000) }, true)).toBeNull()
-  })
-  it('rejects blank / missing names, over-long text and NUL with the Go API\'s wording', () => {
-    expect(state.validateRiderText({}, true)).toBe('invalid rider input: name is required')
-    expect(state.validateRiderText({ name: '   ' }, true)).toBe('invalid rider input: name is required')
-    expect(state.validateRiderText({ name: '   ' }, false)).toBe('invalid rider input: name cannot be blank')
-    expect(state.validateRiderText({ name: 'n'.repeat(201) }, true)).toContain('name is too long (201 characters; the limit is 200)')
-    expect(state.validateRiderText({ name: 'n', backline: 'b'.repeat(20001) }, true)).toContain('backline is too long')
-    expect(state.validateRiderText({ name: 'n', otherNotes: 'a\u0000b' }, true)).toContain('otherNotes contains a NUL')
-  })
-  it('on update only inspects what is present', () => {
-    expect(state.validateRiderText({}, false)).toBeNull()
-    expect(state.validateRiderText({ technical: 'ok' }, false)).toBeNull()
-  })
-  it('counts an emoji as one character', () => {
-    expect(state.validateRiderText({ name: '🎧'.repeat(200) }, true)).toBeNull()
-  })
-})
-
 describe('rider mock handlers', () => {
   it('create template: 201, but 422 for a blank name or oversized text', async () => {
     const ok = await call('tplCreate', { body: { name: 'Mock club', technical: 't' } })
@@ -125,13 +104,13 @@ describe('rider mock handlers', () => {
     const created = (await call('tplCreate', { body: { name: 'Limits' } })).res!.data as { id: string; updatedAt: string }
     const bad = await call('tplPut', { params: { id: created.id }, body: { technical: 'x'.repeat(20001), updatedAt: created.updatedAt } })
     expect(bad.status).toBe(422)
-    expect(state.getTemplate(created.id)?.updatedAt).toBe(created.updatedAt)
+    expect(state.db.getTemplate(created.id)?.updatedAt).toBe(created.updatedAt)
   })
 
   it('create attachment: 404 for a template that does not exist, 409 for a second one, 422 over the limit', async () => {
     const g = gigId()
     expect((await call('attCreate', { body: { gigId: g, templateId: 'no-such-template' } })).status).toBe(404)
-    expect(state.getAttachmentByGig(g)).toBeNull() // nothing was stored with a dangling id
+    expect(state.db.getAttachmentByGig(g)).toBeNull() // nothing was stored with a dangling id
 
     expect((await call('attCreate', { body: { gigId: g, technical: 'x'.repeat(20001) } })).status).toBe(422)
     expect((await call('attCreate', { body: { gigId: g } })).status).toBe(201)
