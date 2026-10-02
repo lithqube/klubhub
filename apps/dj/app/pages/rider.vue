@@ -80,7 +80,8 @@ const selectedAttachment = computed(() => {
   if (!attachmentGigId.value) return null
   return store.attachmentsByGigId[attachmentGigId.value] ?? null
 })
-// The card only reads `id`; it hydrates and attaches by itself.
+// Only `id` is known here. The card loads and attaches the rider by itself and
+// leaves out the date/venue line when the gig has no `date`.
 const deepLinkGig = computed(() => ({ id: attachmentGigId.value }) as Gig)
 
 // ── selection ──

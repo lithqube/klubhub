@@ -28,12 +28,6 @@ CREATE TABLE IF NOT EXISTS rider_templates (
 CREATE INDEX IF NOT EXISTS rider_templates_alive_idx
     ON rider_templates (name) WHERE deleted_at IS NULL;
 
--- Two live templates cannot share a name (case-insensitive): otherwise the
--- picker offers indistinguishable entries. A soft-deleted template frees its
--- name. The repository maps a violation of this index to a 422.
-CREATE UNIQUE INDEX IF NOT EXISTS rider_templates_name_unique
-    ON rider_templates (lower(name)) WHERE deleted_at IS NULL;
-
 -- Rider attachments: per-gig copies of a rider template (or manually entered).
 -- The copy is a snapshot, not a live link to the source template
 -- (RIDER-02): updating the source template never changes the per-gig copy.
@@ -43,9 +37,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS rider_templates_name_unique
 -- Gigs and templates are only ever soft-deleted by the application, so the
 -- FK actions below are a backstop for hard deletes (RESTRICT protects gig
 -- history; SET NULL keeps the per-gig copy but drops the source reference).
--- Soft-deleting a template does the same explicitly (SoftDeleteTemplate sets
--- template_id to NULL on its attachments), so an attachment never points at a
--- template that no longer exists.
+-- A soft-deleted template therefore stays referenced by template_id.
 -- Attaching to a soft-deleted gig is refused in the repository, not here.
 
 CREATE TABLE IF NOT EXISTS rider_attachments (
