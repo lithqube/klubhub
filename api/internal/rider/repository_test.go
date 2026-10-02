@@ -90,6 +90,10 @@ func (m *fakeRepo) UpdateTemplate(_ context.Context, id uuid.UUID, in UpdateTemp
 	if !ok || t.DeletedAt != nil {
 		return nil, ErrNotFound
 	}
+	// Compare-and-set like the real UPDATE ... AND updated_at = $n.
+	if !in.UpdatedAt.Equal(t.UpdatedAt) {
+		return nil, ErrConflict
+	}
 	if in.Name != nil {
 		t.Name = *in.Name
 	}
@@ -174,6 +178,9 @@ func (m *fakeRepo) UpdateAttachment(_ context.Context, id uuid.UUID, in UpdateAt
 	a, ok := m.attachments[id]
 	if !ok || a.DeletedAt != nil {
 		return nil, ErrNotFound
+	}
+	if !in.UpdatedAt.Equal(a.UpdatedAt) {
+		return nil, ErrConflict
 	}
 	applyPatch(in.RiderSectionPatch, &a.Technical, &a.Hospitality, &a.Backline, &a.OtherNotes)
 	a.UpdatedAt = time.Now()
@@ -297,6 +304,7 @@ func TestFakeRepo_UpdateTemplate_PartialOnlyUpdatesNamedFields(t *testing.T) {
 	updated, err := repo.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{
 		Name:              ptr("Renamed"),
 		RiderSectionPatch: RiderSectionPatch{Technical: ptr("tech-B")},
+		UpdatedAt:         tpl.UpdatedAt,
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
@@ -320,7 +328,7 @@ func TestFakeRepo_UpdateTemplate_NilSectionValues_LeavesAllSectionsAlone(t *test
 			Technical: "tech-A", Hospitality: "hosp-A", Backline: "back-A", OtherNotes: "other-A",
 		},
 	})
-	updated, err := repo.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: ptr("Renamed")})
+	updated, err := repo.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: ptr("Renamed"), UpdatedAt: tpl.UpdatedAt})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -373,7 +381,7 @@ func TestFakeRepo_CreateAttachment_WithTemplateID_RecordsSnapshot(t *testing.T) 
 	// semantics). Verify by directly reading the attachment after the
 	// update.
 	newName := "Renamed"
-	if _, err := repo.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &newName}); err != nil {
+	if _, err := repo.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &newName, UpdatedAt: tpl.UpdatedAt}); err != nil {
 		t.Fatalf("update template: %v", err)
 	}
 	again, err := repo.GetAttachment(context.Background(), att.ID)
@@ -396,6 +404,7 @@ func TestFakeRepo_UpdateAttachment_DoesNotChangeTemplateID(t *testing.T) {
 	})
 	updated, err := repo.UpdateAttachment(context.Background(), att.ID, UpdateAttachmentInput{
 		RiderSectionPatch: RiderSectionPatch{Technical: ptr("new")},
+		UpdatedAt:         att.UpdatedAt,
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
@@ -439,6 +448,7 @@ func TestFakeRepo_UpdateAttachment_ThenGetReturnsNewValues(t *testing.T) {
 	})
 	updated, err := repo.UpdateAttachment(context.Background(), att.ID, UpdateAttachmentInput{
 		RiderSectionPatch: RiderSectionPatch{Technical: ptr("new-tech")},
+		UpdatedAt:         att.UpdatedAt,
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)

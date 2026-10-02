@@ -125,6 +125,7 @@ func (h *Handler) handleUpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	tpl, err := h.svc.UpdateTemplate(r.Context(), id, UpdateTemplateInput{
 		Name:              body.Name,
 		RiderSectionPatch: body.sectionPatch(),
+		UpdatedAt:         body.UpdatedAt,
 	})
 	if err != nil {
 		if errors.Is(err, ErrInvalidInput) {
@@ -232,6 +233,7 @@ func (h *Handler) handleUpdateAttachment(w http.ResponseWriter, r *http.Request)
 	}
 	att, err := h.svc.UpdateAttachment(r.Context(), id, UpdateAttachmentInput{
 		RiderSectionPatch: body.sectionPatch(),
+		UpdatedAt:         body.UpdatedAt,
 	})
 	if err != nil {
 		h.translateServiceError(w, err)
@@ -331,6 +333,7 @@ func (r *createTemplateRequest) toSectionValues() RiderSectionValues {
 }
 
 type updateTemplateRequest struct {
+	UpdatedAt   time.Time `json:"updatedAt"`
 	Name        *string `json:"name"`
 	Technical   *string `json:"technical"`
 	Hospitality *string `json:"hospitality"`
@@ -369,6 +372,7 @@ func (r *createAttachmentRequest) toSectionValues() RiderSectionValues {
 }
 
 type updateAttachmentRequest struct {
+	UpdatedAt   time.Time `json:"updatedAt"`
 	Technical   *string `json:"technical"`
 	Hospitality *string `json:"hospitality"`
 	Backline    *string `json:"backline"`

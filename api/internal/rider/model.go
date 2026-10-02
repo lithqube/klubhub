@@ -106,6 +106,10 @@ type RiderSectionPatch struct {
 type UpdateTemplateInput struct {
 	Name *string `json:"name,omitempty"`
 	RiderSectionPatch
+	// UpdatedAt is the updatedAt the caller last saw (optimistic
+	// concurrency, as in gig and finance). Required: the update applies only
+	// if the stored row still carries it, otherwise ErrConflict.
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // CreateAttachmentInput is the request shape for creating a per-gig copy.
@@ -122,6 +126,8 @@ type CreateAttachmentInput struct {
 // columns alone; each section is independently optional.
 type UpdateAttachmentInput struct {
 	RiderSectionPatch
+	// UpdatedAt: see UpdateTemplateInput.
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // RepoIface is the contract the service layer consumes. All read paths

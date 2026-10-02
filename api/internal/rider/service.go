@@ -99,6 +99,9 @@ func (s *Service) CreateTemplate(ctx context.Context, in CreateTemplateInput) (*
 // for templates because validation lives in the input shape (pointer
 // granularity).
 func (s *Service) UpdateTemplate(ctx context.Context, id uuid.UUID, in UpdateTemplateInput) (*RiderTemplate, error) {
+	if in.UpdatedAt.IsZero() {
+		return nil, fmt.Errorf("%w: updatedAt is required", ErrInvalidInput)
+	}
 	if in.Name != nil {
 		trimmed := strings.TrimSpace(*in.Name)
 		if trimmed == "" {
@@ -160,6 +163,9 @@ func (s *Service) CreateAttachment(ctx context.Context, in CreateAttachmentInput
 // update granularity is the repository's responsibility; the service
 // layer is intentionally thin here.
 func (s *Service) UpdateAttachment(ctx context.Context, id uuid.UUID, in UpdateAttachmentInput) (*RiderAttachment, error) {
+	if in.UpdatedAt.IsZero() {
+		return nil, fmt.Errorf("%w: updatedAt is required", ErrInvalidInput)
+	}
 	return s.repo.UpdateAttachment(ctx, id, in)
 }
 

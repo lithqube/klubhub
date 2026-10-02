@@ -113,7 +113,7 @@ func TestService_UpdateTemplate_BlankNameRejected(t *testing.T) {
 	tpl, _ := repo.CreateTemplate(context.Background(), CreateTemplateInput{Name: "Original"})
 	svc := NewService(repo, &fakeStorage{}, &fakeSettings{})
 	blank := "   "
-	_, err := svc.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &blank})
+	_, err := svc.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &blank, UpdatedAt: tpl.UpdatedAt})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got %v", err)
 	}
@@ -148,7 +148,7 @@ func TestService_CreateAttachment_WithTemplate_CopiesValues(t *testing.T) {
 	// Snapshot semantics: subsequent template update must NOT mutate the
 	// attachment.
 	newName := "Renamed"
-	if _, err := repo.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &newName}); err != nil {
+	if _, err := repo.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &newName, UpdatedAt: tpl.UpdatedAt}); err != nil {
 		t.Fatalf("update template: %v", err)
 	}
 	again, err := repo.GetAttachment(context.Background(), att.ID)
@@ -324,4 +324,41 @@ func TestRenderRiderPDF_FallsBackAccentWhenColorsEmpty(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, renderRiderPDF(att, "", "", "", time.Time{}, us, &buf))
 	assert.True(t, bytes.HasPrefix(buf.Bytes(), []byte("%PDF-")))
+}
+
+func TestService_Update_RequiresUpdatedAt(t *testing.T) {
+	repo := newFakeRepo()
+	tpl, _ := repo.CreateTemplate(context.Background(), CreateTemplateInput{Name: "T"})
+	att, _ := repo.CreateAttachment(context.Background(), CreateAttachmentInput{GigID: uuid.New()})
+	svc := NewService(repo, &fakeStorage{}, &fakeSettings{})
+
+	name := "Renamed"
+	if _, err := svc.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &name}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("template without updatedAt: err = %v, want ErrInvalidInput", err)
+	}
+	if _, err := svc.UpdateAttachment(context.Background(), att.ID, UpdateAttachmentInput{
+		RiderSectionPatch: RiderSectionPatch{Technical: ptr("x")},
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("attachment without updatedAt: err = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestService_Update_StaleUpdatedAt_IsConflict_AndKeepsTheNewerWrite(t *testing.T) {
+	repo := newFakeRepo()
+	tpl, _ := repo.CreateTemplate(context.Background(), CreateTemplateInput{Name: "T"})
+	staleToken := tpl.UpdatedAt
+	svc := NewService(repo, &fakeStorage{}, &fakeSettings{})
+
+	first := "first writer"
+	if _, err := svc.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &first, UpdatedAt: staleToken}); err != nil {
+		t.Fatalf("first writer: %v", err)
+	}
+	second := "second writer"
+	if _, err := svc.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &second, UpdatedAt: staleToken}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale writer: err = %v, want ErrConflict", err)
+	}
+	got, _ := repo.GetTemplate(context.Background(), tpl.ID)
+	if got.Name != "first writer" {
+		t.Fatalf("stale write was applied: name = %q", got.Name)
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -579,4 +580,71 @@ func TestHandler_UpdateAttachment_EmptyBody_ChangesNothing(t *testing.T) {
 
 	assert.Equal(t, [4]string{"tech-A", "hosp-A", "back-A", "other-A"}, sectionsOf(t, body))
 	assert.Equal(t, rider.RiderSectionPatch{}, svc.lastAttUpdate.RiderSectionPatch)
+}
+
+
+// ─── updatedAt token (optimistic concurrency) ───────────────────────────────
+
+func TestHandler_UpdateTemplate_ForwardsUpdatedAtToken(t *testing.T) {
+	id := uuid.New()
+	svc := seededTemplateSvc(id)
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(),
+		map[string]interface{}{"technical": "x", "updatedAt": "2026-10-02T12:00:00.123456Z"})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	want := time.Date(2026, 10, 2, 12, 0, 0, 123456000, time.UTC)
+	require.NotNil(t, svc.lastTplUpdate)
+	assert.True(t, svc.lastTplUpdate.UpdatedAt.Equal(want),
+		"token must reach the service with microsecond precision; got %s", svc.lastTplUpdate.UpdatedAt)
+}
+
+func TestHandler_UpdateAttachment_ForwardsUpdatedAtToken(t *testing.T) {
+	id := uuid.New()
+	svc := seededAttachmentSvc(id)
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/attachments/"+id.String(),
+		map[string]interface{}{"technical": "x", "updatedAt": "2026-10-02T12:00:00.123456Z"})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	want := time.Date(2026, 10, 2, 12, 0, 0, 123456000, time.UTC)
+	require.NotNil(t, svc.lastAttUpdate)
+	assert.True(t, svc.lastAttUpdate.UpdatedAt.Equal(want))
+}
+
+func TestHandler_Update_StaleToken_Returns409(t *testing.T) {
+	tid, aid := uuid.New(), uuid.New()
+	tplSvc := seededTemplateSvc(tid)
+	tplSvc.updateTplErr = rider.ErrConflict
+	rec, _ := doRequest(t, newHandlerRoutes(tplSvc), http.MethodPut, "/templates/"+tid.String(),
+		map[string]interface{}{"technical": "x", "updatedAt": "2026-10-02T12:00:00Z"})
+	assert.Equal(t, http.StatusConflict, rec.Code)
+
+	attSvc := seededAttachmentSvc(aid)
+	attSvc.updateAttErr = rider.ErrConflict
+	rec, _ = doRequest(t, newHandlerRoutes(attSvc), http.MethodPut, "/attachments/"+aid.String(),
+		map[string]interface{}{"technical": "x", "updatedAt": "2026-10-02T12:00:00Z"})
+	assert.Equal(t, http.StatusConflict, rec.Code)
+}
+
+func TestHandler_Update_MissingToken_Returns422(t *testing.T) {
+	tid, aid := uuid.New(), uuid.New()
+	tplSvc := seededTemplateSvc(tid)
+	tplSvc.updateTplErr = fmt.Errorf("%w: updatedAt is required", rider.ErrInvalidInput)
+	rec, _ := doRequest(t, newHandlerRoutes(tplSvc), http.MethodPut, "/templates/"+tid.String(),
+		map[string]interface{}{"technical": "x"})
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+
+	attSvc := seededAttachmentSvc(aid)
+	attSvc.updateAttErr = fmt.Errorf("%w: updatedAt is required", rider.ErrInvalidInput)
+	rec, _ = doRequest(t, newHandlerRoutes(attSvc), http.MethodPut, "/attachments/"+aid.String(),
+		map[string]interface{}{"technical": "x"})
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}
+
+func TestHandler_Update_MalformedToken_Returns400(t *testing.T) {
+	id := uuid.New()
+	svc := seededTemplateSvc(id)
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(),
+		map[string]interface{}{"technical": "x", "updatedAt": "not-a-timestamp"})
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Nil(t, svc.lastTplUpdate, "a malformed request must not reach the service")
 }

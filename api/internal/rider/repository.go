@@ -94,16 +94,32 @@ func (r *Repository) UpdateTemplate(ctx context.Context, id uuid.UUID, in Update
 		    backline    = COALESCE($5, backline),
 		    other_notes = COALESCE($6, other_notes),
 		    updated_at  = now()
-		WHERE id = $1 AND deleted_at IS NULL
+		WHERE id = $1 AND deleted_at IS NULL AND updated_at = $7
 		RETURNING id, name, technical, hospitality, backline, other_notes,
 		          created_at, updated_at, deleted_at`,
-		id, in.Name, in.Technical, in.Hospitality, in.Backline, in.OtherNotes,
+		id, in.Name, in.Technical, in.Hospitality, in.Backline, in.OtherNotes, in.UpdatedAt,
 	)
 	t, err := scanTemplate(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, r.missOrConflict(ctx, "rider_templates", id)
 	}
 	return t, err
+}
+
+// missOrConflict explains why a compare-and-set update touched no row: the
+// record is gone (ErrNotFound) or it exists but changed since the caller read
+// it (ErrConflict). table is always a package constant, never user input.
+func (r *Repository) missOrConflict(ctx context.Context, table string, id uuid.UUID) error {
+	var one int
+	err := r.pool.QueryRow(ctx,
+		`SELECT 1 FROM `+table+` WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	return ErrConflict
 }
 
 // SoftDeleteTemplate sets deleted_at on a live template. Idempotent:
@@ -204,14 +220,14 @@ func (r *Repository) UpdateAttachment(ctx context.Context, id uuid.UUID, in Upda
 		    backline    = COALESCE($4, backline),
 		    other_notes = COALESCE($5, other_notes),
 		    updated_at  = now()
-		WHERE id = $1 AND deleted_at IS NULL
+		WHERE id = $1 AND deleted_at IS NULL AND updated_at = $6
 		RETURNING id, gig_id, template_id, technical, hospitality, backline,
 		          other_notes, created_at, updated_at, deleted_at`,
-		id, in.Technical, in.Hospitality, in.Backline, in.OtherNotes,
+		id, in.Technical, in.Hospitality, in.Backline, in.OtherNotes, in.UpdatedAt,
 	)
 	a, err := scanAttachment(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, r.missOrConflict(ctx, "rider_attachments", id)
 	}
 	return a, err
 }
