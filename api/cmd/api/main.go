@@ -27,6 +27,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/migrations"
 	"github.com/klubhub/dj/api/internal/platform/storage"
 	"github.com/klubhub/dj/api/internal/ra"
+	"github.com/klubhub/dj/api/internal/rider"
 	"github.com/klubhub/dj/api/internal/settings"
 	"github.com/klubhub/dj/api/internal/social"
 	"github.com/klubhub/dj/api/internal/tracklist"
@@ -292,6 +293,19 @@ func run() error {
 	// the document service is still used by agreements to store PDFs.
 	financeHandler := buildFinanceHandler(cfg, pool, storeClient, transitionProcessor, logger)
 
+	// 9c. Wire rider module (Phase 4.5 — RIDER-01..05). Rider PDFs need
+	// the gig's venue and date, so SetGigReader is called after gigSvc
+	// is fully constructed. When the rider package has no gig reader
+	// wired (defensive default), the PDF renderer uses "Unknown Venue"
+	// and time.Now() placeholders — the package still works without
+	// gigSvc, useful in tests.
+	riderRepo := rider.NewRepository(pool)
+	riderStorage := rider.NewStorageAdapter(storeClient)
+	riderSettingsSvc := rider.NewSettingsServiceAdapter(settingsSvc)
+	riderSvc := rider.NewService(riderRepo, riderStorage, riderSettingsSvc)
+	riderSvc.SetGigReader(gigSvc)
+	riderHandler := rider.NewHandler(riderSvc, gigSvc)
+
 	// 10. Build router (internal http package aliased as apphttp).
 	router := apphttp.NewRouter(cfg, pool, storeClient, logger,
 		settingsHandler,
@@ -302,6 +316,7 @@ func run() error {
 		venueHandler.Routes(),
 		contactHandler.Routes(),
 		financeHandler,
+		riderHandler.Routes(),
 	)
 
 	// 11. Start HTTP server. Run ListenAndServe in a goroutine so main can
