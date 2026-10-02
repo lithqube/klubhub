@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { RiderConflictError } from '../types/rider'
 import type {
   RiderAttachment,
   RiderAttachmentCreateInput,
@@ -20,7 +21,14 @@ export const useRiderStore = defineStore('rider', () => {
   // State — templates list, attachments keyed by gigId, save indicator.
   const templates = ref<RiderTemplate[]>([])
   const attachmentsByGigId = ref<Record<string, RiderAttachment | null>>({})
-  const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle')
+  // Autosave targets ("template:<id>" / "attachment:<id>") whose last save was
+  // rejected with 409 and are waiting for the user to reload the latest copy.
+  const conflicts = ref<string[]>([])
+  // Bumped when the user discards local edits and reloads: editors hold local
+  // copies of the text, and reseed from the store only on this signal (never
+  // on their own saves, which would clobber text typed during a request).
+  const reloadVersion = ref(0)
 
   // ── Computed ───────────────────────────────────────────────────────
   const templateById = computed(() => {
@@ -28,6 +36,18 @@ export const useRiderStore = defineStore('rider', () => {
     for (const t of templates.value) map.set(t.id, t)
     return map
   })
+
+  function markConflict(key: string): void {
+    if (!conflicts.value.includes(key)) conflicts.value = [...conflicts.value, key]
+  }
+  function clearConflict(key: string): void {
+    conflicts.value = conflicts.value.filter(k => k !== key)
+  }
+
+  function statusOf(e: unknown): number | undefined {
+    const err = e as { statusCode?: number; status?: number }
+    return err?.statusCode ?? err?.status
+  }
 
   // ── Template actions ──────────────────────────────────────────────
   async function loadTemplates(): Promise<void> {
@@ -44,16 +64,39 @@ export const useRiderStore = defineStore('rider', () => {
     return result.data
   }
 
+  // Updates carry the updatedAt this client last saw (read here, at send
+  // time, so back-to-back saves always use the token the previous save
+  // returned). A 409 means someone else saved first and nothing was applied.
   async function updateTemplate(
     id: string,
     patch: RiderTemplateUpdateInput,
   ): Promise<RiderTemplate> {
-    const result = await $fetch<{ data: RiderTemplate }>(`/api/v1/rider/templates/${id}`, {
-      method: 'PUT',
-      body: patch,
-    })
+    const cached = templates.value.find(t => t.id === id)
+    if (!cached) throw new Error('Rider template is not loaded.')
+    let result: { data: RiderTemplate }
+    try {
+      result = await $fetch<{ data: RiderTemplate }>(`/api/v1/rider/templates/${id}`, {
+        method: 'PUT',
+        body: { ...patch, updatedAt: cached.updatedAt },
+      })
+    } catch (e) {
+      if (statusOf(e) === 409) throw new RiderConflictError('template', id)
+      throw e
+    }
     templates.value = templates.value.map(t => (t.id === id ? result.data : t))
     return result.data
+  }
+
+  // Re-read one template, replacing the cached copy (and its token). A 404
+  // means it was deleted elsewhere: drop it from the list.
+  async function reloadTemplate(id: string): Promise<void> {
+    try {
+      const result = await $fetch<{ data: RiderTemplate }>(`/api/v1/rider/templates/${id}`)
+      templates.value = templates.value.map(t => (t.id === id ? result.data : t))
+    } catch (e) {
+      if (statusOf(e) !== 404) throw e
+      templates.value = templates.value.filter(t => t.id !== id)
+    }
   }
 
   async function deleteTemplate(id: string): Promise<void> {
@@ -98,15 +141,36 @@ export const useRiderStore = defineStore('rider', () => {
     id: string,
     patch: RiderAttachmentUpdateInput,
   ): Promise<RiderAttachment> {
-    const result = await $fetch<{ data: RiderAttachment }>(`/api/v1/rider/attachments/${id}`, {
-      method: 'PUT',
-      body: patch,
-    })
+    const cached = Object.values(attachmentsByGigId.value).find(a => a?.id === id)
+    if (!cached) throw new Error('Rider attachment is not loaded.')
+    let result: { data: RiderAttachment }
+    try {
+      result = await $fetch<{ data: RiderAttachment }>(`/api/v1/rider/attachments/${id}`, {
+        method: 'PUT',
+        body: { ...patch, updatedAt: cached.updatedAt },
+      })
+    } catch (e) {
+      if (statusOf(e) === 409) throw new RiderConflictError('attachment', id)
+      throw e
+    }
     attachmentsByGigId.value = {
       ...attachmentsByGigId.value,
       [result.data.gigId]: result.data,
     }
     return result.data
+  }
+
+  // Re-read one attachment, replacing the cached copy (and its token). A 404
+  // means it was detached elsewhere: clear it from the per-gig cache.
+  async function reloadAttachment(id: string): Promise<void> {
+    try {
+      const result = await $fetch<{ data: RiderAttachment }>(`/api/v1/rider/attachments/${id}`)
+      attachmentsByGigId.value = { ...attachmentsByGigId.value, [result.data.gigId]: result.data }
+    } catch (e) {
+      if (statusOf(e) !== 404) throw e
+      const entry = Object.entries(attachmentsByGigId.value).find(([, a]) => a?.id === id)
+      if (entry) attachmentsByGigId.value = { ...attachmentsByGigId.value, [entry[0]]: null }
+    }
   }
 
   async function deleteAttachment(attachment: RiderAttachment): Promise<void> {
@@ -125,6 +189,8 @@ export const useRiderStore = defineStore('rider', () => {
     templates,
     attachmentsByGigId,
     saveStatus,
+    conflicts,
+    reloadVersion,
     // Computed
     templateById,
     // Template methods
@@ -132,11 +198,16 @@ export const useRiderStore = defineStore('rider', () => {
     createTemplate,
     updateTemplate,
     deleteTemplate,
+    reloadTemplate,
     // Attachment methods
     loadAttachmentByGig,
     createAttachment,
     updateAttachment,
     deleteAttachment,
+    reloadAttachment,
     exportAttachmentPdf,
+    // Autosave conflict tracking (409 on a stale updatedAt)
+    markConflict,
+    clearConflict,
   }
 })

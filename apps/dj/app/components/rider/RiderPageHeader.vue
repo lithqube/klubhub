@@ -33,7 +33,7 @@ watch(saveStatus, (val) => {
         TEMPLATES & ATTACHMENTS
       </p>
     </div>
-    <div data-testid="rider-save-status" class="flex items-center pt-1">
+    <div data-testid="rider-save-status" class="flex items-center pt-1" role="status" aria-live="polite">
       <span
         v-if="saveStatus === 'saving'"
         class="font-terminal tracking-terminal text-tertiary text-xs uppercase"
@@ -42,6 +42,10 @@ watch(saveStatus, (val) => {
         v-else-if="saveStatus === 'saved' && showSaved"
         class="font-terminal tracking-terminal text-primary text-xs uppercase"
       >SAVED</span>
+      <span
+        v-else-if="saveStatus === 'conflict'"
+        class="font-terminal tracking-terminal text-error text-xs uppercase"
+      >CHANGED ELSEWHERE</span>
       <span
         v-else-if="saveStatus === 'error'"
         class="font-terminal tracking-terminal text-error text-xs uppercase"

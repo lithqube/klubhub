@@ -5,10 +5,16 @@ export default defineEventHandler(async (event) => {
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: 'invalid template id' })
   }
-  const body = await readBody(event)
-  const updated = updateTemplate(id, body ?? {})
-  if (!updated) {
+  const { updatedAt, ...patch } = (await readBody(event)) ?? {}
+  if (typeof updatedAt !== 'string' || updatedAt === '') {
+    throw createError({ statusCode: 422, statusMessage: 'updatedAt is required' })
+  }
+  const result = updateTemplate(id, patch, updatedAt)
+  if (!result.ok) {
+    if (result.reason === 'conflict') {
+      throw createError({ statusCode: 409, statusMessage: 'template changed since it was read' })
+    }
     throw createError({ statusCode: 404, statusMessage: 'template not found' })
   }
-  return { data: updated }
+  return { data: result.value }
 })

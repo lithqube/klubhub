@@ -27,6 +27,19 @@ interface MockAttachment {
 
 const now = () => new Date().toISOString()
 
+// updatedAt is the optimistic-concurrency token, so every write must produce
+// a value different from the one it replaces (two writes inside one
+// millisecond would otherwise share a token).
+function stampAfter(prev: string): string {
+  const t = now()
+  return t > prev ? t : new Date(new Date(prev).getTime() + 1).toISOString()
+}
+
+/** Outcome of a compare-and-set update, mirroring the Go API's 404 / 409. */
+export type UpdateResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: 'not_found' | 'conflict' }
+
 // Module-level state — survives across requests within one dev process.
 const state: {
   templates: MockTemplate[]
@@ -99,16 +112,18 @@ export function createTemplate(input: {
 export function updateTemplate(
   id: string,
   patch: Partial<Pick<MockTemplate, 'name' | 'technical' | 'hospitality' | 'backline' | 'otherNotes'>>,
-): MockTemplate | null {
+  expectedUpdatedAt: string,
+): UpdateResult<MockTemplate> {
   const t = state.templates.find(x => x.id === id)
-  if (!t) return null
+  if (!t) return { ok: false, reason: 'not_found' }
+  if (t.updatedAt !== expectedUpdatedAt) return { ok: false, reason: 'conflict' }
   if (patch.name !== undefined) t.name = patch.name
   if (patch.technical !== undefined) t.technical = patch.technical
   if (patch.hospitality !== undefined) t.hospitality = patch.hospitality
   if (patch.backline !== undefined) t.backline = patch.backline
   if (patch.otherNotes !== undefined) t.otherNotes = patch.otherNotes
-  t.updatedAt = now()
-  return t
+  t.updatedAt = stampAfter(t.updatedAt)
+  return { ok: true, value: t }
 }
 
 export function deleteTemplate(id: string): boolean {
@@ -169,18 +184,20 @@ export function createAttachment(input: {
 export function updateAttachment(
   id: string,
   patch: Partial<Pick<MockAttachment, 'technical' | 'hospitality' | 'backline' | 'otherNotes'>>,
-): MockAttachment | null {
+  expectedUpdatedAt: string,
+): UpdateResult<MockAttachment> {
   for (const a of Object.values(state.attachmentsByGigId)) {
     if (a.id === id) {
+      if (a.updatedAt !== expectedUpdatedAt) return { ok: false, reason: 'conflict' }
       if (patch.technical !== undefined) a.technical = patch.technical
       if (patch.hospitality !== undefined) a.hospitality = patch.hospitality
       if (patch.backline !== undefined) a.backline = patch.backline
       if (patch.otherNotes !== undefined) a.otherNotes = patch.otherNotes
-      a.updatedAt = now()
-      return a
+      a.updatedAt = stampAfter(a.updatedAt)
+      return { ok: true, value: a }
     }
   }
-  return null
+  return { ok: false, reason: 'not_found' }
 }
 
 export function deleteAttachment(id: string): boolean {

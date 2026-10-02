@@ -62,6 +62,20 @@ export interface RiderAttachmentUpdateInput {
   otherNotes?: string
 }
 
+/**
+ * The server answered 409 to an update: the record changed since this client
+ * read it (another tab or device saved first). The update was NOT applied.
+ */
+export class RiderConflictError extends Error {
+  constructor(
+    public readonly kind: 'template' | 'attachment',
+    public readonly id: string,
+  ) {
+    super(`The ${kind} was changed elsewhere.`)
+    this.name = 'RiderConflictError'
+  }
+}
+
 export type RiderSection = 'technical' | 'hospitality' | 'backline' | 'otherNotes'
 export const RIDER_SECTIONS: readonly RiderSection[] = ['technical', 'hospitality', 'backline', 'otherNotes']
 

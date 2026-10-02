@@ -5,10 +5,16 @@ export default defineEventHandler(async (event) => {
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: 'invalid attachment id' })
   }
-  const body = await readBody(event)
-  const updated = updateAttachment(id, body ?? {})
-  if (!updated) {
+  const { updatedAt, ...patch } = (await readBody(event)) ?? {}
+  if (typeof updatedAt !== 'string' || updatedAt === '') {
+    throw createError({ statusCode: 422, statusMessage: 'updatedAt is required' })
+  }
+  const result = updateAttachment(id, patch, updatedAt)
+  if (!result.ok) {
+    if (result.reason === 'conflict') {
+      throw createError({ statusCode: 409, statusMessage: 'attachment changed since it was read' })
+    }
     throw createError({ statusCode: 404, statusMessage: 'attachment not found' })
   }
-  return { data: updated }
+  return { data: result.value }
 })

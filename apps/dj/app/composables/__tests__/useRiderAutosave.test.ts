@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useRiderAutosave } from '../useRiderAutosave'
 import { useRiderStore } from '../../stores/rider'
+import { RiderConflictError } from '../../types/rider'
 import type { RiderTemplate } from '../../types/rider'
 
 // Real Pinia store + stubbed transport. The autosave queues are module-level,
@@ -19,7 +20,14 @@ function deferred<T>() {
 }
 type Call = [string, { method?: string; body?: Record<string, unknown> }]
 const fetchMock = () => vi.mocked($fetch as unknown as (url: string, o: Call[1]) => Promise<unknown>)
-const bodies = () => fetchMock().mock.calls.map(c => c[1].body)
+const puts = () => fetchMock().mock.calls.filter(c => c[1]?.method === 'PUT')
+// The patch each PUT carried, without the concurrency token (asserted separately).
+const bodies = () => puts().map((c) => {
+  const { updatedAt: _token, ...patch } = c[1].body as Record<string, unknown>
+  return patch
+})
+// The updatedAt token each PUT carried.
+const tokens = () => puts().map(c => (c[1].body as Record<string, unknown>).updatedAt)
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -55,6 +63,8 @@ describe('useRiderAutosave', () => {
     await f2
 
     expect(bodies()).toEqual([{ technical: 'one' }, { technical: 'two' }])
+    // Each save carries the token the previous response returned.
+    expect(tokens()).toEqual(['T0', 'T1'])
     expect(store.templates[0]?.technical).toBe('two')
   })
 
@@ -142,5 +152,121 @@ describe('useRiderAutosave', () => {
     await flush({ kind: 'template', id: 't-empty' })
     expect(fetchMock()).not.toHaveBeenCalled()
     expect(store.saveStatus).toBe('idle')
+  })
+})
+
+
+// ─── Conflicts (the server rejected a stale updatedAt with 409) ─────────────
+
+const http409 = () => Object.assign(new Error('409 Conflict'), { statusCode: 409 })
+
+describe('useRiderAutosave: conflicts', () => {
+  it('on 409 keeps the edits, flags the target and reports a conflict instead of an error', async () => {
+    const store = useRiderStore()
+    store.templates = [tmpl('t-c1')]
+    const { scheduleSave, flush } = useRiderAutosave()
+    fetchMock().mockRejectedValueOnce(http409())
+
+    scheduleSave({ kind: 'template', id: 't-c1' }, { technical: 'mine' })
+    await flush({ kind: 'template', id: 't-c1' })
+
+    expect(store.saveStatus).toBe('conflict')
+    expect(store.conflicts).toEqual(['template:t-c1'])
+
+    // Clean up the shared module-level queue.
+    fetchMock().mockResolvedValue({ data: tmpl('t-c1', { updatedAt: 'T9' }) })
+    await useRiderAutosave().discard({ kind: 'template', id: 't-c1' })
+  })
+
+  it('does not resend while a conflict is unresolved, however much more is typed', async () => {
+    const store = useRiderStore()
+    store.templates = [tmpl('t-c2')]
+    const { scheduleSave, flush } = useRiderAutosave()
+    fetchMock().mockRejectedValueOnce(http409())
+
+    scheduleSave({ kind: 'template', id: 't-c2' }, { technical: 'first' })
+    await flush({ kind: 'template', id: 't-c2' })
+    expect(fetchMock()).toHaveBeenCalledTimes(1)
+
+    vi.useFakeTimers()
+    scheduleSave({ kind: 'template', id: 't-c2' }, { technical: 'second' })
+    await vi.advanceTimersByTimeAsync(10_000) // far past the debounce
+    await flush({ kind: 'template', id: 't-c2' })
+    expect(fetchMock()).toHaveBeenCalledTimes(1)
+    expect(store.saveStatus).toBe('conflict')
+
+    vi.useRealTimers()
+    fetchMock().mockResolvedValue({ data: tmpl('t-c2', { updatedAt: 'T9' }) })
+    await useRiderAutosave().discard({ kind: 'template', id: 't-c2' })
+  })
+
+  it('discard() reloads the latest copy, drops the unsaved edits, clears the conflict and signals editors', async () => {
+    const store = useRiderStore()
+    store.templates = [tmpl('t-c3', { technical: 'old' })]
+    const { scheduleSave, flush, discard } = useRiderAutosave()
+    fetchMock().mockRejectedValueOnce(http409())
+    scheduleSave({ kind: 'template', id: 't-c3' }, { technical: 'mine' })
+    await flush({ kind: 'template', id: 't-c3' })
+    expect(store.conflicts).toHaveLength(1)
+
+    const before = store.reloadVersion
+    fetchMock().mockResolvedValueOnce({ data: tmpl('t-c3', { technical: 'theirs', updatedAt: 'T5' }) })
+    await discard({ kind: 'template', id: 't-c3' })
+
+    expect(fetchMock().mock.calls.at(-1)?.[0]).toBe('/api/v1/rider/templates/t-c3') // the GET
+    expect(store.templates[0]).toMatchObject({ technical: 'theirs', updatedAt: 'T5' })
+    expect(store.conflicts).toEqual([])
+    expect(store.reloadVersion).toBe(before + 1)
+    expect(store.saveStatus).toBe('saved')
+
+    // The next save uses the reloaded token and does not resurrect the dropped edit.
+    fetchMock().mockResolvedValueOnce({ data: tmpl('t-c3', { updatedAt: 'T6' }) })
+    scheduleSave({ kind: 'template', id: 't-c3' }, { hospitality: 'after reload' })
+    await flush({ kind: 'template', id: 't-c3' })
+    expect(bodies().at(-1)).toEqual({ hospitality: 'after reload' })
+    expect(tokens().at(-1)).toBe('T5')
+  })
+
+  it('discard() keeps the conflict (and the edits) if the reload itself fails', async () => {
+    const store = useRiderStore()
+    store.templates = [tmpl('t-c4')]
+    const { scheduleSave, flush, discard } = useRiderAutosave()
+    fetchMock().mockRejectedValueOnce(http409())
+    scheduleSave({ kind: 'template', id: 't-c4' }, { technical: 'mine' })
+    await flush({ kind: 'template', id: 't-c4' })
+
+    fetchMock().mockRejectedValueOnce(new Error('offline'))
+    await expect(discard({ kind: 'template', id: 't-c4' })).rejects.toThrow('offline')
+    expect(store.conflicts).toEqual(['template:t-c4'])
+    expect(store.saveStatus).toBe('conflict')
+
+    fetchMock().mockResolvedValueOnce({ data: tmpl('t-c4', { updatedAt: 'T7' }) })
+    await discard({ kind: 'template', id: 't-c4' })
+    expect(store.conflicts).toEqual([])
+  })
+
+  it('a 409 on one target does not block another target from saving', async () => {
+    const store = useRiderStore()
+    store.templates = [tmpl('t-c5'), tmpl('t-c6')]
+    const { scheduleSave, flush, discard } = useRiderAutosave()
+    fetchMock().mockRejectedValueOnce(http409()).mockResolvedValueOnce({ data: tmpl('t-c6', { updatedAt: 'T1' }) })
+
+    scheduleSave({ kind: 'template', id: 't-c5' }, { name: 'a' })
+    await flush({ kind: 'template', id: 't-c5' })
+    scheduleSave({ kind: 'template', id: 't-c6' }, { name: 'b' })
+    await flush({ kind: 'template', id: 't-c6' })
+
+    expect(store.templates.find(t => t.id === 't-c6')?.updatedAt).toBe('T1')
+    expect(store.saveStatus).toBe('conflict') // t-c5 still needs the user
+
+    fetchMock().mockResolvedValueOnce({ data: tmpl('t-c5', { updatedAt: 'T2' }) })
+    await discard({ kind: 'template', id: 't-c5' })
+  })
+
+  it('RiderConflictError is what the store throws for a 409', async () => {
+    const store = useRiderStore()
+    store.templates = [tmpl('t-c7')]
+    fetchMock().mockRejectedValueOnce(http409())
+    await expect(store.updateTemplate('t-c7', { name: 'x' })).rejects.toBeInstanceOf(RiderConflictError)
   })
 })

@@ -3,10 +3,11 @@
 // deep link. Identical shape to RiderTemplateEditor but for an
 // attachment; the route ?gig= param is consumed in pages/rider.vue.
 
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRiderAutosave } from '~/composables/useRiderAutosave'
 import { useRiderStore } from '~/stores/rider'
 import type { RiderAttachment } from '~/types/rider'
+import RiderConflictNotice from './RiderConflictNotice.vue'
 import RiderSectionField from './RiderSectionField.vue'
 
 const props = defineProps<{ attachment: RiderAttachment }>()
@@ -19,7 +20,11 @@ const hospitality = ref(props.attachment.hospitality)
 const backline = ref(props.attachment.backline)
 const otherNotes = ref(props.attachment.otherNotes)
 
-watch(() => props.attachment.id, () => {
+// Reseed on a different attachment, or when the user explicitly discards their
+// edits to take the server's copy after a conflict (not on our own saves).
+// Separate sources, not one getter returning an array (a fresh array always
+// counts as "changed" and would fire after every save).
+watch([() => props.attachment.id, () => store.reloadVersion], () => {
   technical.value = props.attachment.technical
   hospitality.value = props.attachment.hospitality
   backline.value = props.attachment.backline
@@ -69,6 +74,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="space-y-4">
+    <RiderConflictNotice :id="attachment.id" kind="attachment" />
     <div class="glass-panel p-4 flex items-center justify-between">
       <div>
         <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal">RIDER ATTACHMENT</p>
