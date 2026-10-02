@@ -24,6 +24,7 @@ That makes it a good fit for the job KlubHub lacks today: turning our issued inv
 2. **Add a format adapter behind an `Exporter` interface in Go.** `docs/INVOICING.md` §6 already plans this.
 3. **Start with e-invoice-eu's `slim` image as a stateless, internal-only sidecar.** Add a validator sidecar (KoSIT or Mustang) for CI golden tests and a stored validation report.
 4. **Build inbound parsing in Go for Promoter.** German businesses have had to *receive* e-invoices since 2025-01-01, and e-invoice-eu can't parse.
+5. **Organise `billing` as one module per country.** Germany and the EU are the first; the US (§7) is the second, where the work is payee tax forms, withholding and 1099/1042-S reporting rather than an e-invoice format.
 
 On the "standalone service for all products" idea: **yes for the stateless part** (one `einvoice` sidecar that both stacks share). **No for a stateful finance microservice for now.** Instead, extract a shared Go `billing` library that both binaries use. A stateful service would have to cross Promoter's security invariants (RLS tenancy, envelope encryption, OPA, IDs-only events) and DJ's single-tenant, no-auth model. That needs its own ADR, ideally alongside the v2 SaaS migration (`docs/v2-saas-migration-plan.md`).
 
@@ -215,6 +216,58 @@ Put it behind `finance.Exporter` so B or C can replace it later. Option C, or GO
 4. **Extract `billing` and add owner/org scoping** (Promoter P5 prerequisite).
 5. **Promoter inbound + DJ→Promoter matching** (Tier 2, items 9–10). Then self-billing, the settlement engine and DATEV (items 11–13).
 
+## 7. Other countries: a per-country module, US first
+
+Other countries differ less in the invoice file format and more in how the payer collects tax forms and reports at year end. So instead of special-casing Germany, `billing` holds one **module per country**. Each module answers the same questions, and the e-invoice sidecar is just Germany's and the EU's output step.
+
+### What's different in the US
+
+- **No e-invoice mandate and no VAT.** A plain PDF is a valid invoice.
+  - A voluntary network exists: DBNAlliance, similar to Peppol, using UBL plus AS4 transport. Its first live invoice went through in April 2024. Nothing requires it ([Avalara](https://www.avalara.com/blog/en/europe/2025/07/us-e-invoicing-fragmentation-and-future-solutions.html), [Storecove](https://www.storecove.com/blog/en/digital-business-network-alliance/)).
+- **Sales tax is set by each state.** Most states don't tax a performer's fee; a few tax some services or gross receipts [unverified per state].
+  - If exact rates are ever needed, use a rate provider (Avalara, TaxJar) behind an interface rather than writing our own rules.
+- **The burden falls on whoever pays the artist,** which in KlubHub means Promoter:
+
+| Situation | What the payer must do |
+|---|---|
+| US DJ → US promoter | Collect a **W-9** (the DJ's taxpayer ID). File a **1099-NEC** if paid **≥ $2,000** in a year. That limit applies from 2026 (it was $600) and rises with inflation from 2027 ([Patriot](https://www.patriotsoftware.com/blog/accounting/1099-reporting-threshold/), [Avalara](https://www.avalara.com/blog/en/north-america/2025/07/one-big-beautiful-bill-act-1099-reporting-threshold.html)) |
+| Foreign DJ → US promoter | Collect a **W-8BEN** and withhold **30% of the gross fee**; report on 1042-S / 1042. The artist can apply for a **Central Withholding Agreement** (Form 13930, or 13930-A under $10k), which bases withholding on net income at graduated rates ([IRS FAQ](https://www.irs.gov/individuals/international-taxpayers/frequently-asked-questions-faqs-about-foreign-artist-and-athlete-withholding), [IRS Pub 519](https://www.irs.gov/publications/p519)). Some states add their own withholding for out-of-state performers [unverified] |
+| US DJ → German or EU promoter | Already covered above: §13b / reverse-charge invoice, and §50a withholding on the promoter's side. Treaty relief under the US–Germany treaty Art. 17 may apply [unverified] |
+
+The pattern is the same as in Germany:
+
+| US | German equivalent |
+|---|---|
+| 30% NRA withholding | §50a withholding |
+| 1099 / 1042-S | §50a quarterly filing, KSK annual report |
+| W-9 / W-8BEN | Freistellungsbescheinigung |
+
+### What each country module defines
+
+| Part of the module | DE / EU | US |
+|---|---|---|
+| Tax treatment rules | VAT: standard, reverse charge (`AE`), §19 exemption (`E`), outside scope (`O`) | Sales tax: usually none; optional rate lookup |
+| Fields required before issuing | Steuernummer or VAT ID, the EN 16931 set (§2) | Payee legal name, address, EIN/SSN on file (payer side) |
+| Legal notes on the invoice | §19 UStG, §13b / Art. 196 | None required |
+| Output files | Factur-X EN16931 and XRechnung via the sidecar | PDF (existing fpdf renderer); optional UBL for DBNAlliance later |
+| Withholding when paying an artist | §50a: 15.825%, €250 Freigrenze | 30% NRA, or the CWA rate |
+| Year-end reporting | §50a filing, KSK report, DATEV | 1099-NEC (≥ $2,000), 1042-S |
+| Payee documents | Freistellungsbescheinigung | W-9, W-8BEN |
+
+### Implications
+
+- **Already in the code:** `vat_treatment = us_sales_tax` and `tax_id_kind = ein` exist. What's missing for the US:
+  - collecting and storing payee tax forms;
+  - year-end income reports per payee;
+  - the 30% / CWA withholding calculation.
+- **Withholding goes in the module.** The DJ invoice's `withholding_rate_bps` should get its default rate and legal basis from the country module rather than being typed in by hand.
+- **Promoter security:** US taxpayer IDs (SSN/EIN) and W-8/W-9 forms are sensitive.
+  - Store them encrypted (`*_enc` / `*_bidx`, `data_class` financial), with documents in object storage.
+  - Never put them in events, which carry IDs only.
+  - Never send them to the e-invoice sidecar.
+- **Spike task:** check GOBL's per-country regimes (it already organises tax rules by country) as a source for the module boundaries, even if we keep our own tax engine.
+- **Next modules:** UK (VAT, no mandate yet), ES (Verifactu 2027), IT (SdI), FR (2026/27 reform). Add them when there are users there.
+
 ## Sources
 
 **e-invoice-eu (repo at commit `dc96ee0`, 2026-09-30):**
@@ -232,6 +285,11 @@ Put it behind `finance.Exporter` so B or C can replace it later. Option C, or GO
 **EU:**
 - [EU Commission: ViDA adoption](https://taxation-customs.ec.europa.eu/news/adoption-vat-digital-age-package-2025-03-11_en)
 - [BDO: Belgium](https://www.bdo.be/en-gb/insights/news-alerts/2025/mandatory-e-invoicing-in-2026-in-belgium-three-month-tolerance-period), [BDO: Spain Verifactu](https://www.bdo.global/en-gb/insights/tax/indirect-tax/spain-veri-factu-obligation-postponed-until-2027), [Sovos: Poland KSeF](https://sovos.com/blog/vat/poland-e-invoicing-via-ksef/) (secondary)
+
+**US:**
+- [IRS: foreign artist and athlete withholding FAQ](https://www.irs.gov/individuals/international-taxpayers/frequently-asked-questions-faqs-about-foreign-artist-and-athlete-withholding), [IRS Publication 519](https://www.irs.gov/publications/p519)
+- 1099 threshold under OBBBA: [Patriot Software](https://www.patriotsoftware.com/blog/accounting/1099-reporting-threshold/), [Avalara](https://www.avalara.com/blog/en/north-america/2025/07/one-big-beautiful-bill-act-1099-reporting-threshold.html) (secondary)
+- DBNAlliance: [Avalara](https://www.avalara.com/blog/en/europe/2025/07/us-e-invoicing-fragmentation-and-future-solutions.html), [Storecove](https://www.storecove.com/blog/en/digital-business-network-alliance/) (secondary)
 
 **Peppol:**
 - [OpenPeppol fees](https://peppol.org/join/fees/), [phase4](https://github.com/phax/phase4), [Peppyrus](https://www.peppyrus.be/en) (vendor)
