@@ -28,6 +28,10 @@ _IDENT = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,62}$')
 _PROJECT = re.compile(r'^[a-z0-9][a-z0-9_-]*$')
 _S3_BUCKET = re.compile(r'^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
 _SHA256 = re.compile(r'^[0-9a-fA-F]{64}$')
+# prune_storage runs while the apps are stopped, so a hung S3 endpoint must fail
+# the restore (TimeoutExpired reaches the generic handler) instead of blocking it.
+LIST_TIMEOUT = 300
+DELETE_TIMEOUT = 120
 
 
 def _fail(message):
@@ -185,13 +189,14 @@ def prune_storage(root, bucket, url):
     aws = ['aws', '--endpoint-url', url, 's3api']
     result = subprocess.run(aws + ['list-objects-v2', '--bucket', bucket,
                                   '--output', 'json'], check=True,
-                            capture_output=True, text=True)
+                            capture_output=True, text=True, timeout=LIST_TIMEOUT)
     listing = json.loads(result.stdout)
     for row in listing.get('Contents', []):
         key = row['Key']
         if key not in archived:
             subprocess.run(aws + ['delete-object', '--bucket', bucket,
-                                  '--key', key], check=True, stdout=subprocess.DEVNULL)
+                                  '--key', key], check=True, stdout=subprocess.DEVNULL,
+                           timeout=DELETE_TIMEOUT)
 
 
 if __name__ == '__main__':

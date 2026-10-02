@@ -103,16 +103,38 @@ describe('minors', () => {
     expect(w.find('.draft-status').text()).toContain('Could not reload the invoice.')
   })
 
-  it('a superseded entry read is not reported as a load error (missing-cache edit)', async () => {
+  it('a superseded entry read with nothing cached is retried, so the dialog loads instead of staying blank', async () => {
     const s = useEarningsStore()
     const first = deferred<unknown>()
     transport().mockReturnValueOnce(first.promise)
     w = mount(EntryFormDialog, { attachTo: document.body, props: { open: true, kind: 'income', editId: 'e' } }); await flushPromises()
     const second = deferred<unknown>(); transport().mockReturnValueOnce(second.promise)
+    const retry = deferred<unknown>(); transport().mockReturnValueOnce(retry.promise)
     const newer = s.fetchEntry('e')
     first.resolve({ data: entry() }); await flushPromises()
+    // Superseded and nothing cached: no error, and the dialog asks again.
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+    expect(transport()).toHaveBeenCalledTimes(3)
+    retry.resolve({ data: entry({ description: 'Loaded on retry' }) }); await flushPromises()
+    expect((document.querySelector('#ee-description') as HTMLInputElement).value).toBe('Loaded on retry')
+    expect((document.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false)
     expect(document.querySelector('[role="alert"]')).toBeNull()
     second.resolve({ data: entry() }); await newer; await flushPromises()
+  })
+
+  it('a superseded entry read that stays superseded with nothing cached ends in a real error, not a blank dialog', async () => {
+    const s = useEarningsStore()
+    const first = deferred<unknown>(); transport().mockReturnValueOnce(first.promise)
+    w = mount(EntryFormDialog, { attachTo: document.body, props: { open: true, kind: 'income', editId: 'e' } }); await flushPromises()
+    const second = deferred<unknown>(); transport().mockReturnValueOnce(second.promise)
+    const retry = deferred<unknown>(); transport().mockReturnValueOnce(retry.promise)
+    const newer = s.fetchEntry('e')
+    first.resolve({ data: entry() }); await flushPromises()
+    const third = deferred<unknown>(); transport().mockReturnValueOnce(third.promise)
+    const newest = s.fetchEntry('e') // supersedes the retry as well
+    retry.resolve({ data: entry() }); await flushPromises()
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not load this entry')
+    second.resolve({ data: entry() }); third.resolve({ data: entry() }); await newer; await newest; await flushPromises()
   })
 
   it('a superseded reload read during discard is not reported as an error', async () => {

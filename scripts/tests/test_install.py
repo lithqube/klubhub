@@ -172,7 +172,8 @@ def read_env(path):
 class ExposureWarningTests(unittest.TestCase):
     def warning(self, sb, **env):
         seed_dj_env(sb, **env)
-        r = sb.bash(sourced(f'DIR="{sb.dir}"\ncors_exposure_warning'))
+        # DJ_PORT is set by load_settings in the real flow; the helper needs it under set -u.
+        r = sb.bash(sourced(f'DIR="{sb.dir}"; DJ_PORT=8080\ncors_exposure_warning'))
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout + r.stderr
 
@@ -253,6 +254,45 @@ class OfferPublicUrlTests(unittest.TestCase):
         os.write(master, b'https://other.example\n')
         r = sb2.bash(sourced(f'DIR="{sb2.dir}"; YES=0; CHECK=0; DJ=1; TTY="{os.ttyname(slave)}"\noffer_public_url'))
         self.assertEqual(read_env(envfile)['CORS_ORIGIN'], 'https://mine.example', r.stderr)
+
+
+class MainWiringTests(unittest.TestCase):
+    """main/summary/check_only must actually use the CORS helpers: without the
+    calls a LAN-published DJ silently 403s every save with no guidance."""
+    STUBS = (
+        'parse_args(){ :; }; choose_products(){ :; }; preflight(){ :; }; fetch_repo(){ :; }\n'
+        'write_settings(){ :; }; install_promoter(){ echo install_promoter; }\n'
+        'load_settings(){ echo load_settings; }; offer_public_url(){ echo offer_public_url; }\n'
+        'cors_exposure_warning(){ echo cors_exposure_warning; }; check_only(){ echo check_only; }\n'
+        'install_dj(){ echo install_dj; }; summary(){ echo summary; }\n'
+    )
+
+    def flow(self, dj, check):
+        sb = Sandbox(self)
+        r = sb.bash(sourced(f'DIR="{sb.dir}"\n{self.STUBS}DJ={dj}; PROMOTER=0; CHECK={check}\nmain'))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return [line for line in r.stdout.splitlines() if line.replace('_', '').isalpha()]
+
+    def test_dj_install_offers_url_and_warns_after_settings_and_before_install(self):
+        self.assertEqual(self.flow(1, 0), ['load_settings', 'offer_public_url', 'cors_exposure_warning', 'install_dj', 'summary'])
+
+    def test_check_mode_warns_before_returning_without_installing(self):
+        self.assertEqual(self.flow(1, 1), ['load_settings', 'offer_public_url', 'cors_exposure_warning', 'check_only'])
+
+    def test_promoter_only_run_never_touches_dj_cors_guidance(self):
+        self.assertEqual(self.flow(0, 0), ['load_settings', 'summary'])
+
+    def test_summary_and_check_only_list_the_cors_rules_for_dj(self):
+        sb = Sandbox(self)
+        seed_dj_env(sb, CORS_ORIGIN='https://dj.example', API_BIND='0.0.0.0')
+        for fn in ('summary', 'check_only'):
+            with self.subTest(fn=fn):
+                r = sb.bash(sourced(
+                    f'DIR="{sb.dir}"; DJ=1; PROMOTER=0; DJ_PORT=8080; S3_PORT_V=39000\n'
+                    'resolve_tag(){ :; }; check_ports(){ :; }\n' + fn))
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertIn('CORS_ORIGIN=https://dj.example', r.stdout)
+                self.assertIn('Allowed Host for saves', r.stdout)
 
 
 class LoadSettingsUpdateTests(unittest.TestCase):

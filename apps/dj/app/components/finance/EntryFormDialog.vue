@@ -177,7 +177,7 @@ watch([() => props.open, () => props.editId, () => (props.editId ? null : props.
   error.value = ''
 }, { immediate: true, flush: 'sync' })
 
-async function reloadMissing(id: string, generation: number): Promise<void> {
+async function reloadMissing(id: string, generation: number, retried = false): Promise<void> {
   const isCurrent = () => alive && props.open && lifetime === generation && props.editId === id
   const { entry: remote, superseded } = await store.readEntry(id)
   if (!isCurrent()) return
@@ -186,6 +186,10 @@ async function reloadMissing(id: string, generation: number): Promise<void> {
     // A newer read/write took over; adopt whatever it cached, stay quiet.
     const cached = entries.value.find((x) => x.id === id)
     if (cached) loadFromEntry(cached)
+    // Nothing cached yet: the dialog does not watch `entries`, so read once
+    // more (a fresh read generation) rather than stay blank and unsavable.
+    else if (!retried) await reloadMissing(id, generation, true)
+    else error.value = 'Could not load this entry. Close the dialog and try again.'
   } else error.value = 'Could not load this entry. Close the dialog and try again.'
 }
 

@@ -151,7 +151,11 @@ trap - EXIT
 rm -rf "${WORK_DIR}"
 
 ARCHIVE_SIZE=$(du -sh "${ARCHIVE}" | cut -f1)
-SHA256=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA256=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
+else
+  SHA256=$(shasum -a 256 "${ARCHIVE}" | awk '{print $1}')
+fi
 echo "${SHA256}  ${ARCHIVE}" > "${ARCHIVE}.sha256"
 echo "[backup] Complete: ${ARCHIVE} (${ARCHIVE_SIZE})"
 echo "[backup] Checksum: ${SHA256}"

@@ -21,14 +21,17 @@ orchestration decisions in restore.sh. The end-to-end real Docker
 compose + Garage round-trip lives in restore_drill.py.
 """
 import hashlib
+import importlib.util
 import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'restore.sh'
 SUPPORT = Path(__file__).resolve().parents[1] / 'restore_support.py'
@@ -342,6 +345,30 @@ class Restore(unittest.TestCase):
         with tarfile.open(archives[0], 'r:gz') as t:
             self.assertTrue(any(n.endswith('/db.sql') for n in t.getnames()))
 
+    @unittest.skipUnless(shutil.which('shasum'), 'needs shasum for the macOS fallback')
+    def test_backup_checksum_works_without_sha256sum(self):
+        # macOS has no sha256sum: hide it (and only it) from PATH.
+        shadow = self.root / 'no-sha256sum'
+        shadow.mkdir()
+        for d in os.environ['PATH'].split(os.pathsep):
+            if not os.path.isdir(d):
+                continue
+            for name in os.listdir(d):
+                if name != 'sha256sum' and not (shadow / name).exists():
+                    try:
+                        (shadow / name).symlink_to(Path(d) / name)
+                    except OSError:
+                        pass
+        env = dict(self.env, PATH=str(self.bin) + os.pathsep + str(shadow))
+        self.assertIsNone(shutil.which('sha256sum', path=env['PATH']))
+        output = self.root / 'backups-nosha'
+        p = subprocess.run(['bash', str(BACKUP), '-f', str(self.compose), str(output)],
+                           env=env, capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr + p.stdout)
+        archive, = output.glob('*.tar.gz')
+        self.assertEqual(Path(str(archive) + '.sha256').read_text().split()[0],
+                         hashlib.sha256(archive.read_bytes()).hexdigest())
+
     def test_unconditional_overwrite_and_exact_nested_pruning(self):
         destination = self.root / 'destination'
         destination.mkdir()
@@ -394,6 +421,45 @@ class Restore(unittest.TestCase):
         p, calls = self.run_restore()
         self.assertNotEqual(p.returncode, 0)
         self.assertFalse(any('stop' in c for c in calls))
+
+
+class PruneStorageTimeouts(unittest.TestCase):
+    """prune_storage runs with the apps stopped: a hung S3 endpoint must fail
+    the restore rather than block it forever."""
+
+    def load(self):
+        spec = importlib.util.spec_from_file_location('restore_support_under_test', SUPPORT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_every_aws_call_carries_a_timeout(self):
+        mod = self.load()
+        calls = []
+
+        def fake_run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            out = json.dumps({'Contents': [{'Key': 'keep'}, {'Key': 'stale'}]})
+            return subprocess.CompletedProcess(argv, 0, stdout=out, stderr='')
+
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'keep').write_text('x')
+            with mock.patch.object(mod.subprocess, 'run', fake_run):
+                mod.prune_storage(d, 'bucket', 'http://127.0.0.1:1')
+        verbs = [next(a for a in argv if a in ('list-objects-v2', 'delete-object')) for argv, _ in calls]
+        self.assertEqual(verbs, ['list-objects-v2', 'delete-object'])
+        for argv, kwargs in calls:
+            self.assertGreater(kwargs.get('timeout', 0), 0, argv)
+
+    def test_a_hung_listing_raises_instead_of_blocking(self):
+        mod = self.load()
+
+        def hung(argv, **kwargs):
+            raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(mod.subprocess, 'run', hung):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                mod.prune_storage(d, 'bucket', 'http://127.0.0.1:1')
 
 
 if __name__ == '__main__':

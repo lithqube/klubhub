@@ -383,12 +383,10 @@ func parseCappedInt64(raw string, cap int64) (int64, bool, error) {
 	if raw == "" {
 		return 0, false, nil
 	}
-	neg := false
 	if raw[0] == '-' {
-		neg = true
-		raw = raw[1:]
+		return 0, false, fmt.Errorf("negative aggregate %q", raw)
 	}
-	if raw == "" || raw == "0" {
+	if raw == "0" {
 		return 0, false, nil
 	}
 	var v int64
@@ -403,9 +401,6 @@ func parseCappedInt64(raw string, cap int64) (int64, bool, error) {
 			return 0, true, nil
 		}
 		v = v*10 + digit
-	}
-	if neg {
-		return -v, false, nil
 	}
 	return v, false, nil
 }

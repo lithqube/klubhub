@@ -156,9 +156,16 @@ describe('entry reads and deletes', () => {
     const s = useEarningsStore()
     w.findComponent({ name: 'EntryList' }).vm.$emit('delete', s.entries[0]); await flushPromises()
     const del = () => [...document.querySelectorAll<HTMLButtonElement>('.finance-confirm button')].find(b => b.textContent?.trim() === 'DELETE')!
-    transport().mockImplementation(async (_u, o) => { if (o?.method === 'DELETE') throw new FinanceApiError(409, 'conflict', 'Changed elsewhere'); return { data: {} } })
+    transport().mockImplementation(async (u, o) => {
+      if (o?.method === 'DELETE') throw new FinanceApiError(409, 'conflict', 'Changed elsewhere')
+      if (String(u).endsWith('/entries/e')) return { data: row({ updated_at: 'T2' }) }
+      return { data: {} }
+    })
     del().click(); await flushPromises()
     expect(s.entries.map(e => e.id)).toEqual(['e'])
+    // The 409 refreshes the cached row, so the next confirmation opened from
+    // the list captures the server's new token instead of the stale one.
+    expect(s.entries.map(e => e.updated_at)).toEqual(['T2'])
     expect(document.querySelector('.finance-confirm')).not.toBeNull()
     expect(document.body.textContent).toContain('Changed elsewhere')
     expect(writes('DELETE')).toHaveLength(1)

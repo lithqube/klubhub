@@ -405,7 +405,7 @@ export const useEarningsStore = defineStore('earnings', () => {
     // Confirmations pass their captured version; retain the cache fallback
     // for legacy non-editor consumers.
     const token = input?.updated_at ?? tokenFor(id)
-    beginWrite(id)
+    const generation = beginWrite(id)
     const retained = entries.value.find(e => e.id === id)
     pendingDeletes.set(id, retained)
     try {
@@ -416,7 +416,13 @@ export const useEarningsStore = defineStore('earnings', () => {
     } catch (err) {
       advance(id)
       if (retained && !entries.value.some(e => e.id === id)) upsertEntry(retained)
-      throw toFinanceError(err)
+      const ferr = toFinanceError(err)
+      // Reads are discarded while the id is in pendingDeletes, so clear it
+      // first; then refresh the row so the next confirmation captures the new
+      // token instead of re-sending the stale one (same as void/update).
+      pendingDeletes.delete(id)
+      if (writeGeneration.get(id) === generation && ferr.code === 'conflict') await fetchEntry(id)
+      throw ferr
     } finally {
       pendingDeletes.delete(id)
     }

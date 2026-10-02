@@ -627,7 +627,10 @@ EOF
 
 summary() {
   step "Done"
-  if [[ "$DJ" == 1 ]]; then printf '  %sKlubHub DJ%s        %s\n' "$B" "$N" "$(env_get "$DIR/.local/dj.env" CORS_ORIGIN)"; fi
+  if [[ "$DJ" == 1 ]]; then
+    printf '  %sKlubHub DJ%s        %s\n' "$B" "$N" "$(env_get "$DIR/.local/dj.env" CORS_ORIGIN)"
+    cors_rule_lines
+  fi
   if [[ "$PROMOTER" == 1 ]]; then
     printf '  %sKlubHub Promoter%s  %s\n' "$B" "$N" "$ORIGIN"
     if [[ -n "${SETUP_LINK:-}" ]]; then
@@ -653,6 +656,7 @@ check_only() {
     resolve_tag DJ_TAG klubhub-dj-api --dj-tag
     check_ports klubhub-dj-prod "UI/API $DJ_PORT" "storage $S3_PORT_V"
     ok "DJ on $(env_get "$DIR/.local/dj.env" CORS_ORIGIN) (port $DJ_PORT free or ours)"
+    cors_rule_lines
   fi
   if [[ "$PROMOTER" == 1 ]]; then
     resolve_tag PROMOTER_TAG klubhub-promoter-api --promoter-tag
@@ -670,6 +674,9 @@ main() {
   preflight
   fetch_repo
   load_settings
+  # Before --check returns and before install_dj reads dj.env: offer_public_url
+  # skips itself for --check/--yes/no TTY; the warning stays useful in all modes.
+  if [[ "$DJ" == 1 ]]; then offer_public_url; cors_exposure_warning; fi
   if [[ "$CHECK" == 1 ]]; then check_only; return; fi
   if [[ "$DJ" == 1 ]]; then install_dj; fi
   if [[ "$PROMOTER" == 1 ]]; then install_promoter; fi
