@@ -108,7 +108,7 @@ func (r *Repository) UpdateTemplate(ctx context.Context, id uuid.UUID, in Update
 
 // missOrConflict explains why a compare-and-set update touched no row: the
 // record is gone (ErrNotFound) or it exists but changed since the caller read
-// it (ErrConflict). table is always a package constant, never user input.
+// it (ErrStaleUpdate). table is always a package constant, never user input.
 func (r *Repository) missOrConflict(ctx context.Context, table string, id uuid.UUID) error {
 	var one int
 	err := r.pool.QueryRow(ctx,
@@ -119,7 +119,7 @@ func (r *Repository) missOrConflict(ctx context.Context, table string, id uuid.U
 	if err != nil {
 		return err
 	}
-	return ErrConflict
+	return ErrStaleUpdate
 }
 
 // SoftDeleteTemplate sets deleted_at on a live template. Idempotent:
@@ -180,10 +180,16 @@ func (r *Repository) GetAttachment(ctx context.Context, id uuid.UUID) (*RiderAtt
 //     rider_attachments_one_per_gig                 → ErrConflict (a live
 //     attachment for this gig already exists; concurrent insert race).
 func (r *Repository) CreateAttachment(ctx context.Context, in CreateAttachmentInput) (*RiderAttachment, error) {
+	// INSERT ... SELECT from gigs so the liveness check and the insert are
+	// one statement: gigs are soft-deleted (the FK never fires for them), so
+	// a plain INSERT would happily attach a rider to a deleted gig where
+	// nothing could ever reach it. No live gig -> no row -> ErrNotFound.
 	row := r.pool.QueryRow(ctx, `
 		INSERT INTO rider_attachments
 			(gig_id, template_id, technical, hospitality, backline, other_notes)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		SELECT g.id, $2::uuid, $3::text, $4::text, $5::text, $6::text
+		FROM gigs g
+		WHERE g.id = $1 AND g.deleted_at IS NULL
 		RETURNING id, gig_id, template_id, technical, hospitality, backline,
 		          other_notes, created_at, updated_at, deleted_at`,
 		in.GigID, in.TemplateID, in.Technical, in.Hospitality, in.Backline, in.OtherNotes,
@@ -191,6 +197,9 @@ func (r *Repository) CreateAttachment(ctx context.Context, in CreateAttachmentIn
 	a, err := scanAttachment(row)
 	if err == nil {
 		return a, nil
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
 	}
 	// Translate FK / unique-violation errors. The pgxpool wraps the
 	// underlying pgconn.PgError; SQLSTATE codes are documented by Postgres

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -72,7 +73,7 @@ func (h *Handler) Routes() http.Handler {
 func (h *Handler) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 	out, err := h.svc.ListTemplates(r.Context())
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		h.writeInternalError(w, err)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": templatesToJSON(out)})
@@ -80,8 +81,7 @@ func (h *Handler) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleCreateTemplate(w http.ResponseWriter, r *http.Request) {
 	var body createTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if !h.decodeJSON(w, r, &body) {
 		return
 	}
 	tpl, err := h.svc.CreateTemplate(r.Context(), CreateTemplateInput{
@@ -93,7 +93,7 @@ func (h *Handler) handleCreateTemplate(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		h.writeInternalError(w, err)
 		return
 	}
 	h.writeJSON(w, http.StatusCreated, map[string]interface{}{"data": templateToJSON(tpl)})
@@ -118,8 +118,7 @@ func (h *Handler) handleUpdateTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body updateTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if !h.decodeJSON(w, r, &body) {
 		return
 	}
 	tpl, err := h.svc.UpdateTemplate(r.Context(), id, UpdateTemplateInput{
@@ -178,8 +177,7 @@ func (h *Handler) handleGetAttachmentByGig(w http.ResponseWriter, r *http.Reques
 
 func (h *Handler) handleCreateAttachment(w http.ResponseWriter, r *http.Request) {
 	var body createAttachmentRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if !h.decodeJSON(w, r, &body) {
 		return
 	}
 	gigID, err := uuid.Parse(body.GigID)
@@ -227,8 +225,7 @@ func (h *Handler) handleUpdateAttachment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var body updateAttachmentRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if !h.decodeJSON(w, r, &body) {
 		return
 	}
 	att, err := h.svc.UpdateAttachment(r.Context(), id, UpdateAttachmentInput{
@@ -293,13 +290,39 @@ func (h *Handler) translateServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		h.writeError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, ErrConflict):
+	case errors.Is(err, ErrConflict), errors.Is(err, ErrStaleUpdate):
 		h.writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrInvalidInput):
 		h.writeError(w, http.StatusUnprocessableEntity, err.Error())
 	default:
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		h.writeInternalError(w, err)
 	}
+}
+
+// writeInternalError logs the real cause and returns a generic 500. Raw
+// database errors carry table, column and constraint names (and, for bad
+// input, fragments of it) that must not reach API clients. Same approach as
+// finance.writeInternalError.
+func (h *Handler) writeInternalError(w http.ResponseWriter, err error) {
+	slog.Error("rider: internal error", "err", err)
+	h.writeError(w, http.StatusInternalServerError, "an internal error occurred")
+}
+
+// decodeJSON reads a request body into v with a size cap. Too large is 413;
+// anything else that does not parse is 400. It reports whether the caller
+// may continue (false means a response was already written).
+func (h *Handler) decodeJSON(w http.ResponseWriter, r *http.Request, v interface{}) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBytes)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return false
+		}
+		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	return true
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, v interface{}) {

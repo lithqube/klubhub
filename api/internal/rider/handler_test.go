@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -613,13 +615,16 @@ func TestHandler_UpdateAttachment_ForwardsUpdatedAtToken(t *testing.T) {
 func TestHandler_Update_StaleToken_Returns409(t *testing.T) {
 	tid, aid := uuid.New(), uuid.New()
 	tplSvc := seededTemplateSvc(tid)
-	tplSvc.updateTplErr = rider.ErrConflict
-	rec, _ := doRequest(t, newHandlerRoutes(tplSvc), http.MethodPut, "/templates/"+tid.String(),
+	tplSvc.updateTplErr = rider.ErrStaleUpdate
+	rec, body := doRequest(t, newHandlerRoutes(tplSvc), http.MethodPut, "/templates/"+tid.String(),
 		map[string]interface{}{"technical": "x", "updatedAt": "2026-10-02T12:00:00Z"})
 	assert.Equal(t, http.StatusConflict, rec.Code)
+	// Not the "attachment already exists" wording of ErrConflict.
+	assert.Contains(t, string(body), "changed since it was read")
+	assert.NotContains(t, string(body), "already exists")
 
 	attSvc := seededAttachmentSvc(aid)
-	attSvc.updateAttErr = rider.ErrConflict
+	attSvc.updateAttErr = rider.ErrStaleUpdate
 	rec, _ = doRequest(t, newHandlerRoutes(attSvc), http.MethodPut, "/attachments/"+aid.String(),
 		map[string]interface{}{"technical": "x", "updatedAt": "2026-10-02T12:00:00Z"})
 	assert.Equal(t, http.StatusConflict, rec.Code)
@@ -647,4 +652,96 @@ func TestHandler_Update_MalformedToken_Returns400(t *testing.T) {
 		map[string]interface{}{"technical": "x", "updatedAt": "not-a-timestamp"})
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Nil(t, svc.lastTplUpdate, "a malformed request must not reach the service")
+}
+
+
+// ─── Request size cap, no leaked internals, safe mux JSON ───────────────────
+
+func TestHandler_BodyTooLarge_Returns413_AndNeverReachesTheService(t *testing.T) {
+	huge := strings.Repeat("x", rider.MaxRequestBytes+1)
+	tid, aid := uuid.New(), uuid.New()
+	tplSvc, attSvc := seededTemplateSvc(tid), seededAttachmentSvc(aid)
+	cases := []struct {
+		name, method, path string
+		h                  http.Handler
+		body               map[string]interface{}
+	}{
+		{"create template", http.MethodPost, "/templates", newHandlerRoutes(tplSvc), map[string]interface{}{"name": "n", "technical": huge}},
+		{"update template", http.MethodPut, "/templates/" + tid.String(), newHandlerRoutes(tplSvc), map[string]interface{}{"technical": huge, "updatedAt": "2026-10-02T12:00:00Z"}},
+		{"create attachment", http.MethodPost, "/attachments", newHandlerRoutes(attSvc), map[string]interface{}{"gigId": uuid.NewString(), "technical": huge}},
+		{"update attachment", http.MethodPut, "/attachments/" + aid.String(), newHandlerRoutes(attSvc), map[string]interface{}{"technical": huge, "updatedAt": "2026-10-02T12:00:00Z"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec, body := doRequest(t, tc.h, tc.method, tc.path, tc.body)
+			assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code, string(body[:min(len(body), 120)]))
+		})
+	}
+	assert.Nil(t, tplSvc.lastTplUpdate)
+	assert.Nil(t, attSvc.lastAttUpdate)
+	assert.Len(t, tplSvc.templates, 1, "nothing was created")
+}
+
+func TestHandler_BodyAtTheLimit_IsStillAccepted(t *testing.T) {
+	id := uuid.New()
+	svc := seededTemplateSvc(id)
+	// Four maximum-size sections of 2-byte characters stay well under the cap.
+	section := strings.Repeat("é", rider.MaxSectionChars)
+	rec, _ := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(), map[string]interface{}{
+		"technical": section, "hospitality": section, "backline": section, "otherNotes": section,
+		"updatedAt": "2026-10-02T12:00:00Z",
+	})
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestHandler_InternalErrors_AreNotLeakedToTheClient(t *testing.T) {
+	leak := errors.New(`ERROR: relation "rider_templates" does not exist (SQLSTATE 42P01)`)
+	check := func(name string, rec *httptest.ResponseRecorder, body []byte) {
+		t.Helper()
+		assert.Equal(t, http.StatusInternalServerError, rec.Code, name)
+		assert.NotContains(t, string(body), "rider_templates", name)
+		assert.NotContains(t, string(body), "SQLSTATE", name)
+		assert.Contains(t, string(body), "internal error", name)
+	}
+	id := uuid.New()
+
+	svc := seededTemplateSvc(id)
+	svc.listTplErr = leak
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodGet, "/templates", nil)
+	check("list", rec, body)
+
+	svc = seededTemplateSvc(id)
+	svc.createTplErr = leak
+	rec, body = doRequest(t, newHandlerRoutes(svc), http.MethodPost, "/templates", map[string]interface{}{"name": "n"})
+	check("create", rec, body)
+
+	svc = seededTemplateSvc(id)
+	svc.updateTplErr = leak
+	rec, body = doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(),
+		map[string]interface{}{"name": "n", "updatedAt": "2026-10-02T12:00:00Z"})
+	check("update (via translateServiceError)", rec, body)
+}
+
+func TestHandler_InvalidInput_StillExplainsItself(t *testing.T) {
+	id := uuid.New()
+	svc := seededTemplateSvc(id)
+	svc.updateTplErr = fmt.Errorf("%w: technical is too long (20001 characters; the limit is 20000)", rider.ErrInvalidInput)
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(),
+		map[string]interface{}{"technical": "x", "updatedAt": "2026-10-02T12:00:00Z"})
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	assert.Contains(t, string(body), "too long", "validation messages are for the user and are kept")
+}
+
+func TestMux_ErrorBodyIsValidJSON_EvenWhenThePathContainsQuotes(t *testing.T) {
+	mux := rider.NewMux(nil, nil)
+	// The path decodes to /api/v1/rider/"x followed by a backslash.
+	req := httptest.NewRequest(http.MethodGet, `/api/v1/rider/%22x%5C`, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+	var parsed map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &parsed), "body: %s", rec.Body.String())
+	assert.Equal(t, "not_found", parsed["error"])
+	assert.Contains(t, parsed["message"], `"x\`)
 }

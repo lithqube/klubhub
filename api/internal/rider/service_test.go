@@ -28,6 +28,8 @@ type fakeStorage struct {
 	lastPutBucket string
 	lastPutKey    string
 	lastPutCT     string
+	deletedKeys   []string
+	deleteErr     error
 }
 
 func (m *fakeStorage) PutObject(_ context.Context, bucket, key string, r io.Reader, _ int64, contentType string) error {
@@ -53,7 +55,11 @@ func (m *fakeStorage) PresignedGetObject(_ context.Context, _, key string, _ tim
 	return "https://garage.example.com/presigned/" + key, nil
 }
 
-func (m *fakeStorage) DeleteObject(_ context.Context, _, _ string) error {
+func (m *fakeStorage) DeleteObject(_ context.Context, _, key string) error {
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	m.deletedKeys = append(m.deletedKeys, key)
 	return nil
 }
 
@@ -388,8 +394,8 @@ func TestService_Update_StaleUpdatedAt_IsConflict_AndKeepsTheNewerWrite(t *testi
 		t.Fatalf("first writer: %v", err)
 	}
 	second := "second writer"
-	if _, err := svc.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &second, UpdatedAt: staleToken}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("stale writer: err = %v, want ErrConflict", err)
+	if _, err := svc.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{Name: &second, UpdatedAt: staleToken}); !errors.Is(err, ErrStaleUpdate) {
+		t.Fatalf("stale writer: err = %v, want ErrStaleUpdate", err)
 	}
 	got, _ := repo.GetTemplate(context.Background(), tpl.ID)
 	if got.Name != "first writer" {

@@ -25,6 +25,11 @@ var (
 	// ErrInvalidInput is returned when a required field is missing or
 	// otherwise invalid (e.g. blank template name).
 	ErrInvalidInput = errors.New("invalid rider input")
+
+	// ErrStaleUpdate is returned when an update carries an updatedAt that no
+	// longer matches the stored row: the record was changed (by another tab
+	// or device) after the caller read it. Nothing was applied. Maps to 409.
+	ErrStaleUpdate = errors.New("rider record was changed since it was read")
 )
 
 // GigReader is the subset of gig.GigReader the rider service uses to

@@ -3,7 +3,6 @@ package finance
 import (
 	"bytes"
 	"context"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -12,13 +11,8 @@ import (
 	"codeberg.org/go-pdf/fpdf"
 
 	"github.com/klubhub/dj/api/internal/finance/tax"
+	"github.com/klubhub/dj/api/internal/platform/pdffont"
 )
-
-//go:embed fonts/DejaVuSansCondensed.ttf
-var dejaVuSansRegularTTF []byte
-
-//go:embed fonts/DejaVuSansCondensed-Bold.ttf
-var dejaVuSansBoldTTF []byte
 
 // InvoicePDFData contains all data needed to render an invoice PDF.
 type InvoicePDFData struct {
@@ -312,12 +306,9 @@ func (r *PDFRenderer) RenderInvoice(ctx context.Context, data *InvoicePDFData) (
 	pdf.SetAutoPageBreak(true, 20)
 	pdf.AddPage()
 
-	// Embedded DejaVu Sans so non-Latin1 characters render correctly. No
-	// italic variants are embedded; those styles reuse the upright faces.
-	pdf.AddUTF8FontFromBytes("DejaVu", "", dejaVuSansRegularTTF)
-	pdf.AddUTF8FontFromBytes("DejaVu", "B", dejaVuSansBoldTTF)
-	pdf.AddUTF8FontFromBytes("DejaVu", "I", dejaVuSansRegularTTF)
-	pdf.AddUTF8FontFromBytes("DejaVu", "BI", dejaVuSansBoldTTF)
+	// Embedded DejaVu Sans so non-Latin1 characters render correctly (shared
+	// with the rider PDF). No italic faces exist; those styles reuse upright.
+	pdffont.Register(pdf)
 
 	darkBlue := []int{0x1E, 0x3A, 0x5F}
 	lightGray := []int{0xF0, 0xF0, 0xF0}

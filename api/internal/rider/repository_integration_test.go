@@ -3,10 +3,12 @@ package rider
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Real-database coverage for repository behaviour the fake-repo tests cannot
@@ -189,7 +191,7 @@ func seedGig(t *testing.T) uuid.UUID {
 
 // ─── Optimistic concurrency (updatedAt token) ───────────────────────────────
 
-func TestIntegration_UpdateTemplate_StaleToken_IsErrConflict_AndChangesNothing(t *testing.T) {
+func TestIntegration_UpdateTemplate_StaleToken_IsErrStaleUpdate_AndChangesNothing(t *testing.T) {
 	repo := requireIntegration(t)
 	ctx := context.Background()
 	tpl := seedTemplate(t, repo, "stale-template")
@@ -208,8 +210,8 @@ func TestIntegration_UpdateTemplate_StaleToken_IsErrConflict_AndChangesNothing(t
 		RiderSectionPatch: RiderSectionPatch{Technical: ptr("tech-stale-writer")},
 		UpdatedAt:         tpl.UpdatedAt,
 	})
-	if !errors.Is(err, ErrConflict) {
-		t.Fatalf("stale update err = %v, want ErrConflict", err)
+	if !errors.Is(err, ErrStaleUpdate) {
+		t.Fatalf("stale update err = %v, want ErrStaleUpdate", err)
 	}
 	got, err := repo.GetTemplate(ctx, tpl.ID)
 	if err != nil {
@@ -268,7 +270,7 @@ func TestIntegration_UpdateTemplate_MissingOrDeleted_IsErrNotFound_NotConflict(t
 	}
 }
 
-func TestIntegration_UpdateAttachment_StaleToken_IsErrConflict_AndNotFoundStaysNotFound(t *testing.T) {
+func TestIntegration_UpdateAttachment_StaleToken_IsErrStaleUpdate_AndNotFoundStaysNotFound(t *testing.T) {
 	repo := requireIntegration(t)
 	ctx := context.Background()
 	att, err := repo.CreateAttachment(ctx, CreateAttachmentInput{
@@ -288,8 +290,8 @@ func TestIntegration_UpdateAttachment_StaleToken_IsErrConflict_AndNotFoundStaysN
 	_, err = repo.UpdateAttachment(ctx, att.ID, UpdateAttachmentInput{
 		RiderSectionPatch: RiderSectionPatch{Technical: ptr("tech-stale")}, UpdatedAt: att.UpdatedAt,
 	})
-	if !errors.Is(err, ErrConflict) {
-		t.Fatalf("stale update err = %v, want ErrConflict", err)
+	if !errors.Is(err, ErrStaleUpdate) {
+		t.Fatalf("stale update err = %v, want ErrStaleUpdate", err)
 	}
 	got, _ := repo.GetAttachment(ctx, att.ID)
 	if got.Technical != "tech-B" || !got.UpdatedAt.Equal(saved.UpdatedAt) {
@@ -304,5 +306,91 @@ func TestIntegration_UpdateAttachment_StaleToken_IsErrConflict_AndNotFoundStaysN
 	}
 	if _, err := repo.UpdateAttachment(ctx, att.ID, UpdateAttachmentInput{UpdatedAt: saved.UpdatedAt}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("soft-deleted err = %v, want ErrNotFound", err)
+	}
+}
+
+// ─── Attach only to a live gig ──────────────────────────────────────────────
+
+func TestIntegration_CreateAttachment_SoftDeletedOrMissingGig_IsErrNotFound(t *testing.T) {
+	repo := requireIntegration(t)
+	ctx := context.Background()
+
+	gone := seedGig(t)
+	if _, err := testPool.Exec(ctx, `UPDATE gigs SET deleted_at = now() WHERE id = $1`, gone); err != nil {
+		t.Fatalf("soft-delete gig: %v", err)
+	}
+	if _, err := repo.CreateAttachment(ctx, CreateAttachmentInput{GigID: gone}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("attach to a soft-deleted gig: err = %v, want ErrNotFound (gigs are only soft-deleted, so the FK never fires)", err)
+	}
+	var n int
+	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM rider_attachments WHERE gig_id = $1`, gone).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("an orphan attachment row was created: count=%d err=%v", n, err)
+	}
+
+	if _, err := repo.CreateAttachment(ctx, CreateAttachmentInput{GigID: uuid.New()}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("attach to a nonexistent gig: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestIntegration_CreateAttachment_LiveGig_StillOnePerGig_AndKeepsTheSections(t *testing.T) {
+	repo := requireIntegration(t)
+	ctx := context.Background()
+	gigID := seedGig(t)
+	tpl := seedTemplate(t, repo, "snapshot-source")
+
+	att, err := repo.CreateAttachment(ctx, CreateAttachmentInput{
+		GigID: gigID, TemplateID: &tpl.ID,
+		RiderSectionValues: RiderSectionValues{Technical: "t", Hospitality: "h", Backline: "b", OtherNotes: "o"},
+	})
+	if err != nil {
+		t.Fatalf("CreateAttachment: %v", err)
+	}
+	if att.TemplateID == nil || *att.TemplateID != tpl.ID || sections(att.Technical, att.Hospitality, att.Backline, att.OtherNotes) != sections("t", "h", "b", "o") {
+		t.Fatalf("attachment lost data on insert: %+v", att)
+	}
+	if _, err := repo.CreateAttachment(ctx, CreateAttachmentInput{GigID: gigID}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("second live attachment for the same gig: err = %v, want ErrConflict", err)
+	}
+	// A blank-start attachment (no template) also inserts.
+	if _, err := repo.CreateAttachment(ctx, CreateAttachmentInput{GigID: seedGig(t)}); err != nil {
+		t.Fatalf("attachment without a template: %v", err)
+	}
+}
+
+// ─── Size / blank constraints (the backstop behind the service's 422s) ──────
+
+func TestIntegration_Constraints_RejectOversizedAndBlank(t *testing.T) {
+	requireIntegration(t)
+	ctx := context.Background()
+	long := strings.Repeat("x", MaxSectionChars+1)
+
+	reject := func(label, sql string, args ...any) {
+		t.Helper()
+		_, err := testPool.Exec(ctx, sql, args...)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
+			t.Errorf("%s: err = %v, want a check_violation (23514)", label, err)
+		}
+	}
+	reject("empty name", `INSERT INTO rider_templates (name) VALUES ('')`)
+	reject("blank name", `INSERT INTO rider_templates (name) VALUES ('   ')`)
+	reject("name over 200", `INSERT INTO rider_templates (name) VALUES ($1)`, strings.Repeat("n", MaxNameChars+1))
+	reject("template section over 20000", `INSERT INTO rider_templates (name, technical) VALUES ('c', $1)`, long)
+	reject("attachment section over 20000", `INSERT INTO rider_attachments (gig_id, other_notes) VALUES ($1, $2)`, seedGig(t), long)
+}
+
+func TestIntegration_Constraints_CountCharactersNotBytes(t *testing.T) {
+	repo := requireIntegration(t)
+	ctx := context.Background()
+	// 200 two-byte characters (400 bytes) and 20000 of them per section.
+	name, section := strings.Repeat("é", MaxNameChars), strings.Repeat("é", MaxSectionChars)
+
+	tpl, err := repo.CreateTemplate(ctx, CreateTemplateInput{Name: name,
+		RiderSectionValues: RiderSectionValues{Technical: section, Hospitality: section, Backline: section, OtherNotes: section}})
+	if err != nil {
+		t.Fatalf("limits are in characters; a maximum-size multi-byte template must be accepted: %v", err)
+	}
+	if len([]rune(tpl.Technical)) != MaxSectionChars {
+		t.Fatalf("section was truncated: %d characters", len([]rune(tpl.Technical)))
 	}
 }

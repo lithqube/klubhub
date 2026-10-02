@@ -1,6 +1,9 @@
 package rider
 
-import "net/http"
+import (
+	"encoding/json"
+	"net/http"
+)
 
 // Mux dispatches /api/v1/rider/* between the templates and attachments
 // handlers in one place. Compose at boot and mount under the parent
@@ -81,5 +84,7 @@ func splitRiderSegments(s string) []string {
 func writeRiderError(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_, _ = w.Write([]byte(`{"error":"` + code + `","message":"` + msg + `"}`))
+	// Marshalled, not concatenated: msg can embed a URL path segment.
+	body, _ := json.Marshal(map[string]string{"error": code, "message": msg})
+	_, _ = w.Write(body)
 }

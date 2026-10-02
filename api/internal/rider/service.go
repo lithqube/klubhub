@@ -3,12 +3,15 @@ package rider
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/klubhub/dj/api/internal/gig"
 	"github.com/klubhub/dj/api/internal/settings"
 )
 
@@ -91,6 +94,12 @@ func (s *Service) CreateTemplate(ctx context.Context, in CreateTemplateInput) (*
 		return nil, fmt.Errorf("%w: name is required", ErrInvalidInput)
 	}
 	in.Name = strings.TrimSpace(in.Name)
+	if err := checkText("name", in.Name, MaxNameChars); err != nil {
+		return nil, err
+	}
+	if err := checkSections(in.RiderSectionValues); err != nil {
+		return nil, err
+	}
 	return s.repo.CreateTemplate(ctx, in)
 }
 
@@ -107,7 +116,13 @@ func (s *Service) UpdateTemplate(ctx context.Context, id uuid.UUID, in UpdateTem
 		if trimmed == "" {
 			return nil, fmt.Errorf("%w: name cannot be blank", ErrInvalidInput)
 		}
+		if err := checkText("name", trimmed, MaxNameChars); err != nil {
+			return nil, err
+		}
 		in.Name = &trimmed
+	}
+	if err := checkPatch(in.RiderSectionPatch); err != nil {
+		return nil, err
 	}
 	return s.repo.UpdateTemplate(ctx, id, in)
 }
@@ -139,6 +154,13 @@ func (s *Service) GetAttachment(ctx context.Context, id uuid.UUID) (*RiderAttach
 // When TemplateID is nil, the RiderSectionValues from in are used as-is
 // (manual entry / "Start from blank").
 func (s *Service) CreateAttachment(ctx context.Context, in CreateAttachmentInput) (*RiderAttachment, error) {
+	if in.TemplateID == nil {
+		// Manual entry: the sections come from the request. (With a template
+		// they are copied from the already-validated stored template.)
+		if err := checkSections(in.RiderSectionValues); err != nil {
+			return nil, err
+		}
+	}
 	if in.TemplateID != nil {
 		tpl, err := s.repo.GetTemplate(ctx, *in.TemplateID)
 		if err != nil {
@@ -166,12 +188,30 @@ func (s *Service) UpdateAttachment(ctx context.Context, id uuid.UUID, in UpdateA
 	if in.UpdatedAt.IsZero() {
 		return nil, fmt.Errorf("%w: updatedAt is required", ErrInvalidInput)
 	}
+	if err := checkPatch(in.RiderSectionPatch); err != nil {
+		return nil, err
+	}
 	return s.repo.UpdateAttachment(ctx, id, in)
 }
 
 // DeleteAttachment soft-deletes a per-gig attachment.
 func (s *Service) DeleteAttachment(ctx context.Context, id uuid.UUID) error {
-	return s.repo.SoftDeleteAttachment(ctx, id)
+	if err := s.repo.SoftDeleteAttachment(ctx, id); err != nil {
+		return err
+	}
+	// The exported PDF lives under a key derived from the attachment id and
+	// would otherwise outlive the rider it was made from. Best effort: the
+	// detach has already succeeded, so a storage failure is logged, not
+	// returned (and DeleteObject on a missing key is not an error in S3).
+	if err := s.storage.DeleteObject(ctx, StorageBucket, exportKey(id)); err != nil {
+		slog.WarnContext(ctx, "rider: could not delete exported PDF", "attachment", id, "err", err)
+	}
+	return nil
+}
+
+// exportKey is the storage key of an attachment's exported PDF.
+func exportKey(attachmentID uuid.UUID) string {
+	return fmt.Sprintf("rider/exports/%s.pdf", attachmentID.String())
 }
 
 // ─── PDF export ────────────────────────────────────────────────────────────
@@ -188,10 +228,14 @@ func (s *Service) GeneratePDF(ctx context.Context, attachmentID uuid.UUID) (*Exp
 		return nil, err
 	}
 
-	// Load venue + date via the injected GigReader. When no reader is
-	// configured (tests, mocked wiring), fall back to safe defaults so
-	// the renderer still produces a valid PDF.
-	venueName, venueCity, venueCountry, gigDate := s.lookupGigContext(ctx, att.GigID)
+	// Load venue + date via the injected GigReader. Only when no reader is
+	// configured (tests, mocked wiring) are placeholders used; a lookup that
+	// FAILS aborts the export, because a rider sent to a promoter with a made
+	// up venue and today's date is worse than an error.
+	venueName, venueCity, venueCountry, gigDate, err := s.lookupGigContext(ctx, att.GigID)
+	if err != nil {
+		return nil, err
+	}
 
 	userSettings, err := s.settings.GetSettings(ctx)
 	if err != nil {
@@ -203,7 +247,7 @@ func (s *Service) GeneratePDF(ctx context.Context, attachmentID uuid.UUID) (*Exp
 		return nil, fmt.Errorf("render PDF: %w", err)
 	}
 
-	key := fmt.Sprintf("rider/exports/%s.pdf", attachmentID.String())
+	key := exportKey(attachmentID)
 	pdfBytes := buf.Bytes()
 	if err := s.storage.PutObject(ctx, StorageBucket, key, bytes.NewReader(pdfBytes), int64(len(pdfBytes)), "application/pdf"); err != nil {
 		return nil, fmt.Errorf("store PDF: %w", err)
@@ -222,18 +266,25 @@ func (s *Service) GeneratePDF(ctx context.Context, attachmentID uuid.UUID) (*Exp
 }
 
 // lookupGigContext returns (venueName, venueCity, venueCountry, gigDate)
-// for the gig this attachment belongs to. When a GigReader is configured
-// it fetches the real gig; without one it returns placeholder values
-// ("Unknown Venue", now) so the renderer compiles and is testable.
-func (s *Service) lookupGigContext(ctx context.Context, gigID uuid.UUID) (name, city, country string, date time.Time) {
+// for the gig this attachment belongs to. Without a configured GigReader it
+// returns placeholder values ("Unknown Venue", now) so the renderer is
+// testable. With one, a gig that no longer exists is ErrNotFound and any
+// other lookup failure is returned as-is: never a made-up venue or date.
+func (s *Service) lookupGigContext(ctx context.Context, gigID uuid.UUID) (name, city, country string, date time.Time, err error) {
 	if s.gigs == nil {
-		return "Unknown Venue", "", "", time.Now()
+		return "Unknown Venue", "", "", time.Now(), nil
 	}
 	g, err := s.gigs.GetGig(ctx, gigID)
-	if err != nil || g == nil {
-		return "Unknown Venue", "", "", time.Now()
+	if err != nil {
+		if errors.Is(err, gig.ErrNotFound) {
+			return "", "", "", time.Time{}, fmt.Errorf("%w: the gig for this rider no longer exists", ErrNotFound)
+		}
+		return "", "", "", time.Time{}, fmt.Errorf("look up gig for PDF: %w", err)
 	}
-	return g.Venue, g.City, g.Country, g.Date
+	if g == nil {
+		return "", "", "", time.Time{}, fmt.Errorf("%w: the gig for this rider no longer exists", ErrNotFound)
+	}
+	return g.Venue, g.City, g.Country, g.Date, nil
 }
 
 // isBlank is a small helper exported for the PDF renderer.

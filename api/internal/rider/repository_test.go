@@ -92,7 +92,7 @@ func (m *fakeRepo) UpdateTemplate(_ context.Context, id uuid.UUID, in UpdateTemp
 	}
 	// Compare-and-set like the real UPDATE ... AND updated_at = $n.
 	if !in.UpdatedAt.Equal(t.UpdatedAt) {
-		return nil, ErrConflict
+		return nil, ErrStaleUpdate
 	}
 	if in.Name != nil {
 		t.Name = *in.Name
@@ -180,7 +180,7 @@ func (m *fakeRepo) UpdateAttachment(_ context.Context, id uuid.UUID, in UpdateAt
 		return nil, ErrNotFound
 	}
 	if !in.UpdatedAt.Equal(a.UpdatedAt) {
-		return nil, ErrConflict
+		return nil, ErrStaleUpdate
 	}
 	applyPatch(in.RiderSectionPatch, &a.Technical, &a.Hospitality, &a.Backline, &a.OtherNotes)
 	a.UpdatedAt = time.Now()

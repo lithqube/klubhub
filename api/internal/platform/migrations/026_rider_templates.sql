@@ -3,6 +3,10 @@
 -- Rider templates: reusable named sets of four rider sections (technical,
 -- hospitality, backline, other notes). Soft-deletion via deleted_at
 -- (RIDER-05). Ordering is by name for stable list rendering.
+--
+-- Size limits (name <= 200 characters, each section <= 20000) mirror
+-- rider.MaxNameChars / rider.MaxSectionChars; the service rejects with a
+-- readable 422 first, these CHECKs are the backstop. Keep them in sync.
 
 CREATE TABLE IF NOT EXISTS rider_templates (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -13,7 +17,12 @@ CREATE TABLE IF NOT EXISTS rider_templates (
     other_notes  TEXT NOT NULL DEFAULT '',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at   TIMESTAMPTZ
+    deleted_at   TIMESTAMPTZ,
+    CONSTRAINT rider_templates_name_check
+        CHECK (char_length(name) BETWEEN 1 AND 200 AND name ~ '[^[:space:]]'),
+    CONSTRAINT rider_templates_sections_check
+        CHECK (char_length(technical) <= 20000 AND char_length(hospitality) <= 20000
+           AND char_length(backline) <= 20000 AND char_length(other_notes) <= 20000)
 );
 
 CREATE INDEX IF NOT EXISTS rider_templates_alive_idx
@@ -25,10 +34,11 @@ CREATE INDEX IF NOT EXISTS rider_templates_alive_idx
 -- template_id is nullable so a gig may have an attachment with no source
 -- template (manual entry / "Start from blank").
 --
--- On gig delete the FK RESTRICT prevents destroying gig history that a
--- per-gig copy references; on template delete the FK SET NULL preserves
--- the per-gig copy but loses the source reference (intentional — soft-delete
--- on templates hides them but keeps rows for forensics).
+-- Gigs and templates are only ever soft-deleted by the application, so the
+-- FK actions below are a backstop for hard deletes (RESTRICT protects gig
+-- history; SET NULL keeps the per-gig copy but drops the source reference).
+-- A soft-deleted template therefore stays referenced by template_id.
+-- Attaching to a soft-deleted gig is refused in the repository, not here.
 
 CREATE TABLE IF NOT EXISTS rider_attachments (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -41,6 +51,9 @@ CREATE TABLE IF NOT EXISTS rider_attachments (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at   TIMESTAMPTZ,
+    CONSTRAINT rider_attachments_sections_check
+        CHECK (char_length(technical) <= 20000 AND char_length(hospitality) <= 20000
+           AND char_length(backline) <= 20000 AND char_length(other_notes) <= 20000),
     CONSTRAINT rider_attachments_gig_id_fkey FOREIGN KEY (gig_id)
         REFERENCES gigs (id) ON DELETE RESTRICT,
     CONSTRAINT rider_attachments_template_id_fkey FOREIGN KEY (template_id)
