@@ -232,6 +232,8 @@ rate / 10000); `net_payable = total − withholding`.
 | `PUT /invoices/{id}` | `{customer, vat_treatment, tax_rate_bps, tax_note, withholding_rate_bps, supply_date, due_at, number_prefix, internal_notes, updated_at}` | draft only; totals recomputed |
 | `GET /invoices/{id}/issue-check` | | `{data: {ready: boolean, problems: IssueProblem[]}}` |
 | `GET /invoices/{id}/pdf` | | `application/pdf` attachment (`invoice-<number>.pdf`, `credit-note-<number>.pdf`, or `invoice-draft-<id8>.pdf`); rendered on demand, `Cache-Control: private, no-store`. Not persisted yet |
+| `GET /invoices/{id}/einvoice-check?format=` | | `{data: {format, ready, problems: [{field, message}]}}`; `format` is `facturx`, `xrechnung-cii` or `xrechnung-ubl`. Numbered documents only (`409 bad_state` otherwise); `503` when no generator is configured |
+| `GET /invoices/{id}/einvoice?format=` | | The validated e-invoice as an attachment: Factur-X PDF/A-3b (`.pdf`) or XRechnung (`.xml`), named `<number>-<format>.<ext>`; `X-EInvoice-Validation: passed`, `Cache-Control: private, no-store`. `422 {error:"not_exportable", problems}` when data is missing or the rule engine rejects it (nothing invalid is ever returned); `503` when `EINVOICE_URL` is unset; `502` if the generator misbehaves. Not persisted yet |
 | `POST /invoices/{id}/issue` | `{updated_at}` | allocates number; `422 {error:"not_issuable", problems}` |
 | `POST /invoices/{id}/pay` | `{paid_at, payment_ref, updated_at}` | issued → paid |
 | `POST /invoices/{id}/cancel` | `{updated_at}` | **draft only** → cancelled |
@@ -395,6 +397,18 @@ startup warning and ignores malformed values). Only one extra host is
 supported. Behind a TLS-terminating proxy, `CORS_ORIGIN` must be the public
 `https://` origin. `X-Forwarded-*` headers are never trusted. The default
 `http://127.0.0.1:3000` works for local use.
+
+### 4.3 E-invoice export
+
+`internal/einvoice` is independent of finance types: `finance/einvoice.go` maps a numbered invoice (using the supplier snapshot taken at issue) to a neutral `Document`, and an `Exporter` turns it into a file through a `Generator` interface. Today the generator is the `gflohr/e-invoice-eu` sidecar (`EINVOICE_URL`); a Go-native one can replace it without touching callers.
+
+- **Nothing invalid ships.** The sidecar neither calculates nor checks rules, so the XML is generated first and validated in-process with `speedata/einvoice` (EN 16931 BR-*, BR-CO-*, XRechnung BR-DE-*). For Factur-X the PDF is wrapped only after that passes.
+- **Missing data is reported by field** (`einvoice.Prepare`): seller and buyer address, tax number or VAT ID, delivery date, and for XRechnung the buyer reference (Leitweg-ID), seller contact name, phone and email, and IBAN.
+- **Cannot be expressed, so blocked:** withholding tax (EN 16931 has no field for it) and currencies with more than two decimals.
+- **Outside the scope of VAT** (category `O`) invoices carry no VAT IDs (BR-O-02) and need the seller's Steuernummer.
+- Credit notes export as type 381 with the credited invoice as the preceding document.
+- The sidecar has no authentication: it publishes no port and is reachable only on the compose `internal` network.
+- Golden checks against the real generator and veraPDF (PDF/A-3b): `bash scripts/einvoice-golden.sh` (also a CI job).
 
 ## 5. Frontend structure
 

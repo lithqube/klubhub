@@ -26,6 +26,9 @@ type InvoicePDFData struct {
 	// CreditedInvoiceNumber is the number of the invoice a credit note
 	// reverses (printed as the reference).
 	CreditedInvoiceNumber string
+	// CreditedIssueDate is that invoice's issue date (YYYY-MM-DD); the
+	// e-invoice of a credit note names it (BG-3).
+	CreditedIssueDate string
 }
 
 // BillingProfileSnapshot is the billing profile data snapshotted at invoice issuance.

@@ -304,12 +304,12 @@ The pattern is the same as in Germany:
 | 2. EN 16931 data model, editable lines | Done: BT-32 Steuernummer, BT-10/12/13 references, BT-20 terms, BT-84/86 IBAN/BIC, BT-130 unit codes, multi-line editing, `tax.CategoryFor`. Open: allowances and charges (BG-20/21); BT-34/49 addresses and payment-means code 58 are derived at export. |
 | 3. Country legal notes | **Done for Germany** (§ 19 UStG, reverse charge with "Steuerschuldnerschaft des Leistungsempfängers", § 3a Abs. 2 UStG), bilingual DE/EN, served to the UI by `GET /invoices/tax-notes`. Needs a Steuerberater's confirmation of the wording. Other countries keep the generic English text. |
 | 4. Structured payment means | IBAN/BIC stored, validated and printed. Open: EPC/GiroCode QR on the PDF. |
-| 5. Factur-X / XRechnung `Exporter` + sidecar | Not started (mapping proven in §8). |
+| 5. Factur-X / XRechnung `Exporter` + sidecar | **Done:** `internal/einvoice` (neutral `Document`, `Generator` interface, sidecar client, in-process `speedata/einvoice` validation before anything ships, field-level readiness problems), `GET /invoices/{id}/einvoice[-check]`, pinned `einvoice` service in the dev and prod Compose files (internal network only), minimal "E-invoice" panel in the invoice sheet, `scripts/einvoice-golden.sh` + CI job (real sidecar, veraPDF PDF/A-3b). Open: KoSIT validator in the golden run, Go-native generator. |
 | 6. Validation report stored with the invoice | Not started. |
-| 7. Credit note 381 mapping | Proven in the spike; not built. |
+| 7. Credit note 381 mapping | Done (type 381 with the credited invoice as preceding document). |
 | 8. E-invoice attached to the invoice email | Not started. |
 
-Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: the Go `Exporter` behind an interface with in-process `speedata/einvoice` validation and KoSIT/veraPDF golden tests in CI, then the export-readiness check and the documents handler.
+Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: the documents handler, then persist the issued PDF, the e-invoice XML and its validation report as immutable documents (items 1 and 6), then attach the e-invoice to the invoice email (item 8).
 
 ## Sources
 

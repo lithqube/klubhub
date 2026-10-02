@@ -123,6 +123,13 @@ type Config struct {
 	PlunkFromEmail string `envconfig:"PLUNK_FROM_EMAIL" default:""`
 	PlunkFromName  string `envconfig:"PLUNK_FROM_NAME" default:""`
 
+	// Optional: e-invoice generator sidecar (gflohr/e-invoice-eu) behind
+	// Factur-X / XRechnung export. It has no authentication: point this only at
+	// an address that nothing outside the stack can reach (the compose
+	// service name on the internal network). Leave empty to disable export;
+	// the e-invoice routes then answer 503.
+	EInvoiceURL string `envconfig:"EINVOICE_URL" default:""`
+
 	// Edition features: capabilities reserved for the licensed / SaaS
 	// editions. Every flag is OFF by default so the self-hosted open-source
 	// build (and the public demo) never exposes them. See docs/EDITIONS.md.

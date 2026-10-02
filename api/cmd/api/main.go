@@ -17,6 +17,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/klubhub/dj/api/internal/artwork"
 	"github.com/klubhub/dj/api/internal/contact"
+	"github.com/klubhub/dj/api/internal/einvoice"
 	"github.com/klubhub/dj/api/internal/epk"
 	"github.com/klubhub/dj/api/internal/finance"
 	"github.com/klubhub/dj/api/internal/gig"
@@ -446,6 +447,12 @@ func buildFinanceRuntime(ctx context.Context, cfg *config.Config, pool *pgxpool.
 func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger, startWorker ...func(*finance.EmailService)) *finance.Mux {
 	billingSvc := finance.NewService(finance.NewRepository(pool))
 	invoiceSvc := finance.NewInvoiceService(finance.NewInvoiceRepository(pool), billingSvc, finance.NewPGGigFeeProvider(pool))
+	if cfg.EInvoiceURL != "" {
+		invoiceSvc.WithEInvoice(&einvoice.Exporter{Gen: einvoice.NewSidecarClient(cfg.EInvoiceURL, nil)})
+		logger.Info().Str("einvoice_url", cfg.EInvoiceURL).Msg("e-invoice export enabled")
+	} else {
+		logger.Info().Msg("e-invoice export disabled: EINVOICE_URL is not set")
+	}
 	// The transition processor is shared with the gig service so the
 	// manual gig-edit path and the invoice-payment sync path see the
 	// same finance-entry state. Without sharing, two independent

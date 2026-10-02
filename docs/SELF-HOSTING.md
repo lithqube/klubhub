@@ -200,6 +200,10 @@ Taking a receipt photo, or using the app on a phone at all, means the phone has 
 - **Uploads go through the API**, not straight to S3, so the phone only needs to reach the app port. `S3_PUBLIC_ENDPOINT` matters only for presigned downloads elsewhere in the app.
 - **No phone at all:** on a laptop, drag and drop or the file picker work the same, so a scanner's output folder or AirDropped photos are fine.
 
+## E-invoices (Factur-X, XRechnung)
+
+Both Compose files run an `einvoice` service (`gflohr/e-invoice-eu`, pinned by digest) that builds the structured invoice files, and set `EINVOICE_URL=http://einvoice:3000` on the app. It has **no authentication**, so it publishes no port and sits on the internal Compose network only; never add a `ports:` entry for it. The image is amd64-only, so on Apple Silicon it runs under emulation. Every export is validated against the EN 16931 and XRechnung rules before it is returned. To turn export off, unset `EINVOICE_URL` (the invoice sheet then says it is not enabled). See [INVOICING.md](./INVOICING.md#43-e-invoice-export).
+
 ## Upgrades and existing installations
 
 Development and production use different Compose project names and project-scoped volumes, without fixed container names. This isolates data and credentials, but does not avoid host-port collisions. Stop the other mode first or configure different published ports and matching callback/browser URLs.

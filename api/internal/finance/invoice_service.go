@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/klubhub/dj/api/internal/einvoice"
 	"github.com/klubhub/dj/api/internal/finance/tax"
 )
 
@@ -43,6 +44,7 @@ type InvoiceService struct {
 	repo        InvoiceRepositoryIface
 	billingSvc  BillingServiceIface
 	gigProvider GigFeeProvider
+	exporter    *einvoice.Exporter // nil: e-invoice export is unavailable (einvoice.go)
 }
 
 // NewInvoiceService returns an InvoiceService.
@@ -175,6 +177,7 @@ func (s *InvoiceService) pdfData(ctx context.Context, id uuid.UUID) (*InvoicePDF
 		switch {
 		case err == nil:
 			data.CreditedInvoiceNumber = orig.Number()
+			data.CreditedIssueDate = dateString(orig.IssuedAt)
 		case !errors.Is(err, ErrInvoiceNotFound):
 			return nil, err
 		}

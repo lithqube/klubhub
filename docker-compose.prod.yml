@@ -65,6 +65,24 @@ services:
       start_period: 5s
     stop_grace_period: 30s
 
+  # E-invoice generator (Factur-X / XRechnung). It has no authentication, so it
+  # publishes no port and only the app container can reach it. Pinned by digest.
+  einvoice:
+    image: gflohr/e-invoice-eu:slim@sha256:c5d7f966d604661de7c4b55bf33d08c8d489ecc228e92b82e4f3f51e9dbb9664
+    # Published for amd64 only; Apple Silicon runs it under emulation.
+    platform: linux/amd64
+    restart: unless-stopped
+    networks: [ internal ]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ ALL ]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: "1.0"
+    pids_limit: 200
+
   app:
     # Per-product image: each KlubHub product publishes its own API
     # package (`<product>-api`). DJ ships `ghcr.io/lithqube/klubhub-dj-api`;
@@ -93,6 +111,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:8080}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SHUTDOWN_TIMEOUT_SEC: ${SHUTDOWN_TIMEOUT_SEC:-30}
+      EINVOICE_URL: http://einvoice:3000
       NUXT_INTERNAL_URL: http://127.0.0.1:3000
       NUXT_PUBLIC_API_BASE: http://127.0.0.1:8080
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}

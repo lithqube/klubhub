@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/klubhub/dj/api/internal/einvoice"
 )
 
 // InvoiceHandler implements http.Handler for /api/v1/finance/invoices/*.
@@ -33,6 +36,8 @@ func NewInvoiceHandler(svc *InvoiceService) *InvoiceHandler {
 //	PUT    /invoices/{id}                update draft (totals recomputed)
 //	GET    /invoices/{id}/issue-check    issue readiness
 //	GET    /invoices/{id}/pdf            invoice / credit-note PDF (rendered on demand)
+//	GET    /invoices/{id}/einvoice-check?format=   what stops an e-invoice export
+//	GET    /invoices/{id}/einvoice?format=         validated Factur-X / XRechnung file
 //	POST   /invoices/{id}/issue          draft → issued (number allocated)
 //	POST   /invoices/{id}/pay            issued → paid
 //	POST   /invoices/{id}/cancel         draft → cancelled
@@ -95,14 +100,20 @@ func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	action := parts[1]
-	if action == "issue-check" || action == "pdf" {
+	switch action {
+	case "issue-check", "pdf", "einvoice", "einvoice-check":
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET supported on "+action)
 			return
 		}
-		if action == "pdf" {
+		switch action {
+		case "pdf":
 			h.handlePDF(w, r, id)
-		} else {
+		case "einvoice":
+			h.handleEInvoice(w, r, id)
+		case "einvoice-check":
+			h.handleEInvoiceCheck(w, r, id)
+		default:
 			h.handleIssueCheck(w, r, id)
 		}
 		return
@@ -311,6 +322,72 @@ func (h *InvoiceHandler) handlePDF(w http.ResponseWriter, r *http.Request, id uu
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b)
+}
+
+// eInvoiceFormat reads and validates the ?format= query.
+func eInvoiceFormat(w http.ResponseWriter, r *http.Request) (einvoice.Format, bool) {
+	f, ok := einvoice.ParseFormat(r.URL.Query().Get("format"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "validation_failed", "format must be one of facturx, xrechnung-cii, xrechnung-ubl")
+	}
+	return f, ok
+}
+
+func (h *InvoiceHandler) handleEInvoiceCheck(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	f, ok := eInvoiceFormat(w, r)
+	if !ok {
+		return
+	}
+	chk, err := h.svc.EInvoiceCheck(r.Context(), id, f)
+	if err != nil {
+		writeEInvoiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": chk})
+}
+
+func (h *InvoiceHandler) handleEInvoice(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	f, ok := eInvoiceFormat(w, r)
+	if !ok {
+		return
+	}
+	file, err := h.svc.EInvoice(r.Context(), id, f)
+	if err != nil {
+		writeEInvoiceError(w, r, err)
+		return
+	}
+	hdr := w.Header()
+	hdr.Set("Content-Type", file.MimeType)
+	hdr.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": file.Filename}))
+	hdr.Set("Content-Length", strconv.Itoa(len(file.Data)))
+	hdr.Set("Cache-Control", "private, no-store")
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	// The file was checked against the EN 16931 / XRechnung business rules
+	// before it was handed out; nothing that failed ever gets here.
+	hdr.Set("X-EInvoice-Validation", "passed")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(file.Data)
+}
+
+// writeEInvoiceError maps export errors. A generator that rejects our document
+// or returns something unreadable is our fault, not the user's: it is logged
+// with its detail and answered with a generic 502.
+func writeEInvoiceError(w http.ResponseWriter, r *http.Request, err error) {
+	var notExportable *einvoice.NotExportableError
+	var generation *einvoice.GenerationError
+	switch {
+	case errors.As(err, &notExportable):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error": "not_exportable", "message": "this invoice cannot be exported as an e-invoice yet", "problems": notExportable.Problems,
+		})
+	case errors.Is(err, einvoice.ErrUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "e-invoice export is not available: the generator is not configured or cannot be reached")
+	case errors.As(err, &generation), errors.Is(err, einvoice.ErrUnreadable):
+		slog.ErrorContext(r.Context(), "finance: e-invoice generation failed", "method", r.Method, "path", r.URL.Path, "err", err)
+		writeError(w, http.StatusBadGateway, "bad_gateway", "the e-invoice could not be generated")
+	default:
+		writeInvoiceError(w, r, err)
+	}
 }
 
 func (h *InvoiceHandler) handleUpdateDraft(w http.ResponseWriter, r *http.Request, id uuid.UUID) {

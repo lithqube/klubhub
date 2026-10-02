@@ -6,6 +6,16 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Factur-X (ZUGFeRD) and XRechnung (CII and UBL) e-invoice export for
+  issued invoices and credit notes: `GET /invoices/{id}/einvoice` and
+  `/einvoice-check`. A pinned, internal-only `einvoice` generator
+  service ships in the Compose files (`EINVOICE_URL`). Every file is
+  validated against the EN 16931 and XRechnung rules before it is
+  returned; missing data is reported by field. The invoice sheet gains
+  an E-INVOICE panel. See `docs/INVOICING.md`.
+
 ### Changed
 
 - README, `docs/INDEX.md` and `CLAUDE.md` synced to the current state

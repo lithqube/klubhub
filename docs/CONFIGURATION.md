@@ -101,6 +101,7 @@ without delivery until the outbox replay finds a working sender.
 | `PLUNK_API_KEY` *or* `PLUNK_API_KEY_FILE` | empty | Bearer token for `Authorization`. `PLUNK_API_KEY_FILE` keeps the secret out of process env (compatible with the existing `${X_FILE}` pattern). |
 | `PLUNK_FROM_EMAIL` | empty | Default sender for transactional messages; e.g. `noreply@klubhub.dj`. Must be a verified Plunk sender domain. |
 | `PLUNK_FROM_NAME` | empty | Display name; e.g. `KlubHub`. |
+| `EINVOICE_URL` | empty (`http://einvoice:3000` in the shipped Compose files) | Base URL of the e-invoice generator sidecar behind Factur-X / XRechnung export. The sidecar has no authentication: point this only at an address nothing outside the stack can reach. Empty disables export (the e-invoice routes answer 503). |
 | `DOCUMENT_STORE_BUCKET` | empty | S3 bucket for uploaded PDFs and signed agreement scans. Defaults to the existing `S3_BUCKET` if unset. |
 
 Hosted vs self-hosted Plunk is the same wire format — only
