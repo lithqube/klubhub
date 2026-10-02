@@ -68,6 +68,7 @@ const baseEntry: Entry = {
   created_at: '2026-09-15T10:00:00Z',
   updated_at: '2026-09-15T10:00:00Z',
   deleted_at: null,
+  attachment_count: 0,
 }
 
 // ── mock ui store (social store calls useUiStore().showError on failure) ──

@@ -35,6 +35,20 @@ export interface TaxBreakdownRow {
   tax_minor: number
 }
 
+/** UN/ECE Recommendation 20 unit codes offered on invoice lines (BT-130). */
+export type UnitCode = 'C62' | 'HUR' | 'DAY' | 'LS' | 'KMT'
+
+export const DEFAULT_UNIT_CODE: UnitCode = 'C62'
+
+/** Unit choices in display order; `C62` (piece) is the default. */
+export const UNIT_CODES: { value: UnitCode; label: string }[] = [
+  { value: 'C62', label: 'Piece' },
+  { value: 'HUR', label: 'Hour' },
+  { value: 'DAY', label: 'Day' },
+  { value: 'LS', label: 'Lump sum' },
+  { value: 'KMT', label: 'Kilometre' },
+]
+
 export interface Invoice {
   id: string
   kind: InvoiceKind
@@ -52,6 +66,14 @@ export interface Invoice {
   paid_at: string | null
   payment_ref: string
   internal_notes: string
+  /** EN 16931 BT-10: Leitweg-ID for German public-sector buyers (≤100). */
+  buyer_reference: string
+  /** EN 16931 BT-13 (≤100). */
+  purchase_order_ref: string
+  /** EN 16931 BT-12 (≤100). */
+  contract_ref: string
+  /** EN 16931 BT-20, free text such as "Payable within 14 days" (≤500). */
+  payment_terms: string
   customer: Party
   billing_profile: Record<string, unknown> | null
   vat_treatment: VatTreatment
@@ -78,9 +100,25 @@ export interface InvoiceLine {
   description: string
   quantity: number
   unit_minor: number
+  /** UN/ECE Rec. 20 unit; always present from the API (default `C62`). */
+  unit_code: UnitCode
   tax_bps: number
   line_total_minor: number
   created_at: string
+}
+
+/**
+ * One line of a PUT /invoices/{id} replacement. The line total and tax rate
+ * are derived by the server and must never be sent.
+ */
+export interface InvoiceLineInput {
+  /** 1..500 characters. */
+  description: string
+  /** Integer 1..1,000,000. */
+  quantity: number
+  /** Integer minor units (cents), ≥ 0. */
+  unit_minor: number
+  unit_code?: UnitCode
 }
 
 export interface IssueProblem {
@@ -152,9 +190,59 @@ export interface InvoiceUpdateInput {
   due_at: string | null
   number_prefix: string
   internal_notes: string
+  /** Always sent: the API replaces all four, so omitting one clears it. */
+  buyer_reference: string
+  purchase_order_ref: string
+  contract_ref: string
+  payment_terms: string
+  /**
+   * Replaces ALL lines when present (1..100). Omit to keep the existing
+   * lines; an empty array is rejected by the API.
+   */
+  lines?: InvoiceLineInput[]
   /** FE-2: caller-supplied version token, paired with the form fields. */
   updated_at?: string
 }
+
+/** Alias matching the API's name for the PUT /invoices/{id} body. */
+export type UpdateInvoiceRequest = InvoiceUpdateInput
+
+export type EntityKind = 'individual' | 'sole_trader' | 'partnership' | 'llc' | 'corp' | 'other'
+export type TaxIdKind = '' | 'vat' | 'ein' | 'gst' | 'abn' | 'other'
+
+/** GET /api/v1/finance/billing-profile (`{data: BillingProfile}`). */
+export interface BillingProfile {
+  id: string
+  legal_name: string
+  trading_name: string
+  entity_kind: EntityKind
+  tax_id: string
+  tax_id_kind: TaxIdKind
+  contact_email: string
+  contact_phone: string
+  address_line1: string
+  address_line2: string
+  address_city: string
+  address_region: string
+  address_postal: string
+  address_country: string
+  jurisdiction: string
+  payment_instructions: string
+  default_currency: string
+  /** National tax number, e.g. German Steuernummer (EN 16931 BT-32, ≤40). */
+  tax_number: string
+  /** Server-normalised: spaces removed, upper-cased; validated (mod-97). */
+  iban: string
+  /** 8 or 11 characters; the server upper-cases. */
+  bic: string
+  vat_exempt_small_business: boolean
+  default_vat_rate_bps: number
+  updated_at: string
+  created_at: string
+}
+
+/** PUT /api/v1/finance/billing-profile body: every field, plus the token. */
+export type UpdateBillingProfileRequest = Omit<BillingProfile, 'id' | 'created_at'>
 
 export interface PaymentCreateInput {
   kind: PaymentKind
@@ -190,6 +278,10 @@ export type FinanceErrorCode =
   | 'not_issuable'
   | 'invoice_not_payable'
   | 'exceeds_balance'
+  | 'unsupported_media_type'
+  | 'too_large'
+  | 'limit_reached'
+  | 'inactive'
   | 'unavailable'
   | 'network'
   | 'unknown'
@@ -257,7 +349,23 @@ export interface Entry {
   created_at: string
   updated_at: string
   deleted_at: string | null
+  /** Receipt files on the entry (present on list/get/update/void responses). */
+  attachment_count: number
 }
+
+/** A receipt (photo, scan or PDF) attached to an entry. The storage key never leaves the server. */
+export interface EntryAttachment {
+  id: string
+  entry_id: string
+  filename: string
+  mime_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf'
+  size_bytes: number
+  checksum_sha256: string
+  created_at: string
+}
+
+/** `receipt` filter of the entries list: entries with no files / with at least one. */
+export type EntryReceiptFilter = 'missing' | 'present'
 
 /** Server-side filter accepted by GET /api/v1/finance/entries. Empty fields drop. */
 export interface EntryFilter {
@@ -268,6 +376,7 @@ export interface EntryFilter {
   gig_id?: string
   from?: string
   to?: string
+  receipt?: EntryReceiptFilter
 }
 
 /** Currency-grouped totals — multi-currency without conversion (FIN-09). */

@@ -40,7 +40,7 @@ export class FinanceApiError extends Error {
     this.status = status
     this.code = code
     this.problems = problems
-    const m = /(?:validation failed:\s*)?([a-z_]+(?:\.[a-z_0-9]+)*):\s/.exec(message)
+    const m = /(?:validation failed:\s*)?([a-z_]+(?:\[\d+\])?(?:\.[a-z_0-9]+(?:\[\d+\])?)*):\s/.exec(message)
     this.field = status === 400 && m ? (m[1] ?? null) : null
   }
 }
@@ -48,6 +48,7 @@ export class FinanceApiError extends Error {
 const KNOWN_CODES: FinanceErrorCode[] = [
   'validation_failed', 'bad_request', 'not_found', 'conflict', 'bad_state',
   'not_issuable', 'invoice_not_payable', 'exceeds_balance',
+  'unsupported_media_type', 'too_large', 'limit_reached', 'inactive',
 ]
 
 function readBody(data: unknown): Partial<FinanceErrorBody> {
@@ -71,6 +72,8 @@ export function toFinanceError(e: unknown): FinanceApiError {
   if (status === 503) code = 'unavailable'
   else if ((KNOWN_CODES as string[]).includes(raw)) code = raw as FinanceErrorCode
   else if (status === 0) code = 'network'
+  else if (status === 413) code = 'too_large'
+  else if (status === 415) code = 'unsupported_media_type'
   else if (status === 400) code = 'validation_failed'
   else if (status === 404) code = 'not_found'
   else if (status === 409) code = 'conflict'
@@ -80,6 +83,11 @@ export function toFinanceError(e: unknown): FinanceApiError {
       ? DISABLED_MESSAGE
       : body.message || (status === 0 ? 'Could not reach the server.' : err.message || 'Request failed.')
   return new FinanceApiError(status, code, message, Array.isArray(body.problems) ? body.problems : [])
+}
+
+/** GET endpoint returning the invoice PDF as an attachment. Link to it; never fetch it into memory. */
+export function invoicePdfUrl(id: string): string {
+  return `${BASE}/invoices/${encodeURIComponent(id)}/pdf`
 }
 
 function unwrap<T>(res: unknown): T {
@@ -380,10 +388,23 @@ export const useInvoiceStore = defineStore('invoice', () => {
       if (!isCurrent()) { upsert(inv, false); return inv }
       upsert(inv)
       notice.value = null
+      // The PUT answers with the invoice only; a replaced line list has to
+      // be read back before the editor reseeds from it.
+      if (input.lines) await refreshLines(id, isCurrent)
       if (inv.status === 'draft') await fetchIssueCheck(id, isCurrent).catch(() => undefined)
       return inv
     } catch (e) {
       return handleWriteError(e, id, isCurrent)
+    }
+  }
+
+  /** Re-reads just the lines of the shown invoice (after a PUT that replaced them). */
+  async function refreshLines(id: string, isCurrent: () => boolean): Promise<void> {
+    try {
+      const res = await request<{ data: Invoice; lines?: InvoiceLine[] | null }>(`${BASE}/invoices/${id}`, {}, isCurrent)
+      if (isCurrent() && current.value?.id === id) lines.value = res.lines ?? []
+    } catch {
+      if (isCurrent()) notice.value = 'Saved, but the line items could not be reloaded. Reopen the invoice to see them.'
     }
   }
 

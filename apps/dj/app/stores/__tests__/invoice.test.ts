@@ -29,6 +29,10 @@ function makeInvoice(overrides: Partial<Invoice> = {}): Invoice {
     paid_at: null,
     payment_ref: '',
     internal_notes: '',
+    buyer_reference: '',
+    purchase_order_ref: '',
+    contract_ref: '',
+    payment_terms: '',
     customer: { ...emptyParty(), legal_name: 'Club Alpha' },
     billing_profile: null,
     vat_treatment: 'domestic',
@@ -167,6 +171,10 @@ describe('useInvoiceStore', () => {
       due_at: inv.due_at,
       number_prefix: 'INV',
       internal_notes: '',
+      buyer_reference: '',
+      purchase_order_ref: '',
+      contract_ref: '',
+      payment_terms: '',
     })
     const [url, opts] = fetchMock.mock.calls[0]!
     expect(url).toBe('/api/v1/finance/invoices/inv-1')

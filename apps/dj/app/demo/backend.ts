@@ -92,6 +92,8 @@ export function createDemoBackend(opts: DemoBackendOptions) {
       const p = store.state.posts.find((x) => x.id === post[1])
       return p ? postImage(p) : null
     }
+    const receipt = /^\/api\/v1\/finance\/entries\/([^/]+)\/attachments\/([^/]+)$/.exec(path)
+    if (receipt) return finance.attachmentDataUrl(decodeURIComponent(receipt[1]!), decodeURIComponent(receipt[2]!))
     if (path === '/api/v1/storage/proxy') {
       return store.state.assets[new URLSearchParams(qs).get('path') ?? ''] ?? null
     }

@@ -3,11 +3,12 @@
 // routes and the browser demo router answer identically.
 
 import type {
-  Entry,
+  BillingProfile,
   EntryFilter,
   EntryKind,
   EntryStatus,
   EntryTotals,
+  InvoiceLine,
   InvoiceSummary,
   Party,
   PaymentKind,
@@ -15,9 +16,11 @@ import type {
   ProfitLossTotals,
   ReconciliationAction,
 } from '../../app/types/finance'
+import { minorToDecimalString } from '../../app/utils/money'
 import type { FinanceMockDb, StoredEntry, StoredInvoice } from './db'
 import {
-  badRequest, fail, isDateOnly, isTreatment, normalizeDueAt, normalizeParty, NOTES, ok, prefixProblem,
+  badRequest, BIC_PATTERN, compactUpper, fail, isDateOnly, isTreatment, normalizeDueAt, normalizeParty, NOTES, ok,
+  prefixProblem, UNIT_CODES, uuid, validIban,
   type MockResult,
 } from './rules'
 
@@ -67,7 +70,9 @@ export function listInvoices(db: FinanceMockDb, q: Query): MockResult {
 export function getInvoice(db: FinanceMockDb, id: string): MockResult {
   const inv = db.invoices.get(id)
   if (!inv) return notFound()
-  return ok({ data: db.serialize(inv), lines: db.lines.get(inv.id) ?? [] })
+  // Lines stored before unit codes existed read as pieces.
+  const lines = (db.lines.get(inv.id) ?? []).map((l) => ({ ...l, unit_code: l.unit_code ?? 'C62' }))
+  return ok({ data: db.serialize(inv), lines })
 }
 
 export function createInvoice(db: FinanceMockDb, body: Body | null): MockResult {
@@ -115,6 +120,49 @@ export function createInvoice(db: FinanceMockDb, body: Body | null): MockResult 
   return ok({ data: db.serialize(inv) }, 201)
 }
 
+// Limits of api/internal/finance/invoice_validation.go.
+const MAX_LINES = 100
+const MAX_LINE_DESCRIPTION = 500
+const MAX_LINE_QUANTITY = 1_000_000
+const MAX_LINE_TOTAL_MINOR = 10_000_000_000_000
+
+/** Validates a `lines` replacement; returns the normalised lines or the field problems. */
+function checkLines(raw: unknown): { lines: LineInput[] } | { errs: string[] } {
+  if (!Array.isArray(raw) || raw.length === 0) return { errs: ['lines: an invoice needs at least one line'] }
+  if (raw.length > MAX_LINES) return { errs: [`lines: at most ${MAX_LINES} lines are allowed`] }
+  const errs: string[] = []
+  const lines: LineInput[] = []
+  raw.forEach((r, i) => {
+    const l = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>
+    const path = `lines[${i}].`
+    const description = String(l.description ?? '').trim()
+    const n = [...description].length
+    if (n === 0) errs.push(`${path}description: required`)
+    else if (n > MAX_LINE_DESCRIPTION) errs.push(`${path}description: exceeds ${MAX_LINE_DESCRIPTION} characters`)
+    const quantity = l.quantity as number
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_LINE_QUANTITY) {
+      errs.push(`${path}quantity: must be between 1 and ${MAX_LINE_QUANTITY}`)
+    }
+    const unit = l.unit_minor as number
+    if (!Number.isInteger(unit)) errs.push(`${path}unit_minor: must be a whole number of minor units`)
+    else if (unit < 0) errs.push(`${path}unit_minor: must not be negative`)
+    else if (Number.isInteger(quantity) && quantity >= 1 && unit > 0 && quantity > Math.floor(MAX_LINE_TOTAL_MINOR / unit)) {
+      errs.push(`${path}unit_minor: line total exceeds the maximum amount`)
+    }
+    const code = compactUpper(l.unit_code) || 'C62'
+    if (!UNIT_CODES.includes(code)) errs.push(`${path}unit_code: must be one of ${UNIT_CODES.join(', ')}`)
+    lines.push({ description, quantity, unit_minor: unit, unit_code: code })
+  })
+  return errs.length ? { errs } : { lines }
+}
+
+interface LineInput { description: string; quantity: number; unit_minor: number; unit_code: string }
+
+/** Reference and terms fields of an invoice (EN 16931 BT-10/13/12/20) with their limits. */
+const REFERENCE_LIMITS = [
+  ['buyer_reference', 100], ['purchase_order_ref', 100], ['contract_ref', 100], ['payment_terms', 500],
+] as const
+
 /** Full replacement of the listed fields (§4.1); draft only. */
 export function updateInvoice(db: FinanceMockDb, id: string, body: Body): MockResult {
   const inv = writable(db, id, body)
@@ -122,6 +170,15 @@ export function updateInvoice(db: FinanceMockDb, id: string, body: Body): MockRe
   if (inv.status !== 'draft') return fail(409, 'bad_state', 'only draft invoices can be edited')
 
   const errs: string[] = []
+  // Same order as the Go API: references, lines, then the rest.
+  const refs: Record<string, string> = {}
+  for (const [field, max] of REFERENCE_LIMITS) {
+    refs[field] = String(body[field] ?? '').trim()
+    if ([...refs[field]!].length > max) errs.push(`${field}: exceeds ${max} characters`)
+  }
+  // `lines` omitted/null keeps the existing lines; anything else replaces them.
+  const linesChecked = body.lines === undefined || body.lines === null ? null : checkLines(body.lines)
+  if (linesChecked && 'errs' in linesChecked) errs.push(...linesChecked.errs)
   const customer = normalizeParty((body.customer ?? {}) as Partial<Party>, inv.customer)
   if (customer.country && !/^[A-Z]{2}$/.test(customer.country)) errs.push('customer.country: must be a 2-letter ISO 3166-1 alpha-2 code')
   if (!isTreatment(body.vat_treatment)) errs.push('vat_treatment: must be one of domestic, reverse_charge, exempt, outside_scope, us_sales_tax, none')
@@ -148,6 +205,19 @@ export function updateInvoice(db: FinanceMockDb, id: string, body: Body): MockRe
   inv.due_at = due ?? null
   inv.number_prefix = prefix.toUpperCase()
   inv.internal_notes = String(body.internal_notes ?? '')
+  inv.buyer_reference = refs.buyer_reference!
+  inv.purchase_order_ref = refs.purchase_order_ref!
+  inv.contract_ref = refs.contract_ref!
+  inv.payment_terms = refs.payment_terms!
+  if (linesChecked && 'lines' in linesChecked) {
+    const now = db.stamp()
+    db.lines.set(inv.id, linesChecked.lines.map((l, i): InvoiceLine => ({
+      id: uuid(), invoice_id: inv.id, sort_order: i,
+      description: l.description, quantity: l.quantity, unit_minor: l.unit_minor, unit_code: l.unit_code as InvoiceLine['unit_code'],
+      // The server derives the tax rate and the line total; clients never send them.
+      tax_bps: inv.tax_rate_bps, line_total_minor: l.quantity * l.unit_minor, created_at: now,
+    })))
+  }
   db.recompute(inv)
   inv.updated_at = db.stamp()
   return ok({ data: db.serialize(inv) })
@@ -390,7 +460,9 @@ function coerceFilter(q: Query): { filter: EntryFilter; errors: string[] } {
   const fromRaw = String(q.from ?? '')
   const toRaw = String(q.to ?? '')
   const gigRaw = String(q.gig_id ?? '')
+  const receiptRaw = String(q.receipt ?? '')
 
+  if (receiptRaw && receiptRaw !== 'missing' && receiptRaw !== 'present') errors.push('receipt: must be missing or present')
   if (kindRaw && !ENTRY_KINDS.includes(kindRaw as EntryKind)) errors.push('kind: must be income or expense')
   if (statusRaw && !ENTRY_STATUSES.includes(statusRaw as EntryStatus)) errors.push('status: must be active or voided')
   if (currencyRaw && !isCurrencyCode(currencyRaw)) errors.push('currency: must be an uppercase 3-letter code')
@@ -407,12 +479,16 @@ function coerceFilter(q: Query): { filter: EntryFilter; errors: string[] } {
   if (fromRaw) filter.from = fromRaw
   if (toRaw) filter.to = toRaw
   if (gigRaw) filter.gig_id = gigRaw
+  if (receiptRaw === 'missing' || receiptRaw === 'present') filter.receipt = receiptRaw
 
   return { filter, errors }
 }
 
-function applyFilter(entries: StoredEntry[], f: EntryFilter): StoredEntry[] {
+function applyFilter(entries: StoredEntry[], f: EntryFilter, receiptCount: (id: string) => number = () => 0): StoredEntry[] {
   return entries.filter((e) => {
+    // Same definition as the Go API: "missing" is an ACTIVE EXPENSE with no files.
+    if (f.receipt === 'missing' && (e.kind !== 'expense' || e.status !== 'active' || receiptCount(e.id) > 0)) return false
+    if (f.receipt === 'present' && receiptCount(e.id) === 0) return false
     if (f.kind && e.kind !== f.kind) return false
     if (f.status && e.status !== f.status) return false
     if (f.currency && e.currency !== f.currency) return false
@@ -427,16 +503,16 @@ function applyFilter(entries: StoredEntry[], f: EntryFilter): StoredEntry[] {
 export function listEntries(db: FinanceMockDb, q: Query): MockResult {
   const { filter, errors } = coerceFilter(q)
   if (errors.length) return badRequest(errors)
-  const rows = applyFilter([...db.entries.values()].filter((e) => !e.deleted_at), filter)
+  const rows = applyFilter([...db.entries.values()].filter((e) => !e.deleted_at), filter, (id) => db.attachmentsOf(id).length)
     .sort((a, b) => b.entry_date.localeCompare(a.entry_date))
     .slice(0, 200)
-  return ok({ data: rows as Entry[] })
+  return ok({ data: rows.map((e) => db.entryView(e)) })
 }
 
 export function getEntry(db: FinanceMockDb, id: string): MockResult {
   const e = db.entries.get(id)
   if (!e || e.deleted_at) return fail(404, 'not_found', 'finance entry not found')
-  return ok({ data: e as Entry })
+  return ok({ data: db.entryView(e) })
 }
 
 /** Common body for POST /entries. */
@@ -464,7 +540,7 @@ export function createEntry(db: FinanceMockDb, body: Body | null): MockResult {
     notes: input.notes,
     gig_id: input.gig_id,
   })
-  return ok({ data: e as Entry }, 201)
+  return ok({ data: db.entryView(e) }, 201)
 }
 
 export function updateEntry(db: FinanceMockDb, id: string, body: Body): MockResult {
@@ -485,7 +561,7 @@ export function updateEntry(db: FinanceMockDb, id: string, body: Body): MockResu
   entry.notes = String(body.notes ?? '')
   entry.gig_id = body.gig_id == null || body.gig_id === '' ? null : String(body.gig_id)
   entry.updated_at = db.stamp()
-  return ok({ data: entry as Entry })
+  return ok({ data: db.entryView(entry) })
 }
 
 export function deleteEntry(db: FinanceMockDb, id: string, body: Body): MockResult {
@@ -508,7 +584,7 @@ export function voidEntry(db: FinanceMockDb, id: string, body: Body): MockResult
   if (entry.status === 'voided') return fail(409, 'inactive', 'finance entry is already voided')
   entry.status = 'voided'
   entry.updated_at = db.stamp()
-  return ok({ data: entry as Entry })
+  return ok({ data: db.entryView(entry) })
 }
 
 /** Aggregates the active entries in `entries` (defaults to all) by currency. */
@@ -676,4 +752,99 @@ export function describePendingMetadataForGig(db: FinanceMockDb, gigId: string):
     }
   }
   return null
+}
+
+// ── Billing profile (GET/PUT /api/v1/finance/billing-profile) ────────────
+
+export function getBillingProfile(db: FinanceMockDb): MockResult {
+  return ok({ data: structuredClone(db.billingProfile) })
+}
+
+const ENTITY_KINDS = ['individual', 'sole_trader', 'partnership', 'llc', 'corp', 'other']
+const TAX_ID_KINDS = ['', 'vat', 'ein', 'gst', 'abn', 'other']
+
+/** Same rules, messages and normalisation as api/internal/finance/validation.go. */
+export function updateBillingProfile(db: FinanceMockDb, body: Body | null): MockResult {
+  const b = body ?? {}
+  if (typeof b.updated_at !== 'string' || !b.updated_at) return fail(400, 'bad_request', 'updated_at is required')
+  const str = (k: string) => String(b[k] ?? '')
+  const errs: string[] = []
+  const required = (k: string, max = 0) => {
+    const v = str(k).trim()
+    if (!v) errs.push(`${k}: required`)
+    else if (max && [...v].length > max) errs.push(`${k}: exceeds ${max} characters`)
+  }
+  required('legal_name', 200)
+  const email = str('contact_email').trim()
+  if (!email) errs.push('contact_email: required')
+  else if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) errs.push('contact_email: not a valid email')
+  required('address_line1')
+  required('address_city')
+  required('address_postal')
+  required('jurisdiction')
+  const currency = str('default_currency').trim()
+  if (!currency) errs.push('default_currency: required')
+  else if (currency.length !== 3) errs.push('default_currency: must be a 3-letter ISO 4217 code')
+  else if (!/^[A-Z]{3}$/.test(currency)) errs.push('default_currency: must be uppercase A-Z letters')
+  if (!ENTITY_KINDS.includes(str('entity_kind'))) errs.push('entity_kind: must be one of individual, sole_trader, partnership, llc, corp, other')
+  if (!TAX_ID_KINDS.includes(str('tax_id_kind'))) errs.push("tax_id_kind: must be one of '', vat, ein, gst, abn, other")
+  const country = str('address_country')
+  if (country && country.length !== 2) errs.push('address_country: must be a 2-letter ISO 3166-1 alpha-2 code')
+  else if (country && !/^[A-Z]{2}$/.test(country)) errs.push('address_country: must be uppercase A-Z letters')
+  const rate = b.default_vat_rate_bps
+  if (!Number.isInteger(rate) || (rate as number) < 0 || (rate as number) > 10000) errs.push('default_vat_rate_bps: must be between 0 and 10000 basis points')
+  const taxNumber = str('tax_number').trim()
+  const iban = compactUpper(b.iban)
+  const bic = compactUpper(b.bic)
+  if ([...taxNumber].length > 40) errs.push('tax_number: exceeds 40 characters')
+  if (iban && !validIban(iban)) errs.push('iban: not a valid IBAN (check the country, length and check digits)')
+  if (bic && !BIC_PATTERN.test(bic)) errs.push('bic: must be an 8 or 11 character BIC/SWIFT code')
+  if ([...str('trading_name').trim()].length > 200) errs.push('trading_name: exceeds 200 characters')
+  if (errs.length) return badRequest(errs)
+  if (b.updated_at !== db.billingProfile.updated_at) return fail(409, 'conflict', 'billing profile updated by another writer; refresh and retry')
+
+  db.billingProfile = {
+    ...db.billingProfile,
+    legal_name: str('legal_name').trim(), trading_name: str('trading_name').trim(),
+    entity_kind: str('entity_kind') as BillingProfile['entity_kind'],
+    tax_id: str('tax_id').trim(), tax_id_kind: str('tax_id_kind') as BillingProfile['tax_id_kind'],
+    contact_email: email, contact_phone: str('contact_phone').trim(),
+    address_line1: str('address_line1').trim(), address_line2: str('address_line2').trim(),
+    address_city: str('address_city').trim(), address_region: str('address_region').trim(),
+    address_postal: str('address_postal').trim(), address_country: country,
+    jurisdiction: str('jurisdiction').trim(), payment_instructions: str('payment_instructions'),
+    default_currency: currency, tax_number: taxNumber, iban, bic,
+    vat_exempt_small_business: b.vat_exempt_small_business === true,
+    default_vat_rate_bps: rate as number,
+    updated_at: db.stamp(),
+  }
+  return ok({ data: structuredClone(db.billingProfile) })
+}
+
+// ── Invoice PDF (GET /api/v1/finance/invoices/{id}/pdf) ─────────────────
+
+/** Text lines of a demo invoice PDF; null when the invoice does not exist. */
+export function invoicePdfLines(db: FinanceMockDb, id: string): { name: string; lines: { text: string; size?: number; bold?: boolean }[] } | null {
+  const inv = db.invoices.get(id)
+  if (!inv) return null
+  const money = (minor: number) => `${minorToDecimalString(minor, inv.currency)} ${inv.currency}`
+  const label = inv.invoice_number ?? 'DRAFT'
+  const out: { text: string; size?: number; bold?: boolean }[] = [
+    { text: `${inv.kind === 'credit_note' ? 'Credit note' : 'Invoice'} ${label}`, size: 20, bold: true },
+    { text: 'KlubHub DJ mock - fictional data, not a real invoice', size: 9 },
+    { text: ' ' },
+    { text: `From: ${db.supplier.legal_name}${db.billingProfile.iban ? ` - IBAN ${db.billingProfile.iban}` : ''}` },
+    { text: `Bill to: ${inv.customer.company || inv.customer.legal_name || '-'}` },
+    { text: `Supply date: ${inv.supply_date ?? '-'}` },
+  ]
+  for (const [lbl, v] of [
+    ['Buyer reference', inv.buyer_reference], ['Purchase order', inv.purchase_order_ref],
+    ['Contract', inv.contract_ref], ['Payment terms', inv.payment_terms],
+  ] as const) if (v) out.push({ text: `${lbl}: ${v}` })
+  out.push({ text: ' ' }, { text: 'Lines', bold: true })
+  for (const l of db.lines.get(inv.id) ?? []) {
+    out.push({ text: `${l.description} - ${l.quantity} x ${money(l.unit_minor)} [${l.unit_code ?? 'C62'}] = ${money(l.line_total_minor)}` })
+  }
+  out.push({ text: ' ' }, { text: `Subtotal: ${money(inv.subtotal_minor)}` }, { text: `Tax: ${money(inv.tax_minor)}` }, { text: `Total: ${money(inv.total_minor)}`, bold: true })
+  return { name: `${label}.pdf`, lines: out }
 }

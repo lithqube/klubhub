@@ -28,7 +28,7 @@ vi.mock('#kui/components/ui/toast/use-toast', () => ({ useToast: () => ({ toast:
 type Call = [string, { method?: string; params?: unknown; body?: Record<string, unknown> }?]
 const transport = () => vi.mocked($fetch as unknown as (url: string, options?: Call[1]) => Promise<unknown>)
 const writes = (method: string) => transport().mock.calls.filter(([, o]) => o?.method === method)
-const row = (over: Partial<Entry> = {}): Entry => ({ id: 'e', kind: 'income', amount_minor: 100, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-01', description: 'Fee', notes: '', gig_id: null, status: 'active', auto_generated: false, source_kind: 'manual', source_id: null, source_amount_minor: null, source_currency: null, source_description: '', created_at: 'T1', updated_at: 'T1', deleted_at: null, ...over })
+const row = (over: Partial<Entry> = {}): Entry => ({ id: 'e', kind: 'income', amount_minor: 100, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-01', description: 'Fee', notes: '', gig_id: null, status: 'active', auto_generated: false, source_kind: 'manual', source_id: null, source_amount_minor: null, source_currency: null, source_description: '', created_at: 'T1', updated_at: 'T1', deleted_at: null, attachment_count: 0, ...over })
 function deferred<T>() { let resolve!: (v: T) => void; let reject!: (e: unknown) => void; const promise = new Promise<T>((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 async function type(selector: string, value: string): Promise<void> {
   const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement
@@ -110,7 +110,7 @@ describe('FE-5 confirmed invoice write after selection moved on', () => {
     const { s, a } = setup()
     const write = deferred<unknown>(); const next = deferred<unknown>()
     transport().mockReturnValueOnce(write.promise).mockReturnValueOnce(next.promise).mockResolvedValue({ data: [] })
-    const done = op === 'update' ? s.updateInvoice('a', { customer: a.customer, vat_treatment: 'domestic', tax_rate_bps: 1900, tax_note: '', withholding_rate_bps: 0, supply_date: null, due_at: null, number_prefix: 'INV', internal_notes: 'changed', updated_at: 'T1' })
+    const done = op === 'update' ? s.updateInvoice('a', { customer: a.customer, vat_treatment: 'domestic', tax_rate_bps: 1900, tax_note: '', withholding_rate_bps: 0, supply_date: null, due_at: null, number_prefix: 'INV', internal_notes: 'changed', buyer_reference: '', purchase_order_ref: '', contract_ref: '', payment_terms: '', updated_at: 'T1' })
       : op === 'cancel' ? s.cancelInvoice('a', 'T1')
         : op === 'credit' ? s.issueCreditNote('a', 'r', 'T1') : s.correctInvoice('a', 'r', 'T1')
     const selection = s.openDetail('b')
