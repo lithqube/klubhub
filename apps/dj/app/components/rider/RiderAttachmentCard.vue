@@ -72,7 +72,7 @@ async function onAttached(): Promise<void> {
 const toneColor = computed(() => {
   switch (status.value.tone) {
     case 'accent':
-      return 'var(--green)'
+      return 'var(--color-secondary)'
     case 'amber':
       return 'var(--color-primary)'
     default:

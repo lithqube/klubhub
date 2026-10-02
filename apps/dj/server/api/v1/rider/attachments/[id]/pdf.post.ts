@@ -1,4 +1,4 @@
-import { getAttachment } from '../../_state'
+import { db } from '../../_state'
 
 // Tiny minimal-PDF placeholder so the frontend download button works in
 // dev. Real PDFs come from the Go API in production. The bytes below are
@@ -19,9 +19,9 @@ export default defineEventHandler(async (event) => {
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: 'invalid attachment id' })
   }
-  const a = getAttachment(id)
+  const a = db.getAttachment(id)
   if (!a) {
-    throw createError({ statusCode: 404, statusMessage: 'attachment not found' })
+    throw createError({ statusCode: 404, statusMessage: 'rider record not found' })
   }
   setResponseStatus(event, 201)
   // Bare envelope shape matches epk /export (no {data:...}).

@@ -105,6 +105,14 @@ export const useRiderStore = defineStore('rider', () => {
   async function deleteTemplate(id: string): Promise<void> {
     await $fetch(`/api/v1/rider/templates/${id}`, { method: 'DELETE' })
     templates.value = templates.value.filter(t => t.id !== id)
+    // The server clears template_id on the attachments made from it (their
+    // text and updatedAt are untouched); do the same to the cached copies so
+    // their status label stops claiming a template that no longer exists.
+    const next: Record<string, RiderAttachment | null> = {}
+    for (const [gigId, a] of Object.entries(attachmentsByGigId.value)) {
+      next[gigId] = a && a.templateId === id ? { ...a, templateId: null } : a
+    }
+    attachmentsByGigId.value = next
   }
 
   // ── Attachment actions ─────────────────────────────────────────────

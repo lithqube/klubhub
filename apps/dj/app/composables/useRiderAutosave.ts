@@ -48,6 +48,14 @@ function keyOf(t: RiderAutosaveTarget): string {
   return `${t.kind}:${t.id}`
 }
 
+/** True while any target has edits that have not reached the server. */
+export function hasAnyUnsavedRiderEdits(): boolean {
+  for (const q of queues.values()) {
+    if (q.conflict || q.failed || q.active > 0 || q.timer !== null || Object.keys(q.pending).length > 0) return true
+  }
+  return false
+}
+
 export function useRiderAutosave(delayMs = 1500) {
   const store = useRiderStore()
 

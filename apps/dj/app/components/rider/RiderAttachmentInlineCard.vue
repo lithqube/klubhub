@@ -8,8 +8,11 @@ import RiderAttachmentCard from './RiderAttachmentCard.vue'
 
 const props = defineProps<{ gig: Gig }>()
 
+// A new tab, not an in-place navigation: the gig dialog around this card can
+// hold unsaved edits (the card is even shown for a status that has not been
+// saved yet), and leaving the page would silently discard them.
 async function onOpenEditor(gigId: string): Promise<void> {
-  await navigateTo({ path: '/rider', query: { gig: gigId } })
+  await navigateTo({ path: '/rider', query: { gig: gigId } }, { open: { target: '_blank' } })
 }
 </script>
 

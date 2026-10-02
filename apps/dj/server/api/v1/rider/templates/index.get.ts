@@ -1,3 +1,3 @@
-import { listTemplates } from '../_state'
+import { db } from '../_state'
 
-export default defineEventHandler(() => ({ data: listTemplates() }))
+export default defineEventHandler(() => ({ data: db.listTemplates() }))

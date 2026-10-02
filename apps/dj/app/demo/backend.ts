@@ -2,9 +2,11 @@
 // persisted DemoState. Framework-free so it runs in vitest and the browser.
 
 import { FinanceMockDb } from '../../shared/finance-mock/db'
+import { RiderMockDb } from '../../shared/rider-mock/db'
 import { registerEpk } from './handlers/epk'
 import { financeLookup, registerFinance } from './handlers/finance'
 import { registerGigs } from './handlers/gigs'
+import { registerRider } from './handlers/rider'
 import { registerSettings } from './handlers/settings'
 import { postImage, registerSocial } from './handlers/social'
 import { registerTracklists } from './handlers/tracklists'
@@ -33,6 +35,7 @@ export function buildRouter(): DemoRouter {
   registerEpk(r)
   registerGigs(r)
   registerFinance(r)
+  registerRider(r)
   return r
 }
 
@@ -46,10 +49,13 @@ export function createDemoBackend(opts: DemoBackendOptions) {
 
   const finance = new FinanceMockDb({ lookupGig: (id) => financeLookup(store.state)(id) })
   finance.load(store.state.finance)
+  const rider = new RiderMockDb({ now })
+  rider.load(store.state.rider)
 
   const ctx: DemoContext = {
     get state() { return store.state },
     finance,
+    rider,
     now,
     baseURL: opts.baseURL ?? '/',
     objectUrl(blob) {
@@ -72,6 +78,7 @@ export function createDemoBackend(opts: DemoBackendOptions) {
     }
     if (req.method !== 'GET' || MUTATING_READS.has(req.path)) {
       store.state.finance = finance.toJSON()
+      store.state.rider = rider.toJSON()
       store.save()
     }
     return res
@@ -94,6 +101,7 @@ export function createDemoBackend(opts: DemoBackendOptions) {
   function reset(): void {
     store.reset()
     finance.load(store.state.finance)
+    rider.load(store.state.rider)
   }
 
   return {

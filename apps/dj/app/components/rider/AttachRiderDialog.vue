@@ -2,7 +2,8 @@
 // AttachRiderDialog — pick a template (or "Start from blank") for a
 // gig. Used inside GigFormDialog when status flips to advanced.
 
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
+import { useModalA11y } from '~/composables/useModalA11y'
 import { useRiderStore } from '~/stores/rider'
 import { riderErrorMessage } from '~/utils/riderErrors'
 
@@ -10,6 +11,9 @@ const props = defineProps<{ open: boolean; gigId: string }>()
 const emit = defineEmits<{ close: []; attached: [] }>()
 
 const store = useRiderStore()
+const titleId = useId()
+const panel = ref<HTMLElement | null>(null)
+useModalA11y(() => props.open, panel, () => emit('close'))
 const selectedTemplateId = ref<string | null>(null)
 const error = ref('')
 const submitting = ref(false)
@@ -59,14 +63,15 @@ async function onConfirm(): Promise<void> {
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
     role="dialog"
     aria-modal="true"
+    :aria-labelledby="titleId"
     @click.self="emit('close')"
   >
-    <div class="glass-panel w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 space-y-4">
+    <div ref="panel" tabindex="-1" class="glass-panel w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 space-y-4">
       <div class="flex items-center justify-between">
-        <h2 class="font-command font-bold uppercase text-on-surface text-lg tracking-command">
+        <h2 :id="titleId" class="font-command font-bold uppercase text-on-surface text-lg tracking-command">
           ATTACH RIDER
         </h2>
-        <button type="button" class="btn-hud btn-hud-ghost" @click="emit('close')">✕</button>
+        <button type="button" class="btn-hud btn-hud-ghost" aria-label="Close" @click="emit('close')">✕</button>
       </div>
 
       <div class="grid gap-4 md:grid-cols-2">
@@ -75,6 +80,7 @@ async function onConfirm(): Promise<void> {
             type="button"
             class="glass-panel w-full text-left p-3"
             :class="{ 'is-selected': selectedTemplateId === null }"
+            :aria-pressed="selectedTemplateId === null"
             :data-testid="'attach-rider-blank'"
             @click="selectedTemplateId = null"
           >
@@ -90,6 +96,7 @@ async function onConfirm(): Promise<void> {
             type="button"
             class="glass-panel w-full text-left p-3"
             :class="{ 'is-selected': selectedTemplateId === t.id }"
+            :aria-pressed="selectedTemplateId === t.id"
             :data-testid="`attach-rider-template-${t.id}`"
             @click="selectedTemplateId = t.id"
           >
@@ -128,7 +135,7 @@ async function onConfirm(): Promise<void> {
         </div>
       </div>
 
-      <p v-if="error" class="text-error font-terminal text-xs uppercase">{{ error }}</p>
+      <p v-if="error" role="alert" class="text-error font-terminal text-xs uppercase">{{ error }}</p>
 
       <div class="flex justify-end gap-2">
         <button type="button" class="btn-hud btn-hud-ghost" @click="emit('close')">CANCEL</button>
