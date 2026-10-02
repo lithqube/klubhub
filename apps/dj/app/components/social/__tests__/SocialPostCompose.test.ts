@@ -1,21 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { ref } from 'vue'
 import SocialPostCompose from '../SocialPostCompose.vue'
+import { useSocialStore } from '../../../stores/social'
 
-const mockCreatePost = vi.fn().mockResolvedValue(undefined)
-const mockCloseComposePanel = vi.fn()
+const mockCreatePost = vi.fn().mockResolvedValue({ id: 'created-post' })
+const mockUploadImage = vi.fn().mockResolvedValue('social/created-post/image.jpg')
 const mockLoadPosts = vi.fn().mockResolvedValue(undefined)
 
-// Mock the social store
-vi.mock('~/stores/social', () => ({
-  useSocialStore: vi.fn(() => ({
-    createPost: mockCreatePost,
-    closeComposePanel: mockCloseComposePanel,
-    loadPosts: mockLoadPosts,
-  })),
-}))
 
 // Mock the tracklist store
 vi.mock('~/stores/tracklist', () => ({
@@ -64,6 +57,26 @@ describe('SocialPostCompose', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    mockCreatePost.mockReset().mockResolvedValue({ id: 'created-post' })
+    mockUploadImage.mockReset().mockResolvedValue('social/created-post/image.jpg')
+    mockResetForm.mockImplementation(() => { mockImageFile.value = null })
+    useSocialStore().openComposePanel()
+    vi.stubGlobal('$fetch', vi.fn(async (url: string, options?: any) => {
+      if (url.endsWith('/image')) {
+        const id = url.split('/').at(-2)!
+        return { data: { path: await mockUploadImage(id, options.body.get('image_file')) } }
+      }
+      if (options?.method === 'POST') {
+        const f = options.body as FormData
+        return { data: await mockCreatePost({
+          postType: f.get('post_type'), caption: f.get('caption'),
+          scheduledAt: f.get('scheduled_at'), timezoneName: f.get('timezone_name'),
+          imageId: f.get('image_id') ?? undefined,
+        }) }
+      }
+      await mockLoadPosts()
+      return { data: [] }
+    }))
     // Reset reactive refs
     mockPostType.value = 'feed'
     mockCaption.value = ''
@@ -114,6 +127,68 @@ describe('SocialPostCompose', () => {
       })
       await wrapper.setProps({ prefilledImageId: null })
       expect(mockGenerateCaption).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('create then upload', () => {
+    function readyForm(file: File | null = null) {
+      mockCaption.value = 'Test caption'
+      mockScheduledAt.value = '2026-12-01T12:00'
+      mockImageFile.value = file
+      mockImageId.value = file ? null : 'tracklists/existing.jpg'
+      return mount(SocialPostCompose, { props: { prefilledImageId: null } })
+    }
+
+    it('uploads the selected file using the returned post id before closing and clearing', async () => {
+      const file = new File(['image'], 'image.jpg', { type: 'image/jpeg' })
+      let completeUpload!: (path: string) => void
+      mockUploadImage.mockImplementationOnce(() => new Promise<string>((resolve) => { completeUpload = resolve }))
+      const wrapper = readyForm(file)
+      await wrapper.get('[data-testid="submit-btn"]').trigger('click')
+      await flushPromises()
+      expect(mockCreatePost).toHaveBeenCalledWith({
+        postType: 'feed', caption: 'Test caption', scheduledAt: '2026-12-01T12:00',
+        timezoneName: 'Europe/Berlin', imageId: undefined,
+      })
+      expect(mockUploadImage).toHaveBeenCalledWith('created-post', file)
+      expect(useSocialStore().composePanelOpen).toBe(true)
+      expect(mockResetForm).not.toHaveBeenCalled()
+      expect(mockImageFile.value).toBe(file)
+      completeUpload('social/created-post/image.jpg')
+      await flushPromises()
+      expect(useSocialStore().composePanelOpen).toBe(false)
+      expect(mockResetForm).toHaveBeenCalledOnce()
+      expect(mockImageFile.value).toBeNull()
+    })
+
+    it('uses an existing image without uploading a file', async () => {
+      const wrapper = readyForm()
+      await wrapper.get('[data-testid="submit-btn"]').trigger('click')
+      await flushPromises()
+      expect(mockCreatePost.mock.calls[0][0]).not.toHaveProperty('imageFile')
+      expect(mockCreatePost.mock.calls[0][0].imageId).toBe('tracklists/existing.jpg')
+      expect(mockUploadImage).not.toHaveBeenCalled()
+      expect(useSocialStore().composePanelOpen).toBe(false)
+      expect(mockResetForm).toHaveBeenCalledOnce()
+    })
+
+    it('shows partial failure, retains the file and retries upload without recreating the post', async () => {
+      const file = new File(['image'], 'image.jpg')
+      mockUploadImage.mockRejectedValueOnce(new Error('storage unavailable'))
+      const wrapper = readyForm(file)
+      await wrapper.get('[data-testid="submit-btn"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[role="alert"]').text()).toMatch(/post.*created.*image upload failed/i)
+      expect(useSocialStore().composePanelOpen).toBe(true)
+      expect(mockResetForm).not.toHaveBeenCalled()
+      expect(mockImageFile.value).toBe(file)
+      await wrapper.get('[data-testid="submit-btn"]').trigger('click')
+      await flushPromises()
+      expect(mockCreatePost).toHaveBeenCalledOnce()
+      expect(mockUploadImage).toHaveBeenCalledTimes(2)
+      expect(mockUploadImage).toHaveBeenLastCalledWith('created-post', file)
+      expect(useSocialStore().composePanelOpen).toBe(false)
+      expect(mockImageFile.value).toBeNull()
     })
   })
 
