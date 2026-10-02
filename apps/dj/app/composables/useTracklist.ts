@@ -63,12 +63,64 @@ export function getTracklist(id: string): Promise<{
   });
 }
 
+// A gig a tracklist is linked to (GET /tracklists/{id}/gigs).
+export interface LinkedGig {
+  id: string;
+  date: string;
+  venue: string;
+  city: string;
+  eventName: string;
+}
+
+function throwIfError(res: unknown): void {
+  if (res && typeof res === 'object' && !Array.isArray(res) && (res as { error?: unknown }).error) {
+    const r = res as { error: string; message?: string };
+    throw new Error(r.message ?? r.error);
+  }
+}
+
+// Rename a tracklist. The API trims the title and answers 422 for an empty or
+// over-long one; the thrown message carries the API's reason.
+export async function renameTracklist(id: string, title: string): Promise<Tracklist> {
+  const res = await $fetch(`/api/v1/tracklists/${id}`, { method: 'PUT', body: { title } });
+  throwIfError(res);
+  return res as Tracklist;
+}
+
+// The gigs this tracklist is linked to. Linking and unlinking go through the
+// gig store (POST/DELETE /gigs/{id}/tracklists/{tracklistId}).
+export async function listLinkedGigs(tracklistId: string): Promise<LinkedGig[]> {
+  const res = await $fetch(`/api/v1/tracklists/${tracklistId}/gigs`);
+  throwIfError(res);
+  return Array.isArray(res) ? (res as LinkedGig[]) : [];
+}
+
+export type NewTrack = Partial<Pick<Track, 'artist' | 'bpm' | 'musicalKey' | 'media' | 'hiddenGem' | 'unreleased'>> & {
+  title: string;
+};
+
+// Add a track by hand; the API appends it after the last one (201). A blank
+// title or unknown media is a 422.
+export async function addTrack(tracklistId: string, fields: NewTrack): Promise<Track> {
+  const res = await $fetch(`/api/v1/tracklists/${tracklistId}/tracks`, { method: 'POST', body: fields });
+  throwIfError(res);
+  return res as Track;
+}
+
+// Persist a new track order: every track id of the tracklist, once, in order.
+// Returns the tracks as the server now has them.
+export async function reorderTracks(tracklistId: string, trackIds: string[]): Promise<Track[]> {
+  const res = await $fetch(`/api/v1/tracklists/${tracklistId}/tracks/order`, { method: 'PUT', body: { trackIds } });
+  throwIfError(res);
+  return Array.isArray(res) ? (res as Track[]) : [];
+}
+
 // Update a track
 export function updateTrack(
   tracklistId: string,
   trackId: string,
   fields: Partial<
-    Pick<Track, 'title' | 'artist' | 'bpm' | 'musicalKey' | 'album' | 'genre'>
+    Pick<Track, 'title' | 'artist' | 'bpm' | 'musicalKey' | 'album' | 'genre' | 'hiddenGem' | 'unreleased' | 'media'>
   >,
 ): Promise<Track> {
   return $fetch(`/api/v1/tracklists/${tracklistId}/tracks/${trackId}`, {

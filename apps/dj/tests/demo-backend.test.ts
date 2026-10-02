@@ -121,6 +121,67 @@ describe('demo tracklists', () => {
     expect((await call(b, 'POST', `/api/v1/tracklists/${tl.id}/generate-image?format=poster`)).status).toBe(400)
   })
 
+  it('renames a tracklist like the Go API (trimmed, 1-200 chars) and lists its linked gigs', async () => {
+    const b = backend()
+    const [tl] = (await call(b, 'GET', '/api/v1/tracklists')).body.data
+
+    const ok = await call(b, 'PUT', `/api/v1/tracklists/${tl.id}`, { title: '  Friday at Tresor ' })
+    expect(ok.status).toBe(200)
+    expect(ok.body.title).toBe('Friday at Tresor')
+    expect((await call(b, 'GET', `/api/v1/tracklists/${tl.id}`)).body.tracklist.title).toBe('Friday at Tresor')
+    expect((await call(b, 'GET', '/api/v1/tracklists')).body.data.find((t: { id: string }) => t.id === tl.id).title).toBe('Friday at Tresor')
+
+    for (const body of [{}, { title: '   ' }, { title: 'x'.repeat(201) }]) {
+      expect((await call(b, 'PUT', `/api/v1/tracklists/${tl.id}`, body)).status).toBe(422)
+    }
+    expect((await call(b, 'PUT', '/api/v1/tracklists/nope', { title: 'x' })).status).toBe(404)
+
+    // A seeded gig has a linked tracklist: it shows up, and unlinking removes it.
+    const detail = (await call(b, 'GET', `/api/v1/gigs/${FINANCE_GIG_IDS.domestic}/detail`)).body
+    const linkedId = detail.tracklists[0].id
+    const gigs = (await call(b, 'GET', `/api/v1/tracklists/${linkedId}/gigs`)).body as unknown as Array<{ id: string; venue: string; eventName: string }>
+    expect(gigs.map((g) => g.id)).toContain(FINANCE_GIG_IDS.domestic)
+    expect(gigs[0]).toHaveProperty('eventName')
+    await call(b, 'DELETE', `/api/v1/gigs/${FINANCE_GIG_IDS.domestic}/tracklists/${linkedId}`)
+    const after = (await call(b, 'GET', `/api/v1/tracklists/${linkedId}/gigs`)).body as unknown as Array<{ id: string }>
+    expect(after.map((g) => g.id)).not.toContain(FINANCE_GIG_IDS.domestic)
+    expect((await call(b, 'GET', '/api/v1/tracklists/nope/gigs')).status).toBe(404)
+  })
+
+  it('adds a track by hand, reorders tracks and keeps the hidden-gem / unreleased / media markers', async () => {
+    const b = backend()
+    const [tl] = (await call(b, 'GET', '/api/v1/tracklists')).body.data
+    // A copy: the demo returns its live state array, which the POST below grows.
+    const before = [...((await call(b, 'GET', `/api/v1/tracklists/${tl.id}`)).body.tracks as Array<{ id: string; position: number }>)]
+
+    const added = await call(b, 'POST', `/api/v1/tracklists/${tl.id}/tracks`, { title: ' New ID ', artist: 'Me', bpm: 128, media: 'vinyl', hiddenGem: true, unreleased: true })
+    expect(added.status).toBe(201)
+    expect(added.body).toMatchObject({ title: 'New ID', position: before.length + 1, media: 'vinyl', hiddenGem: true, unreleased: true })
+    for (const bad of [{ title: ' ' }, { title: 'x', media: 'wav' }, { title: 'x', bpm: 1000 }, { title: 'x'.repeat(201) }]) {
+      expect((await call(b, 'POST', `/api/v1/tracklists/${tl.id}/tracks`, bad)).status).toBe(422)
+    }
+    expect((await call(b, 'POST', '/api/v1/tracklists/nope/tracks', { title: 'x' })).status).toBe(404)
+
+    // Reverse the order: every id once, no more, no fewer.
+    const ids = [...before.map((t) => t.id), added.body.id as string]
+    const reversed = ids.slice().reverse()
+    const ok = await call(b, 'PUT', `/api/v1/tracklists/${tl.id}/tracks/order`, { trackIds: reversed })
+    expect(ok.status).toBe(200)
+    expect((ok.body as unknown as Array<{ id: string; position: number }>).map((t) => [t.id, t.position])).toEqual(reversed.map((id, i) => [id, i + 1]))
+    expect((await call(b, 'GET', `/api/v1/tracklists/${tl.id}`)).body.tracks.map((t: { id: string }) => t.id)).toEqual(reversed)
+    for (const bad of [reversed.slice(1), [...reversed.slice(1), reversed[1]], [], ['nope']]) {
+      expect((await call(b, 'PUT', `/api/v1/tracklists/${tl.id}/tracks/order`, { trackIds: bad })).status).toBe(422)
+    }
+
+    // Markers update one at a time; only vinyl and digital are accepted.
+    const first = reversed[0]!
+    const put = (body: unknown) => call(b, 'PUT', `/api/v1/tracklists/${tl.id}/tracks/${first}`, body)
+    expect((await put({ media: 'digital' })).body.media).toBe('digital')
+    expect((await put({ hiddenGem: false })).body).toMatchObject({ hiddenGem: false, unreleased: true, media: 'digital' })
+    expect((await put({ media: '' })).body.media).toBe('')
+    expect((await put({ media: 'mp3' })).status).toBe(422)
+  })
+
   it('edits a track and deletes a tracklist (204)', async () => {
     const b = backend()
     const [tl] = (await call(b, 'GET', '/api/v1/tracklists')).body.data
