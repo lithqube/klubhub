@@ -270,3 +270,64 @@ describe('useRiderAutosave: conflicts', () => {
     await expect(store.updateTemplate('t-c7', { name: 'x' })).rejects.toBeInstanceOf(RiderConflictError)
   })
 })
+
+
+// ─── cancel(): the record is about to be deleted ────────────────────────────
+
+describe('useRiderAutosave: cancel', () => {
+  it('drops pending edits and the timer: nothing is ever sent for that target', async () => {
+    vi.useFakeTimers()
+    const store = useRiderStore()
+    store.templates = [tmpl('t-x1')]
+    const { scheduleSave, flush, cancel } = useRiderAutosave()
+
+    scheduleSave({ kind: 'template', id: 't-x1' }, { technical: 'unsaved' })
+    await cancel({ kind: 'template', id: 't-x1' })
+    await vi.advanceTimersByTimeAsync(10_000) // past the debounce
+    await flush({ kind: 'template', id: 't-x1' }) // e.g. the editor's unmount flush
+
+    expect(fetchMock()).not.toHaveBeenCalled()
+  })
+
+  it('waits for a save that is already in flight, so it cannot land after the DELETE', async () => {
+    const store = useRiderStore()
+    store.templates = [tmpl('t-x2')]
+    const { scheduleSave, flush, cancel } = useRiderAutosave()
+    const inflight = deferred<unknown>()
+    fetchMock().mockReturnValueOnce(inflight.promise)
+
+    scheduleSave({ kind: 'template', id: 't-x2' }, { technical: 'saving now' })
+    void flush({ kind: 'template', id: 't-x2' })
+    await vi.waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(1))
+
+    let cancelled = false
+    const done = cancel({ kind: 'template', id: 't-x2' }).then(() => { cancelled = true })
+    await new Promise(r => setTimeout(r, 0))
+    expect(cancelled).toBe(false) // still waiting on the PUT
+
+    inflight.resolve({ data: tmpl('t-x2', { updatedAt: 'T1' }) })
+    await done
+    expect(cancelled).toBe(true)
+  })
+
+  it('forgets a failed or conflicted state so a dead record cannot keep the header red', async () => {
+    const store = useRiderStore()
+    store.templates = [tmpl('t-x3')]
+    const { scheduleSave, flush, cancel } = useRiderAutosave()
+    fetchMock().mockRejectedValueOnce(Object.assign(new Error('409'), { statusCode: 409 }))
+    scheduleSave({ kind: 'template', id: 't-x3' }, { technical: 'mine' })
+    await flush({ kind: 'template', id: 't-x3' })
+    expect(store.conflicts).toEqual(['template:t-x3'])
+
+    await cancel({ kind: 'template', id: 't-x3' })
+
+    expect(store.conflicts).toEqual([])
+    expect(store.saveStatus).not.toBe('conflict')
+    expect(store.saveStatus).not.toBe('error')
+  })
+
+  it('is a no-op for a target that was never edited', async () => {
+    const { cancel } = useRiderAutosave()
+    await expect(cancel({ kind: 'attachment', id: 'never-seen' })).resolves.toBeUndefined()
+  })
+})

@@ -169,5 +169,27 @@ export function useRiderAutosave(delayMs = 1500) {
     refreshStatus()
   }
 
-  return { scheduleSave, flush, flushAll, discard }
+  // The record is about to be deleted: drop its queue entirely. Stops the
+  // timer, waits for a save that is already in flight (so it cannot land
+  // after the DELETE and resurrect the record in the store cache), then
+  // forgets the pending edits, failure and conflict state. A later flush for
+  // this target is a no-op, so nothing is sent to a record that is gone.
+  async function cancel(target: RiderAutosaveTarget): Promise<void> {
+    const k = keyOf(target)
+    const q = queues.get(k)
+    if (!q) return
+    if (q.timer !== null) {
+      clearTimeout(q.timer)
+      q.timer = null
+    }
+    await q.chain
+    q.pending = {}
+    q.failed = false
+    q.conflict = false
+    queues.delete(k)
+    store.clearConflict(k)
+    refreshStatus()
+  }
+
+  return { scheduleSave, flush, flushAll, discard, cancel }
 }

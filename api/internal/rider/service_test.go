@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -324,6 +326,38 @@ func TestRenderRiderPDF_FallsBackAccentWhenColorsEmpty(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, renderRiderPDF(att, "", "", "", time.Time{}, us, &buf))
 	assert.True(t, bytes.HasPrefix(buf.Bytes(), []byte("%PDF-")))
+}
+
+// pdfPages counts page objects in the rendered PDF ("/Type /Pages" is the
+// page tree, not a page).
+func pdfPages(b []byte) int {
+	return len(regexp.MustCompile(`/Type /Page[^s]`).FindAll(b, -1))
+}
+
+func TestRenderRiderPDF_ShortRider_IsExactlyOnePage(t *testing.T) {
+	us := &settings.UserSettings{DJName: "Test DJ"}
+	cases := map[string]*RiderAttachment{
+		"empty rider":    {ID: uuid.New()},
+		"one line":       {ID: uuid.New(), Technical: "2× CDJ-3000"},
+		"all four short": {ID: uuid.New(), Technical: "t", Hospitality: "h", Backline: "b", OtherNotes: "o"},
+	}
+	for name, att := range cases {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			require.NoError(t, renderRiderPDF(att, "Berghain", "Berlin", "Germany", time.Date(2026, 3, 14, 22, 0, 0, 0, time.UTC), us, &buf))
+			assert.Equal(t, 1, pdfPages(buf.Bytes()),
+				"the footer must not push a short rider onto a second page")
+		})
+	}
+}
+
+func TestRenderRiderPDF_LongRider_FlowsOntoMorePagesAndStillRenders(t *testing.T) {
+	long := strings.Repeat("Line of technical requirements for the booth.\n", 120)
+	att := &RiderAttachment{ID: uuid.New(), Technical: long, Hospitality: long}
+	var buf bytes.Buffer
+	require.NoError(t, renderRiderPDF(att, "Club", "Berlin", "Germany", time.Time{}, &settings.UserSettings{DJName: "X"}, &buf))
+	assert.Greater(t, pdfPages(buf.Bytes()), 1, "long content should paginate")
+	assert.Equal(t, 1, bytes.Count(buf.Bytes(), []byte("/Type /Catalog")))
 }
 
 func TestService_Update_RequiresUpdatedAt(t *testing.T) {

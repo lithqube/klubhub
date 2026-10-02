@@ -1,9 +1,14 @@
-import { createAttachment } from '../../_state'
+import { createAttachment, getTemplate } from '../../_state'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   if (!body?.gigId) {
     throw createError({ statusCode: 400, statusMessage: 'invalid gigId' })
+  }
+  // The real API answers 404 for a template that no longer exists; without
+  // this the mock stored the dangling id and created empty sections.
+  if (body.templateId && !getTemplate(body.templateId)) {
+    throw createError({ statusCode: 404, statusMessage: 'template not found' })
   }
   // Simulate the 409 conflict: if an attachment already exists for this
   // gig, return 409 (matches real API semantics).

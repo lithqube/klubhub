@@ -13,7 +13,10 @@ import RiderSectionField from './RiderSectionField.vue'
 const props = defineProps<{ attachment: RiderAttachment }>()
 
 const store = useRiderStore()
-const { scheduleSave, flush } = useRiderAutosave()
+const { scheduleSave, flush, cancel } = useRiderAutosave()
+// Set while a detach is under way so the unmount flush does not PUT to the
+// record we are deleting (it would 404 and leave a sticky "save failed").
+const detaching = ref(false)
 
 const technical = ref(props.attachment.technical)
 const hospitality = ref(props.attachment.hospitality)
@@ -63,11 +66,29 @@ async function onExport(): Promise<void> {
 
 async function onDetach(): Promise<void> {
   if (!confirm('Detach rider? Per-gig overrides will be lost.')) return
-  await store.deleteAttachment(props.attachment)
-  await navigateTo('/rider')
+  detaching.value = true
+  const target = { kind: 'attachment' as const, id: props.attachment.id }
+  try {
+    // Stop pending saves and let an in-flight one land before the DELETE.
+    await cancel(target)
+    await store.deleteAttachment(props.attachment)
+    await navigateTo('/rider')
+  } catch (error) {
+    // The attachment still exists: the editor text is still on screen, so
+    // queue it again rather than silently dropping the unsaved edits.
+    detaching.value = false
+    scheduleSave(target, {
+      technical: technical.value,
+      hospitality: hospitality.value,
+      backline: backline.value,
+      otherNotes: otherNotes.value,
+    })
+    throw error
+  }
 }
 
 onBeforeUnmount(() => {
+  if (detaching.value) return
   void flush({ kind: 'attachment', id: props.attachment.id })
 })
 </script>
