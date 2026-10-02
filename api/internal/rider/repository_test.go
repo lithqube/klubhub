@@ -1,9 +1,9 @@
 package rider
 
 import (
-	"strings"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,16 +20,16 @@ type fakeRepo struct {
 	byGig       map[uuid.UUID]uuid.UUID // gigID → attachmentID (live only)
 
 	// Error injection for negative-path tests.
-	listErr       error
-	getTplErr     error
-	createTplErr  error
-	updateTplErr  error
-	deleteTplErr  error
-	getAttErr     error
-	getByGigErr   error
-	createAttErr  error
-	updateAttErr  error
-	deleteAttErr  error
+	listErr      error
+	getTplErr    error
+	createTplErr error
+	updateTplErr error
+	deleteTplErr error
+	getAttErr    error
+	getByGigErr  error
+	createAttErr error
+	updateAttErr error
+	deleteAttErr error
 }
 
 func newFakeRepo() *fakeRepo {

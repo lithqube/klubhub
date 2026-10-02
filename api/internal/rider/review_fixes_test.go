@@ -268,7 +268,6 @@ func TestRenderRiderPDF_Emoji_DoesNotFailTheExport(t *testing.T) {
 	assert.Equal(t, 1, pdfPages(buf.Bytes()))
 }
 
-
 // ─── Configured bucket ──────────────────────────────────────────────────────
 
 func TestService_UsesTheConfiguredBucketForEveryStorageCall(t *testing.T) {

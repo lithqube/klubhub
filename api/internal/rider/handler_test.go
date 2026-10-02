@@ -22,26 +22,26 @@ import (
 // ─── Mock service ───────────────────────────────────────────────────────────
 
 type mockService struct {
-	templates    []*rider.RiderTemplate
-	attachments  []*rider.RiderAttachment
-	pdfResult    *rider.ExportResult
-	pdfErr       error
+	templates   []*rider.RiderTemplate
+	attachments []*rider.RiderAttachment
+	pdfResult   *rider.ExportResult
+	pdfErr      error
 
 	// What the handler actually passed to the service on the last update.
 	lastTplUpdate *rider.UpdateTemplateInput
 	lastAttUpdate *rider.UpdateAttachmentInput
 
 	// Error injection per method.
-	listTplErr       error
-	getTplErr        error
-	createTplErr     error
-	updateTplErr     error
-	deleteTplErr     error
-	getAttByGigErr   error
-	getAttErr        error
-	createAttErr     error
-	updateAttErr     error
-	deleteAttErr     error
+	listTplErr     error
+	getTplErr      error
+	createTplErr   error
+	updateTplErr   error
+	deleteTplErr   error
+	getAttByGigErr error
+	getAttErr      error
+	createAttErr   error
+	updateAttErr   error
+	deleteAttErr   error
 }
 
 func (m *mockService) ListTemplates(_ context.Context) ([]*rider.RiderTemplate, error) {
@@ -586,7 +586,6 @@ func TestHandler_UpdateAttachment_EmptyBody_ChangesNothing(t *testing.T) {
 	assert.Equal(t, rider.RiderSectionPatch{}, svc.lastAttUpdate.RiderSectionPatch)
 }
 
-
 // ─── updatedAt token (optimistic concurrency) ───────────────────────────────
 
 func TestHandler_UpdateTemplate_ForwardsUpdatedAtToken(t *testing.T) {
@@ -655,7 +654,6 @@ func TestHandler_Update_MalformedToken_Returns400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Nil(t, svc.lastTplUpdate, "a malformed request must not reach the service")
 }
-
 
 // ─── Request size cap, no leaked internals, safe mux JSON ───────────────────
 
@@ -747,7 +745,6 @@ func TestMux_ErrorBodyIsValidJSON_EvenWhenThePathContainsQuotes(t *testing.T) {
 	assert.Equal(t, "not_found", parsed["error"])
 	assert.Contains(t, parsed["message"], `"x\`)
 }
-
 
 func TestHandler_ErrorBodies_CarryACodeAndAMessage(t *testing.T) {
 	id := uuid.New()

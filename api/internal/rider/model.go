@@ -1,9 +1,9 @@
 package rider
 
 import (
-	"fmt"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,14 +55,14 @@ type GigReader interface {
 // deleted templates remain in the table for forensics but are filtered from
 // every read path.
 type RiderTemplate struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Technical   string    `json:"technical"`
-	Hospitality string    `json:"hospitality"`
-	Backline    string    `json:"backline"`
-	OtherNotes  string    `json:"otherNotes"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          uuid.UUID  `json:"id"`
+	Name        string     `json:"name"`
+	Technical   string     `json:"technical"`
+	Hospitality string     `json:"hospitality"`
+	Backline    string     `json:"backline"`
+	OtherNotes  string     `json:"otherNotes"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 	DeletedAt   *time.Time `json:"deletedAt,omitempty"`
 }
 
@@ -131,7 +131,7 @@ type UpdateTemplateInput struct {
 // current four-section values into the new row at insert time; when nil,
 // the RiderSectionValues from this input are used as-is.
 type CreateAttachmentInput struct {
-	GigID      uuid.UUID `json:"gigId"`
+	GigID      uuid.UUID  `json:"gigId"`
 	TemplateID *uuid.UUID `json:"templateId,omitempty"`
 	RiderSectionValues
 }

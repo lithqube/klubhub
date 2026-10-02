@@ -377,11 +377,11 @@ func (r *createTemplateRequest) toSectionValues() RiderSectionValues {
 
 type updateTemplateRequest struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
-	Name        *string `json:"name"`
-	Technical   *string `json:"technical"`
-	Hospitality *string `json:"hospitality"`
-	Backline    *string `json:"backline"`
-	OtherNotes  *string `json:"otherNotes"`
+	Name        *string   `json:"name"`
+	Technical   *string   `json:"technical"`
+	Hospitality *string   `json:"hospitality"`
+	Backline    *string   `json:"backline"`
+	OtherNotes  *string   `json:"otherNotes"`
 }
 
 // sectionPatch forwards exactly the sections the client sent. A section that
@@ -416,10 +416,10 @@ func (r *createAttachmentRequest) toSectionValues() RiderSectionValues {
 
 type updateAttachmentRequest struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
-	Technical   *string `json:"technical"`
-	Hospitality *string `json:"hospitality"`
-	Backline    *string `json:"backline"`
-	OtherNotes  *string `json:"otherNotes"`
+	Technical   *string   `json:"technical"`
+	Hospitality *string   `json:"hospitality"`
+	Backline    *string   `json:"backline"`
+	OtherNotes  *string   `json:"otherNotes"`
 }
 
 // sectionPatch: see updateTemplateRequest.sectionPatch.

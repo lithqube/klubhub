@@ -176,7 +176,6 @@ func TestIntegration_UpdateAttachment_SingleSection_LeavesOthersAlone(t *testing
 	}
 }
 
-
 // seedGig inserts the minimal live gig a rider attachment can reference.
 func seedGig(t *testing.T) uuid.UUID {
 	t.Helper()
