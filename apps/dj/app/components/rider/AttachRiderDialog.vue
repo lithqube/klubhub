@@ -2,7 +2,7 @@
 // AttachRiderDialog — pick a template (or "Start from blank") for a
 // gig. Used inside GigFormDialog when status flips to advanced.
 
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRiderStore } from '~/stores/rider'
 
 const props = defineProps<{ open: boolean; gigId: string }>()
@@ -12,6 +12,17 @@ const store = useRiderStore()
 const selectedTemplateId = ref<string | null>(null)
 const error = ref('')
 const submitting = ref(false)
+
+// store.templates is otherwise only filled by /rider; opened from the gig
+// form first, the picker would offer only "Start from blank".
+watch(() => props.open, async (isOpen) => {
+  if (!isOpen || store.templates.length > 0) return
+  try {
+    await store.loadTemplates()
+  } catch {
+    error.value = 'Could not load rider templates. You can still start from blank.'
+  }
+}, { immediate: true })
 
 const previewTemplate = computed(() =>
   selectedTemplateId.value ? store.templateById.get(selectedTemplateId.value) ?? null : null,
@@ -27,7 +38,13 @@ async function onConfirm(): Promise<void> {
     })
     emit('attached')
   } catch (e: unknown) {
-    error.value = (e as { message?: string })?.message ?? 'Could not attach rider.'
+    const err = e as { message?: string; statusCode?: number; status?: number }
+    if ((err.statusCode ?? err.status) === 409) {
+      // One rider per gig: it already exists, so refresh instead of failing.
+      emit('attached')
+      return
+    }
+    error.value = err.message ?? 'Could not attach rider.'
   } finally {
     submitting.value = false
   }

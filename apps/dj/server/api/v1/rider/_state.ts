@@ -186,7 +186,9 @@ export function updateAttachment(
 export function deleteAttachment(id: string): boolean {
   for (const [gigId, a] of Object.entries(state.attachmentsByGigId)) {
     if (a.id === id) {
-      delete state.attachmentsByGigId[gigId]
+      state.attachmentsByGigId = Object.fromEntries(
+        Object.entries(state.attachmentsByGigId).filter(([k]) => k !== gigId),
+      )
       return true
     }
   }

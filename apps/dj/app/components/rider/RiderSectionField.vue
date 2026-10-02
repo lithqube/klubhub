@@ -24,10 +24,6 @@ const textareaProxy = computed({
 
 const chips = computed(() => SECTION_CHIPS[props.section] ?? [])
 
-function onChange(value: string): void {
-  emit('update:modelValue', value)
-}
-
 function insertChip(text: string): void {
   const trimmed = textareaProxy.value.trim()
   textareaProxy.value = trimmed ? `${trimmed}, ${text}` : text
@@ -58,7 +54,6 @@ function insertChip(text: string): void {
       :rows="6"
       :placeholder="`${section} requirements…`"
       :data-testid="`rider-${section}-textarea`"
-      @update:model-value="onChange"
     />
   </div>
 </template>

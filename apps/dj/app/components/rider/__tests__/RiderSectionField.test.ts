@@ -1,13 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { reactive, nextTick } from 'vue'
 import RiderSectionField from '../RiderSectionField.vue'
 
 // Mirror the EPK test pattern: vi.mock the composable / store so the
 // component reads from a reactive() object instead of the real Pinia
 // store (which doesn't play well with vi.mock in unit tests).
-
-const chips = ['Tech Chip A', 'Tech Chip B']
 
 vi.mock('../chips', () => ({
   SECTION_CHIPS: {
@@ -38,7 +35,9 @@ describe('RiderSectionField', () => {
     })
     const ta = wrapper.find('[data-testid="rider-technical-textarea"]')
     await ta.setValue('hello')
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['hello'])
+    // Exactly once per edit: a duplicate listener doubles every keystroke's
+    // emit and so every autosave schedule in the parent editor.
+    expect(wrapper.emitted('update:modelValue')).toEqual([['hello']])
   })
 
   it('clicking a chip on empty value sets it to just that chip', async () => {

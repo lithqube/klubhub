@@ -3,7 +3,7 @@
 // the attachments tab. Mirrors the COMPACT UX in 04.5-05-PLAN.md
 // §RiderAttachmentCard.
 
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRiderStore } from '~/stores/rider'
 import type { Gig } from '~/types/gig'
 import { riderStatusLabel } from '~/types/rider'
@@ -23,6 +23,20 @@ const template = computed(() =>
 const status = computed(() => riderStatusLabel(attachment.value, template.value))
 const exporting = ref(false)
 const showAttach = ref(false)
+
+// The card is used where nothing else has loaded the rider (the gig form),
+// so it hydrates its own gig; cached gigs are not refetched. Without this it
+// shows "NO RIDER ATTACHED" for a gig that has one.
+async function hydrate(): Promise<void> {
+  try {
+    const att = await store.loadAttachmentByGig(props.gig.id)
+    if (att?.templateId && store.templates.length === 0) await store.loadTemplates()
+  } catch {
+    // Leave the card as-is; the user can still open the editor.
+  }
+}
+onMounted(hydrate)
+watch(() => props.gig.id, hydrate)
 
 async function onExport(): Promise<void> {
   if (!attachment.value) return

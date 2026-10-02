@@ -31,11 +31,11 @@ onMounted(async () => {
   if (gigStore.gigs.length === 0) {
     await gigStore.fetchGigs()
   }
-  await riderStore.loadTemplates()
-  // Hydrate attachment cache for each gig.
-  for (const g of gigStore.gigs) {
-    await riderStore.loadAttachmentByGig(g.id)
-  }
+  // Independent loads: one failing request must not stop the others.
+  await Promise.allSettled([
+    riderStore.loadTemplates(),
+    ...gigStore.gigs.map(g => riderStore.loadAttachmentByGig(g.id)),
+  ])
 })
 
 async function onOpenEditor(gigId: string): Promise<void> {

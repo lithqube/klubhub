@@ -63,6 +63,7 @@ export interface RiderAttachmentUpdateInput {
 }
 
 export type RiderSection = 'technical' | 'hospitality' | 'backline' | 'otherNotes'
+export const RIDER_SECTIONS: readonly RiderSection[] = ['technical', 'hospitality', 'backline', 'otherNotes']
 
 export const RIDER_SECTION_LABELS: Record<RiderSection, string> = {
   technical: 'TECHNICAL',
@@ -80,9 +81,12 @@ export function riderStatusLabel(
   if (!attachment) {
     return { label: 'NO RIDER ATTACHED', tone: 'muted' }
   }
-  // Override = template exists AND updatedAt > createdAt.
+  // Override = the per-gig copy's content differs from its template. Not
+  // timestamps: autosave rewrites all four sections, and an export or an
+  // edit that restores the template text would otherwise read as "custom".
   const overridden =
-    attachment.templateId !== null && attachment.updatedAt > attachment.createdAt
+    attachment.templateId !== null && template !== null &&
+    RIDER_SECTIONS.some(s => attachment[s] !== template[s])
   if (overridden) {
     return {
       label: `CUSTOM (FROM ${template?.name?.toUpperCase() ?? 'TEMPLATE'})`,

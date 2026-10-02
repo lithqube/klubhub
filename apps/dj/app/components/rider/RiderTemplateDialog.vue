@@ -1,10 +1,13 @@
 <script setup lang="ts">
 // RiderTemplateDialog — create-new modal. Submit → store.createTemplate.
 
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRiderStore } from '~/stores/rider'
 import RiderSectionField from './RiderSectionField.vue'
 
+// `open` must be a declared prop: the template reads it, and an undeclared
+// attribute is not visible to the template, so the dialog never rendered.
+const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const store = useRiderStore()
@@ -16,6 +19,19 @@ const backline = ref('')
 const otherNotes = ref('')
 const error = ref('')
 const submitting = ref(false)
+
+// The component stays mounted while closed: clear it so a reopened dialog
+// does not show the previous values (and invite a duplicate create).
+watch(() => props.open, (isOpen) => {
+  if (isOpen) return
+  name.value = ''
+  technical.value = ''
+  hospitality.value = ''
+  backline.value = ''
+  otherNotes.value = ''
+  error.value = ''
+  submitting.value = false
+})
 
 async function onSubmit(): Promise<void> {
   error.value = ''
