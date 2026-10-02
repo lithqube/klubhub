@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useGigStore } from '../../stores/gig'
 import { useTracklistStore } from '../../stores/tracklist'
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
 import type { Gig, GigCreate, Venue, Contact, GigStatus, PaymentStatus } from '../../types/gig'
+import { GigConflictError } from '../../types/gig'
 import type { GigFinanceReconciliation } from '../../types/finance'
 import type { Tracklist as TracklistType } from '../../types/tracklist'
 import VenueAutocomplete from './VenueAutocomplete.vue'
@@ -178,6 +179,9 @@ const copyResults = ref<Gig[]>([])
 const showCancelConfirm = ref(false)
 const isSaving = ref(false)
 const saveError = ref<string | null>(null)
+const editSnapshot = ref<Gig | null>(null)
+const hasConflict = ref(false)
+const isReloading = ref(false)
 // FIN-04 / FIN-05: gig id of a freshly raised finance reconciliation, and
 // the metadata to show for it. Both live at setup scope, not inside
 // doSave, so the template (which renders the dialog below) can read them —
@@ -189,22 +193,32 @@ const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'DKK', 'SEK', 'NOK
 const STATUS_OPTIONS: GigStatus[] = ['inquiry', 'confirmed', 'advanced', 'played', 'cancelled']
 const PAYMENT_OPTIONS: PaymentStatus[] = ['unpaid', 'deposit_paid', 'paid', 'overdue', 'waived']
 
-function initForm() {
-  if (props.gig) {
-    form.date = props.gig.date ? (props.gig.date.split('T')[0] ?? '') : ''
-    form.event_name = props.gig.event_name || ''
+function initForm(source: Gig | null = props.gig) {
+  editSnapshot.value = source ? { ...source } : null
+  hasConflict.value = false
+  saveError.value = null
+  // A legacy gig has a venue name even without a reusable linked entity.
+  form.venue = source?.venue ? {
+    id: '', name: source.venue, city: source.city, country: source.country,
+    capacity: null, website: null, tech_contact_name: '', tech_contact_email: '',
+    tech_contact_phone: '', notes: '', created_at: '', updated_at: '', deleted_at: null,
+  } : null
+  form.contact = null
+  if (source) {
+    form.date = source.date ? (source.date.split('T')[0] ?? '') : ''
+    form.event_name = source.event_name || ''
     form.room_details = ''
-    form.city = props.gig.city || ''
-    form.country = props.gig.country || ''
-    form.promoter_name = props.gig.promoter_name || ''
-    form.promoter_email = props.gig.promoter_email || ''
-    form.promoter_phone = props.gig.promoter_phone || ''
-    form.fee_amount = props.gig.fee_amount || null
-    form.fee_currency = props.gig.fee_currency || 'EUR'
-    form.notes = props.gig.notes || ''
-    form.set_length_minutes = props.gig.set_length_minutes || null
-    form.status = props.gig.status
-    form.payment_status = props.gig.payment_status
+    form.city = source.city || ''
+    form.country = source.country || ''
+    form.promoter_name = source.promoter_name || ''
+    form.promoter_email = source.promoter_email || ''
+    form.promoter_phone = source.promoter_phone || ''
+    form.fee_amount = source.fee_amount || null
+    form.fee_currency = source.fee_currency || 'EUR'
+    form.notes = source.notes || ''
+    form.set_length_minutes = source.set_length_minutes || null
+    form.status = source.status
+    form.payment_status = source.payment_status
   } else {
     form.date = ''
     form.venue = null
@@ -225,19 +239,42 @@ function initForm() {
   }
 }
 
-watch(() => props.open, (val) => {
-  if (val) initForm()
-})
+// A gig ID is not a dialog session: closing/reopening the same gig also
+// invalidates pending work. Same-ID parent cache refreshes preserve edits.
+let sessionGeneration = 0
+function invalidateSession() {
+  sessionGeneration++
+  isSaving.value = false
+  isReloading.value = false
+  showCancelConfirm.value = false
+}
+const isCurrentSession = (session: number) => props.open && session === sessionGeneration
+watch([() => props.open, () => props.gig?.id], ([open]) => {
+  invalidateSession()
+  if (open) {
+    initForm()
+    pendingReconciliationGigId.value = null
+    pendingReconciliationMetadata.value = null
+  }
+}, { immediate: true, flush: 'sync' })
+onBeforeUnmount(invalidateSession)
 
-// Reset any pending finance reconciliation marker when the dialog opens;
-// a fresh save below will set it again if the API responds with one.
-watch(() => [props.open, props.gig?.id] as const, ([open]) => {
-  if (open) { pendingReconciliationGigId.value = null; pendingReconciliationMetadata.value = null }
-}, { immediate: true })
-
-watch(() => props.gig, () => {
-  initForm()
-})
+async function reloadLatest() {
+  if (!hasConflict.value || !props.gig?.id || isReloading.value) return
+  const id = props.gig.id
+  const session = sessionGeneration
+  isReloading.value = true
+  try {
+    const latest = await gigStore.fetchGig(id)
+    if (!isCurrentSession(session)) return
+    if (latest) initForm(latest)
+    else saveError.value = 'Could not reload the latest gig. Your edits are still here; retry reload before saving.'
+  } catch {
+    if (isCurrentSession(session)) saveError.value = 'Could not reload the latest gig. Your edits are still here; retry reload before saving.'
+  } finally {
+    if (isCurrentSession(session)) isReloading.value = false
+  }
+}
 
 function onVenueSelected(venue: Venue) {
   form.venue = venue
@@ -272,6 +309,7 @@ async function copyFromGig(gig: Gig) {
 }
 
 async function save() {
+  if (hasConflict.value || isSaving.value || isReloading.value) return
   if (form.status === 'cancelled' && props.gig?.status !== 'cancelled') {
     showCancelConfirm.value = true
     return
@@ -280,6 +318,7 @@ async function save() {
 }
 
 async function doSave() {
+  if (hasConflict.value || isSaving.value || isReloading.value) return
   saveError.value = null
   if (!form.date) {
     saveError.value = 'Date is required.'
@@ -292,6 +331,9 @@ async function doSave() {
     return
   }
 
+  const session = sessionGeneration
+  const snapshot = editSnapshot.value ? { ...editSnapshot.value } : null
+  const targetId = snapshot?.id
   isSaving.value = true
   try {
     const gigData: GigCreate = {
@@ -318,14 +360,19 @@ async function doSave() {
     // falsy result is the only failure signal — keep the dialog open.
     // Updates are guarded by optimistic concurrency: the API matches on
     // the `updated_at` we last saw and answers 409 without it.
-    const result = isEdit.value && props.gig?.id
-      ? await gigStore.updateGig(props.gig.id, { ...gigData, updated_at: props.gig.updated_at })
+    const result = targetId
+      ? await gigStore.updateGig(targetId, { ...gigData, updated_at: snapshot?.updated_at ?? null })
       : await gigStore.createGig(gigData)
 
+    if (!isCurrentSession(session)) return
     if (!result) {
       saveError.value = 'Could not save the gig. Check the fields and try again.'
       return
     }
+
+    // Adopt returned fields AND version together, even if the parent retains
+    // its old selected object until it handles the saved event.
+    initForm({ ...snapshot, ...result })
 
     // FIN-04 / FIN-05: the gig PUT response can carry a finance
     // reconciliation prompt when fee/currency/payment changed while the
@@ -336,28 +383,40 @@ async function doSave() {
       earningsStore.rememberReconciliationMetadata(result.id, result.finance_reconciliation)
       pendingReconciliationMetadata.value = result.finance_reconciliation
       pendingReconciliationGigId.value = result.id
-    } else if (isEdit.value && props.gig?.id) {
+    } else if (targetId) {
       // No fresh prompt: pull the durable GET so a prompt from a prior
       // save still surfaces when the user opens the gig again.
-      await earningsStore.fetchReconciliationForGig(props.gig.id)
-      const fromGet = earningsStore.getPendingReconciliationForGig(props.gig.id) as GigFinanceReconciliation | null
+      await earningsStore.fetchReconciliationForGig(targetId)
+      if (!isCurrentSession(session)) return
+      const fromGet = earningsStore.getPendingReconciliationForGig(targetId) as GigFinanceReconciliation | null
       if (fromGet && fromGet.id) {
         pendingReconciliationMetadata.value = fromGet
-        pendingReconciliationGigId.value = props.gig.id
+        pendingReconciliationGigId.value = targetId
       }
     }
 
+    if (!isCurrentSession(session)) return
     emit('saved')
-    emit('update:open', false)
+    if (isCurrentSession(session)) emit('update:open', false)
   } catch (e) {
-    console.error('save failed:', e)
+    if (!isCurrentSession(session)) return
+    if (e instanceof GigConflictError) {
+      hasConflict.value = true
+      saveError.value = 'This gig was changed by another writer. Your edits are still here. Reload the latest gig to discard your edits, then reapply your changes before saving.'
+    } else {
+      saveError.value = 'Could not save the gig. Check the fields and try again.'
+      console.error('save failed:', e)
+    }
   } finally {
-    isSaving.value = false
-    showCancelConfirm.value = false
+    if (isCurrentSession(session)) {
+      isSaving.value = false
+      showCancelConfirm.value = false
+    }
   }
 }
 
 function close() {
+  invalidateSession()
   emit('update:open', false)
 }
 </script>
@@ -655,7 +714,7 @@ function close() {
           </div>
 
           <!-- Dialog footer -->
-          <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);">
+          <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);">
             <div
               v-if="saveError"
               role="alert"
@@ -664,12 +723,15 @@ function close() {
             >
               {{ saveError }}
             </div>
+            <button v-if="hasConflict" class="btn-hud" :disabled="isReloading" @click="reloadLatest">
+              {{ isReloading ? 'RELOADING...' : 'RELOAD LATEST (DISCARD MY EDITS)' }}
+            </button>
             <button class="btn-hud" @click="close">
               CANCEL
             </button>
             <button
               class="btn-hud btn-hud-cta"
-              :disabled="isSaving"
+              :disabled="isSaving || hasConflict || isReloading"
               @click="save"
             >
               {{ isSaving ? 'SAVING...' : 'SAVE' }}
