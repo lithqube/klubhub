@@ -11,7 +11,7 @@ const entry: Entry = {
   entry_date: '2026-10-01', description: 'Recorded income', notes: '', gig_id: null,
   status: 'active', auto_generated: false, source_kind: 'manual', source_id: null,
   source_amount_minor: null, source_currency: null, source_description: '',
-  created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z', deleted_at: null,
+  created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z', deleted_at: null, attachment_count: 0,
 }
 let rows: Entry[]
 let demo = false
@@ -34,7 +34,7 @@ const fetchMock = vi.fn(async (url: string, opts?: { method?: string }) => {
 const wrappers: VueWrapper[] = []
 function render() {
   const wrapper = mount(Finance, { global: { stubs: {
-    InvoiceWorkspace: true, EarningsWorkspace: true, EntryReconciliationDialog: true, teleport: true,
+    InvoiceWorkspace: true, EntryReconciliationDialog: true, teleport: true,
   } } })
   wrappers.push(wrapper)
   return wrapper

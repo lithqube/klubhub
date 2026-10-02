@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import Finance from '../finance.vue'
 import EarningsWorkspace from '../../components/finance/EarningsWorkspace.vue'
-import EntryFormDialog from '../../components/finance/EntryFormDialog.vue'
+import EntryForm from '../../components/finance/EntryForm.vue'
 import { useEarningsStore } from '../../stores/earnings'
 import type { Entry } from '../../types/finance'
 
@@ -12,7 +12,7 @@ const entry: Entry = {
   entry_date: '2026-10-01', description: 'Recorded income', notes: '', gig_id: null,
   status: 'active', auto_generated: false, source_kind: 'manual', source_id: null,
   source_amount_minor: null, source_currency: null, source_description: '',
-  created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z', deleted_at: null,
+  created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z', deleted_at: null, attachment_count: 0,
 }
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -46,7 +46,8 @@ async function render() {
   wrappers.push(wrapper)
   await flushPromises()
   expect(wrapper.findComponent(EarningsWorkspace).exists()).toBe(true)
-  expect(wrapper.findComponent(EntryFormDialog).exists()).toBe(true)
+  // The composer is inline and only exists while open: nothing mounted until a button asks for it.
+  expect(wrapper.findComponent(EntryForm).exists()).toBe(false)
   expect(useEarningsStore().listLoaded).toBe(true)
   fetchMock.mockClear() // Only count requests after the initially loaded page has settled.
   return wrapper
@@ -193,7 +194,7 @@ describe('confirmed finance mutations (real page, workspace, dialog and Pinia)',
     expect(useEarningsStore().entries).toEqual([entry])
     expect(useEarningsStore().createOpen).toBe(true)
     expect(wrapper.findComponent(EarningsWorkspace).emitted('saved')).toBeUndefined()
-    expect(wrapper.findComponent(EntryFormDialog).emitted('saved')).toBeUndefined()
+    expect(wrapper.findComponent(EntryForm).emitted('saved')).toBeUndefined()
     expect(document.querySelector('.ee-form [role="alert"]')?.textContent).toContain('Could not reach the server.')
     expect((document.querySelector('#ee-description') as HTMLInputElement).value).toBe('Unsaved income')
     expectNoRefresh()

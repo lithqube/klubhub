@@ -164,7 +164,7 @@ defineExpose({ refresh })
 .pl-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 .pl-btn-on { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
 .pl-btn:disabled { opacity: .4; cursor: not-allowed; }
-.pl-select { height: 28px; padding: 0 8px; font-family: var(--font-command); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.pl-select { width: auto; min-width: 76px; height: 28px; padding: 0 8px; font-family: var(--font-command); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .pl-sub { font-family: var(--font-data); font-size: 12px; color: var(--color-on-surface-variant); }
 .pl-state { padding: 14px; display: flex; flex-direction: column; gap: 6px; }
 .pl-state-title { font-family: var(--font-command); font-size: 12px; font-weight: 700; letter-spacing: -.02em; text-transform: uppercase; color: var(--color-on-surface); }
@@ -173,9 +173,9 @@ defineExpose({ refresh })
 .pl-row { display: grid; grid-template-columns: 56px repeat(3, 1fr); align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px dashed color-mix(in srgb, var(--color-on-surface) 10%, transparent); }
 .pl-row:last-child { border-bottom: 0; }
 .pl-cur { font-family: var(--font-command); font-size: 13px; font-weight: 700; color: var(--color-on-surface); text-align: center; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--color-on-surface) 20%, transparent); }
-.pl-amt { font-family: var(--font-command); font-size: 14px; font-weight: 700; letter-spacing: -.02em; text-align: right; }
-.pl-amt-pos { color: var(--color-primary); }
-.pl-amt-neg { color: var(--color-error); }
+.pl-amt { font-family: var(--font-command); font-size: 14px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; text-align: right; }
+/* Income and expense differ by sign and column; the signature and error colours stay reserved. */
+.pl-amt-pos, .pl-amt-neg { color: var(--color-on-surface); }
 .pl-amt-net { color: var(--color-on-surface); }
 .pl-amt-loss { color: var(--color-error); }
 @media (max-width: 768px) {
