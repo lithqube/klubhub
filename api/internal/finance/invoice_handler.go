@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,6 +31,7 @@ func NewInvoiceHandler(svc *InvoiceService) *InvoiceHandler {
 //	GET    /invoices/{id}                invoice + lines
 //	PUT    /invoices/{id}                update draft (totals recomputed)
 //	GET    /invoices/{id}/issue-check    issue readiness
+//	GET    /invoices/{id}/pdf            invoice / credit-note PDF (rendered on demand)
 //	POST   /invoices/{id}/issue          draft → issued (number allocated)
 //	POST   /invoices/{id}/pay            issued → paid
 //	POST   /invoices/{id}/cancel         draft → cancelled
@@ -89,12 +91,16 @@ func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	action := parts[1]
-	if action == "issue-check" {
+	if action == "issue-check" || action == "pdf" {
 		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET supported on issue-check")
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET supported on "+action)
 			return
 		}
-		h.handleIssueCheck(w, r, id)
+		if action == "pdf" {
+			h.handlePDF(w, r, id)
+		} else {
+			h.handleIssueCheck(w, r, id)
+		}
 		return
 	}
 	handlers := map[string]func(http.ResponseWriter, *http.Request, uuid.UUID){
@@ -276,6 +282,22 @@ func (h *InvoiceHandler) handleGet(w http.ResponseWriter, r *http.Request, id uu
 		lines = []*InvoiceLine{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": inv, "lines": lines})
+}
+
+func (h *InvoiceHandler) handlePDF(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	b, name, err := h.svc.PDF(r.Context(), id)
+	if err != nil {
+		writeInvoiceError(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+	// Financial documents: never cached by shared caches, never sniffed.
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(b)
 }
 
 func (h *InvoiceHandler) handleUpdateDraft(w http.ResponseWriter, r *http.Request, id uuid.UUID) {

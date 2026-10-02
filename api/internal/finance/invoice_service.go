@@ -160,6 +160,50 @@ func (s *InvoiceService) GetByID(ctx context.Context, id uuid.UUID) (*Invoice, [
 	return s.repo.GetByID(ctx, id)
 }
 
+// pdfData gathers everything RenderInvoice prints. Issued documents carry
+// their own supplier snapshot, so the live billing profile is loaded only
+// for drafts. A credit note also needs the number of the invoice it reverses.
+func (s *InvoiceService) pdfData(ctx context.Context, id uuid.UUID) (*InvoicePDFData, error) {
+	inv, lines, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	data := &InvoicePDFData{Invoice: inv, Lines: lines}
+
+	if inv.Kind == InvoiceKindCreditNote && inv.CreditsInvoiceID != nil {
+		orig, _, err := s.repo.GetByID(ctx, *inv.CreditsInvoiceID)
+		switch {
+		case err == nil:
+			data.CreditedInvoiceNumber = orig.Number()
+		case !errors.Is(err, ErrInvoiceNotFound):
+			return nil, err
+		}
+	}
+	// Same test the renderer applies: an empty `{}` is not a snapshot.
+	var snap BillingProfileSnapshot
+	if len(inv.BillingProfile) == 0 || snap.FromJSON(inv.BillingProfile) != nil || snap.LegalName == "" {
+		if data.BillingProfile, err = s.profile(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return data, nil
+}
+
+// PDF renders the invoice or credit note as a PDF. It returns the bytes and
+// the suggested filename. The document is rendered on demand from the stored
+// invoice; nothing is persisted.
+func (s *InvoiceService) PDF(ctx context.Context, id uuid.UUID) ([]byte, string, error) {
+	data, err := s.pdfData(ctx, id)
+	if err != nil {
+		return nil, "", err
+	}
+	b, name, _, err := NewPDFRenderer().RenderInvoice(ctx, data)
+	if err != nil {
+		return nil, "", err
+	}
+	return b, name, nil
+}
+
 // List returns invoices matching the filter.
 func (s *InvoiceService) List(ctx context.Context, filter InvoiceFilter) ([]*Invoice, error) {
 	return s.repo.List(ctx, filter)
