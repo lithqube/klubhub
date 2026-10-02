@@ -8,6 +8,13 @@ function httpError(status: number, body: unknown) {
   return Object.assign(new Error(`HTTP ${status}`), { statusCode: status, data: body })
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
+}
+
 const fetchMock = vi.fn()
 
 function makeEntry(over: Partial<Entry> = {}): Entry {
@@ -181,6 +188,64 @@ describe('useEarningsStore', () => {
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/finance/profit-loss', {
       params: { scope: 'month', year: '2026', month: '9' },
     })
+  })
+
+  it('keeps the newest custom summary range when an older month response arrives', async () => {
+    const store = useEarningsStore()
+    const old = deferred<unknown>()
+    fetchMock.mockReturnValueOnce(old.promise).mockResolvedValueOnce({ data: { EUR: { currency: 'EUR', income_minor: 200, expense_minor: 0 } } })
+    const month = { scope: 'month' as const, year: 2025, month: 9 }
+    const oldRead = store.refreshSummary(month)
+    // The selected scope must be an owned snapshot, not a caller-mutable arg.
+    month.year = 2024
+    expect(store.summaryScope).toEqual({ scope: 'month', year: 2025, month: 9 })
+    const range = { from: '2024-01-01', to: '2024-04-01' }
+    await store.refreshSummary(range)
+    old.resolve({ data: { EUR: { currency: 'EUR', income_minor: 999, expense_minor: 0 } } })
+    await oldRead
+    expect(store.summaryScope).toEqual(range)
+    expect(store.summary.EUR?.income_minor).toBe(200)
+    expect(store.summaryError).toBeNull()
+    expect(store.summaryLoading).toBe(false)
+  })
+
+  it.each(['summary', 'profitLoss'] as const)('retains the %s cache and current failure even after an older success', async (pane) => {
+    const store = useEarningsStore()
+    const totals = { EUR: { currency: 'EUR', income_minor: 120, expense_minor: 0, profit_loss_minor: 120 } }
+    fetchMock.mockResolvedValueOnce({ data: totals })
+    const refresh = () => pane === 'summary' ? store.refreshSummary() : store.refreshProfitLoss()
+    await refresh()
+    const old = deferred<unknown>()
+    const current = deferred<unknown>()
+    fetchMock.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise)
+    const oldRead = refresh()
+    const currentRead = refresh()
+    current.reject(httpError(500, { error: 'unknown', message: 'Current read failed' }))
+    await currentRead
+    old.resolve({ data: {} })
+    await oldRead
+    expect(pane === 'summary' ? store.summary : store.profitLossByScope?.data).toEqual(totals)
+    expect(pane === 'summary' ? store.summaryError?.message : store.profitLossError?.message).toBe('Current read failed')
+    expect(pane === 'summary' ? store.summaryLoading : store.profitLossLoading).toBe(false)
+  })
+
+  it('summary and profit/loss generations do not supersede each other', async () => {
+    const store = useEarningsStore()
+    const summary = deferred<unknown>()
+    const pnl = deferred<unknown>()
+    fetchMock.mockReturnValueOnce(summary.promise).mockReturnValueOnce(pnl.promise)
+    const summaryRead = store.refreshSummary()
+    const pnlRead = store.refreshProfitLoss({ scope: 'gig', gig_id: 'gig-1' })
+    const totals = { EUR: { currency: 'EUR', income_minor: 120, expense_minor: 0, profit_loss_minor: 120 } }
+    summary.resolve({ data: totals })
+    await summaryRead
+    expect(store.summary).toEqual(totals)
+    expect(store.summaryLoading).toBe(false)
+    expect(store.profitLossLoading).toBe(true)
+    pnl.resolve({ data: totals })
+    await pnlRead
+    expect(store.profitLossByScope).toEqual({ scope: 'gig:gig-1', data: totals })
+    expect(store.profitLossLoading).toBe(false)
   })
 
   it('resolveReconciliation POSTs with the right body and refreshes entries', async () => {

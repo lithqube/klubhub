@@ -148,7 +148,7 @@ function clearFilters(): void {
       </div>
     </div>
 
-    <p class="el-help">FIN-10 — no tax / VAT is computed anywhere on this page. Entries appear in their own currency; totals below are grouped by code and never converted.</p>
+    <p class="el-help">FIN-10 — Earnings entries do not compute tax or VAT. Entries appear in their own currency; totals below are grouped by code and never converted.</p>
 
     <div v-if="state === 'disabled'" class="glass el-state" role="status">
       <p class="el-state-title">EARNINGS UNAVAILABLE</p>
