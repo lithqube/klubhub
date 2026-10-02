@@ -68,6 +68,10 @@ describe('Important 2: conflict copy', () => {
   it('entry dialog says discard and reload; no retry promise; reload button gets focus', async () => {
     const s = useEarningsStore(); s.entries = [entry()]
     w = mount(EntryFormDialog, { attachTo: document.body, props: { open: true, kind: 'income', editId: 'e' } }); await flushPromises()
+    // useDialogFocus moves focus to the title on a real ~16ms timer. Let that
+    // settle first, otherwise on a slow runner it fires after the conflict
+    // handler focuses the reload button and steals focus back.
+    await vi.waitFor(() => expect(document.activeElement).toBe(document.querySelector('.ee-title')))
     transport().mockRejectedValueOnce(new FinanceApiError(409, 'conflict', 'Changed')).mockResolvedValueOnce({ data: entry({ updated_at: 'T2' }) })
     ;(document.querySelector('#ee-description') as HTMLInputElement).value = 'Mine'
     document.querySelector('#ee-description')!.dispatchEvent(new Event('input', { bubbles: true }))
