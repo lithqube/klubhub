@@ -272,7 +272,7 @@ func run() error {
 	// `?secret=ICAL_SECRET` was accepted. The secret is now env-injected
 	// (config.ICALSecret, required) and the handler fails closed on
 	// empty/missing/placeholder values.
-	gigHandler := gig.NewHandler(gigSvc, cfg.ICALSecret)
+	gigHandler := gig.NewHandler(gigSvc, cfg.ICALSecret, settingsSvc)
 
 	venueSvc := venue.NewService(venueRepo)
 	venueHandler := venue.NewHandler(venueSvc)

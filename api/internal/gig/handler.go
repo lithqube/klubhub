@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/klubhub/dj/api/internal/settings"
 	"github.com/klubhub/dj/api/internal/tracklist"
 	"github.com/shopspring/decimal"
 )
@@ -27,12 +29,16 @@ import (
 // attacks.
 type Handler struct {
 	svc             ServiceIface
+	settingsRepo    settingsRepoIface
 	icalSecret      []byte
 	raImportHandler *RAImportHandler
 }
 
 // ServiceIface defines the interface exposed by the gig service to the HTTP layer.
 type ServiceIface interface {
+	GetGigWithRelations(ctx context.Context, id uuid.UUID) (*GigWithRelations, error)
+	ListGigsWithRelations(ctx context.Context, f GigFilter) ([]*GigWithRelations, error)
+	Tracklists(ctx context.Context, id uuid.UUID) ([]*tracklist.Tracklist, error)
 	CreateGig(ctx context.Context, req *GigCreate) (*Gig, error)
 	GetGig(ctx context.Context, id uuid.UUID) (*Gig, error)
 	ListGigs(ctx context.Context, f GigFilter) ([]*Gig, error)
@@ -47,19 +53,24 @@ type ServiceIface interface {
 	GetGigDetail(ctx context.Context, id uuid.UUID) (*GigDetailResponse, error)
 }
 
+// settingsRepoIface reads the existing server-side settings singleton.
+type settingsRepoIface interface {
+	GetOrCreate(context.Context) (*settings.UserSettings, error)
+}
+
 // NewHandler creates a Handler backed by the given service. The icalSecret
 // is the high-entropy shared secret gating the calendar.ics and booking
 // PDF endpoints; an empty secret is rejected at construction so a
 // misconfigured deployment fails fast rather than silently disabling
 // authentication.
-func NewHandler(svc ServiceIface, icalSecret string) *Handler {
+func NewHandler(svc ServiceIface, icalSecret string, settingsRepo settingsRepoIface) *Handler {
 	if icalSecret == "" {
 		// Fail loud rather than letting every request through. This is
 		// almost certainly a deployment misconfiguration: the secret is
 		// loaded from config.ICALSecret, which is required by envconfig.
 		panic("gig.NewHandler: icalSecret must not be empty (config.ICALSecret unset?")
 	}
-	return &Handler{svc: svc, icalSecret: []byte(icalSecret)}
+	return &Handler{svc: svc, icalSecret: []byte(icalSecret), settingsRepo: settingsRepo}
 }
 
 // validateICalSecret checks the provided bearer against the configured
@@ -90,6 +101,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Delete("/{id}", h.handleDeleteGig)
 	r.Post("/{id}/link-venue", h.handleLinkVenue)
 	r.Post("/{id}/link-contact", h.handleLinkContact)
+	r.Get("/{id}/tracklists", h.handleGetGigTracklists)
 	r.Post("/{id}/tracklists/{tracklistId}", h.handleLinkTracklist)
 	r.Delete("/{id}/tracklists/{tracklistId}", h.handleUnlinkTracklist)
 	r.Get("/{id}/pdf", h.handleGetBookingPDF)
@@ -154,12 +166,12 @@ func (h *Handler) handleListGigs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	gigs, err := h.svc.ListGigs(r.Context(), f)
+	gigs, err := h.svc.ListGigsWithRelations(r.Context(), f)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusOK, gigs)
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": gigs})
 }
 
 // handleCreateGig creates a new gig.
@@ -175,7 +187,7 @@ func (h *Handler) handleCreateGig(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusCreated, gig)
+	h.writeJSON(w, http.StatusCreated, map[string]interface{}{"data": gig})
 }
 
 // handleGetGig returns a single gig by ID.
@@ -186,7 +198,7 @@ func (h *Handler) handleGetGig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gig, err := h.svc.GetGig(r.Context(), id)
+	gig, err := h.svc.GetGigWithRelations(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
 		h.writeError(w, http.StatusNotFound, "gig not found")
 		return
@@ -195,7 +207,7 @@ func (h *Handler) handleGetGig(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusOK, gig)
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": gig})
 }
 
 // handleUpdateGig updates a gig.
@@ -229,7 +241,7 @@ func (h *Handler) handleUpdateGig(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.writeJSON(w, http.StatusOK, gig)
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": gig})
 }
 
 // handleDeleteGig soft-deletes a gig.
@@ -305,6 +317,28 @@ func (h *Handler) handleLinkContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleGetGigTracklists returns the linked tracklists as a bare array.
+func (h *Handler) handleGetGigTracklists(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid gig id")
+		return
+	}
+	rows, err := h.svc.Tracklists(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		h.writeError(w, http.StatusNotFound, "gig not found")
+		return
+	}
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if rows == nil {
+		rows = make([]*tracklist.Tracklist, 0)
+	}
+	h.writeJSON(w, http.StatusOK, rows)
 }
 
 // handleLinkTracklist links a tracklist to a gig.
@@ -418,7 +452,21 @@ func (h *Handler) handleGetBookingPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pdfData, storagePath, err := h.svc.GenerateBookingPDF(r.Context(), id, "DJ Name")
+	if h.settingsRepo == nil {
+		h.writeError(w, http.StatusInternalServerError, "booking PDF settings unavailable")
+		return
+	}
+	userSettings, err := h.settingsRepo.GetOrCreate(r.Context())
+	if err != nil || userSettings == nil {
+		h.writeError(w, http.StatusInternalServerError, "could not load booking PDF settings")
+		return
+	}
+	if strings.TrimSpace(userSettings.DJName) == "" {
+		h.writeError(w, http.StatusUnprocessableEntity, "set your DJ name in settings before downloading a booking PDF")
+		return
+	}
+
+	pdfData, storagePath, err := h.svc.GenerateBookingPDF(r.Context(), id, userSettings.DJName)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return

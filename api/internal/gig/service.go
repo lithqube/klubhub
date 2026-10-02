@@ -27,11 +27,11 @@ type contactRepoIface interface {
 
 // Service implements business logic for gigs and satisfies the GigReader interface.
 type Service struct {
-	repo           *Repository
-	venueRepo      venueRepoIface
-	contactRepo    contactRepoIface
-	tracklistRepo  tracklistRepoIface
-	storage        PDFStorageClientIface
+	repo               *Repository
+	venueRepo          venueRepoIface
+	contactRepo        contactRepoIface
+	tracklistRepo      tracklistRepoIface
+	storage            PDFStorageClientIface
 	paymentTransitions PaymentTransitionProcessor
 }
 
@@ -43,13 +43,62 @@ func NewService(repo *Repository, venueRepo venueRepoIface, contactRepo contactR
 // NewServiceWithPaymentTransitionProcessor wires the optional finance hook.
 func NewServiceWithPaymentTransitionProcessor(repo *Repository, venueRepo venueRepoIface, contactRepo contactRepoIface, tracklistRepo tracklistRepoIface, storage PDFStorageClientIface, processor PaymentTransitionProcessor) *Service {
 	return &Service{
-		repo:          repo,
-		venueRepo:     venueRepo,
-		contactRepo:   contactRepo,
-		tracklistRepo: tracklistRepo,
-		storage:       storage,
+		repo:               repo,
+		venueRepo:          venueRepo,
+		contactRepo:        contactRepo,
+		tracklistRepo:      tracklistRepo,
+		storage:            storage,
 		paymentTransitions: processor,
 	}
+}
+
+// GigWithRelations adds reusable linked entities without changing the base Gig
+// wire format or the legacy /detail response. Empty relationships serialize as [].
+type GigWithRelations struct {
+	*Gig
+	LinkedVenues     []*venue.Venue         `json:"linkedVenues"`
+	LinkedContacts   []*contact.Contact     `json:"linkedContacts"`
+	LinkedTracklists []*tracklist.Tracklist `json:"linkedTracklists"`
+}
+
+func (s *Service) ListGigsWithRelations(ctx context.Context, f GigFilter) ([]*GigWithRelations, error) {
+	gigs, err := s.repo.List(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*GigWithRelations, 0, len(gigs))
+	for _, g := range gigs {
+		row, err := s.withRelations(ctx, g)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, nil
+}
+
+func (s *Service) GetGigWithRelations(ctx context.Context, id uuid.UUID) (*GigWithRelations, error) {
+	g, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.withRelations(ctx, g)
+}
+
+func (s *Service) withRelations(ctx context.Context, g *Gig) (*GigWithRelations, error) {
+	venues, err := s.repo.LinkedVenues(ctx, g.ID)
+	if err != nil {
+		return nil, err
+	}
+	contacts, err := s.repo.LinkedContacts(ctx, g.ID)
+	if err != nil {
+		return nil, err
+	}
+	tracklists, err := s.Tracklists(ctx, g.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &GigWithRelations{Gig: g, LinkedVenues: venues, LinkedContacts: contacts, LinkedTracklists: tracklists}, nil
 }
 
 // ─── GigReader interface implementation ─────────────────────────────────────
@@ -89,7 +138,7 @@ func (s *Service) Tracklists(ctx context.Context, gigID uuid.UUID) ([]*tracklist
 	}
 	defer rows.Close()
 
-	var tracklists []*tracklist.Tracklist
+	tracklists := make([]*tracklist.Tracklist, 0)
 	for rows.Next() {
 		var tl tracklist.Tracklist
 		err := rows.Scan(
@@ -105,7 +154,6 @@ func (s *Service) Tracklists(ctx context.Context, gigID uuid.UUID) ([]*tracklist
 	}
 	return tracklists, rows.Err()
 }
-
 
 // GetGigDetail returns a gig by ID with linked venues, contacts, and tracklists.
 func (s *Service) GetGigDetail(ctx context.Context, id uuid.UUID) (*GigDetailResponse, error) {
