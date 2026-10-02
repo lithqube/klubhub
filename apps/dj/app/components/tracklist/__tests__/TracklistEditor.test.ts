@@ -31,10 +31,16 @@ type Call = { method: string; url: string; body?: any }
 let calls: Call[]
 let failNext: { match: RegExp; error: unknown } | null
 let serverTracks: Track[]
+let deferNextPut: Promise<never> | null
 
 const fetchStub = async (url: string, opts?: { method?: string; body?: any }) => {
   const method = opts?.method ?? 'GET'
   calls.push({ method, url, body: opts?.body })
+  if (deferNextPut && method === 'PUT') {
+    const p = deferNextPut
+    deferNextPut = null
+    return p
+  }
   if (failNext && failNext.match.test(`${method} ${url}`)) {
     const e = failNext.error
     failNext = null
@@ -63,6 +69,7 @@ function setup(initial: Track[] = [track('a', 'Alpha', 1), track('b', 'Bravo', 2
   setActivePinia(createPinia())
   calls = []
   failNext = null
+  deferNextPut = null
   serverTracks = initial
   vi.stubGlobal('$fetch', vi.fn(fetchStub))
   const store = useTracklistStore()
@@ -162,6 +169,23 @@ describe('TracklistEditor: marks', () => {
     expect(store.tracks[1]!.hiddenGem).toBe(false)
     expect(rows(wrapper)[1]!.find(sel('mark-hidden-gem')).attributes('aria-pressed')).toBe('false')
     expect(ui.editError).toBe('invalid track fields')
+  })
+
+  it('a failed save puts back only its own mark, not one that saved meanwhile', async () => {
+    const { store, wrapper } = setup()
+    const row = rows(wrapper)[0]!
+    let failFirst!: (e: unknown) => void
+    deferNextPut = new Promise<never>((_, reject) => { failFirst = reject })
+    await row.find(sel('mark-hidden-gem')).trigger('click') // request A: still in flight
+    await row.find(sel('mark-unreleased')).trigger('click') // request B: saves
+    await flushPromises()
+    expect(store.tracks[0]).toMatchObject({ hiddenGem: true, unreleased: true })
+
+    failFirst(Object.assign(new Error('x'), { data: { error: 'boom' } }))
+    await flushPromises()
+    expect(store.tracks[0]).toMatchObject({ hiddenGem: false, unreleased: true })
+    expect(serverTracks[0]).toMatchObject({ unreleased: true })
+    expect(row.find(sel('mark-unreleased')).attributes('aria-pressed')).toBe('true')
   })
 
   it('sets what it was played from: vinyl or digital, or clears it', async () => {

@@ -116,6 +116,22 @@ describe('useSettingsStore.save', () => {
     await expect(store.save({ default_template: 'light' })).resolves.toBeUndefined();
   });
 
+  it('a saved default_template wins over the preset a demo response still carries', async () => {
+    // @ts-expect-error - mocking global $fetch
+    global.$fetch = vi.fn().mockResolvedValue(row({ default_template: 'neon', preset: 'dark' }))
+    const store = useSettingsStore()
+    await store.loadFromApi()
+    expect(store.preset).toBe('neon')
+  })
+
+  it('falls back to preset when there is no default_template', async () => {
+    // @ts-expect-error - mocking global $fetch
+    global.$fetch = vi.fn().mockResolvedValue(row({ default_template: '', preset: 'light' }))
+    const store = useSettingsStore()
+    await store.loadFromApi()
+    expect(store.preset).toBe('light')
+  })
+
   it('loadFromApi restores the preset from the Go API\'s default_template', async () => {
     // @ts-expect-error - mocking global $fetch
     global.$fetch = vi.fn().mockResolvedValue(row({ default_template: 'minimal' }));

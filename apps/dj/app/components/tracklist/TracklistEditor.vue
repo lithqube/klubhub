@@ -89,16 +89,21 @@ const setMarker = async (
   if (!tracklist.value) return;
   const index = indexOfTrack(track.id);
   if (index === -1) return;
-  const before = { ...tracks.value[index]! };
-  tracks.value[index] = { ...before, ...patch };
+  // Only the fields this click changes are applied, confirmed and, on failure,
+  // put back: another marker on the same track may be saving at the same time,
+  // and restoring a whole-track snapshot would undo it.
+  const keys = Object.keys(patch) as Array<keyof typeof patch>;
+  const pick = (from: Track) => Object.fromEntries(keys.map((k) => [k, from[k]])) as typeof patch;
+  const previous = pick(tracks.value[index]!);
+  tracks.value[index] = { ...tracks.value[index]!, ...patch };
   uiStore.editError = null;
   try {
     const saved = await updateTrack(tracklist.value.id, track.id, patch);
     const i = indexOfTrack(track.id);
-    if (i !== -1) tracks.value[i] = { ...tracks.value[i]!, ...saved };
+    if (i !== -1) tracks.value[i] = { ...tracks.value[i]!, ...pick(saved) };
   } catch (err) {
     const i = indexOfTrack(track.id);
-    if (i !== -1) tracks.value[i] = before;
+    if (i !== -1) tracks.value[i] = { ...tracks.value[i]!, ...previous };
     uiStore.editError = reasonOf(err, 'Failed to save track');
   }
 };

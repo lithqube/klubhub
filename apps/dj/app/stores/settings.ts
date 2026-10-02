@@ -84,9 +84,13 @@ export const useSettingsStore = defineStore('settings', () => {
     if (data.logo_position !== undefined) logoPosition.value = data.logo_position;
     if (data.custom_placeholder_path !== undefined) customPlaceholderPath.value = data.custom_placeholder_path;
     // The Go API stores the chosen preset as `default_template`; the dev mock
-    // and demo backends also send `preset`.
-    if (typeof data.default_template === 'string' && data.default_template) preset.value = data.default_template;
-    if (data.preset !== undefined) preset.value = data.preset;
+    // and demo backends also send `preset`. A saved default_template wins when
+    // both are present (a demo response keeps the old `preset` after a save).
+    if (typeof data.default_template === 'string' && data.default_template) {
+      preset.value = data.default_template;
+    } else if (data.preset !== undefined) {
+      preset.value = data.preset;
+    }
     if (data.bg_mode !== undefined) bgMode.value = data.bg_mode;
     if (data.bg_value !== undefined) bgValue.value = data.bg_value;
     // A fresh settings row carries `visible_fields: {}` (an empty object);
