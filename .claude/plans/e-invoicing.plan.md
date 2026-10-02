@@ -296,6 +296,21 @@ The pattern is the same as in Germany:
 - The slim image's PDF wrap is solid for our fpdf output (fonts already embedded). Item 5 stays on the plan as written.
 - Build tooling note: the finance package's `TestMain` starts a Postgres container; set `SKIP_INTEGRATION=1` for tests that don't need one.
 
+## 9. Progress (updated 2026-10-03)
+
+| Plan item (§4 Tier 1) | State |
+|---|---|
+| 1. PDF download | Route done (`GET /invoices/{id}/pdf`, on demand). **Not done:** archive the issued PDF as an immutable document; needs a documents HTTP handler. |
+| 2. EN 16931 data model, editable lines | Done: BT-32 Steuernummer, BT-10/12/13 references, BT-20 terms, BT-84/86 IBAN/BIC, BT-130 unit codes, multi-line editing, `tax.CategoryFor`. Open: allowances and charges (BG-20/21); BT-34/49 addresses and payment-means code 58 are derived at export. |
+| 3. Country legal notes | **Done for Germany** (§ 19 UStG, reverse charge with "Steuerschuldnerschaft des Leistungsempfängers", § 3a Abs. 2 UStG), bilingual DE/EN, served to the UI by `GET /invoices/tax-notes`. Needs a Steuerberater's confirmation of the wording. Other countries keep the generic English text. |
+| 4. Structured payment means | IBAN/BIC stored, validated and printed. Open: EPC/GiroCode QR on the PDF. |
+| 5. Factur-X / XRechnung `Exporter` + sidecar | Not started (mapping proven in §8). |
+| 6. Validation report stored with the invoice | Not started. |
+| 7. Credit note 381 mapping | Proven in the spike; not built. |
+| 8. E-invoice attached to the invoice email | Not started. |
+
+Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: the Go `Exporter` behind an interface with in-process `speedata/einvoice` validation and KoSIT/veraPDF golden tests in CI, then the export-readiness check and the documents handler.
+
 ## Sources
 
 **e-invoice-eu (repo at commit `dc96ee0`, 2026-09-30):**

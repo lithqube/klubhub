@@ -40,10 +40,30 @@ export function isTreatment(v: unknown): v is VatTreatment {
   return typeof v === 'string' && (TREATMENTS as string[]).includes(v)
 }
 
-export const NOTES: Partial<Record<VatTreatment, string>> = {
+type Notes = Partial<Record<VatTreatment, string>>
+
+// Legal wording per supplier country: a mirror of api/internal/finance/tax
+// (notes.go for the generic defaults, notes_de.go for Germany). Keep the text
+// identical to the Go registry; the DE entries are bilingual "German / English".
+const GENERIC_NOTES: Notes = {
   reverse_charge: 'Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC).',
   exempt: 'VAT exempt: small business scheme.',
   outside_scope: 'Outside the scope of EU VAT: place of supply outside the EU.',
+}
+
+const DE_NOTES: Notes = {
+  exempt: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. / '
+    + 'VAT is not charged under § 19 UStG (German small-business scheme).',
+  reverse_charge: 'Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge): '
+    + 'Die Umsatzsteuer ist vom Leistungsempfänger zu entrichten (Art. 196 MwStSystRL). / '
+    + 'Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC).',
+  outside_scope: 'Nicht steuerbare sonstige Leistung, Leistungsort außerhalb Deutschlands (§ 3a Abs. 2 UStG). / '
+    + 'Not subject to German VAT: the place of supply is outside Germany (§ 3a(2) UStG).',
+}
+
+/** The legal wording a supplier in `country` prints per treatment (those that carry one). */
+export function notesFor(country: string): Notes {
+  return country.trim().toUpperCase() === 'DE' ? { ...GENERIC_NOTES, ...DE_NOTES } : { ...GENERIC_NOTES }
 }
 
 export function party(p: Partial<Party>): Party {
@@ -74,8 +94,9 @@ export const DEFAULT_SUPPLIER: Supplier = {
 export function suggest(supplier: Supplier, customer: Pick<Party, 'country' | 'vat_id' | 'is_business'>): TaxSuggestion {
   const sc = supplier.country.toUpperCase()
   const cc = (customer.country || '').toUpperCase()
+  const notes = notesFor(sc)
   const out = (t: VatTreatment, rate: number, reason: string): TaxSuggestion => ({
-    vat_treatment: t, tax_rate_bps: rate, tax_note: NOTES[t] ?? '', reason,
+    vat_treatment: t, tax_rate_bps: rate, tax_note: notes[t] ?? '', reason,
   })
   if (EU.has(sc)) {
     if (supplier.vat_exempt_small_business) return out('exempt', 0, 'You use the small-business VAT exemption.')

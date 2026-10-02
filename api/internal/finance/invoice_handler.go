@@ -27,6 +27,7 @@ func NewInvoiceHandler(svc *InvoiceService) *InvoiceHandler {
 //	GET    /invoices                     list (?status=&gig_id=&kind=&currency=)
 //	POST   /invoices                     create draft
 //	GET    /invoices/tax-suggestion      suggest VAT treatment for a customer
+//	GET    /invoices/tax-notes           legal wording per treatment for the supplier's country
 //	GET    /invoices/summaries           per-currency dashboard
 //	GET    /invoices/{id}                invoice + lines
 //	PUT    /invoices/{id}                update draft (totals recomputed)
@@ -57,14 +58,17 @@ func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST supported on collection")
 		}
 		return
-	case len(parts) == 1 && (parts[0] == "summaries" || parts[0] == "tax-suggestion"):
+	case len(parts) == 1 && (parts[0] == "summaries" || parts[0] == "tax-suggestion" || parts[0] == "tax-notes"):
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET supported on "+parts[0])
 			return
 		}
-		if parts[0] == "summaries" {
+		switch parts[0] {
+		case "summaries":
 			h.handleSummaries(w, r)
-		} else {
+		case "tax-notes":
+			h.handleTaxNotes(w, r)
+		default:
 			h.handleTaxSuggestion(w, r)
 		}
 		return
@@ -270,6 +274,15 @@ func (h *InvoiceHandler) handleTaxSuggestion(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": sugg})
+}
+
+func (h *InvoiceHandler) handleTaxNotes(w http.ResponseWriter, r *http.Request) {
+	notes, err := h.svc.TaxNotes(r.Context())
+	if err != nil {
+		writeInvoiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": notes})
 }
 
 func (h *InvoiceHandler) handleGet(w http.ResponseWriter, r *http.Request, id uuid.UUID) {

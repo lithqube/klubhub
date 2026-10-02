@@ -499,7 +499,8 @@ func TestInvoiceHandler_CreateDraftOverridesAndValidation(t *testing.T) {
 	inv := hs.createDraft(`{"gig_id":"` + hs.gigID.String() + `","vat_treatment":"exempt","withholding_rate_bps":1500,
 		"supply_date":"2026-10-04","due_at":"2026-11-01","number_prefix":"gig",
 		"customer":{"legal_name":"Promo SARL","country":"fr","vat_id":"fr 123"}}`)
-	if inv.VATTreatment != tax.Exempt || inv.TaxRateBps != 0 || !strings.Contains(inv.TaxNote, "exempt") {
+	// The harness supplier is German, so choosing "exempt" prints the § 19 UStG wording.
+	if inv.VATTreatment != tax.Exempt || inv.TaxRateBps != 0 || inv.TaxNote != tax.Notes.Note("DE", tax.Exempt) || !strings.Contains(inv.TaxNote, "§ 19 UStG") {
 		t.Fatalf("explicit treatment: %+v", inv)
 	}
 	if inv.WithholdingMinor != 3750 || inv.NetPayableMinor != 21250 || inv.NumberPrefix != "GIG" {

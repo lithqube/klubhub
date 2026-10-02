@@ -174,10 +174,31 @@ so the customer can be pre-filled. Billing profiles gain
 | US | any | `none`, rate 0 (user may switch to `us_sales_tax`) |
 | other / unknown country | any | `none`, rate 0 |
 
-Default notes (`tax_note`, editable while draft):
-- `reverse_charge`: "Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC)."
-- `exempt`: "VAT exempt: small business scheme." (country-specific wording is a §6 extension)
-- `outside_scope`: "Outside the scope of EU VAT: place of supply outside the EU."
+Default notes (`tax_note`, editable while draft) come from the `tax.Notes`
+registry, keyed by the supplier's country (the billing profile's
+`address_country`) and the treatment. Domestic VAT, US sales tax and `none`
+print no note.
+
+| Treatment | Germany (`DE`): German / English in one string | Every other country |
+|---|---|---|
+| `exempt` | "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. / VAT is not charged under § 19 UStG (German small-business scheme)." | "VAT exempt: small business scheme." |
+| `reverse_charge` | "Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge): Die Umsatzsteuer ist vom Leistungsempfänger zu entrichten (Art. 196 MwStSystRL). / Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC)." | "Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC)." |
+| `outside_scope` | "Nicht steuerbare sonstige Leistung, Leistungsort außerhalb Deutschlands (§ 3a Abs. 2 UStG). / Not subject to German VAT: the place of supply is outside Germany (§ 3a(2) UStG)." | "Outside the scope of EU VAT: place of supply outside the EU." |
+
+The German wording is bilingual because the customer's language is unknown and
+the German phrase is the one a German bookkeeper or the Finanzamt looks for
+(§ 14a Abs. 5 UStG requires "Steuerschuldnerschaft des Leistungsempfängers" on
+a reverse-charge invoice). It is the common practice for these cases, **not
+tax advice**: have a Steuerberater confirm it. Other countries get their own
+entries when their country module is written (`tax/notes_de.go` is the model);
+nothing invents legal text for a country that has none.
+
+`GET /invoices/tax-notes` returns `{data: {country, notes: {treatment: text}}}`
+for the billing profile's country. The draft editor loads it once and uses it
+when the user switches treatment, so wording that was a default (the country's
+or the generic one) is replaced and never left under the wrong treatment, while
+a note the user wrote themselves is kept. Notes already stored on existing
+drafts and issued invoices are never rewritten.
 
 Issue validation (`GET /invoices/{id}/issue-check`, enforced by `POST …/issue`):
 - supplier: `legal_name`, `address_line1`, `city`, `postal_code`, `country`
@@ -205,6 +226,7 @@ rate / 10000); `net_payable = total − withholding`.
 | `GET /invoices?status=&gig_id=&kind=` | | `{data: Invoice[]}` newest first, max 100 |
 | `POST /invoices` | `{gig_id, customer?, vat_treatment?, tax_rate_bps?, withholding_rate_bps?, supply_date?, due_at?, number_prefix?}` | `201 {data: Invoice}` draft; omitted fields are pre-filled (customer from gig contact, supply date from gig, treatment from `Suggest`) |
 | `GET /invoices/tax-suggestion?customer_country=&customer_vat_id=&customer_is_business=` | | `{data: {vat_treatment, tax_rate_bps, tax_note, reason}}` |
+| `GET /invoices/tax-notes` | | `{data: {country, notes: {reverse_charge?, exempt?, outside_scope?}}}`: the legal wording for the billing profile's country (generic English when it has no entry) |
 | `GET /invoices/summaries` | | `{data: {[currency]: {currency, draft_count, issued_count, paid_count, outstanding_minor, paid_minor}}}` |
 | `GET /invoices/{id}` | | `{data: Invoice, lines: InvoiceLine[]}` |
 | `PUT /invoices/{id}` | `{customer, vat_treatment, tax_rate_bps, tax_note, withholding_rate_bps, supply_date, due_at, number_prefix, internal_notes, updated_at}` | draft only; totals recomputed |
@@ -399,7 +421,7 @@ supported. Behind a TLS-terminating proxy, `CORS_ORIGIN` must be the public
 | Planned feature | Where it plugs in |
 |---|---|
 | Second supplier tax number, company registration, legal footer (review item 5) | `billing_profiles` columns → `Party`-like supplier snapshot → `InvoicePartyFields` reused for the billing profile form; printed by the PDF renderer footer. |
-| Country-specific legal notes (e.g. DE §19 UStG, FR late-payment wording) | `tax.Notes` registry keyed by `(country, treatment)`; `Suggest` already returns `tax_note`. |
+| More country-specific legal notes (FR late-payment wording, other countries) | **Germany is done** (`tax/notes_de.go`, §3). Add another country the same way: register `(country, treatment)` entries in an `init()`, mirror them in `shared/finance-mock/rules.ts`, and the UI picks them up through `GET /invoices/tax-notes`. |
 | Local-currency VAT (Art. 230) | `invoices.fx_rate` + `tax_minor_local`; computed in `tax.ComputeTotals`. |
 | Per-line tax / editable lines | `invoice_lines.tax_bps` already per line; `tax.ComputeTotals` already groups by rate. |
 | E-invoicing (EN 16931 UBL / Factur-X / Peppol) | new `Exporter` next to `PDFRenderer`, fed the same issued invoice + snapshots. |

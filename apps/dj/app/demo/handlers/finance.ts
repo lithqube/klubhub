@@ -41,6 +41,7 @@ export function registerFinance(r: DemoRouter): void {
     .on('POST', `${B}/invoices`, (req, c) => res(ops.createInvoice(c.finance, req.body as Record<string, unknown> | null)))
     .on('GET', `${B}/invoices/summaries`, (_req, c) => res(ops.summaries(c.finance)))
     .on('GET', `${B}/invoices/tax-suggestion`, (req, c) => res(ops.taxSuggestion(c.finance, query(req))))
+    .on('GET', `${B}/invoices/tax-notes`, (_req, c) => res(ops.taxNotes(c.finance)))
     .on('GET', `${B}/invoices/:id`, (req, c) => res(ops.getInvoice(c.finance, req.params.id!)))
     .on('PUT', `${B}/invoices/:id`, (req, c) => res(ops.updateInvoice(c.finance, req.params.id!, body(req))))
     .on('GET', `${B}/invoices/:id/pdf`, (req, c) => {

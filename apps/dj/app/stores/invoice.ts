@@ -16,6 +16,8 @@ import type {
   Party,
   Payment,
   PaymentCreateInput,
+  TaxNotes,
+  TaxNotesMap,
   TaxSuggestion,
 } from '../types/finance'
 import { isActiveInvoice, matchesFilter, todayIso, LIST_FILTERS } from '../utils/invoiceDisplay'
@@ -345,6 +347,22 @@ export const useInvoiceStore = defineStore('invoice', () => {
     return unwrap<TaxSuggestion>(res)
   }
 
+  // ── Legal-note wording for the supplier's country ──
+  // Loaded once and shared; the draft editor swaps the note itself when the
+  // user changes the treatment. A failure is silent: the built-in wording in
+  // utils/vatTreatment.ts applies, and the next editor tries again.
+  const taxNotes = ref<TaxNotesMap | null>(null)
+  let taxNotesRequest: Promise<void> | null = null
+
+  function fetchTaxNotes(): Promise<void> {
+    if (taxNotes.value) return Promise.resolve()
+    taxNotesRequest ??= request<unknown>(`${BASE}/invoices/tax-notes`)
+      .then((res) => { taxNotes.value = unwrap<TaxNotes>(res).notes })
+      .catch(() => { /* keep the built-in defaults */ })
+      .finally(() => { taxNotesRequest = null })
+    return taxNotesRequest
+  }
+
   // ── Writes (no optimistic updates: state changes only from responses) ──
 
   /** Shared 409/422 handling: refetch and surface the reason, then rethrow. */
@@ -624,7 +642,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
     filteredInvoices, filterCounts, activeInvoiceByGig, gigById,
     // actions
     fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck,
-    fetchGigOptions, suggestTax, closeCurrent,
+    fetchGigOptions, suggestTax, taxNotes, fetchTaxNotes, closeCurrent,
     createInvoice, updateInvoice, issueInvoice, cancelInvoice, markPaid,
     issueCreditNote, correctInvoice, createPayment, markPaymentReceived,
     setFilter, clearNotice, openCreate, setCreateOpen, openDetail, setDetailOpen,

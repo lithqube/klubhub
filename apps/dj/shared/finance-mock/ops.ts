@@ -19,7 +19,7 @@ import type {
 import { minorToDecimalString } from '../../app/utils/money'
 import type { FinanceMockDb, StoredEntry, StoredInvoice } from './db'
 import {
-  badRequest, BIC_PATTERN, compactUpper, fail, isDateOnly, isTreatment, normalizeDueAt, normalizeParty, NOTES, ok,
+  badRequest, BIC_PATTERN, compactUpper, fail, isDateOnly, isTreatment, normalizeDueAt, normalizeParty, notesFor, ok,
   prefixProblem, UNIT_CODES, uuid, validIban,
   type MockResult,
 } from './rules'
@@ -108,7 +108,7 @@ export function createInvoice(db: FinanceMockDb, body: Body | null): MockResult 
       // §4.1: a treatment other than the suggestion takes its default rate/note.
       inv.vat_treatment = body.vat_treatment
       inv.tax_rate_bps = body.vat_treatment === 'domestic' ? db.supplier.default_vat_rate_bps : 0
-      inv.tax_note = NOTES[body.vat_treatment] ?? ''
+      inv.tax_note = notesFor(db.supplier.country)[body.vat_treatment] ?? ''
     }
   }
   if (typeof body.tax_rate_bps === 'number') inv.tax_rate_bps = body.tax_rate_bps
@@ -387,6 +387,12 @@ export function summaries(db: FinanceMockDb): MockResult {
     }
   }
   return ok({ data: out })
+}
+
+/** GET /invoices/tax-notes: the legal wording for the billing profile's country. */
+export function taxNotes(db: FinanceMockDb): MockResult {
+  const country = db.supplier.country.trim().toUpperCase()
+  return ok({ data: { country, notes: notesFor(country) } })
 }
 
 export function taxSuggestion(db: FinanceMockDb, q: Query): MockResult {

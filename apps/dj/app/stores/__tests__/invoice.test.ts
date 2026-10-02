@@ -348,6 +348,41 @@ describe('useInvoiceStore', () => {
     })
   })
 
+  describe('fetchTaxNotes', () => {
+    const NOTES = { exempt: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. / VAT not charged.', reverse_charge: 'Steuerschuldnerschaft des Leistungsempfängers' }
+
+    it('loads the supplier country\'s wording once and caches it', async () => {
+      const store = useInvoiceStore()
+      expect(store.taxNotes).toBeNull()
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await store.fetchTaxNotes()
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/finance/invoices/tax-notes', {})
+      expect(store.taxNotes).toEqual(NOTES)
+
+      await store.fetchTaxNotes()
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('shares one request between concurrent callers', async () => {
+      const store = useInvoiceStore()
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await Promise.all([store.fetchTaxNotes(), store.fetchTaxNotes(), store.fetchTaxNotes()])
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('stays quiet on failure (the built-in defaults apply) and tries again next time', async () => {
+      const store = useInvoiceStore()
+      fetchMock.mockRejectedValueOnce(new Error('offline'))
+      await expect(store.fetchTaxNotes()).resolves.toBeUndefined()
+      expect(store.taxNotes).toBeNull()
+      expect(store.listError).toBeNull()
+
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await store.fetchTaxNotes()
+      expect(store.taxNotes).toEqual(NOTES)
+    })
+  })
+
   it('fetchGigOptions maps gigs and reports failure without throwing', async () => {
     const store = useInvoiceStore()
     fetchMock.mockResolvedValueOnce([{ id: 'g1', date: '2026-09-20T00:00:00Z', venue: 'Club Alpha', status: 'played', fee_amount: '1500', fee_currency: 'EUR' }])

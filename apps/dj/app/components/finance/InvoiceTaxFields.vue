@@ -77,9 +77,13 @@ function patch(p: Partial<TaxFieldsValue>): void {
   emit('update:modelValue', latest)
 }
 
+// The supplier country's legal wording; until it loads (or if it cannot) the
+// built-in generic wording applies.
+void store.fetchTaxNotes()
+
 function onTreatment(e: Event): void {
   const next = (e.target as HTMLSelectElement).value as VatTreatment
-  const changed = applyTreatmentChange(latest, next)
+  const changed = applyTreatmentChange(latest, next, store.taxNotes)
   rateText.value = bpsToPercent(changed.tax_rate_bps)
   patch(changed)
 }

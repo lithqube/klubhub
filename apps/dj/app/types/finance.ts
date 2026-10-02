@@ -139,6 +139,15 @@ export interface TaxSuggestion {
   reason: string
 }
 
+/** Legal wording per VAT treatment; treatments that carry none are absent. */
+export type TaxNotesMap = Partial<Record<VatTreatment, string>>
+
+/** GET /invoices/tax-notes: the wording the billing profile's country prints. */
+export interface TaxNotes {
+  country: string
+  notes: TaxNotesMap
+}
+
 export interface InvoiceSummary {
   currency: string
   draft_count: number

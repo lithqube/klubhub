@@ -229,6 +229,28 @@ func (s *InvoiceService) TaxSuggestion(ctx context.Context, customer Party) (tax
 	return tax.Suggest(supplierFromProfile(profile), customer.TaxCustomer()), nil
 }
 
+// TaxNotes is the legal wording the billing profile's country prints for each
+// treatment that has one. The UI fetches it once and swaps the draft's note
+// itself when the user changes the treatment.
+type TaxNotes struct {
+	Country string                   `json:"country"`
+	Notes   map[tax.Treatment]string `json:"notes"`
+}
+
+// TaxNotes returns the notes for the supplier country (the billing profile's
+// country, ” when none is set: the generic wording then applies).
+func (s *InvoiceService) TaxNotes(ctx context.Context) (*TaxNotes, error) {
+	profile, err := s.profile(ctx)
+	if err != nil {
+		return nil, err
+	}
+	country := ""
+	if profile != nil {
+		country = strings.ToUpper(strings.TrimSpace(profile.AddressCountry))
+	}
+	return &TaxNotes{Country: country, Notes: tax.NotesFor(country)}, nil
+}
+
 // problemsFor runs tax.ValidateForIssue for an invoice. It is pure so it
 // can run inside the issue transaction.
 func problemsFor(inv *Invoice, profile *BillingProfile, gigCurrency string) []tax.Problem {

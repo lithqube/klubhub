@@ -102,16 +102,19 @@ func TestNotesRegistry(t *testing.T) {
 	if r.Note("DE", Domestic) != "" || r.Note("US", None) != "" {
 		t.Error("domestic/none carry no default note")
 	}
-	r.Register("de", Exempt, "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.")
-	if got := r.Note("DE", Exempt); !strings.Contains(got, "§ 19 UStG") {
+	// "ZZ" is not a real country: the global Notes registry carries German
+	// wording for DE (notes_de.go), so the isolation check uses a code it
+	// can never register.
+	r.Register("zz", Exempt, "Test-only wording for ZZ.")
+	if got := r.Note("ZZ", Exempt); got != "Test-only wording for ZZ." {
 		t.Errorf("country-specific note not used: %q", got)
 	}
 	if got := r.Note("AT", Exempt); got != "VAT exempt: small business scheme." {
 		t.Errorf("other countries keep the default: %q", got)
 	}
 	// The global registry is untouched by a local registration.
-	if strings.Contains(Notes.Note("DE", Exempt), "UStG") {
-		t.Error("local registry leaked into Notes")
+	if got := Notes.Note("ZZ", Exempt); got != "VAT exempt: small business scheme." {
+		t.Errorf("local registry leaked into Notes: %q", got)
 	}
 }
 
