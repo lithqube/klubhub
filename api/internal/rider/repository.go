@@ -83,21 +83,9 @@ func (r *Repository) CreateTemplate(ctx context.Context, in CreateTemplateInput)
 // UpdateTemplate performs a partial update. Each *string pointer drives a
 // COALESCE-style "update when non-nil, leave alone otherwise" — matches
 // EPK's CASE WHEN pattern but is simpler to read. Name updates touch the
-// column directly; section updates are guarded by the *RiderSectionValues
-// umbrella (nil → leave all four sections alone).
+// column directly; every section is independently optional (nil → that
+// column is left alone, pointer to "" → cleared).
 func (r *Repository) UpdateTemplate(ctx context.Context, id uuid.UUID, in UpdateTemplateInput) (*RiderTemplate, error) {
-	// Resolve section values: nil pointers preserve existing column values.
-	tech := (*string)(nil)
-	hosp := (*string)(nil)
-	back := (*string)(nil)
-	other := (*string)(nil)
-	if in.RiderSectionValues != nil {
-		tech = &in.RiderSectionValues.Technical
-		hosp = &in.RiderSectionValues.Hospitality
-		back = &in.RiderSectionValues.Backline
-		other = &in.RiderSectionValues.OtherNotes
-	}
-
 	row := r.pool.QueryRow(ctx, `
 		UPDATE rider_templates
 		SET name        = COALESCE($2, name),
@@ -109,7 +97,7 @@ func (r *Repository) UpdateTemplate(ctx context.Context, id uuid.UUID, in Update
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING id, name, technical, hospitality, backline, other_notes,
 		          created_at, updated_at, deleted_at`,
-		id, in.Name, tech, hosp, back, other,
+		id, in.Name, in.Technical, in.Hospitality, in.Backline, in.OtherNotes,
 	)
 	t, err := scanTemplate(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -209,14 +197,6 @@ func (r *Repository) CreateAttachment(ctx context.Context, in CreateAttachmentIn
 // question is stable. Callers that want to "re-source" an attachment
 // should delete and recreate it.
 func (r *Repository) UpdateAttachment(ctx context.Context, id uuid.UUID, in UpdateAttachmentInput) (*RiderAttachment, error) {
-	var tech, hosp, back, other *string
-	if in.RiderSectionValues != nil {
-		tech = &in.RiderSectionValues.Technical
-		hosp = &in.RiderSectionValues.Hospitality
-		back = &in.RiderSectionValues.Backline
-		other = &in.RiderSectionValues.OtherNotes
-	}
-
 	row := r.pool.QueryRow(ctx, `
 		UPDATE rider_attachments
 		SET technical   = COALESCE($2, technical),
@@ -227,7 +207,7 @@ func (r *Repository) UpdateAttachment(ctx context.Context, id uuid.UUID, in Upda
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING id, gig_id, template_id, technical, hospitality, backline,
 		          other_notes, created_at, updated_at, deleted_at`,
-		id, tech, hosp, back, other,
+		id, in.Technical, in.Hospitality, in.Backline, in.OtherNotes,
 	)
 	a, err := scanAttachment(row)
 	if errors.Is(err, pgx.ErrNoRows) {

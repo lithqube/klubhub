@@ -24,6 +24,10 @@ type mockService struct {
 	pdfResult    *rider.ExportResult
 	pdfErr       error
 
+	// What the handler actually passed to the service on the last update.
+	lastTplUpdate *rider.UpdateTemplateInput
+	lastAttUpdate *rider.UpdateAttachmentInput
+
 	// Error injection per method.
 	listTplErr       error
 	getTplErr        error
@@ -77,12 +81,8 @@ func (m *mockService) UpdateTemplate(_ context.Context, id uuid.UUID, in rider.U
 			if in.Name != nil {
 				t.Name = *in.Name
 			}
-			if in.RiderSectionValues != nil {
-				t.Technical = in.Technical
-				t.Hospitality = in.Hospitality
-				t.Backline = in.Backline
-				t.OtherNotes = in.OtherNotes
-			}
+			m.lastTplUpdate = &in
+			applyPatchForTest(in.RiderSectionPatch, &t.Technical, &t.Hospitality, &t.Backline, &t.OtherNotes)
 			t.UpdatedAt = time.Now()
 			return t, nil
 		}
@@ -151,12 +151,8 @@ func (m *mockService) UpdateAttachment(_ context.Context, id uuid.UUID, in rider
 	}
 	for _, a := range m.attachments {
 		if a.ID == id {
-			if in.RiderSectionValues != nil {
-				a.Technical = in.Technical
-				a.Hospitality = in.Hospitality
-				a.Backline = in.Backline
-				a.OtherNotes = in.OtherNotes
-			}
+			m.lastAttUpdate = &in
+			applyPatchForTest(in.RiderSectionPatch, &a.Technical, &a.Hospitality, &a.Backline, &a.OtherNotes)
 			a.UpdatedAt = time.Now()
 			return a, nil
 		}
@@ -450,4 +446,137 @@ func TestContract_PDFReturnsBareEnvelope(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &env))
 	assert.Equal(t, id.String(), env.ID)
 	assert.Equal(t, "https://garage/dl", env.DownloadURL)
+}
+
+// ─── Partial updates: per-field semantics ───────────────────────────────────
+//
+// A PUT naming only some sections must leave the others untouched; a section
+// sent as "" must clear just that one. These assert both what the handler
+// hands the service (nil vs pointer-to-empty) and the resulting record.
+
+func strPtr(v string) *string { return &v }
+
+func applyPatchForTest(p rider.RiderSectionPatch, tech, hosp, back, other *string) {
+	if p.Technical != nil {
+		*tech = *p.Technical
+	}
+	if p.Hospitality != nil {
+		*hosp = *p.Hospitality
+	}
+	if p.Backline != nil {
+		*back = *p.Backline
+	}
+	if p.OtherNotes != nil {
+		*other = *p.OtherNotes
+	}
+}
+
+func seededTemplateSvc(id uuid.UUID) *mockService {
+	return &mockService{templates: []*rider.RiderTemplate{{
+		ID: id, Name: "Original",
+		Technical: "tech-A", Hospitality: "hosp-A", Backline: "back-A", OtherNotes: "other-A",
+	}}}
+}
+
+func seededAttachmentSvc(id uuid.UUID) *mockService {
+	return &mockService{attachments: []*rider.RiderAttachment{{
+		ID: id, GigID: uuid.New(),
+		Technical: "tech-A", Hospitality: "hosp-A", Backline: "back-A", OtherNotes: "other-A",
+	}}}
+}
+
+func sectionsOf(t *testing.T, body []byte) [4]string {
+	t.Helper()
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &resp))
+	return [4]string{
+		resp.Data["technical"].(string), resp.Data["hospitality"].(string),
+		resp.Data["backline"].(string), resp.Data["otherNotes"].(string),
+	}
+}
+
+func TestHandler_UpdateTemplate_SingleSection_LeavesOtherSectionsAlone(t *testing.T) {
+	id := uuid.New()
+	svc := seededTemplateSvc(id)
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(),
+		map[string]interface{}{"technical": "tech-B"})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	assert.Equal(t, [4]string{"tech-B", "hosp-A", "back-A", "other-A"}, sectionsOf(t, body))
+	in := svc.lastTplUpdate
+	require.NotNil(t, in)
+	assert.Nil(t, in.Name)
+	require.NotNil(t, in.Technical)
+	assert.Equal(t, "tech-B", *in.Technical)
+	assert.Nil(t, in.Hospitality, "an unsent section must reach the service as nil, not \"\"")
+	assert.Nil(t, in.Backline)
+	assert.Nil(t, in.OtherNotes)
+}
+
+func TestHandler_UpdateTemplate_EmptyString_ClearsOnlyThatSection(t *testing.T) {
+	id := uuid.New()
+	svc := seededTemplateSvc(id)
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(),
+		map[string]interface{}{"hospitality": ""})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	assert.Equal(t, [4]string{"tech-A", "", "back-A", "other-A"}, sectionsOf(t, body))
+	require.NotNil(t, svc.lastTplUpdate.Hospitality, "an explicit empty string is a clear, not an omission")
+	assert.Equal(t, "", *svc.lastTplUpdate.Hospitality)
+	assert.Nil(t, svc.lastTplUpdate.Technical)
+}
+
+func TestHandler_UpdateTemplate_NameOnly_LeavesAllSectionsAlone(t *testing.T) {
+	id := uuid.New()
+	svc := seededTemplateSvc(id)
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/templates/"+id.String(),
+		map[string]interface{}{"name": "Renamed"})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	assert.Equal(t, [4]string{"tech-A", "hosp-A", "back-A", "other-A"}, sectionsOf(t, body))
+	in := svc.lastTplUpdate
+	require.NotNil(t, in)
+	require.NotNil(t, in.Name)
+	assert.Equal(t, "Renamed", *in.Name)
+	assert.Equal(t, rider.RiderSectionPatch{}, in.RiderSectionPatch)
+}
+
+func TestHandler_UpdateAttachment_SingleSection_LeavesOtherSectionsAlone(t *testing.T) {
+	id := uuid.New()
+	svc := seededAttachmentSvc(id)
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/attachments/"+id.String(),
+		map[string]interface{}{"backline": "back-B"})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	assert.Equal(t, [4]string{"tech-A", "hosp-A", "back-B", "other-A"}, sectionsOf(t, body))
+	in := svc.lastAttUpdate
+	require.NotNil(t, in)
+	require.NotNil(t, in.Backline)
+	assert.Nil(t, in.Technical)
+	assert.Nil(t, in.Hospitality)
+	assert.Nil(t, in.OtherNotes)
+}
+
+func TestHandler_UpdateAttachment_EmptyString_ClearsOnlyThatSection(t *testing.T) {
+	id := uuid.New()
+	svc := seededAttachmentSvc(id)
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/attachments/"+id.String(),
+		map[string]interface{}{"otherNotes": ""})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	assert.Equal(t, [4]string{"tech-A", "hosp-A", "back-A", ""}, sectionsOf(t, body))
+	require.NotNil(t, svc.lastAttUpdate.OtherNotes)
+}
+
+func TestHandler_UpdateAttachment_EmptyBody_ChangesNothing(t *testing.T) {
+	id := uuid.New()
+	svc := seededAttachmentSvc(id)
+	rec, body := doRequest(t, newHandlerRoutes(svc), http.MethodPut, "/attachments/"+id.String(),
+		map[string]interface{}{})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	assert.Equal(t, [4]string{"tech-A", "hosp-A", "back-A", "other-A"}, sectionsOf(t, body))
+	assert.Equal(t, rider.RiderSectionPatch{}, svc.lastAttUpdate.RiderSectionPatch)
 }

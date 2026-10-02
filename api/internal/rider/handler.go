@@ -123,8 +123,8 @@ func (h *Handler) handleUpdateTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tpl, err := h.svc.UpdateTemplate(r.Context(), id, UpdateTemplateInput{
-		Name:               body.Name,
-		RiderSectionValues: body.toSectionValues(),
+		Name:              body.Name,
+		RiderSectionPatch: body.sectionPatch(),
 	})
 	if err != nil {
 		if errors.Is(err, ErrInvalidInput) {
@@ -231,7 +231,7 @@ func (h *Handler) handleUpdateAttachment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	att, err := h.svc.UpdateAttachment(r.Context(), id, UpdateAttachmentInput{
-		RiderSectionValues: body.toSectionValues(),
+		RiderSectionPatch: body.sectionPatch(),
 	})
 	if err != nil {
 		h.translateServiceError(w, err)
@@ -338,28 +338,16 @@ type updateTemplateRequest struct {
 	OtherNotes  *string `json:"otherNotes"`
 }
 
-// toSectionValues returns nil when every pointer is nil (caller is
-// only updating fields outside RiderSectionValues, like Name). Returns
-// a populated struct otherwise — every field is supplied so the service
-// layer can clear sections by sending empty strings.
-func (r *updateTemplateRequest) toSectionValues() *RiderSectionValues {
-	if r.Technical == nil && r.Hospitality == nil && r.Backline == nil && r.OtherNotes == nil {
-		return nil
+// sectionPatch forwards exactly the sections the client sent. A section that
+// is absent stays nil (column untouched); one sent as "" is a pointer to ""
+// (column cleared). Do not collapse these into plain strings.
+func (r *updateTemplateRequest) sectionPatch() RiderSectionPatch {
+	return RiderSectionPatch{
+		Technical:   r.Technical,
+		Hospitality: r.Hospitality,
+		Backline:    r.Backline,
+		OtherNotes:  r.OtherNotes,
 	}
-	out := &RiderSectionValues{}
-	if r.Technical != nil {
-		out.Technical = *r.Technical
-	}
-	if r.Hospitality != nil {
-		out.Hospitality = *r.Hospitality
-	}
-	if r.Backline != nil {
-		out.Backline = *r.Backline
-	}
-	if r.OtherNotes != nil {
-		out.OtherNotes = *r.OtherNotes
-	}
-	return out
 }
 
 type createAttachmentRequest struct {
@@ -387,24 +375,14 @@ type updateAttachmentRequest struct {
 	OtherNotes  *string `json:"otherNotes"`
 }
 
-func (r *updateAttachmentRequest) toSectionValues() *RiderSectionValues {
-	if r.Technical == nil && r.Hospitality == nil && r.Backline == nil && r.OtherNotes == nil {
-		return nil
+// sectionPatch: see updateTemplateRequest.sectionPatch.
+func (r *updateAttachmentRequest) sectionPatch() RiderSectionPatch {
+	return RiderSectionPatch{
+		Technical:   r.Technical,
+		Hospitality: r.Hospitality,
+		Backline:    r.Backline,
+		OtherNotes:  r.OtherNotes,
 	}
-	out := &RiderSectionValues{}
-	if r.Technical != nil {
-		out.Technical = *r.Technical
-	}
-	if r.Hospitality != nil {
-		out.Hospitality = *r.Hospitality
-	}
-	if r.Backline != nil {
-		out.Backline = *r.Backline
-	}
-	if r.OtherNotes != nil {
-		out.OtherNotes = *r.OtherNotes
-	}
-	return out
 }
 
 // ─── Response serialisation ─────────────────────────────────────────────────

@@ -88,13 +88,24 @@ type CreateTemplateInput struct {
 	RiderSectionValues
 }
 
+// RiderSectionPatch is the partial-update counterpart of RiderSectionValues:
+// each section is independently optional. A nil pointer leaves that column
+// alone; a pointer to "" clears it. Plain strings cannot express that
+// difference, which is how a PUT carrying only {"technical": "..."} used to
+// blank the other three sections.
+type RiderSectionPatch struct {
+	Technical   *string `json:"technical,omitempty"`
+	Hospitality *string `json:"hospitality,omitempty"`
+	Backline    *string `json:"backline,omitempty"`
+	OtherNotes  *string `json:"otherNotes,omitempty"`
+}
+
 // UpdateTemplateInput supports partial updates. Every field is a pointer so
-// the caller can distinguish "set to empty string" from "leave alone".
-// RiderSectionValues is non-nil when the user is updating any section; nil
-// means "only the Name field is being updated".
+// the caller can distinguish "set to empty string" from "leave alone", per
+// field (name and each section independently).
 type UpdateTemplateInput struct {
 	Name *string `json:"name,omitempty"`
-	*RiderSectionValues
+	RiderSectionPatch
 }
 
 // CreateAttachmentInput is the request shape for creating a per-gig copy.
@@ -108,10 +119,9 @@ type CreateAttachmentInput struct {
 }
 
 // UpdateAttachmentInput supports per-section overrides. nil pointers leave
-// columns alone; the inline RiderSectionValues is nil-safe as a whole
-// because each section is independently optional.
+// columns alone; each section is independently optional.
 type UpdateAttachmentInput struct {
-	*RiderSectionValues
+	RiderSectionPatch
 }
 
 // RepoIface is the contract the service layer consumes. All read paths

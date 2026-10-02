@@ -93,21 +93,9 @@ func (m *fakeRepo) UpdateTemplate(_ context.Context, id uuid.UUID, in UpdateTemp
 	if in.Name != nil {
 		t.Name = *in.Name
 	}
-	// Mirror the real Repository's COALESCE semantics: a non-nil pointer
-	// in RiderSectionValues updates that column; a nil pointer leaves it
-	// alone. The umbrella non-nil check is a no-op for column-level
-	// behaviour but still matches the contract.
-	if in.RiderSectionValues != nil {
-		// Distinguish "field absent" (column unchanged) from "field present
-		// and empty" (column cleared) by treating the section struct as
-		// the only signal — every field is always provided by the
-		// caller; only the absence of the whole RiderSectionValues
-		// means "leave alone".
-		t.Technical = in.Technical
-		t.Hospitality = in.Hospitality
-		t.Backline = in.Backline
-		t.OtherNotes = in.OtherNotes
-	}
+	// Mirror the real Repository's COALESCE semantics per field: a non-nil
+	// pointer updates that column (even to ""); a nil pointer leaves it alone.
+	applyPatch(in.RiderSectionPatch, &t.Technical, &t.Hospitality, &t.Backline, &t.OtherNotes)
 	t.UpdatedAt = time.Now()
 	return t, nil
 }
@@ -187,14 +175,25 @@ func (m *fakeRepo) UpdateAttachment(_ context.Context, id uuid.UUID, in UpdateAt
 	if !ok || a.DeletedAt != nil {
 		return nil, ErrNotFound
 	}
-	if in.RiderSectionValues != nil {
-		a.Technical = in.Technical
-		a.Hospitality = in.Hospitality
-		a.Backline = in.Backline
-		a.OtherNotes = in.OtherNotes
-	}
+	applyPatch(in.RiderSectionPatch, &a.Technical, &a.Hospitality, &a.Backline, &a.OtherNotes)
 	a.UpdatedAt = time.Now()
 	return a, nil
+}
+
+// applyPatch sets each destination only when its patch pointer is non-nil.
+func applyPatch(p RiderSectionPatch, tech, hosp, back, other *string) {
+	if p.Technical != nil {
+		*tech = *p.Technical
+	}
+	if p.Hospitality != nil {
+		*hosp = *p.Hospitality
+	}
+	if p.Backline != nil {
+		*back = *p.Backline
+	}
+	if p.OtherNotes != nil {
+		*other = *p.OtherNotes
+	}
 }
 
 func (m *fakeRepo) SoftDeleteAttachment(_ context.Context, id uuid.UUID) error {
@@ -293,19 +292,11 @@ func TestFakeRepo_UpdateTemplate_PartialOnlyUpdatesNamedFields(t *testing.T) {
 			OtherNotes:  "other-A",
 		},
 	})
-	// Update Name + RiderSectionValues explicitly sent with one new
-	// field. Because RiderSectionValues is a value type (not pointers),
-	// supplying it replaces all four sections wholesale; to keep the
-	// "only NamedFields updated" property, supply the unchanged values
-	// too. The umbrella nil check is the only granularity gate.
+	// Name + one section: the other three sections are not mentioned, so
+	// they must be left alone.
 	updated, err := repo.UpdateTemplate(context.Background(), tpl.ID, UpdateTemplateInput{
-		Name: ptr("Renamed"),
-		RiderSectionValues: &RiderSectionValues{
-			Technical:   "tech-B",
-			Hospitality: "hosp-A",
-			Backline:    "back-A",
-			OtherNotes:  "other-A",
-		},
+		Name:              ptr("Renamed"),
+		RiderSectionPatch: RiderSectionPatch{Technical: ptr("tech-B")},
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
@@ -404,7 +395,7 @@ func TestFakeRepo_UpdateAttachment_DoesNotChangeTemplateID(t *testing.T) {
 		TemplateID: &tpl.ID,
 	})
 	updated, err := repo.UpdateAttachment(context.Background(), att.ID, UpdateAttachmentInput{
-		RiderSectionValues: &RiderSectionValues{Technical: "new"},
+		RiderSectionPatch: RiderSectionPatch{Technical: ptr("new")},
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
@@ -447,12 +438,7 @@ func TestFakeRepo_UpdateAttachment_ThenGetReturnsNewValues(t *testing.T) {
 		},
 	})
 	updated, err := repo.UpdateAttachment(context.Background(), att.ID, UpdateAttachmentInput{
-		RiderSectionValues: &RiderSectionValues{
-			Technical:   "new-tech",
-			Hospitality: "old-hosp",
-			Backline:    "old-back",
-			OtherNotes:  "old-other",
-		},
+		RiderSectionPatch: RiderSectionPatch{Technical: ptr("new-tech")},
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
