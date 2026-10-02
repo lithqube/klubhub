@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Social Media Scheduler** - Instagram OAuth, timezone-aware post scheduling, retry with backoff, queue/calendar view
 - [x] **Phase 3: EPK / Press Kit Builder** - Artist bio, press photos, tech rider, PDF export with section control, export history
 - [x] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, GigReader interface for downstream modules
-- [x] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export (RIDER-01..05; IN PROGRESS 2026-09-30 on branch `feat/phase-4.5-rider-templates`)
+- [ ] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export (RIDER-01..05; IN PROGRESS 2026-09-30 on branch `feat/phase-4.5-rider-templates`)
 - [ ] **Phase 4.8: Bandsintown Sync** - INSERTED (optional) — Outbound event push to Bandsintown on gig confirmed
 - [x] **Phase 5: Finance Tracker** - Income & expense ledger, multi-currency summaries, gig-linked auto-income, in-app FIN-04/05 reconciliation prompts, plus invoices/payments, versioned PDFs, event agreements and explicit email sends
 - [ ] **Phase 6: Release Planner** - Release CRUD with status workflow, deadline tracking, promo checklist with customizable default template

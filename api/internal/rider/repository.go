@@ -59,7 +59,11 @@ func (r *Repository) GetTemplate(ctx context.Context, id uuid.UUID) (*RiderTempl
 		       created_at, updated_at, deleted_at
 		FROM rider_templates
 		WHERE id = $1 AND deleted_at IS NULL`, id)
-	return scanTemplate(row)
+	t, err := scanTemplate(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return t, err
 }
 
 // CreateTemplate inserts a new template row and returns the populated

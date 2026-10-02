@@ -157,7 +157,7 @@ Filename: `rider-<gig-id>.pdf` (Garage key: `rider/exports/<attachment-id>.pdf`)
 - `api/internal/rider/repository_test.go` — contract tests with `fakeRiderRepo`
 - `api/internal/rider/service_test.go` — service tests with fakes
 - `api/internal/rider/handler_test.go` — handler tests via httptest.Server
-- `api/internal/platform/migrations/024_rider_templates.sql`
+- `api/internal/platform/migrations/026_rider_templates.sql`
 
 **Backend (modified):**
 - `api/cmd/api/main.go` — wire `rider.NewMux` into the router
@@ -203,7 +203,7 @@ Filename: `rider-<gig-id>.pdf` (Garage key: `rider/exports/<attachment-id>.pdf`)
 
 ## Plan breakdown (5 plans, matching GSD pattern)
 
-1. `04.5-01-PLAN.md` — data layer: migration 024, `rider_model.go`, `rider_repository.go` (with `deleted_at` soft-delete), contract tests
+1. `04.5-01-PLAN.md` — data layer: migration 026, `rider_model.go`, `rider_repository.go` (with `deleted_at` soft-delete), contract tests
 2. `04.5-02-PLAN.md` — service + PDF: `rider_service.go`, `rider_pdf.go`, template copy semantics, attachment CRUD, unit tests
 3. `04.5-03-PLAN.md` — HTTP layer: `rider_handler.go`, `rider_mux.go`, full `/api/v1/rider/*` surface, contract tests via httptest
 4. `04.5-04-PLAN.md` — backend wiring: `cmd/api/main.go` mounts rider mux; mock handlers at `apps/dj/server/api/v1/rider/*` for FE-only dev; E2E sanity check
