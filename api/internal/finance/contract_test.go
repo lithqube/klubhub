@@ -52,6 +52,7 @@ func (f *fakeRepo) Update(ctx context.Context, req *UpdateBillingProfileRequest)
 	cp.DefaultCurrency = req.DefaultCurrency
 	cp.VATExemptSmallBusiness = req.VATExemptSmallBusiness
 	cp.DefaultVATRateBps = req.DefaultVATRateBps
+	cp.TaxNumber, cp.IBAN, cp.BIC = req.TaxNumber, req.IBAN, req.BIC
 	// Advance from the token value passed in, so the test assertion against
 	// repo.current.UpdatedAt passes.
 	cp.UpdatedAt = req.UpdatedAt.Add(time.Millisecond)

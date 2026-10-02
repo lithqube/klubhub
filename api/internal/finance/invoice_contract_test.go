@@ -65,9 +65,13 @@ func (f *fakeInvoiceRepo) CreateDraft(_ context.Context, in DraftInput) (*Invoic
 	}
 	f.invoices[inv.ID] = inv
 	for i, l := range in.Lines {
+		unit := l.UnitCode
+		if unit == "" {
+			unit = DefaultUnitCode
+		}
 		f.lines[inv.ID] = append(f.lines[inv.ID], &InvoiceLine{
 			ID: uuid.New(), InvoiceID: inv.ID, SortOrder: i, Description: l.Description, Quantity: l.Quantity,
-			UnitMinor: l.UnitMinor, TaxBps: t.LineTaxBps[i], LineTotalMinor: int64(l.Quantity) * l.UnitMinor, CreatedAt: now,
+			UnitMinor: l.UnitMinor, UnitCode: unit, TaxBps: t.LineTaxBps[i], LineTotalMinor: int64(l.Quantity) * l.UnitMinor, CreatedAt: now,
 		})
 	}
 	return f.snapshot(inv), nil
@@ -125,11 +129,22 @@ func (f *fakeInvoiceRepo) UpdateDraft(_ context.Context, id uuid.UUID, req Updat
 	if !isDraft(inv) {
 		return nil, ErrInvoiceBadState
 	}
+	if req.Lines != nil {
+		f.lines[id] = nil
+		for i, l := range req.Lines {
+			f.lines[id] = append(f.lines[id], &InvoiceLine{
+				ID: uuid.New(), InvoiceID: id, SortOrder: i, Description: l.Description, Quantity: l.Quantity,
+				UnitMinor: l.UnitMinor, UnitCode: l.UnitCode, LineTotalMinor: int64(l.Quantity) * l.UnitMinor, CreatedAt: inv.CreatedAt,
+			})
+		}
+	}
 	lines := f.lines[id]
 	taxLines := make([]tax.Line, len(lines))
 	for i, l := range lines {
 		taxLines[i] = tax.Line{NetMinor: l.LineTotalMinor}
 	}
+	inv.BuyerReference, inv.PurchaseOrderRef, inv.ContractRef, inv.PaymentTerms =
+		req.BuyerReference, req.PurchaseOrderRef, req.ContractRef, req.PaymentTerms
 	t := tax.ComputeTotals(taxLines, req.TaxRateBps, req.WithholdingRateBps)
 	for i, l := range lines {
 		l.TaxBps = t.LineTaxBps[i]
