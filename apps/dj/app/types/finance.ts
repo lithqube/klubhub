@@ -132,6 +132,16 @@ export interface IssueCheck {
   problems: IssueProblem[]
 }
 
+/** Structured e-invoice formats the server can produce for a numbered invoice. */
+export type EInvoiceFormat = 'facturx' | 'xrechnung-cii' | 'xrechnung-ubl'
+
+export interface EInvoiceCheck {
+  format: EInvoiceFormat
+  ready: boolean
+  /** What stops the export; `field` is the same dotted path as issue problems. */
+  problems: IssueProblem[]
+}
+
 export interface TaxSuggestion {
   vat_treatment: VatTreatment
   tax_rate_bps: number

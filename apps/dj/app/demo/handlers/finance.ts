@@ -53,6 +53,8 @@ export function registerFinance(r: DemoRouter): void {
         headers: { 'content-disposition': `attachment; filename="${pdf.name}"` },
       }
     })
+    .on('GET', `${B}/invoices/:id/einvoice-check`, (req, c) => res(ops.einvoiceCheck(c.finance, req.params.id!, query(req).format ?? '')))
+    .on('GET', `${B}/invoices/:id/einvoice`, (req, c) => res(ops.einvoiceCheck(c.finance, req.params.id!, query(req).format ?? '')))
     .on('GET', `${B}/invoices/:id/issue-check`, (req, c) => res(ops.issueCheck(c.finance, req.params.id!)))
     .on('POST', `${B}/invoices/:id/issue`, (req, c) => res(ops.issueInvoice(c.finance, req.params.id!, body(req))))
     .on('POST', `${B}/invoices/:id/cancel`, (req, c) => res(ops.cancelInvoice(c.finance, req.params.id!, body(req))))

@@ -854,3 +854,14 @@ export function invoicePdfLines(db: FinanceMockDb, id: string): { name: string; 
   out.push({ text: ' ' }, { text: `Subtotal: ${money(inv.subtotal_minor)}` }, { text: `Tax: ${money(inv.tax_minor)}` }, { text: `Total: ${money(inv.total_minor)}`, bold: true })
   return { name: `${label}.pdf`, lines: out }
 }
+
+const EINVOICE_FORMATS = ['facturx', 'xrechnung-cii', 'xrechnung-ubl']
+
+/** The browser-only mock has no generator, like a server without EINVOICE_URL. */
+export function einvoiceCheck(db: FinanceMockDb, id: string, format: string): MockResult {
+  if (!EINVOICE_FORMATS.includes(format)) return fail(400, 'validation_failed', 'format must be one of ' + EINVOICE_FORMATS.join(', '))
+  const inv = db.invoices.get(id)
+  if (!inv) return notFound()
+  if (inv.status === 'draft' || inv.status === 'cancelled') return fail(409, 'bad_state', 'only numbered invoices have an e-invoice')
+  return fail(503, 'service_unavailable', 'E-invoice export is not enabled on this server.')
+}

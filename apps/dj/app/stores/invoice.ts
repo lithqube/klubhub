@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
+  EInvoiceCheck,
+  EInvoiceFormat,
   FinanceErrorBody,
   FinanceErrorCode,
   Invoice,
@@ -90,6 +92,11 @@ export function toFinanceError(e: unknown): FinanceApiError {
 /** GET endpoint returning the invoice PDF as an attachment. Link to it; never fetch it into memory. */
 export function invoicePdfUrl(id: string): string {
   return `${BASE}/invoices/${encodeURIComponent(id)}/pdf`
+}
+
+/** GET endpoint returning a validated e-invoice as an attachment. Link to it; never fetch it into memory. */
+export function invoiceEInvoiceUrl(id: string, format: EInvoiceFormat): string {
+  return `${BASE}/invoices/${encodeURIComponent(id)}/einvoice?format=${encodeURIComponent(format)}`
 }
 
 function unwrap<T>(res: unknown): T {
@@ -255,6 +262,23 @@ export const useInvoiceStore = defineStore('invoice', () => {
       return normalized
     } finally {
       if (isCurrent()) issueCheckLoading.value = false
+    }
+  }
+
+  /**
+   * Asks whether an invoice can be exported as `format`. Resolves to null when
+   * this server has no e-invoice generator (503). That is deliberately not
+   * `request()`: a missing generator must not mark all of finance disabled.
+   */
+  async function fetchEInvoiceCheck(id: string, format: EInvoiceFormat): Promise<EInvoiceCheck | null> {
+    try {
+      const res = await $fetch<unknown>(`${BASE}/invoices/${encodeURIComponent(id)}/einvoice-check`, { query: { format } })
+      const chk = unwrap<EInvoiceCheck>(res)
+      return { format, ready: !!chk?.ready, problems: chk?.problems ?? [] }
+    } catch (e) {
+      const err = toFinanceError(e)
+      if (err.code === 'unavailable') return null
+      throw err
     }
   }
 
@@ -641,7 +665,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
     // getters
     filteredInvoices, filterCounts, activeInvoiceByGig, gigById,
     // actions
-    fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck,
+    fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck, fetchEInvoiceCheck,
     fetchGigOptions, suggestTax, taxNotes, fetchTaxNotes, closeCurrent,
     createInvoice, updateInvoice, issueInvoice, cancelInvoice, markPaid,
     issueCreditNote, correctInvoice, createPayment, markPaymentReceived,
