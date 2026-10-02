@@ -220,6 +220,10 @@ func run() error {
 		InstagramRedirectURI: cfg.InstagramRedirectURI,
 		TokenEncryptionKey:   []byte(cfg.TokenEncryptionKey),
 	}, socialStateStore)
+	// C.1: Post-image uploads go through the Service so it owns the
+	// validation + S3-write + DB-update sequence as a single unit.
+	// Worker keeps its own (presign-side) view of storage.
+	socialSvc.SetStorage(storeClient)
 	socialHandler := social.NewHandler(socialSvc, storeClient)
 
 	// 7a. Wire and start the background publish worker. The returned
