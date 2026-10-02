@@ -194,6 +194,9 @@ func (r *EntryRepository) get(ctx context.Context, id uuid.UUID, includeDeleted 
 	if err != nil {
 		return nil, fmt.Errorf("get finance entry: %w", err)
 	}
+	if err := r.fillAttachmentCounts(ctx, &e); err != nil {
+		return nil, err
+	}
 	return &e, nil
 }
 
@@ -231,7 +234,10 @@ func (r *EntryRepository) List(ctx context.Context, f EntryFilter) ([]*Entry, er
 		  AND ($5::uuid IS NULL OR gig_id=$5)
 		  AND ($6='' OR entry_date >= $6::date)
 		  AND ($7='' OR entry_date < $7::date)
-		ORDER BY entry_date DESC, created_at DESC, id DESC`, f.Kind, f.Status, f.Currency, f.Category, f.GigID, f.From, f.To)
+		  AND ($8='' OR ($8='missing' AND kind='expense' AND status='active'
+		                 AND NOT EXISTS (SELECT 1 FROM finance_entry_attachments a WHERE a.entry_id = finance_entries.id))
+		             OR ($8='present' AND EXISTS (SELECT 1 FROM finance_entry_attachments a WHERE a.entry_id = finance_entries.id)))
+		ORDER BY entry_date DESC, created_at DESC, id DESC`, f.Kind, f.Status, f.Currency, f.Category, f.GigID, f.From, f.To, string(f.Receipt))
 	if err != nil {
 		return nil, fmt.Errorf("list finance entries: %w", err)
 	}
@@ -247,7 +253,40 @@ func (r *EntryRepository) List(ctx context.Context, f EntryFilter) ([]*Entry, er
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list finance entries: %w", err)
 	}
+	if err := r.fillAttachmentCounts(ctx, entries...); err != nil {
+		return nil, err
+	}
 	return entries, nil
+}
+
+// fillAttachmentCounts sets AttachmentCount on every entry with one query, so
+// a list of N rows costs two round trips, not N+1.
+func (r *EntryRepository) fillAttachmentCounts(ctx context.Context, entries ...*Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	byID := make(map[uuid.UUID]*Entry, len(entries))
+	ids := make([]uuid.UUID, len(entries))
+	for i, e := range entries {
+		byID[e.ID], ids[i] = e, e.ID
+	}
+	rows, err := r.pool.Query(ctx, `SELECT entry_id, count(*)::int FROM finance_entry_attachments
+		WHERE entry_id = ANY($1) GROUP BY entry_id`, ids)
+	if err != nil {
+		return fmt.Errorf("count finance entry attachments: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return fmt.Errorf("scan attachment count: %w", err)
+		}
+		if e := byID[id]; e != nil {
+			e.AttachmentCount = n
+		}
+	}
+	return rows.Err()
 }
 
 func (r *EntryRepository) Update(ctx context.Context, id uuid.UUID, req UpdateEntryRequest) (*Entry, error) {
@@ -269,6 +308,9 @@ func (r *EntryRepository) Update(ctx context.Context, id uuid.UUID, req UpdateEn
 			return nil, EntryValidationErrors{{Field: "gig_id", Message: "does not reference an existing gig"}}
 		}
 		return nil, fmt.Errorf("update finance entry: %w", err)
+	}
+	if err := r.fillAttachmentCounts(ctx, &e); err != nil {
+		return nil, err
 	}
 	return &e, nil
 }
@@ -295,6 +337,9 @@ func (r *EntryRepository) Void(ctx context.Context, id uuid.UUID, updatedAt time
 	}
 	if err != nil {
 		return nil, fmt.Errorf("void finance entry: %w", err)
+	}
+	if err := r.fillAttachmentCounts(ctx, &e); err != nil {
+		return nil, err
 	}
 	return &e, nil
 }

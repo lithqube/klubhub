@@ -477,7 +477,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 		logger.Info().Msg("finance email disabled: PLUNK_BASE_URL, PLUNK_PROJECT_ID and PLUNK_API_KEY(_FILE) are not all set")
 	}
 
-	return finance.NewMux(
+	mux := finance.NewMux(
 		finance.NewHandler(billingSvc),
 		finance.NewInvoiceHandler(invoiceSvc),
 		finance.NewPaymentHandler(paymentSvc),
@@ -487,6 +487,13 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 		emailHandler,
 		finance.NewEntryHandler(entrySvc),
 	)
+	// Receipts on ledger entries need object storage; without it
+	// /entries/{id}/attachments answers 503 and the rest of finance is unaffected.
+	if storeClient != nil {
+		mux.WithAttachments(finance.NewAttachmentHandler(finance.NewAttachmentService(
+			finance.NewAttachmentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)))
+	}
+	return mux
 }
 
 // raClient is everything the RA-backed handlers need from the Resident
