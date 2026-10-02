@@ -99,7 +99,7 @@ func NewRouter(
 	}
 
 	// Rider templates: per-gig rider copies attached to gigs.
-	// rider.Mux parses the full /api/v1/rider/... path itself.
+	// riderHandler is rider.Handler.Routes(); chi's Mount strips the prefix.
 	if riderHandler != nil {
 		r.Mount("/api/v1/rider", riderHandler)
 	}

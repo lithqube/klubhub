@@ -133,7 +133,7 @@ func TestMux_NilAttachmentsHandler_Returns503(t *testing.T) {
 // chi router inside handler.Routes() matches against the full path, not
 // the stripped one. Confirms the contract documented in finance/mux.go.
 func TestMux_StripsPrefixToInnerHandler(t *testing.T) {
-	inner := rider.NewHandler(&mockService{}, nil).Routes()
+	inner := rider.NewHandler(&mockService{}).Routes()
 	mux := rider.NewMux(inner, inner)
 	r := chi.NewRouter()
 	r.Mount("/api/v1/rider", mux)

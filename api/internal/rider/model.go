@@ -1,6 +1,7 @@
 package rider
 
 import (
+	"fmt"
 	"context"
 	"errors"
 	"time"
@@ -31,6 +32,14 @@ var (
 	// or device) after the caller read it. Nothing was applied. Maps to 409.
 	ErrStaleUpdate = errors.New("rider record was changed since it was read")
 )
+
+// nameTakenError is returned when a template name is already used by another
+// live template (case-insensitive). It wraps ErrInvalidInput, so it maps to
+// 422: it is a problem with the submitted value, and must not look like the
+// 409 "changed elsewhere" conflict the editors treat specially.
+func nameTakenError(name string) error {
+	return fmt.Errorf("%w: a template named %q already exists", ErrInvalidInput, name)
+}
 
 // GigReader is the subset of gig.GigReader the rider service uses to
 // resolve a gig's venue and date for PDF rendering. Declared in this
