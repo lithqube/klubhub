@@ -170,6 +170,8 @@ func writePaymentRuleError(w http.ResponseWriter, err error) bool {
 	switch {
 	case errors.Is(err, ErrPaymentInvoiceState):
 		writeError(w, http.StatusUnprocessableEntity, "invoice_not_payable", err.Error())
+	case errors.Is(err, ErrPaymentKindNotAllowed):
+		writeError(w, http.StatusUnprocessableEntity, "payment_kind_not_allowed", err.Error())
 	case errors.Is(err, ErrPaymentExceedsBalance):
 		writeError(w, http.StatusUnprocessableEntity, "exceeds_balance", err.Error())
 	default:

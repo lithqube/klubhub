@@ -290,8 +290,13 @@ func run() error {
 
 	// 9b. Wire finance module (billing profile, invoices, payments,
 	// agreements, email). Documents have no HTTP surface yet (nil → 503);
-	// the document service is still used by agreements to store PDFs.
-	financeHandler := buildFinanceHandler(cfg, pool, storeClient, transitionProcessor, logger)
+	// agreement PDF generation is explicitly unsupported and creates no artifacts.
+	financeHandler, emailDone := buildFinanceRuntime(ctx, cfg, pool, storeClient, transitionProcessor, logger)
+	// Always cancel and drain email before deferred database teardown, even
+	// on ListenAndServe failure (not only the signal shutdown path).
+	defer func() { cancel(); <-emailDone }()
+	allWorkersDone := make(chan struct{})
+	go func() { <-workerDone; <-emailDone; close(allWorkersDone) }()
 
 	// 9c. Wire rider module (Phase 4.5 — RIDER-01..05). Rider PDFs need
 	// the gig's venue and date, so SetGigReader is called after gigSvc
@@ -368,7 +373,7 @@ func run() error {
 	// should equal docker-compose's `stop_grace_period` for the api
 	// service to avoid SIGKILL during drain.
 	shutdownTimeout := time.Duration(cfg.ShutdownTimeoutSec) * time.Second
-	if err := gracefulShutdown(srv, workerDone, shutdownTimeout, logger); err != nil {
+	if err := gracefulShutdown(srv, allWorkersDone, shutdownTimeout, logger); err != nil {
 		// Non-fatal from the container's POV: the process is exiting
 		// anyway. Surface for logs/metrics but don't propagate (matches
 		// the pre-B.3 behavior of returning nil when server closed).
@@ -419,10 +424,21 @@ func runHealthcheck() int {
 	return 0
 }
 
+// buildFinanceRuntime owns delivery lifecycle separately from route composition.
+func buildFinanceRuntime(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger) (*finance.Mux, <-chan struct{}) {
+	disabledDone := make(chan struct{})
+	close(disabledDone)
+	var done <-chan struct{} = disabledDone
+	handler := buildFinanceHandler(cfg, pool, storeClient, transitionProcessor, logger, func(svc *finance.EmailService) {
+		done = svc.StartWorker(ctx, 5*time.Second, func(err error) { logger.Error().Err(err).Msg("finance email recovery failed") })
+	})
+	return handler, done
+}
+
 // buildFinanceHandler composes the finance routes. Email is only mounted
 // when Plunk is fully configured; otherwise /finance/emails answers 503
 // instead of queuing mail that can never be delivered.
-func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger) *finance.Mux {
+func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger, startWorker ...func(*finance.EmailService)) *finance.Mux {
 	billingSvc := finance.NewService(finance.NewRepository(pool))
 	invoiceSvc := finance.NewInvoiceService(finance.NewInvoiceRepository(pool), billingSvc, finance.NewPGGigFeeProvider(pool))
 	// The transition processor is shared with the gig service so the
@@ -446,7 +462,11 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 			FromEmail: cfg.PlunkFromEmail,
 			FromName:  cfg.PlunkFromName,
 		})
-		emailHandler = finance.NewEmailHandler(finance.NewEmailService(finance.NewEmailRepository(pool), sender))
+		emailSvc := finance.NewEmailService(finance.NewEmailRepository(pool), sender)
+		emailHandler = finance.NewEmailHandler(emailSvc)
+		if len(startWorker) > 0 {
+			startWorker[0](emailSvc)
+		}
 		logger.Info().Str("plunk_base_url", cfg.PlunkBaseURL).Msg("finance email enabled (plunk)")
 	} else {
 		logger.Info().Msg("finance email disabled: PLUNK_BASE_URL, PLUNK_PROJECT_ID and PLUNK_API_KEY(_FILE) are not all set")

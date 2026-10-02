@@ -9,11 +9,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 )
 
 // PGGigFeeProvider reads the fee for an invoice straight from the gigs
 // table (005_gigs.sql). The gig module stores fees as DECIMAL(12,2) major
-// units; Postgres does the ×100 so no float ever touches the amount.
+// units; gigFeeToMinor converts to integer minor units using the
+// currency's own exponent (zero-decimal JPY 0, three-decimal BHD 3,
+// everything else 2), so a flat ×100 over a JPY fee is rejected as
+// over-precision rather than silently overstating it 100×.
 type PGGigFeeProvider struct {
 	pool *pgxpool.Pool
 }
@@ -33,22 +37,29 @@ func NewPGGigFeeProvider(pool *pgxpool.Pool) *PGGigFeeProvider {
 // email only.
 func (p *PGGigFeeProvider) GetGigFeeInfo(ctx context.Context, gigID uuid.UUID) (*GigFeeInfo, error) {
 	var (
-		feeMinor                    int64
+		feeMajor                    decimal.Decimal
 		currency, event             string
 		venue, city, date           string
 		promoterName, promoterEmail string
 		readerContactID             *uuid.UUID
 	)
 	err := p.pool.QueryRow(ctx, `
-		SELECT (fee_amount * 100)::BIGINT, upper(fee_currency), event_name, venue, city,
+		SELECT fee_amount, upper(fee_currency), event_name, venue, city,
 		       to_char(date, 'YYYY-MM-DD'), promoter_name, promoter_email, gig_reader_contact_id
 		FROM gigs WHERE id = $1 AND deleted_at IS NULL`, gigID).
-		Scan(&feeMinor, &currency, &event, &venue, &city, &date, &promoterName, &promoterEmail, &readerContactID)
+		Scan(&feeMajor, &currency, &event, &venue, &city, &date, &promoterName, &promoterEmail, &readerContactID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrInvoiceNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("load gig fee: %w", err)
+	}
+	var feeMinor int64
+	if !feeMajor.IsZero() {
+		feeMinor, err = gigFeeToMinor(feeMajor, currency)
+		if err != nil {
+			return nil, fmt.Errorf("convert gig fee: %w", err)
+		}
 	}
 	customer, err := p.customerFor(ctx, gigID, readerContactID)
 	if err != nil {

@@ -3,7 +3,7 @@
 // issue checklist. Form input is local and only re-seeded when a different
 // invoice is shown or a save succeeds, so a 409 refetch never wipes what the
 // user typed; they review the banner and press SAVE again themselves.
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { Invoice, InvoiceTaxFieldsValue, InvoiceUpdateInput, Party } from '../../types/finance'
 import { useInvoiceStore, toFinanceError } from '../../stores/invoice'
@@ -54,6 +54,16 @@ function fromInvoice(inv: Invoice): DraftForm {
 
 const form = reactive<DraftForm>(fromInvoice(props.invoice))
 const baseline = ref(JSON.stringify(fromInvoice(props.invoice)))
+// FE-2: the invoice's T1 token captured when the editor opened (or last
+// reloaded). Always paired with the form fields, never borrowed from the
+// Pinia cache after a same-id refresh.
+const originalUpdatedAt = ref(props.invoice.updated_at)
+// FE-2: non-null while conflicted. The form stays on T1 fields, Save is
+// blocked, and the explicit DISCARD CHANGES AND RELOAD button adopts T2
+// fields + T2 token together.
+const conflictRemote = ref<Invoice | null>(null)
+const conflicted = computed(() => conflictRemote.value !== null)
+const reloadBtn = ref<HTMLButtonElement | null>(null)
 const taxValid = ref(true)
 const saving = ref(false)
 const saveError = ref('')
@@ -65,12 +75,21 @@ function reseed(inv: Invoice): void {
   Object.assign(form, next)
   baseline.value = JSON.stringify(next)
   serverField.value = null
+  // FE-2: a successful reseed adopts both the new fields AND the new
+  // version token, clearing any prior conflict state.
+  originalUpdatedAt.value = inv.updated_at
+  conflictRemote.value = null
 }
 
+let lifetime = 0
+let alive = true
+onBeforeUnmount(() => { alive = false; lifetime++ })
 watch(() => props.invoice.id, () => {
+  lifetime++
+  saving.value = false
   reseed(props.invoice)
   saveError.value = ''
-})
+}, { flush: 'sync' })
 
 const dirty = computed(() => JSON.stringify(form) !== baseline.value)
 
@@ -93,7 +112,7 @@ const fieldErrors = computed(() => {
   return { ...merged, ...localErrors.value }
 })
 
-const canSave = computed(() => dirty.value && !saving.value && taxValid.value && Object.keys(localErrors.value).length === 0)
+const canSave = computed(() => !conflicted.value && dirty.value && !saving.value && taxValid.value && Object.keys(localErrors.value).length === 0)
 
 function input(): InvoiceUpdateInput {
   return {
@@ -107,31 +126,73 @@ function input(): InvoiceUpdateInput {
     due_at: toApiTime(form.due_at),
     number_prefix: form.number_prefix.trim().toUpperCase(),
     internal_notes: form.internal_notes,
+    // FE-2: pair T1 fields with the T1 token captured on open / reload.
+    updated_at: originalUpdatedAt.value,
   }
 }
 
 async function save(): Promise<void> {
   if (!canSave.value) return
+  const generation = lifetime
+  const id = props.invoice.id
+  const isCurrent = () => alive && generation === lifetime
   saving.value = true
   saveError.value = ''
   serverField.value = null
   try {
-    const inv = await store.updateInvoice(props.invoice.id, input())
+    const inv = await store.updateInvoice(id, input(), isCurrent)
+    if (!isCurrent()) return
     reseed(inv)
     emit('saved', inv)
   } catch (e) {
+    if (!isCurrent()) return
     const err = toFinanceError(e)
-    if (err.code === 'validation_failed' && err.field) {
+    if (err.code === 'conflict') {
+      // FE-2: the store has already kicked off the authoritative GET
+      // for this id; once it lands, `store.current` holds T2. The form
+      // keeps the user's unsaved T1 draft, Save is blocked, and the
+      // explicit DISCARD CHANGES AND RELOAD button adopts both fields
+      // and the new token together.
+      saveError.value = 'This invoice changed elsewhere. Discard your changes and reload to continue.'
+      conflictRemote.value = store.current && store.current.id === props.invoice.id ? store.current : null
+      // Move focus to the only way forward so keyboard/AT users land on it.
+      await nextTick()
+      if (isCurrent()) reloadBtn.value?.focus()
+    } else if (err.code === 'validation_failed' && err.field) {
       const msg = err.message.replace(/^validation failed:\s*/, '')
       serverField.value = { field: err.field, message: msg }
       saveError.value = `Check ${err.field.replace(/[._]/g, ' ')}: ${msg}`
       await nextTick()
-      focusField(err.field)
+      if (isCurrent()) focusField(err.field)
     } else {
       saveError.value = inlineErrorMessage(err) ?? ''
     }
   } finally {
-    saving.value = false
+    if (isCurrent()) saving.value = false
+  }
+}
+
+/** FE-2: explicitly adopt T2 fields + T2 token together. Save remains
+ * disabled while conflicted, so this is the only path back to a savable
+ * editor when the remote snapshot has diverged. */
+async function discardAndReload(): Promise<void> {
+  if (saving.value) return
+  const generation = lifetime
+  const id = props.invoice.id
+  const isCurrent = () => alive && lifetime === generation
+  saving.value = true
+  try {
+    const remote = await store.fetchInvoice(id)
+    if (!isCurrent()) return
+    if (!remote) {
+      // fetchInvoice records currentError only for a failed (not superseded) read.
+      if (store.currentError) saveError.value = 'Could not reload the invoice.'
+      return
+    }
+    reseed(remote)
+    saveError.value = ''
+  } finally {
+    if (isCurrent()) saving.value = false
   }
 }
 
@@ -237,9 +298,29 @@ const CUSTOMER_REQUIRED: (keyof Party)[] = ['legal_name', 'address_line1', 'city
     </div>
 
     <div class="draft-save">
-      <p class="draft-status" :class="{ 'draft-msg-error': !!saveError }" aria-live="polite">
+      <p
+        class="draft-status"
+        :class="{ 'draft-msg-error': !!saveError }"
+        :role="conflicted ? 'alert' : undefined"
+        :aria-live="conflicted ? undefined : 'polite'"
+      >
         {{ saveError || (dirty ? 'Unsaved changes.' : 'All changes saved.') }}
       </p>
+      <!--
+        FE-2 conflict escape hatch. Save stays disabled while conflicted,
+        so this is the only path back to a savable editor after the
+        store's authoritative GET surfaces T2 fields + T2 token.
+      -->
+      <button
+        v-if="conflicted"
+        ref="reloadBtn"
+        type="button"
+        class="btn-hud btn-hud-ghost"
+        data-testid="inv-discard-reload"
+        @click="discardAndReload"
+      >
+        DISCARD CHANGES AND RELOAD
+      </button>
       <button type="submit" class="btn-hud btn-hud-cta" :disabled="!canSave">
         {{ saving ? 'SAVING…' : 'SAVE DRAFT' }}
       </button>

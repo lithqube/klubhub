@@ -152,6 +152,8 @@ export interface InvoiceUpdateInput {
   due_at: string | null
   number_prefix: string
   internal_notes: string
+  /** FE-2: caller-supplied version token, paired with the form fields. */
+  updated_at?: string
 }
 
 export interface PaymentCreateInput {

@@ -124,10 +124,41 @@ DJ_SET=(); PROMOTER_SET=()
 set_var() { # dj|promoter, KEY=VALUE
   local kv="$2" key="${2%%=*}"
   [[ "$kv" == *=* && "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || die "Expected KEY=VALUE with an upper-case KEY, got: $kv"
+  # CORS_ORIGIN feeds the API's Host/Origin boundary, which only accepts an
+  # exact origin: never let an un-normalised value through any route.
+  if [[ "$1" == dj && "$key" == CORS_ORIGIN ]]; then normalize_origin "CORS_ORIGIN" "${kv#*=}"; kv="CORS_ORIGIN=$NORM_ORIGIN"; fi
   if [[ "$1" == dj ]]; then DJ_SET+=("$kv"); else PROMOTER_SET+=("$kv"); fi
 }
 need_val() { [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "Option $1 needs a value."; }
 valid_port() { [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 && "$2" -le 65535 ]] || die "$1 must be a port number (1–65535)."; }
+# origin_normalize LABEL VALUE -> sets NORM_ORIGIN, or sets ORIGIN_ERR and
+# returns 1. The DJ API accepts CORS_ORIGIN only as an exact serialized origin:
+# scheme://host[:port], lowercase, no trailing slash, path, query, fragment or
+# userinfo, and (like browsers' Origin header) no default port.
+origin_normalize() {
+  local label="$1" raw="$2" scheme rest host port="" lower
+  NORM_ORIGIN=""; ORIGIN_ERR=""
+  [[ "$raw" != *[[:space:][:cntrl:]\\]* ]] || { ORIGIN_ERR="$label must be a URL like https://dj.example[:port]: no spaces or backslashes."; return 1; }
+  [[ "$raw" =~ ^([A-Za-z][A-Za-z0-9+.-]*)://(.*)$ ]] || { ORIGIN_ERR="$label must be a URL like https://dj.example[:port], got: $raw"; return 1; }
+  scheme="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"; rest="${BASH_REMATCH[2]}"
+  [[ "$scheme" == http || "$scheme" == https ]] || { ORIGIN_ERR="$label must start with http:// or https://, got scheme '$scheme'."; return 1; }
+  [[ "$rest" != *@* ]] || { ORIGIN_ERR="$label must not contain credentials (user:password@); it is an origin, not a login URL."; return 1; }
+  rest="${rest%/}" # one trailing slash is tolerated, nothing more
+  [[ "$rest" != */* && "$rest" != *\?* && "$rest" != *\#* ]] || { ORIGIN_ERR="$label must be an origin only (scheme://host[:port]): no path, query or fragment."; return 1; }
+  if [[ "$rest" =~ ^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?)(:([0-9]+))?$ ]]; then
+    host="${BASH_REMATCH[1]}"; port="${BASH_REMATCH[4]}"
+  else
+    ORIGIN_ERR="$label has an invalid host or port: https://dj.example[:port] expected."; return 1
+  fi
+  if [[ -n "$port" ]]; then
+    [[ "${#port}" -le 5 && "$((10#$port))" -ge 1 && "$((10#$port))" -le 65535 ]] || { ORIGIN_ERR="$label port must be 1–65535."; return 1; }
+    port="$((10#$port))"
+    if [[ ( "$scheme" == http && "$port" == 80 ) || ( "$scheme" == https && "$port" == 443 ) ]]; then port=""; fi
+  fi
+  lower="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
+  NORM_ORIGIN="$scheme://$lower${port:+:$port}"
+}
+normalize_origin() { origin_normalize "$@" || die "$ORIGIN_ERR"; } # sets NORM_ORIGIN; no subshell, so die exits
 valid_url() { [[ "$2" =~ ^https?://[^[:space:]/]+(/[^[:space:]]*)?$ ]] || die "$1 must be a URL like https://host[:port], got: $2"; }
 
 parse_args() {
@@ -140,7 +171,7 @@ parse_args() {
   CHECK="${KLUBHUB_CHECK:-0}"
   [[ -z "${KLUBHUB_BIND:-}" ]]           || { set_var dj "API_BIND=$KLUBHUB_BIND"; set_var dj "S3_BIND=$KLUBHUB_BIND"; set_var promoter "PROMOTER_BIND=$KLUBHUB_BIND"; }
   [[ -z "${KLUBHUB_DJ_PORT:-}" ]]        || set_var dj "API_PORT=$KLUBHUB_DJ_PORT"
-  [[ -z "${KLUBHUB_DJ_URL:-}" ]]         || set_var dj "CORS_ORIGIN=$KLUBHUB_DJ_URL"
+  [[ -z "${KLUBHUB_DJ_URL:-}" ]]         || { normalize_origin KLUBHUB_DJ_URL "$KLUBHUB_DJ_URL"; set_var dj "CORS_ORIGIN=$NORM_ORIGIN"; }
   [[ -z "${KLUBHUB_S3_PORT:-}" ]]        || set_var dj "S3_PORT=$KLUBHUB_S3_PORT"
   [[ -z "${KLUBHUB_S3_URL:-}" ]]         || set_var dj "S3_PUBLIC_ENDPOINT=$KLUBHUB_S3_URL"
   [[ -z "${KLUBHUB_PROMOTER_PORT:-}" ]]  || set_var promoter "PROMOTER_HOST_PORT=$KLUBHUB_PROMOTER_PORT"
@@ -153,7 +184,7 @@ parse_args() {
       --promoter-tag) need_val "$@"; PROMOTER_TAG="$2"; shift ;;
       --bind) need_val "$@"; set_var dj "API_BIND=$2"; set_var dj "S3_BIND=$2"; set_var promoter "PROMOTER_BIND=$2"; shift ;;
       --dj-port) need_val "$@"; valid_port "$1" "$2"; set_var dj "API_PORT=$2"; shift ;;
-      --dj-url) need_val "$@"; valid_url "$1" "$2"; set_var dj "CORS_ORIGIN=$2"; shift ;;
+      --dj-url) need_val "$@"; normalize_origin "$1" "$2"; set_var dj "CORS_ORIGIN=$NORM_ORIGIN"; shift ;;
       --s3-port) need_val "$@"; valid_port "$1" "$2"; set_var dj "S3_PORT=$2"; shift ;;
       --s3-url) need_val "$@"; valid_url "$1" "$2"; set_var dj "S3_PUBLIC_ENDPOINT=$2"; shift ;;
       --ra-import) set_var dj "FEATURE_RA_IMPORT=true" ;;
@@ -227,6 +258,7 @@ load_settings() {
   DJ_KEEP=0; PROMOTER_KEEP=0
   if [[ "$(saved KLUBHUB_DJ)" == 1 && "$DJ" != 1 ]]; then DJ_KEEP=1; fi
   if [[ "$(saved KLUBHUB_PROMOTER)" == 1 && "$PROMOTER" != 1 ]]; then PROMOTER_KEEP=1; fi
+  local old_dj_port; old_dj_port="$(env_get "$DIR/.local/dj.env" API_PORT)"
   if [[ ${#DJ_SET[@]} -gt 0 ]]; then env_file_merge "$DIR/.local/dj.env" "${DJ_SET[@]}"; fi
   if [[ ${#PROMOTER_SET[@]} -gt 0 ]]; then env_file_merge "$DIR/.local/promoter.env" "${PROMOTER_SET[@]}"; fi
   DJ_PORT="$(env_get "$DIR/.local/dj.env" API_PORT)"; DJ_PORT="${DJ_PORT:-8080}"
@@ -239,6 +271,7 @@ load_settings() {
   if [[ "$DJ" == 1 ]]; then
     follow_port "$DIR/.local/dj.env" CORS_ORIGIN "http://127.0.0.1:$DJ_PORT"
     follow_port "$DIR/.local/dj.env" S3_PUBLIC_ENDPOINT "http://127.0.0.1:$S3_PORT_V"
+    check_saved_cors_origin "${old_dj_port:-8080}"
   fi
   if [[ "$PROMOTER" == 1 ]]; then
     ORIGIN="${ORIGIN:-$(saved KLUBHUB_ORIGIN)}"
@@ -250,7 +283,77 @@ follow_port() { # env file, key, local default
   local cur; cur="$(env_get "$1" "$2")"
   if [[ -z "$cur" || "$cur" =~ ^http://127\.0\.0\.1:[0-9]+$ ]]; then env_file_merge "$1" "$2=$3"; fi
 }
+check_saved_cors_origin() { # previous DJ port — repair/flag a saved CORS_ORIGIN the API would reject
+  local cur fixed port; cur="$(env_get "$DIR/.local/dj.env" CORS_ORIGIN)"
+  [[ -n "$cur" ]] || return 0
+  if ! origin_normalize CORS_ORIGIN "$cur"; then
+    warn "Saved CORS_ORIGIN '$cur' is not a bare origin; the API ignores it and refuses saves from that host. Fix: --dj-url https://dj.example"
+    return 0
+  fi
+  fixed="$NORM_ORIGIN"
+  if [[ "$fixed" != "$cur" ]]; then
+    env_file_merge "$DIR/.local/dj.env" "CORS_ORIGIN=$fixed"; warn "Saved CORS_ORIGIN '$cur' normalized to '$fixed' (the API wants an exact origin)."
+  fi
+  # A custom origin that still names the old direct port after a port change.
+  port="${fixed##*:}"
+  if [[ "$fixed" != "http://127.0.0.1:$DJ_PORT" && "$1" != "$DJ_PORT" && "$fixed" =~ :[0-9]+$ && "$port" == "$1" ]] && ! loopback_host "$(origin_host "$fixed")"; then
+    warn "CORS_ORIGIN $fixed still names port $1 but DJ now listens on $DJ_PORT. If you open DJ directly (no proxy), re-run with --dj-url ${fixed%:*}:$DJ_PORT"
+  fi
+}
 probe_host() { case "${1:-}" in ""|0.0.0.0|"::") echo 127.0.0.1 ;; *) echo "$1" ;; esac; }
+# ---- Host/Origin boundary (api/internal/platform/http/origin.go) ------------
+# Unsafe /api/v1 requests (POST/PUT/PATCH/DELETE) are accepted only when the
+# request Host is localhost, 127.0.0.1, [::1] or the host of CORS_ORIGIN (ports
+# ignored); an Origin header, when sent, must equal the request origin or
+# CORS_ORIGIN exactly. GET/HEAD/OPTIONS (health probes, page loads) are exempt.
+loopback_host() { case "$1" in localhost|127.0.0.1|"[::1]"|"::1") return 0 ;; esac; return 1; }
+origin_host() { # origin -> host without scheme and port
+  local h="${1#*://}"; h="${h%/}"
+  if [[ "$h" == \[* ]]; then h="${h%%]*}]"; else h="${h%%:*}"; fi
+  printf '%s' "$h"
+}
+dj_published_beyond_loopback() {
+  case "$(env_get "$DIR/.local/dj.env" API_BIND)" in ""|127.0.0.1|localhost|"::1"|"[::1]") return 1 ;; esac
+  return 0
+}
+dj_has_public_url() { # a CORS_ORIGIN whose host is not loopback
+  local o; o="$(env_get "$DIR/.local/dj.env" CORS_ORIGIN)"
+  [[ -n "$o" ]] && ! loopback_host "$(origin_host "$o")"
+}
+cors_exposure_warning() {
+  dj_published_beyond_loopback || return 0
+  ! dj_has_public_url || return 0
+  warn "DJ is published on $(env_get "$DIR/.local/dj.env" API_BIND), but CORS_ORIGIN is still $(env_get "$DIR/.local/dj.env" CORS_ORIGIN)."
+  warn "Saving from any other device (POST/PUT/PATCH/DELETE) will fail with 403 until CORS_ORIGIN is the exact address you open DJ at."
+  warn "Re-run with --dj-url http://<lan-ip-or-hostname>:$DJ_PORT (or https://dj.example behind a proxy), or: ./klubhub set dj CORS_ORIGIN=<that URL>"
+}
+cors_rule_lines() {
+  local o h; o="$(env_get "$DIR/.local/dj.env" CORS_ORIGIN)"; h="$(origin_host "$o")"
+  printf '    CORS_ORIGIN=%s\n' "$o"
+  if loopback_host "$h"; then
+    printf '    Allowed Host for saves: localhost, 127.0.0.1, [::1] (any port): loopback only\n'
+  else
+    printf '    Allowed Host for saves: localhost, 127.0.0.1, [::1], %s (any port)\n' "$h"
+  fi
+  printf '    A browser Origin must equal the address you opened or CORS_ORIGIN exactly (scheme://host[:port], no trailing slash).\n'
+}
+offer_public_url() { # interactive only: --yes never prompts and never invents a hostname
+  [[ "$DJ" == 1 && "$YES" != 1 && "$CHECK" != 1 && -n "$TTY" ]] || return 0
+  dj_published_beyond_loopback || return 0
+  ! dj_has_public_url || return 0
+  printf '\n  DJ is published beyond this machine. The API accepts saves only from localhost or from the\n  host of CORS_ORIGIN, so enter the exact address you will open DJ at (e.g. http://192.168.1.5:%s\n  or https://dj.example). Leave blank to skip.\n' "$DJ_PORT" >"$TTY"
+  local tries=0 pub_url=""
+  while [[ $tries -lt 3 ]]; do
+    pub_url=""; ask pub_url "Public URL for DJ" ""
+    [[ -n "$pub_url" ]] || return 0
+    if origin_normalize "Public URL" "$pub_url"; then
+      env_file_merge "$DIR/.local/dj.env" "CORS_ORIGIN=$NORM_ORIGIN"; ok "CORS_ORIGIN set to $NORM_ORIGIN"; return 0
+    fi
+    warn "$ORIGIN_ERR"; tries=$((tries + 1))
+  done
+  return 0
+}
+
 
 # ------------------------------------------------------------- preflight ----
 pkg_hint() {
@@ -524,7 +627,10 @@ EOF
 
 summary() {
   step "Done"
-  if [[ "$DJ" == 1 ]]; then printf '  %sKlubHub DJ%s        %s\n' "$B" "$N" "$(env_get "$DIR/.local/dj.env" CORS_ORIGIN)"; fi
+  if [[ "$DJ" == 1 ]]; then
+    printf '  %sKlubHub DJ%s        %s\n' "$B" "$N" "$(env_get "$DIR/.local/dj.env" CORS_ORIGIN)"
+    cors_rule_lines
+  fi
   if [[ "$PROMOTER" == 1 ]]; then
     printf '  %sKlubHub Promoter%s  %s\n' "$B" "$N" "$ORIGIN"
     if [[ -n "${SETUP_LINK:-}" ]]; then
@@ -550,6 +656,7 @@ check_only() {
     resolve_tag DJ_TAG klubhub-dj-api --dj-tag
     check_ports klubhub-dj-prod "UI/API $DJ_PORT" "storage $S3_PORT_V"
     ok "DJ on $(env_get "$DIR/.local/dj.env" CORS_ORIGIN) (port $DJ_PORT free or ours)"
+    cors_rule_lines
   fi
   if [[ "$PROMOTER" == 1 ]]; then
     resolve_tag PROMOTER_TAG klubhub-promoter-api --promoter-tag
@@ -567,6 +674,9 @@ main() {
   preflight
   fetch_repo
   load_settings
+  # Before --check returns and before install_dj reads dj.env: offer_public_url
+  # skips itself for --check/--yes/no TTY; the warning stays useful in all modes.
+  if [[ "$DJ" == 1 ]]; then offer_public_url; cors_exposure_warning; fi
   if [[ "$CHECK" == 1 ]]; then check_only; return; fi
   if [[ "$DJ" == 1 ]]; then install_dj; fi
   if [[ "$PROMOTER" == 1 ]]; then install_promoter; fi
@@ -574,4 +684,6 @@ main() {
   summary
 }
 
-main "$@"
+# Run only when executed (also as `curl | bash`, where BASH_SOURCE is empty);
+# sourcing just defines the functions so tests can exercise them.
+(return 0 2>/dev/null) || main "$@"

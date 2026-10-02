@@ -20,7 +20,8 @@ const { profitLossByScope, profitLossLoading, profitLossError, profitLossScope }
 
 type Mode = 'gig' | 'month' | 'year'
 const mode = ref<Mode>('month')
-const localYear = ref(new Date().getUTCFullYear())
+const thisYear = new Date().getUTCFullYear()
+const localYear = ref(thisYear)
 const localMonth = ref(new Date().getUTCMonth() + 1)
 
 const MONTHS = [
@@ -29,7 +30,7 @@ const MONTHS = [
 ]
 const yearOptions = computed(() => {
   const list: number[] = []
-  for (let y = 2020; y <= localYear.value + 1; y++) list.push(y)
+  for (let y = 2020; y <= thisYear + 1; y++) list.push(y)
   return list
 })
 

@@ -5,7 +5,7 @@
 // does. Currency code is uppercased in inputs/outputs; amount moves are
 // integer minor units throughout the store layer. The dialog can also be
 // pre-loaded with a gigId to attach an income to a known gig.
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import Dialog from '#kui/components/ui/dialog/Dialog.vue'
 import DialogContent from '#kui/components/ui/dialog/DialogContent.vue'
@@ -15,7 +15,7 @@ import { useEarningsStore } from '../../stores/earnings'
 import { useDialogFocus } from '../../utils/dialogFocus'
 import { entryDateError } from '../../utils/invoiceFields'
 import { formatMinor, minorToDecimalString, parseMoney } from '../../utils/money'
-import type { Entry } from '../../types/finance'
+import type { Entry, EntryKind } from '../../types/finance'
 
 const props = defineProps<{
   open: boolean
@@ -48,7 +48,12 @@ const form = reactive({
 })
 
 const editing = computed(() => !!props.editId)
-const isIncome = computed(() => props.kind === 'income')
+
+// FE-1 hardening: in edit mode the dialog tracks the entry's own kind,
+// not the last `props.kind` (which carries the create preset). The title,
+// required-string branch, and PUT body all derive from this snapshot.
+const localKind = ref<EntryKind>(props.kind)
+const isIncome = computed(() => localKind.value === 'income')
 
 const amountMinor = computed(() => parseMoney(form.amount, form.currency) ?? 0)
 
@@ -81,6 +86,8 @@ const gigIdError = computed(() => {
 })
 const canSave = computed(
   () => !saving.value
+    && !conflicted.value
+    && editReady.value
     && !amountError.value
     && !currencyError.value
     && !dateError.value
@@ -104,12 +111,45 @@ function loadFromEntry(e: Entry): void {
   form.description = e.description
   form.notes = e.notes
   form.gig_id = e.gig_id
+  // FE-1: kind belongs to the entry, not to the last create preset.
+  // FE-2: capture the original version token so we can send it on save
+  // and recognise a same-id list refresh as a separate snapshot.
+  localKind.value = e.kind
+  originalUpdatedAt.value = e.updated_at
+  // A successful reseed (open / reload) clears any prior conflict state.
+  conflictRemote.value = null
 }
 
+const reloadBtn = ref<HTMLButtonElement | null>(null)
 const saving = ref(false)
 const error = ref('')
 
-watch(() => [props.open, props.editId, props.kind] as const, ([open, editId, kind]) => {
+// FE-2: the entry's T1 token captured when the dialog opened or last
+// reloaded. Always paired with the form fields, never with a later token
+// borrowed from the Pinia cache. Empty in create mode.
+const originalUpdatedAt = ref('')
+// Latest authoritative entry the store surfaced via a 409 conflict GET.
+// Non-null means the editor is conflicted: form keeps T1 fields but the
+// user must explicitly DISCARD CHANGES AND RELOAD to adopt T2 fields + T2
+// token together.
+const conflictRemote = ref<Entry | null>(null)
+const conflicted = computed(() => conflictRemote.value !== null)
+// Edit mode needs the entry's own snapshot (kind + version token). When the
+// row is not cached the dialog reloads it and refuses to save until that
+// snapshot arrives; it never PUTs the create preset with an empty token.
+const editReady = computed(() => !props.editId || originalUpdatedAt.value !== '')
+
+let lifetime = 0
+let alive = true
+onBeforeUnmount(() => { alive = false; lifetime++ })
+// `kind` is only the create preset: in edit mode the entry's own kind wins,
+// so a preset change must not re-run the load and wipe unsaved edits.
+watch([() => props.open, () => props.editId, () => (props.editId ? null : props.kind)], ([open, editId]) => {
+  const kind = props.kind
+  lifetime++
+  saving.value = false
+  error.value = ''
+  conflictRemote.value = null
   if (!open) return
   if (editId) {
     const e = entries.value.find((x) => x.id === editId)
@@ -117,6 +157,10 @@ watch(() => [props.open, props.editId, props.kind] as const, ([open, editId, kin
       loadFromEntry(e)
       return
     }
+    // Not cached (filter change / refetch): blank fields, no token, Save
+    // stays disabled until the authoritative entry is reloaded.
+    originalUpdatedAt.value = ''
+    void reloadMissing(editId, lifetime)
   }
   form.amount = ''
   form.currency = 'EUR'
@@ -125,17 +169,42 @@ watch(() => [props.open, props.editId, props.kind] as const, ([open, editId, kin
   form.description = ''
   form.notes = ''
   form.gig_id = props.gigId ?? null
+  // Create mode uses the preset kind and has no version token.
+  localKind.value = kind
+  originalUpdatedAt.value = ''
+  conflictRemote.value = null
   saving.value = false
   error.value = ''
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
+
+async function reloadMissing(id: string, generation: number, retried = false): Promise<void> {
+  const isCurrent = () => alive && props.open && lifetime === generation && props.editId === id
+  const { entry: remote, superseded } = await store.readEntry(id)
+  if (!isCurrent()) return
+  if (remote) loadFromEntry(remote)
+  else if (superseded) {
+    // A newer read/write took over; adopt whatever it cached, stay quiet.
+    const cached = entries.value.find((x) => x.id === id)
+    if (cached) loadFromEntry(cached)
+    // Nothing cached yet: the dialog does not watch `entries`, so read once
+    // more (a fresh read generation) rather than stay blank and unsavable.
+    else if (!retried) await reloadMissing(id, generation, true)
+    else error.value = 'Could not load this entry. Close the dialog and try again.'
+  } else error.value = 'Could not load this entry. Close the dialog and try again.'
+}
 
 async function save(): Promise<void> {
-  if (!canSave.value) return
+  if (!props.open || !canSave.value) return
+  const generation = lifetime
+  const id = props.editId
+  const isCurrent = () => alive && props.open && lifetime === generation
   saving.value = true
   error.value = ''
   try {
-    const input = {
-      kind: props.kind,
+    const fields = {
+      // FE-1: use the entry's own kind (captured on open / reload),
+      // not the create preset.
+      kind: localKind.value,
       amount_minor: amountMinor.value,
       currency: form.currency,
       category: form.category,
@@ -144,28 +213,68 @@ async function save(): Promise<void> {
       notes: form.notes,
       gig_id: form.gig_id || null,
     }
-    const e = props.editId
-      ? await store.updateEntry(props.editId, input)
-      : await store.createEntry(input)
+    // Create has no version token and the API rejects unknown fields, so
+    // only edit pairs the T1 fields with the T1 token captured on open.
+    const e = id
+      ? await store.updateEntry(id, { ...fields, updated_at: originalUpdatedAt.value })
+      : await store.createEntry(fields)
+    if (!isCurrent()) return
     emit('saved', e)
     emit('update:open', false)
   } catch (err: unknown) {
+    if (!isCurrent()) return
     const ferr = err as { message?: string; code?: string }
-    if (ferr?.code === 'conflict') error.value = 'This entry changed elsewhere. Showing latest; review and retry.'
-    else if (ferr?.code === 'validation_failed') error.value = ferr.message ?? 'Check the fields.'
-    else error.value = ferr?.message ?? 'Could not save the entry.'
+    if (ferr?.code === 'conflict') {
+      // FE-2: by the time the store throws, `await fetchEntry(id)` has
+      // already run and upserted the authoritative T2 row into
+      // entries.value. Surface it so canSave can disable Save, and so the
+      // explicit DISCARD CHANGES AND RELOAD button can adopt it as a
+      // single atomic snapshot (fields + version together).
+      // Until then the form keeps the user's unsaved T1 draft verbatim.
+      error.value = 'This entry changed elsewhere. Discard your changes and reload to continue.'
+      conflictRemote.value = entries.value.find((x) => x.id === props.editId) ?? null
+      // Move focus to the only way forward so keyboard/AT users land on it.
+      await nextTick()
+      if (isCurrent()) reloadBtn.value?.focus()
+    } else if (ferr?.code === 'validation_failed') {
+      error.value = ferr.message ?? 'Check the fields.'
+    } else {
+      error.value = ferr?.message ?? 'Could not save the entry.'
+    }
   } finally {
-    saving.value = false
+    if (isCurrent()) saving.value = false
   }
 }
 
-function close(): void {
-  emit('update:open', false)
+/** FE-2: explicitly adopt T2 fields + T2 token together. Save remains
+ * disabled while conflicted, so this is the only path back to a savable
+ * editor when the remote snapshot has diverged. */
+async function discardAndReload(): Promise<void> {
+  if (!props.open || !props.editId || saving.value) return
+  const generation = lifetime
+  const id = props.editId
+  const isCurrent = () => alive && props.open && lifetime === generation
+  saving.value = true
+  try {
+    const { entry: remote, superseded } = await store.readEntry(id)
+    if (!isCurrent()) return
+    if (!remote) { if (!superseded) error.value = 'Could not reload the entry.'; return }
+    loadFromEntry(remote)
+    error.value = ''
+  } finally {
+    if (isCurrent()) saving.value = false
+  }
 }
+
+function setOpen(open: boolean): void {
+  if (!open) { lifetime++; saving.value = false }
+  emit('update:open', open)
+}
+function close(): void { setOpen(false) }
 </script>
 
 <template>
-  <Dialog :open="open" @update:open="emit('update:open', $event)">
+  <Dialog :open="open" @update:open="setOpen">
     <DialogContent
       class="max-w-[480px] w-[calc(100%-32px)] bg-surface-container max-h-[90vh] overflow-y-auto"
       @open-auto-focus="onOpenAutoFocus"
@@ -230,7 +339,7 @@ function close(): void {
                 and there is no way to land on `''` through real DOM events.
               -->
               <option value="" disabled>SELECT CATEGORY…</option>
-              <option v-for="c in CATEGORY_OPTIONS[kind]" :key="c" :value="c">{{ c }}</option>
+              <option v-for="c in CATEGORY_OPTIONS[localKind]" :key="c" :value="c">{{ c }}</option>
             </select>
             <p class="ee-msg" :class="{ 'ee-error': !!categoryError }">{{ categoryError || 'Anything not listed goes to other_income / other_expense.' }}</p>
           </div>
@@ -276,6 +385,22 @@ function close(): void {
 
         <div class="ee-actions">
           <button type="button" class="btn-hud btn-hud-ghost" @click="close">CANCEL</button>
+          <!--
+            FE-2 conflict escape hatch: only meaningful in edit mode while
+            conflicted. Adopting T2 fields + T2 token together is the only
+            way back to a savable editor after a 409, so the button is the
+            canonical reload action rather than an "Ok" / dismiss.
+          -->
+          <button
+            v-if="editing && conflicted"
+            ref="reloadBtn"
+            type="button"
+            class="btn-hud btn-hud-ghost"
+            data-testid="ee-discard-reload"
+            @click="discardAndReload"
+          >
+            DISCARD CHANGES AND RELOAD
+          </button>
           <button type="submit" class="btn-hud btn-hud-cta" :disabled="!canSave">
             {{ saving ? 'SAVING…' : (editing ? 'SAVE CHANGES' : (isIncome ? 'CREATE INCOME' : 'CREATE EXPENSE')) }}
           </button>
