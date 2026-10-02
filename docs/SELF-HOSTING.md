@@ -189,6 +189,17 @@ See [Configuration](./CONFIGURATION.md) for overrides. Setup does not load a roo
 
 A host reverse proxy forwards production UI and API traffic to **one upstream**, `127.0.0.1:8080`. Add authentication at that boundary and keep the backend loopback-bound. A proxy running in another container needs a deliberately configured Docker-network upstream; its own loopback is not the app container. S3 needs its own reachable route for browser downloads. Do not forward the internal Nuxt port or Garage administration ports.
 
+## Phone access
+
+Taking a receipt photo, or using the app on a phone at all, means the phone has to reach the server. By default nothing is published beyond `127.0.0.1`, and the app has **no login**, so do not just bind it to your Wi-Fi.
+
+- **The camera works over plain HTTP.** The "Take photo" button is a file input with `capture`, which hands off to the phone's own camera app; it needs neither HTTPS nor a permission prompt. What does need a secure context (HTTPS or `localhost`) is a live camera preview inside the page and installing the app as a PWA; KlubHub uses neither.
+- **Preferred: a private network such as [Tailscale](https://tailscale.com).** Put the server and the phone on the same tailnet and open the server's tailnet address (`tailscale serve` can give it HTTPS). Nothing is exposed to the internet and there is nothing to authenticate.
+- **Or a reverse proxy with authentication** (Caddy, nginx) on your own domain, forwarding only to `127.0.0.1:8080` (see above). Set `CORS_ORIGIN` to the public origin.
+- **Home Wi-Fi only:** set `BIND_ADDRESS=0.0.0.0` only behind a firewall on a network you trust. Never on shared or public Wi-Fi.
+- **Uploads go through the API**, not straight to S3, so the phone only needs to reach the app port. `S3_PUBLIC_ENDPOINT` matters only for presigned downloads elsewhere in the app.
+- **No phone at all:** on a laptop, drag and drop or the file picker work the same, so a scanner's output folder or AirDropped photos are fine.
+
 ## Upgrades and existing installations
 
 Development and production use different Compose project names and project-scoped volumes, without fixed container names. This isolates data and credentials, but does not avoid host-port collisions. Stop the other mode first or configure different published ports and matching callback/browser URLs.

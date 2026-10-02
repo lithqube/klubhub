@@ -209,13 +209,18 @@ rate / 10000); `net_payable = total − withholding`.
 | `GET /invoices/{id}` | | `{data: Invoice, lines: InvoiceLine[]}` |
 | `PUT /invoices/{id}` | `{customer, vat_treatment, tax_rate_bps, tax_note, withholding_rate_bps, supply_date, due_at, number_prefix, internal_notes, updated_at}` | draft only; totals recomputed |
 | `GET /invoices/{id}/issue-check` | | `{data: {ready: boolean, problems: IssueProblem[]}}` |
+| `GET /invoices/{id}/pdf` | | `application/pdf` attachment (`invoice-<number>.pdf`, `credit-note-<number>.pdf`, or `invoice-draft-<id8>.pdf`); rendered on demand, `Cache-Control: private, no-store`. Not persisted yet |
 | `POST /invoices/{id}/issue` | `{updated_at}` | allocates number; `422 {error:"not_issuable", problems}` |
 | `POST /invoices/{id}/pay` | `{paid_at, payment_ref, updated_at}` | issued → paid |
 | `POST /invoices/{id}/cancel` | `{updated_at}` | **draft only** → cancelled |
 | `POST /invoices/{id}/credit-note` | `{reason, updated_at}` | `201 {data: {credit_note, original}}` |
 | `POST /invoices/{id}/correct` | `{reason, updated_at}` | `201 {data: {credit_note, original, replacement}}` (replacement is a draft copy) |
 | `GET/POST /invoices/{id}/payments`, `GET/PUT /payments/{id}` | unchanged | balances use `net_payable_minor`; not allowed on credit notes; on `credited`/`corrected` originals only `kind: refund` is accepted (bounded by completed receipts) — new `deposit`/`payment` kinds are rejected as `payment_kind_not_allowed` |
-| `GET /entries?kind=&status=&currency=&category=&gig_id=&from=&to=` | | `{data: Entry[]}` newest first |
+| `GET /entries?kind=&status=&currency=&category=&gig_id=&from=&to=&receipt=` | | `{data: Entry[]}` newest first; each entry carries `attachment_count`; `receipt=missing\|present`: `missing` = **active expenses** with no files (income such as gig payments, and voided entries, are never "missing"); `present` = any entry with at least one file |
+| `POST /entries/{id}/attachments` | multipart, one `file` part | `201 {data: EntryAttachment}`. JPEG, PNG, WebP or PDF only (detected from the bytes, not the name), 15 MB each, 10 per entry. `415 unsupported_media_type`, `413 too_large`, `409 limit_reached`, `409 inactive` (voided entry) |
+| `GET /entries/{id}/attachments` | | `{data: EntryAttachment[]}` oldest first |
+| `GET /entries/{id}/attachments/{aid}` | | the file; `?inline=1` shows images inline (thumbnails), a PDF is always a download. `private, no-store`, `nosniff`, sandboxed CSP |
+| `DELETE /entries/{id}/attachments/{aid}` | | `204`; refused (`409 inactive`) once the entry is voided |
 | `POST /entries` | `{kind, amount_minor, currency, category, entry_date, description?, notes?, gig_id?}` | `201 {data: Entry}` |
 | `GET /entries/{id}` | | `{data: Entry}` |
 | `PUT /entries/{id}` | same as create + `updated_at` | `200 {data: Entry}` |
@@ -225,6 +230,20 @@ rate / 10000); `net_payable = total − withholding`.
 | `GET /profit-loss?scope=gig\|month\|year&from=&to=&gig_id?` | | `{data: ProfitLossTotals[]}` grouped by currency (FIN-07) |
 | `GET /reconciliations?status=&reason=&gig_id=` | | `{data: EntryReconciliation[]}` (FIN-04 / FIN-05 queue) |
 | `POST /reconciliations/{id}/resolve` | `{action: 'update'\|'delete'\|'void'\|'keep'}` | `200 {data: EntryReconciliation}`; applies the chosen action to the linked entry |
+
+**Receipts on entries.** A receipt, supplier bill or scan is stored as-is in
+object storage (never re-encoded; the sha256 of the original is recorded) and
+listed under its entry in `finance_entry_attachments` (migration 030). It is a
+separate table from `documents` on purpose: `documents` keeps one current
+version per owner, while an expense can carry several files. Files are never
+removed with an entry: voiding or soft-deleting an entry keeps them, and a
+voided entry's files can no longer be added or removed. Uploads go through the
+API (not presigned S3 links), so a phone only needs to reach one address; the
+routes answer `503` when object storage is not configured. How long to keep
+receipts is a tax-law question (Germany: generally 8 years for Buchungsbelege):
+confirm with your Steuerberater. A phone photo needs no HTTPS (the browser hands
+off to the camera app), but the phone must be able to reach the server: see
+[Phone access](./SELF-HOSTING.md#phone-access).
 
 Errors: `400 validation_failed`, `404 not_found`, `409 conflict` (stale
 `updated_at`), `409 bad_state` (wrong status for the action), `422
@@ -384,7 +403,7 @@ supported. Behind a TLS-terminating proxy, `CORS_ORIGIN` must be the public
 | Local-currency VAT (Art. 230) | `invoices.fx_rate` + `tax_minor_local`; computed in `tax.ComputeTotals`. |
 | Per-line tax / editable lines | `invoice_lines.tax_bps` already per line; `tax.ComputeTotals` already groups by rate. |
 | E-invoicing (EN 16931 UBL / Factur-X / Peppol) | new `Exporter` next to `PDFRenderer`, fed the same issued invoice + snapshots. |
-| PDF download endpoint | `GET /invoices/{id}/pdf` using `PDFRenderer` + `DocumentService` (store once at issue). |
+| Archive the issued PDF | `GET /invoices/{id}/pdf` is built and renders on demand. Still planned: store the rendered document once at issue via `DocumentService` (immutable original, sha256) and serve that copy; needs a documents HTTP handler (`api/cmd/api/main.go` still wires `nil`). |
 | Retention | issued invoices are immutable and never deleted; enforce in any future delete API. |
 
 ## 7. Shared rule: gig payment_status → ledger

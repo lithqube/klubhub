@@ -268,6 +268,34 @@ The pattern is the same as in Germany:
 - **Spike task:** check GOBL's per-country regimes (it already organises tax rules by country) as a source for the module boundaries, even if we keep our own tax engine.
 - **Next modules:** UK (VAT, no mandate yet), ES (Verifactu 2027), IT (SdI), FR (2026/27 reform). Add them when there are users there.
 
+## 8. Spike results (2026-10-02)
+
+**Setup:** a synthetic German B2B invoice (19% VAT, two lines, umlauts in a line description) rendered with our real fpdf `RenderInvoice`. It was sent to `gflohr/e-invoice-eu:slim` (`sha256:c5d7f966…9664`, 100 MB, bound to 127.0.0.1) and checked with KoSIT validator 1.6.3 + XRechnung config 2026-08-31 (XRechnung 3.0.2), veraPDF REST 1.30.2, and `speedata/einvoice`. Throwaway harness only; nothing was committed.
+
+| Check | Result |
+|---|---|
+| `Factur-X-EN16931` and `Factur-X-XRechnung` hybrid PDF from our fpdf output | **veraPDF: PDF/A-3b compliant, 0 failed rules.** The plain fpdf PDF fails PDF/A-1b with 8 rules, so the check discriminates. The decision gate is **passed**: no Ghostscript fallback or `pdfa-lab` is needed |
+| Embedded XML extracted from the PDF (`factur-x.xml` / `xrechnung.xml`) | KoSIT: schema + schematron accepted, EN 16931 and XRechnung scenarios |
+| `XRECHNUNG-CII`, `XRECHNUNG-UBL` | KoSIT accepted (after the fixes below) |
+| Credit note (type 381) in CII and UBL | KoSIT accepted. The §1 "CII has no credit notes" concern doesn't apply to output validity |
+| Reverse charge (`AE` + `VATEX-EU-AE`, FR buyer) | KoSIT accepted |
+| §19 exempt (`E`, Steuernummer only) | Accepted **only after adding BT-29** (see fix 3) |
+| Negative control: totals that don't add up | e-invoice-eu returns **201** and writes the file. KoSIT rejects it (BR-CO-16). The sidecar does not protect us from bad totals |
+| Inbound: `speedata/einvoice` parse of all outputs | Parses CII and UBL with auto-detection; reads BT-1/2/3/10, parties, lines, totals; `Validate()` passes valid files and rejects the bad-totals file with BR-CO-16. `gobl.cii` was not tried, since speedata covers the need |
+
+**Fixes the Go mapping must apply:**
+1. **JSON shape.** Repeatable nodes must be arrays even with one element: `cac:PartyTaxScheme`, `cac:PaymentMeans`, `cac:TaxTotal`, `cac:InvoiceLine`, `cac:TaxSubtotal`. Attributes are `"cbc:X@currencyID"` siblings, and every value is a string.
+2. **Always send `cac:Delivery/cbc:ActualDeliveryDate`.** Without it the CII output omits `ApplicableHeaderTradeDelivery` and fails the XSD. Our `supply_date` maps to it (BT-72), so it becomes a required issue-time field.
+3. **Steuernummer-only sellers (§19):** send the Steuernummer both as BT-32 (`PartyTaxScheme` with `TaxScheme/ID = FC`) and as BT-29 (`cac:PartyIdentification/cbc:ID`). Otherwise BR-CO-26 rejects the invoice.
+4. **Seller name differs by syntax.** CII prints `PartyLegalEntity/RegistrationName`, UBL prints `PartyName`. Keep both fields set and consistent (legal name vs trading name).
+5. **XRechnung mandatory inputs seen in practice:** BT-10 buyer reference, seller contact (name, phone, email), BT-34/BT-49 email endpoints (scheme `EM`), payment means 58 + IBAN, and the Delivery block above. Our model has none of these yet (§2 table).
+
+**Consequences for the plan:**
+- Compute totals in Go, then **validate before storing**: run `speedata/einvoice` `Validate()` in-process on every generated XML, and keep KoSIT as the CI golden test. At runtime KoSIT would need a JRE sidecar; the in-process check is enough for BR-* rules but is not the official XRechnung schematron. Decide whether to store a KoSIT report only for XRechnung output.
+- `gflohr/e-invoice-eu-validator` is **not published as a Docker image** (the pull failed). Use the KoSIT jar directly in CI.
+- The slim image's PDF wrap is solid for our fpdf output (fonts already embedded). Item 5 stays on the plan as written.
+- Build tooling note: the finance package's `TestMain` starts a Postgres container; set `SKIP_INTEGRATION=1` for tests that don't need one.
+
 ## Sources
 
 **e-invoice-eu (repo at commit `dc96ee0`, 2026-09-30):**
