@@ -49,6 +49,9 @@ func (m *realServiceRepo) ListPosts(_ context.Context) ([]social.ScheduledPost, 
 func (m *realServiceRepo) UpdatePost(_ context.Context, _ uuid.UUID, _, _ string, _ time.Time, _ string) (*social.ScheduledPost, error) {
 	return nil, nil
 }
+func (m *realServiceRepo) UpdatePostImage(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 func (m *realServiceRepo) UpdatePostStatus(_ context.Context, _ uuid.UUID, _ social.PostStatus, _ string) error {
 	return nil
 }
@@ -100,6 +103,9 @@ func (a realServiceAdapter) SoftDeletePost(ctx context.Context, id uuid.UUID) er
 }
 func (a realServiceAdapter) RetryPost(ctx context.Context, id uuid.UUID) error {
 	return a.svc.RetryPost(ctx, id)
+}
+func (a realServiceAdapter) UploadPostImage(ctx context.Context, id uuid.UUID, data []byte, mimeType string) (*social.PostImageResult, error) {
+	return a.svc.UploadPostImage(ctx, id, data, mimeType)
 }
 func (a realServiceAdapter) ValidateImage(d []byte, p social.PostType) error {
 	return a.svc.ValidateImage(d, p)

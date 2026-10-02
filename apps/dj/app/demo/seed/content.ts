@@ -99,7 +99,7 @@ export function seedPosts(now: Date): DemoPost[] {
     status: 'scheduled',
     postType: 'feed',
     caption: '',
-    imageMinioPath: `demo/social/post-${n}.svg`,
+    imageStorageKey: `demo/social/post-${n}.svg`,
     scheduledAtUtc: daysFrom(now, 1, 18),
     timezoneName: 'Europe/Berlin',
     retryCount: 0,

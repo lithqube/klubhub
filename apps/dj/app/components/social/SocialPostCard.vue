@@ -88,7 +88,7 @@ const platformTag = computed(() =>
     <!-- Image thumbnail -->
     <div class="h-40 bg-surface-variant flex items-center justify-center flex-shrink-0 overflow-hidden">
       <img
-        v-if="post.imageMinioPath"
+        v-if="post.imageStorageKey"
         :src="apiAssetUrl(`/api/v1/social/posts/${post.id}/image`)"
         class="w-full h-full object-cover"
         alt="Post image"

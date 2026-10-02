@@ -99,10 +99,16 @@ describe('demo social and EPK', () => {
     form.append('caption', 'Demo post')
     form.append('scheduled_at', '2099-01-01T20:00')
     form.append('timezone_name', 'UTC')
-    form.append('image_file', new File([new Uint8Array([137, 80, 78, 71])], 'a.png', { type: 'image/png' }))
     const created = await call(b, 'POST', '/api/v1/social/posts', form)
     expect(created.status).toBe(201)
     expect(created.body.data).not.toHaveProperty('imageData')
+    const imageForm = new FormData()
+    // Genuine 320x320 PNG encoded with Pillow, not a header-only placeholder.
+    const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAUAAAAFAAQAAAADl65gHAAAAI0lEQVR4nO3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAPwaM0AAASn9scsAAAAASUVORK5CYII='), c => c.charCodeAt(0))
+    imageForm.append('image_file', new File([png], 'a.png', { type: 'image/png' }))
+    const uploaded = await call(b, 'POST', `/api/v1/social/posts/${created.body.data.id}/image`, imageForm)
+    expect(uploaded.status).toBe(200)
+    expect(uploaded.body.data.path).toContain(`demo/social/${created.body.data.id}/`)
     expect(b.resolveAsset(`/api/v1/social/posts/${created.body.data.id}/image`)).toMatch(/^data:image\/png;base64,/)
     const posts = (await call(b, 'GET', '/api/v1/social/posts')).body.data
     const failed = posts.find((p: { status: string }) => p.status === 'failed')

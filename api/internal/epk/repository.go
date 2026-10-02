@@ -17,7 +17,9 @@ var ErrNotFound = errors.New("not found")
 type repoIface interface {
 	GetContent(ctx context.Context) (*EPKContent, error)
 	UpsertContent(ctx context.Context, req UpsertEPKContentRequest) (*EPKContent, error)
-	InsertExport(ctx context.Context, minioPath string) (*EPKExport, error)
+	// InsertExport persists an export row. garageObjectKey is the
+	// canonical Garage (S3-compatible) object key for the exported PDF.
+	InsertExport(ctx context.Context, garageObjectKey string) (*EPKExport, error)
 	ListExports(ctx context.Context) ([]EPKExport, error)
 	DeleteExport(ctx context.Context, id uuid.UUID) error
 }
@@ -116,14 +118,20 @@ func (r *Repository) UpsertContent(ctx context.Context, req UpsertEPKContentRequ
 }
 
 // InsertExport inserts a new epk_exports row and returns the created record.
-func (r *Repository) InsertExport(ctx context.Context, minioPath string) (*EPKExport, error) {
+// Writes the canonical key into BOTH the new garage_object_key column
+// (migration 025 source of truth) AND the legacy minio_path column.
+// The dual-write exists so that rolling migration 025 back (which
+// drops garage_object_key) leaves the previous release with a usable
+// object key in minio_path. The legacy column is dropped in a
+// follow-up release once v1 consumers have rolled out.
+func (r *Repository) InsertExport(ctx context.Context, garageObjectKey string) (*EPKExport, error) {
 	var e EPKExport
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO epk_exports (id, minio_path, created_at)
-		VALUES (gen_random_uuid(), $1, now())
-		RETURNING id, minio_path, created_at`,
-		minioPath,
-	).Scan(&e.ID, &e.MinioPath, &e.CreatedAt)
+		INSERT INTO epk_exports (id, minio_path, garage_object_key, created_at)
+		VALUES (gen_random_uuid(), $1, $1, now())
+		RETURNING id, garage_object_key, created_at`,
+		garageObjectKey,
+	).Scan(&e.ID, &e.GarageObjectKey, &e.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -131,9 +139,10 @@ func (r *Repository) InsertExport(ctx context.Context, minioPath string) (*EPKEx
 }
 
 // ListExports returns all export rows ordered by created_at DESC (newest first).
+// Reads the canonical garage_object_key column (migration 025).
 func (r *Repository) ListExports(ctx context.Context) ([]EPKExport, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, minio_path, created_at
+		SELECT id, garage_object_key, created_at
 		FROM epk_exports
 		ORDER BY created_at DESC`)
 	if err != nil {
@@ -144,7 +153,7 @@ func (r *Repository) ListExports(ctx context.Context) ([]EPKExport, error) {
 	var exports []EPKExport
 	for rows.Next() {
 		var e EPKExport
-		if err := rows.Scan(&e.ID, &e.MinioPath, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.GarageObjectKey, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		exports = append(exports, e)

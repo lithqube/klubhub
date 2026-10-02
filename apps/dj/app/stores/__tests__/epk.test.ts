@@ -19,7 +19,7 @@ const mockEpkContent: EPKContent = {
 
 const mockExport: EPKExport = {
   id: 'export-1',
-  minioPath: 'epk/exports/export-1.pdf',
+  garageObjectKey: 'epk/exports/export-1.pdf',
   createdAt: '2026-01-01T00:00:00Z',
 };
 

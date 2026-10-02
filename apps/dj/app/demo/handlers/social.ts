@@ -32,8 +32,6 @@ function publishDue(c: DemoContext): void {
 }
 
 async function imageFrom(c: DemoContext, form: FormData): Promise<string | undefined> {
-  const file = form.get('image_file')
-  if (file instanceof Blob && file.size > 0) return imageDataUrl(file)
   const id = form.get('image_id')
   if (typeof id === 'string' && id) {
     const blob = c.blobFor(id)
@@ -67,6 +65,7 @@ export function registerSocial(r: DemoRouter): void {
   r.on('POST', '/api/v1/social/posts', async (req, c) => {
     const form = req.body instanceof FormData ? req.body : null
     if (!form) return apiError(400, 'expected multipart form data')
+    if (form.has('image_file')) return apiError(422, 'image_file uploads require POST /posts/{id}/image after creating the post')
     const caption = String(form.get('caption') ?? '')
     const scheduledAt = String(form.get('scheduled_at') ?? '')
     const tz = String(form.get('timezone_name') ?? 'UTC')
@@ -86,7 +85,7 @@ export function registerSocial(r: DemoRouter): void {
       status: 'scheduled',
       postType,
       caption,
-      imageMinioPath: `demo/social/${uuid()}`,
+      imageStorageKey: String(form.get('image_id') ?? ''),
       scheduledAtUtc: zonedToUtc(scheduledAt, tz),
       timezoneName: tz,
       retryCount: 0,
@@ -98,6 +97,33 @@ export function registerSocial(r: DemoRouter): void {
     }
     c.state.posts.push(post)
     return json({ data: view(post) }, 201)
+  })
+
+  r.on('POST', '/api/v1/social/posts/:id/image', async (req, c) => {
+    const post = c.state.posts.find((p) => p.id === req.params.id)
+    if (!post) return notFound('post not found')
+    if (post.status !== 'scheduled') return apiError(409, 'post cannot be edited in its current status')
+    const form = req.body instanceof FormData ? req.body : null
+    const file = form?.get('image_file')
+    if (!(file instanceof Blob)) return apiError(400, 'image_file field is required')
+    if (!file.size) return apiError(422, 'image_file must not be empty')
+    let imageData: string
+    try {
+      // Demo-only signature checks reject obvious spoofing/unsupported bytes.
+      // This is not Go's full-decode, size/aspect validation contract.
+      const bytes = new Uint8Array(await file.slice(0, 8).arrayBuffer())
+      const png = [137, 80, 78, 71, 13, 10, 26, 10].every((byte, i) => bytes[i] === byte)
+      const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+      if (!png && !jpeg) return apiError(422, 'only JPEG and PNG images are supported')
+      imageData = await imageDataUrl(new Blob([file], { type: png ? 'image/png' : 'image/jpeg' }))
+    } catch (e) {
+      return apiError(e instanceof TooLargeError ? 413 : 422, e instanceof Error ? e.message : 'invalid image')
+    }
+    const path = `demo/social/${post.id}/${uuid()}`
+    post.imageData = imageData
+    post.imageStorageKey = path
+    post.updatedAt = c.now().toISOString()
+    return json({ data: { path } })
   })
 
   r.on('PUT', '/api/v1/social/posts/:id', (req, c) => {

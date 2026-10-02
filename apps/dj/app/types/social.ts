@@ -18,12 +18,13 @@ export interface ScheduledPost {
   status: PostStatus
   postType: PostType
   caption: string
-  imageMinioPath: string
+  imageStorageKey: string  // Garage object key for the post image (canonical; legacy name was imageMinioPath)
   scheduledAtUtc: string  // ISO 8601
   timezoneName: string
   retryCount: number
   nextRetryAt: string | null
-  lastError: string
+  lastError: string | null
+  containerId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -33,8 +34,7 @@ export interface CreatePostRequest {
   caption: string
   scheduledAt: string  // datetime-local format: "2026-10-24T23:45"
   timezoneName: string
-  imageId?: string     // existing Garage object key (legacy API field)
-  imageFile?: File     // custom upload
+  imageId?: string     // existing Garage object key (canonical name — carries a Garage object key, not a separate API field)
   accountId?: string   // optional account ID to override the current account
 }
 

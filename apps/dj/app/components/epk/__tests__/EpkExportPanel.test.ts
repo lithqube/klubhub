@@ -93,8 +93,8 @@ describe('EpkExportPanel', () => {
 
   it('export history list shows correct item count', () => {
     mockStore.exports = [
-      { id: 'e1', minioPath: 'p1', downloadUrl: 'http://dl1', createdAt: '2024-01-01T00:00:00Z' },
-      { id: 'e2', minioPath: 'p2', downloadUrl: 'http://dl2', createdAt: '2024-01-02T00:00:00Z' },
+      { id: 'e1', garageObjectKey: 'p1', downloadUrl: 'http://dl1', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 'e2', garageObjectKey: 'p2', downloadUrl: 'http://dl2', createdAt: '2024-01-02T00:00:00Z' },
     ]
     const wrapper = mount(EpkExportPanel)
     const items = wrapper.findAll('[data-testid="export-history-item"]')
@@ -103,7 +103,7 @@ describe('EpkExportPanel', () => {
 
   it('delete button calls deleteExport with correct id', async () => {
     mockStore.exports = [
-      { id: 'e1', minioPath: 'p1', downloadUrl: 'http://dl1', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 'e1', garageObjectKey: 'p1', downloadUrl: 'http://dl1', createdAt: '2024-01-01T00:00:00Z' },
     ]
     const wrapper = mount(EpkExportPanel)
     const deleteBtn = wrapper.find('[data-testid="export-delete-e1"]')
@@ -114,7 +114,7 @@ describe('EpkExportPanel', () => {
 
   it('shows export history list when exports exist', () => {
     mockStore.exports = [
-      { id: 'e1', minioPath: 'p1', downloadUrl: 'http://dl1', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 'e1', garageObjectKey: 'p1', downloadUrl: 'http://dl1', createdAt: '2024-01-01T00:00:00Z' },
     ]
     const wrapper = mount(EpkExportPanel)
     expect(wrapper.find('[data-testid="export-history-list"]').exists()).toBe(true)

@@ -35,9 +35,6 @@ async function handleRetry() {
   await store.retryPost(props.post.id)
 }
 
-async function handleDownload() {
-  await store.downloadImage(props.post.id)
-}
 </script>
 
 <template>
@@ -55,7 +52,7 @@ async function handleDownload() {
     <!-- Image thumbnail -->
     <div class="h-36 bg-surface-variant flex items-center justify-center flex-shrink-0 overflow-hidden">
       <img
-        v-if="post.imageMinioPath"
+        v-if="post.imageStorageKey"
         :src="apiAssetUrl(`/api/v1/social/posts/${post.id}/image`)"
         class="w-full h-full object-cover"
         alt="Post image"
@@ -106,13 +103,6 @@ async function handleDownload() {
         @click="handleRetry"
       >
         RETRY SYNC
-      </button>
-      <button
-        data-testid="download-btn"
-        class="font-terminal tracking-terminal text-[10px] uppercase text-primary hover:text-primary/80 transition-colors"
-        @click="handleDownload"
-      >
-        DOWNLOAD IMAGE
       </button>
     </div>
   </div>
