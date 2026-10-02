@@ -1,4 +1,4 @@
-import { updateTemplate } from '../../_state'
+import { updateTemplate, validateRiderText } from '../_state'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -9,6 +9,8 @@ export default defineEventHandler(async (event) => {
   if (typeof updatedAt !== 'string' || updatedAt === '') {
     throw createError({ statusCode: 422, statusMessage: 'updatedAt is required' })
   }
+  const invalid = validateRiderText(patch, false)
+  if (invalid) throw createError({ statusCode: 422, statusMessage: invalid })
   const result = updateTemplate(id, patch, updatedAt)
   if (!result.ok) {
     if (result.reason === 'conflict') {

@@ -6,7 +6,7 @@
 import { computed } from 'vue'
 import Textarea from '#kui/components/ui/textarea/Textarea.vue'
 import { SECTION_CHIPS } from './chips'
-import type { RiderSection } from '~/types/rider'
+import { RIDER_SECTION_MAX_CHARS, type RiderSection } from '~/types/rider'
 
 const props = defineProps<{
   section: RiderSection
@@ -52,6 +52,7 @@ function insertChip(text: string): void {
     <Textarea
       v-model="textareaProxy"
       :rows="6"
+      :maxlength="RIDER_SECTION_MAX_CHARS"
       :placeholder="`${section} requirements…`"
       :data-testid="`rider-${section}-textarea`"
     />

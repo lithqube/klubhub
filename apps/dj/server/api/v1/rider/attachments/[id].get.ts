@@ -1,4 +1,4 @@
-import { getAttachment } from '../../_state'
+import { getAttachment } from '../_state'
 
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')

@@ -7,6 +7,7 @@ import { useRiderStore } from '~/stores/rider'
 
 const store = useRiderStore()
 const saveStatus = computed(() => store.saveStatus)
+const saveError = computed(() => store.saveError)
 
 const showSaved = ref(false)
 let savedTimer: ReturnType<typeof setTimeout> | null = null
@@ -49,7 +50,7 @@ watch(saveStatus, (val) => {
       <span
         v-else-if="saveStatus === 'error'"
         class="font-terminal tracking-terminal text-error text-xs uppercase"
-      >SAVE FAILED</span>
+      >SAVE FAILED<template v-if="saveError"> · {{ saveError }}</template></span>
     </div>
   </div>
 </template>

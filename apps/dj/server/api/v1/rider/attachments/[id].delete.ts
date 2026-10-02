@@ -1,4 +1,4 @@
-import { deleteAttachment } from '../../_state'
+import { deleteAttachment } from '../_state'
 
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')

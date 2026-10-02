@@ -1,4 +1,4 @@
-import { deleteTemplate } from '../../_state'
+import { deleteTemplate } from '../_state'
 
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')

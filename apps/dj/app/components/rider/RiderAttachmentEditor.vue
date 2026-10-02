@@ -6,6 +6,8 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRiderAutosave } from '~/composables/useRiderAutosave'
 import { useRiderStore } from '~/stores/rider'
+import { openPdf } from '~/utils/openPdf'
+import { riderErrorMessage } from '~/utils/riderErrors'
 import type { RiderAttachment } from '~/types/rider'
 import RiderConflictNotice from './RiderConflictNotice.vue'
 import RiderSectionField from './RiderSectionField.vue'
@@ -13,7 +15,7 @@ import RiderSectionField from './RiderSectionField.vue'
 const props = defineProps<{ attachment: RiderAttachment }>()
 
 const store = useRiderStore()
-const { scheduleSave, flush, cancel } = useRiderAutosave()
+const { scheduleSave, flush, cancel, hasUnsaved } = useRiderAutosave()
 // Set while a detach is under way so the unmount flush does not PUT to the
 // record we are deleting (it would 404 and leave a sticky "save failed").
 const detaching = ref(false)
@@ -54,11 +56,25 @@ function onSection(field: 'technical' | 'hospitality' | 'backline' | 'otherNotes
 }
 
 const exporting = ref(false)
+const exportError = ref('')
 async function onExport(): Promise<void> {
   exporting.value = true
+  exportError.value = ''
   try {
+    // The server renders the PDF from what it has stored, and autosave is
+    // debounced, so edits typed in the last moments are not stored yet.
+    // Save them first; if they cannot be saved (conflict, offline, rejected)
+    // do not hand out a PDF that silently lacks them.
+    const target = { kind: 'attachment' as const, id: props.attachment.id }
+    await flush(target)
+    if (hasUnsaved(target)) {
+      exportError.value = 'Your latest edits are not saved yet, so the PDF would be out of date. Resolve the save problem shown above, then export again.'
+      return
+    }
     const res = await store.exportAttachmentPdf(props.attachment.id)
-    if (res.downloadUrl) window.open(res.downloadUrl, '_blank', 'noopener')
+    if (res.downloadUrl) openPdf(res.downloadUrl)
+  } catch (e) {
+    exportError.value = riderErrorMessage(e, 'Could not export the PDF.')
   } finally {
     exporting.value = false
   }
@@ -119,6 +135,8 @@ onBeforeUnmount(() => {
         >DETACH</button>
       </div>
     </div>
+
+    <p v-if="exportError" role="alert" class="text-xs text-error" data-testid="rider-export-error">{{ exportError }}</p>
 
     <RiderSectionField
       section="technical"

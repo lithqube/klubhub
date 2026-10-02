@@ -1,4 +1,4 @@
-import { getTemplate } from '../../_state'
+import { getTemplate } from '../_state'
 
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')

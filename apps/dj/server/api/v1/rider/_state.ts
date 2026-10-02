@@ -35,6 +35,39 @@ function stampAfter(prev: string): string {
   return t > prev ? t : new Date(new Date(prev).getTime() + 1).toISOString()
 }
 
+// Input rules, mirroring the Go service (rider.MaxNameChars / MaxSectionChars
+// and its NUL / blank-name checks) so frontend-only dev shows the same 422s.
+export const MAX_NAME_CHARS = 200
+export const MAX_SECTION_CHARS = 20000
+
+/**
+ * Returns the 422 message for invalid rider text in `body`, or null if it is
+ * acceptable. `nameRequired` is true on create; on update a name is only
+ * checked when present. Lengths count characters (code points), not bytes.
+ */
+export function validateRiderText(body: Record<string, unknown>, nameRequired: boolean): string | null {
+  const check = (field: string, value: unknown, max: number): string | null => {
+    if (typeof value !== 'string') return null
+    if (value.includes('\u0000')) return `invalid rider input: ${field} contains a NUL character`
+    const n = [...value].length
+    if (n > max) return `invalid rider input: ${field} is too long (${n} characters; the limit is ${max})`
+    return null
+  }
+  if (nameRequired && (typeof body.name !== 'string' || body.name.trim() === '')) {
+    return 'invalid rider input: name is required'
+  }
+  if (typeof body.name === 'string') {
+    if (body.name.trim() === '') return 'invalid rider input: name cannot be blank'
+    const bad = check('name', body.name.trim(), MAX_NAME_CHARS)
+    if (bad) return bad
+  }
+  for (const f of ['technical', 'hospitality', 'backline', 'otherNotes']) {
+    const bad = check(f, body[f], MAX_SECTION_CHARS)
+    if (bad) return bad
+  }
+  return null
+}
+
 /** Outcome of a compare-and-set update, mirroring the Go API's 404 / 409. */
 export type UpdateResult<T> =
   | { ok: true; value: T }

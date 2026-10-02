@@ -22,6 +22,9 @@ export const useRiderStore = defineStore('rider', () => {
   const templates = ref<RiderTemplate[]>([])
   const attachmentsByGigId = ref<Record<string, RiderAttachment | null>>({})
   const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle')
+  // Why the last autosave failed (the API's own words, e.g. a length limit),
+  // or '' when the failure has no useful detail or nothing has failed.
+  const saveError = ref('')
   // Autosave targets ("template:<id>" / "attachment:<id>") whose last save was
   // rejected with 409 and are waiting for the user to reload the latest copy.
   const conflicts = ref<string[]>([])
@@ -189,6 +192,7 @@ export const useRiderStore = defineStore('rider', () => {
     templates,
     attachmentsByGigId,
     saveStatus,
+    saveError,
     conflicts,
     reloadVersion,
     // Computed

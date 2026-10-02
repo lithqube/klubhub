@@ -1,4 +1,4 @@
-import { getAttachment } from '../../../_state'
+import { getAttachment } from '../../_state'
 
 // Tiny minimal-PDF placeholder so the frontend download button works in
 // dev. Real PDFs come from the Go API in production. The bytes below are

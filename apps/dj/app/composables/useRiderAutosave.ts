@@ -1,5 +1,6 @@
 import { useRiderStore } from '../stores/rider'
 import { RiderConflictError } from '../types/rider'
+import { riderErrorMessage } from '../utils/riderErrors'
 import type {
   RiderAttachmentUpdateInput,
   RiderTemplateUpdateInput,
@@ -83,6 +84,7 @@ export function useRiderAutosave(delayMs = 1500) {
           await store.updateAttachment(target.id, patch as RiderAttachmentUpdateInput)
         }
         q.failed = false
+        store.saveError = ''
       } catch (e) {
         // Keep the failed edit; anything typed since wins per key.
         q.pending = { ...patch, ...q.pending }
@@ -91,6 +93,7 @@ export function useRiderAutosave(delayMs = 1500) {
           store.markConflict(keyOf(target))
         } else {
           q.failed = true
+          store.saveError = riderErrorMessage(e, '')
         }
       }
     } finally {
@@ -165,6 +168,7 @@ export function useRiderAutosave(delayMs = 1500) {
       q.conflict = false
     }
     store.clearConflict(k)
+    store.saveError = ''
     store.reloadVersion++
     refreshStatus()
   }
@@ -188,8 +192,17 @@ export function useRiderAutosave(delayMs = 1500) {
     q.conflict = false
     queues.delete(k)
     store.clearConflict(k)
+    store.saveError = ''
     refreshStatus()
   }
 
-  return { scheduleSave, flush, flushAll, discard, cancel }
+  // True while edits for this target have not reached the server: queued,
+  // failed (kept for retry) or blocked by a conflict. Check it after awaiting
+  // flush() to know whether the server's copy is current.
+  function hasUnsaved(target: RiderAutosaveTarget): boolean {
+    const q = queues.get(keyOf(target))
+    return !!q && (q.conflict || q.failed || q.timer !== null || Object.keys(q.pending).length > 0)
+  }
+
+  return { scheduleSave, flush, flushAll, discard, cancel, hasUnsaved }
 }

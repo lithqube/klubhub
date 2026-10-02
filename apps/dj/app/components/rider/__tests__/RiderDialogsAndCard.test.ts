@@ -39,6 +39,18 @@ describe('RiderTemplateDialog', () => {
     expect(open.find('[data-testid="rider-template-dialog"]').exists()).toBe(true)
   })
 
+  it('shows the API\'s reason when creating fails, and limits the name length up front', async () => {
+    const w = mount(RiderTemplateDialog, { props: { open: true } })
+    const name = w.find('[data-testid="rider-template-dialog-name"]')
+    expect(name.attributes('maxlength')).toBe('200')
+
+    fetchMock().mockRejectedValueOnce(Object.assign(new Error('x'), { statusCode: 422, data: { error: 'invalid rider input: name is required' } }))
+    await name.setValue('Club')
+    await w.find('[data-testid="rider-template-dialog-submit"]').trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('name is required')
+  })
+
   it('clears its fields when closed, so a reopened dialog does not invite a duplicate create', async () => {
     const w = mount(RiderTemplateDialog, { props: { open: true } })
     await w.find('[data-testid="rider-template-dialog-name"]').setValue('Standard club')
@@ -75,14 +87,26 @@ describe('AttachRiderDialog', () => {
     expect(w.text()).not.toContain('409')
   })
 
-  it('shows the error for other failures and does not report attached', async () => {
+  it('shows the API\'s reason for other failures and does not report attached', async () => {
     useRiderStore().templates = [template()]
-    fetchMock().mockRejectedValueOnce(Object.assign(new Error('Boom'), { statusCode: 500 }))
+    fetchMock().mockRejectedValueOnce(Object.assign(new Error('[POST] "/api/v1/rider/attachments": 422'), {
+      statusCode: 422, data: { error: 'invalid rider input: technical is too long (20001 characters; the limit is 20000)' },
+    }))
     const w = mount(AttachRiderDialog, { props: { open: true, gigId: 'gig-1' } })
     await w.find('[data-testid="attach-rider-confirm"]').trigger('click')
     await flushPromises()
     expect(w.emitted('attached')).toBeUndefined()
-    expect(w.text()).toContain('Boom')
+    expect(w.text()).toContain('technical is too long')
+    expect(w.text()).not.toContain('[POST]') // ofetch\'s generic message is not shown
+  })
+
+  it('falls back to a plain message when the failure carries no reason', async () => {
+    useRiderStore().templates = [template()]
+    fetchMock().mockRejectedValueOnce(Object.assign(new Error('fetch failed'), { statusCode: 500 }))
+    const w = mount(AttachRiderDialog, { props: { open: true, gigId: 'gig-1' } })
+    await w.find('[data-testid="attach-rider-confirm"]').trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('Could not attach the rider.')
   })
 })
 

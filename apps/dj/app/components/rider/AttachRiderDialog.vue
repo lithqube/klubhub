@@ -4,6 +4,7 @@
 
 import { computed, ref, watch } from 'vue'
 import { useRiderStore } from '~/stores/rider'
+import { riderErrorMessage } from '~/utils/riderErrors'
 
 const props = defineProps<{ open: boolean; gigId: string }>()
 const emit = defineEmits<{ close: []; attached: [] }>()
@@ -38,13 +39,13 @@ async function onConfirm(): Promise<void> {
     })
     emit('attached')
   } catch (e: unknown) {
-    const err = e as { message?: string; statusCode?: number; status?: number }
+    const err = e as { statusCode?: number; status?: number }
     if ((err.statusCode ?? err.status) === 409) {
       // One rider per gig: it already exists, so refresh instead of failing.
       emit('attached')
       return
     }
-    error.value = err.message ?? 'Could not attach rider.'
+    error.value = riderErrorMessage(e, 'Could not attach the rider.')
   } finally {
     submitting.value = false
   }

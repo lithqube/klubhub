@@ -5,7 +5,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRiderAutosave } from '~/composables/useRiderAutosave'
 import { useRiderStore } from '~/stores/rider'
-import type { RiderTemplate } from '~/types/rider'
+import { RIDER_NAME_MAX_CHARS, type RiderTemplate } from '~/types/rider'
 import RiderConflictNotice from './RiderConflictNotice.vue'
 import RiderSectionField from './RiderSectionField.vue'
 
@@ -79,6 +79,7 @@ onBeforeUnmount(() => {
         class="hud-input"
         style="width:100%;"
         placeholder="Standard club"
+        :maxlength="RIDER_NAME_MAX_CHARS"
         data-testid="rider-template-name-input"
         @input="onName(($event.target as HTMLInputElement).value)"
       >

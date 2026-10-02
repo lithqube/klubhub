@@ -76,6 +76,11 @@ export class RiderConflictError extends Error {
   }
 }
 
+// Mirrors the API limits (rider.MaxNameChars / rider.MaxSectionChars). Used as
+// the inputs' maxlength so over-long text is stopped before it is sent.
+export const RIDER_NAME_MAX_CHARS = 200
+export const RIDER_SECTION_MAX_CHARS = 20000
+
 export type RiderSection = 'technical' | 'hospitality' | 'backline' | 'otherNotes'
 export const RIDER_SECTIONS: readonly RiderSection[] = ['technical', 'hospitality', 'backline', 'otherNotes']
 

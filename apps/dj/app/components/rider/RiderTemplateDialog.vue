@@ -3,6 +3,8 @@
 
 import { ref, watch } from 'vue'
 import { useRiderStore } from '~/stores/rider'
+import { RIDER_NAME_MAX_CHARS } from '~/types/rider'
+import { riderErrorMessage } from '~/utils/riderErrors'
 import RiderSectionField from './RiderSectionField.vue'
 
 // `open` must be a declared prop: the template reads it, and an undeclared
@@ -50,7 +52,7 @@ async function onSubmit(): Promise<void> {
     })
     emit('close')
   } catch (e: unknown) {
-    error.value = (e as { message?: string })?.message ?? 'Could not create template.'
+    error.value = riderErrorMessage(e, 'Could not create the template.')
   } finally {
     submitting.value = false
   }
@@ -81,6 +83,7 @@ async function onSubmit(): Promise<void> {
           class="hud-input"
           style="width:100%;"
           placeholder="Standard club"
+          :maxlength="RIDER_NAME_MAX_CHARS"
           data-testid="rider-template-dialog-name"
         >
       </div>

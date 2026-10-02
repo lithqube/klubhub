@@ -7,6 +7,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRiderStore } from '~/stores/rider'
 import type { Gig } from '~/types/gig'
 import { riderStatusLabel } from '~/types/rider'
+import { openPdf } from '~/utils/openPdf'
+import { riderErrorMessage } from '~/utils/riderErrors'
 import AttachRiderDialog from './AttachRiderDialog.vue'
 
 const props = defineProps<{ gig: Gig }>()
@@ -22,6 +24,7 @@ const template = computed(() =>
 )
 const status = computed(() => riderStatusLabel(attachment.value, template.value))
 const exporting = ref(false)
+const exportError = ref('')
 const showAttach = ref(false)
 
 // The card is used where nothing else has loaded the rider (the gig form),
@@ -41,12 +44,15 @@ watch(() => props.gig.id, hydrate)
 async function onExport(): Promise<void> {
   if (!attachment.value) return
   exporting.value = true
+  exportError.value = ''
   try {
     const res = await store.exportAttachmentPdf(attachment.value.id)
     if (res.downloadUrl) {
-      window.open(res.downloadUrl, '_blank', 'noopener')
+      openPdf(res.downloadUrl)
       emit('exported')
     }
+  } catch (e) {
+    exportError.value = riderErrorMessage(e, 'Could not export the PDF.')
   } finally {
     exporting.value = false
   }
@@ -132,6 +138,8 @@ const toneColor = computed(() => {
         >DETACH</button>
       </template>
     </div>
+
+    <p v-if="exportError" role="alert" class="text-xs text-error" data-testid="rider-export-error">{{ exportError }}</p>
 
     <AttachRiderDialog
       v-if="showAttach"
