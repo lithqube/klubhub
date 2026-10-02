@@ -28,6 +28,9 @@ func entryScan(e *Entry) []any {
 }
 
 func (r *EntryRepository) Create(ctx context.Context, req CreateEntryRequest) (*Entry, error) {
+	if err := ValidateCreateEntry(req); err != nil {
+		return nil, err
+	}
 	var e Entry
 	err := r.pool.QueryRow(ctx, `INSERT INTO finance_entries
 		(kind, amount_minor, currency, category, entry_date, description, notes, gig_id)
@@ -43,6 +46,9 @@ func (r *EntryRepository) Create(ctx context.Context, req CreateEntryRequest) (*
 }
 
 func (r *EntryRepository) CreateGenerated(ctx context.Context, in GeneratedEntryInput) (*Entry, error) {
+	if err := ValidateGeneratedEntry(in); err != nil {
+		return nil, err
+	}
 	// The (source_kind, source_id, kind) partial unique index covers only
 	// active, not-deleted rows; once a generated row is voided or
 	// deleted, the partial index no longer protects the slot. Probe the
@@ -65,6 +71,20 @@ func (r *EntryRepository) CreateGenerated(ctx context.Context, in GeneratedEntry
 		return nil, fmt.Errorf("lookup existing generated entry: %w", err)
 	}
 
+	// Active lookup and retry history have different contracts. A generic
+	// retry must not resurrect a voided/deleted source; replacements belong
+	// to the explicit gig re-payment transition path.
+	var priorID uuid.UUID
+	historyErr := r.pool.QueryRow(ctx, `SELECT id FROM finance_entries
+		WHERE auto_generated=true AND source_kind=$1 AND source_id=$2 AND kind=$3
+		  AND (status<>'active' OR deleted_at IS NOT NULL)
+		ORDER BY created_at DESC, id DESC LIMIT 1`, in.SourceKind, in.SourceID, in.Kind).Scan(&priorID)
+	if historyErr == nil {
+		return nil, ErrGeneratedEntryConflict
+	}
+	if !errors.Is(historyErr, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("lookup generated entry history: %w", historyErr)
+	}
 	var e Entry
 	err := r.pool.QueryRow(ctx, `INSERT INTO finance_entries
 		(kind, amount_minor, currency, category, entry_date, description, notes, gig_id,
@@ -177,10 +197,17 @@ func (r *EntryRepository) get(ctx context.Context, id uuid.UUID, includeDeleted 
 	return &e, nil
 }
 
+// GetByGeneratedSource returns the active (not voided, not deleted)
+// generated row for (sourceKind, sourceID, kind), or ErrEntryNotFound.
+//
+// The partial unique index covers only active, nondeleted generated rows.
+// History remains available by ID, but must never hide a live replacement.
 func (r *EntryRepository) GetByGeneratedSource(ctx context.Context, sourceKind EntrySourceKind, sourceID uuid.UUID, kind EntryKind) (*Entry, error) {
 	var e Entry
 	err := r.pool.QueryRow(ctx, `SELECT `+entryColumns+` FROM finance_entries
-		WHERE auto_generated=true AND source_kind=$1 AND source_id=$2 AND kind=$3`, sourceKind, sourceID, kind).Scan(entryScan(&e)...)
+		WHERE auto_generated=true AND source_kind=$1 AND source_id=$2 AND kind=$3
+		  AND status='active' AND deleted_at IS NULL
+		ORDER BY created_at DESC, id DESC LIMIT 1`, sourceKind, sourceID, kind).Scan(entryScan(&e)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrEntryNotFound
 	}
@@ -224,6 +251,9 @@ func (r *EntryRepository) List(ctx context.Context, f EntryFilter) ([]*Entry, er
 }
 
 func (r *EntryRepository) Update(ctx context.Context, id uuid.UUID, req UpdateEntryRequest) (*Entry, error) {
+	if err := ValidateUpdateEntry(req); err != nil {
+		return nil, err
+	}
 	var e Entry
 	err := r.pool.QueryRow(ctx, `UPDATE finance_entries SET
 		kind=$2, amount_minor=$3, currency=$4, category=$5, entry_date=$6,
@@ -293,16 +323,19 @@ func isEntryGigFKViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "finance_entries_gig_id_fkey"
 }
 
+// Summary computes exact numeric sums in PostgreSQL, then checks the JSON
+// safe integer representation bound. It rejects the entire report if any
+// currency total is unsafe; it never truncates or returns partial totals.
 func (r *EntryRepository) Summary(ctx context.Context, dr DateRange, gigID *uuid.UUID) (map[string]EntryTotals, error) {
 	rows, err := r.pool.Query(ctx, `SELECT currency,
 		COALESCE(SUM(amount_minor) FILTER (WHERE kind='income'),0),
 		COALESCE(SUM(amount_minor) FILTER (WHERE kind='expense'),0)
-		FROM finance_entries
-		WHERE deleted_at IS NULL AND status='active'
-		  AND ($1='' OR entry_date >= $1::date)
-		  AND ($2='' OR entry_date < $2::date)
-		  AND ($3::uuid IS NULL OR gig_id=$3)
-		GROUP BY currency ORDER BY currency`, dr.From, dr.To, gigID)
+	FROM finance_entries
+	WHERE deleted_at IS NULL AND status='active'
+	  AND ($1='' OR entry_date >= $1::date)
+	  AND ($2='' OR entry_date < $2::date)
+	  AND ($3::uuid IS NULL OR gig_id=$3)
+	GROUP BY currency ORDER BY currency`, dr.From, dr.To, gigID)
 	if err != nil {
 		return nil, fmt.Errorf("summarize finance entries: %w", err)
 	}
@@ -310,10 +343,69 @@ func (r *EntryRepository) Summary(ctx context.Context, dr DateRange, gigID *uuid
 	out := make(map[string]EntryTotals)
 	for rows.Next() {
 		var v EntryTotals
-		if err := rows.Scan(&v.Currency, &v.IncomeMinor, &v.ExpenseMinor); err != nil {
+		var rawIncome, rawExpense string
+		// SUM(bigint) returns numeric in Postgres when the value can
+		// exceed int64; scanning into string gives the exact digits
+		// without losing precision to int64 wrap-around, so we can
+		// compare against the documented cap and surface a typed
+		// error rather than a Scan failure.
+		if err := rows.Scan(&v.Currency, &rawIncome, &rawExpense); err != nil {
 			return nil, fmt.Errorf("scan finance summary: %w", err)
 		}
+		income, overflow, err := parseCappedInt64(rawIncome, MaxSummaryAggregateMinor)
+		if err != nil {
+			return nil, fmt.Errorf("income aggregate for %s: %w", v.Currency, err)
+		}
+		if overflow {
+			return nil, fmt.Errorf("%w: income for %s in %s..%s", ErrEntryAggregateOverflow, v.Currency, dr.From, dr.To)
+		}
+		expense, overflow, err := parseCappedInt64(rawExpense, MaxSummaryAggregateMinor)
+		if err != nil {
+			return nil, fmt.Errorf("expense aggregate for %s: %w", v.Currency, err)
+		}
+		if overflow {
+			return nil, fmt.Errorf("%w: expense for %s in %s..%s", ErrEntryAggregateOverflow, v.Currency, dr.From, dr.To)
+		}
+		v.IncomeMinor = income
+		v.ExpenseMinor = expense
 		out[v.Currency] = v
 	}
 	return out, rows.Err()
+}
+
+// parseCappedInt64 parses a Postgres numeric/bigint text representation
+// of a non-negative integer. It returns the int64 value when the input is
+// at or below cap; overflow=true when the parsed value would exceed
+// cap (the exact magnitude is intentionally discarded so callers report
+// only that the cap was exceeded); or an error if the input is
+// malformed or negative.
+func parseCappedInt64(raw string, cap int64) (int64, bool, error) {
+	if raw == "" {
+		return 0, false, nil
+	}
+	neg := false
+	if raw[0] == '-' {
+		neg = true
+		raw = raw[1:]
+	}
+	if raw == "" || raw == "0" {
+		return 0, false, nil
+	}
+	var v int64
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if c < '0' || c > '9' {
+			return 0, false, fmt.Errorf("non-digit %q in aggregate %q", c, raw)
+		}
+		digit := int64(c - '0')
+		// Detect overflow above the cap without first overflowing int64.
+		if v > (cap-digit)/10 {
+			return 0, true, nil
+		}
+		v = v*10 + digit
+	}
+	if neg {
+		return -v, false, nil
+	}
+	return v, false, nil
 }

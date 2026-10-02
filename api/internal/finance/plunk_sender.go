@@ -2,12 +2,16 @@ package finance
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // maxPlunkResponseBytes bounds how much of a Plunk API response body we
@@ -22,10 +26,10 @@ const maxPlunkResponseBytes = 1 << 20 // 1 MiB
 //
 // Plunk exposes a public REST API:
 //
-//	POST {BaseURL}/api/v1/{ProjectID}/emails
+//	POST {BaseURL}/v1/send
 //	Authorization: Bearer {APIKey}
 //	Content-Type: application/json
-//	Body: {"from":{"email":"...","name":"..."}, "to":["..."],"subject":"...","body":"...","bodyHtml":"..."}
+//	Body: {"from":{"email":"...","name":"..."}, "to":["..."],"subject":"...","body":"HTML"}
 //
 // Idempotency-Key header is supported (recommended for retry safety).
 type PlunkSender struct {
@@ -36,8 +40,13 @@ type PlunkSender struct {
 // NewPlunkSender creates a PlunkSender.
 func NewPlunkSender(cfg PlunkConfig) *PlunkSender {
 	return &PlunkSender{
-		cfg:    cfg,
-		client: &http.Client{Timeout: 30 * time.Second},
+		cfg: cfg,
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+			// Never follow redirects: 307/308 would replay the POST body and
+			// Idempotency-Key to another location. A 3xx is a failure.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}
 }
 
@@ -57,16 +66,27 @@ type plunkContact struct {
 	Name  string `json:"name,omitempty"`
 }
 
-// plunkResponse is what Plunk returns on success.
-type plunkResponse struct {
-	Success bool   `json:"success"`
-	EmailID string `json:"id,omitempty"`
-	Message string `json:"message,omitempty"`
-}
-
 // Send posts the email to Plunk's public REST API. Returns an error wrapping
 // any transport or non-200 response.
 func (p *PlunkSender) Send(msg *EmailMessage) error {
+	return p.SendContext(context.Background(), msg)
+}
+
+// ValidateRequest rejects features absent from the official /v1/send contract.
+func (p *PlunkSender) ValidateRequest(req CreateEmailRequest) error {
+	if len(req.CCEmails) > 0 || len(req.BCCEmails) > 0 {
+		return fmt.Errorf("%w: Plunk cc_emails and bcc_emails are not supported", ErrEmailValidation)
+	}
+	return nil
+}
+
+func (p *PlunkSender) SendContext(ctx context.Context, msg *EmailMessage) error {
+	if err := p.ValidateRequest(CreateEmailRequest{CCEmails: msg.CCEmails, BCCEmails: msg.BCCEmails}); err != nil {
+		return err
+	}
+	if len(msg.AttachmentIDs) > 0 {
+		return fmt.Errorf("%w: attachment_ids are not supported; no email was sent", ErrEmailValidation)
+	}
 	fromEmail := msg.FromEmail
 	if fromEmail == "" {
 		fromEmail = p.cfg.FromEmail
@@ -80,15 +100,19 @@ func (p *PlunkSender) Send(msg *EmailMessage) error {
 	}
 
 	req := plunkRequest{
-		From:     plunkContact{Email: fromEmail, Name: fromName},
-		To:       []string{msg.ToEmail},
-		CC:       msg.CCEmails,
-		BCC:      msg.BCCEmails,
-		Subject:  msg.Subject,
-		Body:     msg.Body,
-		BodyHTML: msg.BodyHTML,
+		From:    plunkContact{Email: fromEmail, Name: fromName},
+		To:      []string{msg.ToEmail},
+		CC:      msg.CCEmails,
+		BCC:     msg.BCCEmails,
+		Subject: msg.Subject,
+		Body:    msg.Body,
 	}
 
+	if msg.BodyHTML != "" {
+		req.Body = msg.BodyHTML
+	} else {
+		req.Body = "<pre>" + html.EscapeString(msg.Body) + "</pre>"
+	}
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("plunk: marshal: %w", err)
@@ -96,12 +120,12 @@ func (p *PlunkSender) Send(msg *EmailMessage) error {
 
 	base := p.cfg.BaseURL
 	if base == "" {
-		base = "https://app.useplunk.com"
+		base = "https://api.useplunk.com"
 	}
 	base = strings.TrimRight(base, "/")
-	url := fmt.Sprintf("%s/api/v1/%s/emails", base, p.cfg.ProjectID)
+	url := base + "/v1/send"
 
-	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("plunk: new request: %w", err)
 	}
@@ -115,15 +139,59 @@ func (p *PlunkSender) Send(msg *EmailMessage) error {
 		return fmt.Errorf("plunk: send: %w", err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxPlunkResponseBytes))
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("plunk: HTTP %d: %s", resp.StatusCode, string(body))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPlunkResponseBytes+1))
+	if err != nil {
+		return fmt.Errorf("plunk: read acknowledgement: %w", err)
 	}
-
-	var pres plunkResponse
-	if err := json.Unmarshal(body, &pres); err == nil && !pres.Success {
-		return fmt.Errorf("plunk: success=false: %s", pres.Message)
+	if len(body) > maxPlunkResponseBytes {
+		return fmt.Errorf("plunk: acknowledgement too large")
+	}
+	// Official Plunk does not replay receipts. Only a matched duplicate with
+	// an explicitly successful original result proves acceptance; in-flight
+	// (null), original 5xx and arbitrary conflicts remain failures.
+	if resp.StatusCode == http.StatusConflict {
+		var duplicate struct {
+			Success bool `json:"success"`
+			Error   struct {
+				Code    string `json:"code"`
+				Details struct {
+					Key                string `json:"key"`
+					OriginalRequest    string `json:"originalRequest"`
+					OriginalStatusCode *int   `json:"originalStatusCode"`
+				} `json:"details"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(body, &duplicate) == nil && !duplicate.Success && duplicate.Error.Code == "IDEMPOTENCY_KEY_REUSED" {
+			d := duplicate.Error.Details
+			if d.Key == msg.ID.String() && d.OriginalRequest == "POST /v1/send" && d.OriginalStatusCode != nil && *d.OriginalStatusCode == http.StatusOK {
+				return nil
+			}
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("plunk: HTTP %d", resp.StatusCode)
+	}
+	var ack struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Emails []struct {
+				Contact struct {
+					Email string `json:"email"`
+				} `json:"contact"`
+				Email string `json:"email"`
+			} `json:"emails"`
+			Timestamp time.Time `json:"timestamp"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &ack); err != nil {
+		return fmt.Errorf("plunk: invalid acknowledgement: %w", err)
+	}
+	if !ack.Success || len(ack.Data.Emails) != 1 || ack.Data.Timestamp.IsZero() {
+		return fmt.Errorf("plunk: missing successful email acknowledgement")
+	}
+	email := ack.Data.Emails[0]
+	if id, err := uuid.Parse(email.Email); err != nil || id == uuid.Nil || !strings.EqualFold(email.Contact.Email, msg.ToEmail) {
+		return fmt.Errorf("plunk: invalid email receipt")
 	}
 	return nil
 }

@@ -309,12 +309,12 @@ func (h *AgreementInstanceHandler) handleSign(w http.ResponseWriter, r *http.Req
 }
 
 func (h *AgreementInstanceHandler) handleGeneratePDF(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	if h.svc.docService == nil {
-		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "document service not configured")
-		return
-	}
 	doc, err := h.svc.GeneratePDF(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, ErrAgreementGenerationUnsupported) {
+			writeError(w, http.StatusServiceUnavailable, "generation_unsupported", err.Error())
+			return
+		}
 		if errors.Is(err, ErrAgreementInstanceNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "instance not found")
 			return

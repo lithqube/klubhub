@@ -7,6 +7,8 @@
 import { storeToRefs } from 'pinia'
 import { useEarningsStore } from '../../stores/earnings'
 import EntryFormDialog from './EntryFormDialog.vue'
+import type { Entry } from '../../types/finance'
+const emit = defineEmits<{ saved: [entry: Entry] }>()
 
 const store = useEarningsStore()
 const { createOpen, createKind, createPresetGigId, editId } = storeToRefs(store)
@@ -19,5 +21,6 @@ const { createOpen, createKind, createPresetGigId, editId } = storeToRefs(store)
     :gig-id="createPresetGigId"
     :edit-id="editId"
     @update:open="store.setCreateOpen"
+    @saved="emit('saved', $event)"
   />
 </template>

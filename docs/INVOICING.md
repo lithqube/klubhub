@@ -214,7 +214,7 @@ rate / 10000); `net_payable = total − withholding`.
 | `POST /invoices/{id}/cancel` | `{updated_at}` | **draft only** → cancelled |
 | `POST /invoices/{id}/credit-note` | `{reason, updated_at}` | `201 {data: {credit_note, original}}` |
 | `POST /invoices/{id}/correct` | `{reason, updated_at}` | `201 {data: {credit_note, original, replacement}}` (replacement is a draft copy) |
-| `GET/POST /invoices/{id}/payments`, `GET/PUT /payments/{id}` | unchanged | balances use `net_payable_minor`; not allowed on credit notes |
+| `GET/POST /invoices/{id}/payments`, `GET/PUT /payments/{id}` | unchanged | balances use `net_payable_minor`; not allowed on credit notes; on `credited`/`corrected` originals only `kind: refund` is accepted (bounded by completed receipts) — new `deposit`/`payment` kinds are rejected as `payment_kind_not_allowed` |
 | `GET /entries?kind=&status=&currency=&category=&gig_id=&from=&to=` | | `{data: Entry[]}` newest first |
 | `POST /entries` | `{kind, amount_minor, currency, category, entry_date, description?, notes?, gig_id?}` | `201 {data: Entry}` |
 | `GET /entries/{id}` | | `{data: Entry}` |
@@ -228,13 +228,61 @@ rate / 10000); `net_payable = total − withholding`.
 
 Errors: `400 validation_failed`, `404 not_found`, `409 conflict` (stale
 `updated_at`), `409 bad_state` (wrong status for the action), `422
-not_issuable | invoice_not_payable | exceeds_balance`, `503` finance not
+not_issuable | invoice_not_payable | payment_kind_not_allowed | exceeds_balance`, `503` finance not
 configured. Error bodies: `{error, message, problems?}`.
 
-Side effect: every payment write updates `gigs.payment_status` from the
-invoice balance (`paid` when received ≥ net payable, `deposit_paid` when
-received > 0, else `unpaid`) in the same transaction. The gig's
-`updated_at` only moves when the status actually changes.
+Ledger money uses positive integer minor units. Create/update/generated-entry
+validation (including repository/helper paths) rejects values above
+`9007199254740991` (`Number.MAX_SAFE_INTEGER`), including optional generated
+source amounts. This is the exact JSON-number representation limit, not a
+business or currency-specific cap. Summary and profit/loss compute exact
+PostgreSQL numeric sums and reject the entire report with `400
+validation_failed` if any per-currency income/expense total exceeds that
+limit, including legacy data whose sum exceeds int64. No totals are capped,
+truncated, or returned partially.
+
+Refunds on credited/corrected originals reference the original invoice and
+its receipt history. Pending **plus** completed refunds cannot exceed
+completed receipts. Pending refunds reserve refundable cash but do not free
+incoming-payment capacity; only completed refunds reduce net collection.
+Manual `/pay` alone is not a receipt record and creates no refund capacity.
+
+Generated-source lookup returns only the active, nondeleted entry with a
+deterministic ordering; voided/deleted history remains accessible by ID.
+Generic generated-entry retries against inactive history are rejected rather
+than resurrecting revenue. Explicit gig re-payment may create a replacement.
+Concurrent gig-income inserts use `ON CONFLICT DO NOTHING`, then reuse only
+an exact matching payload or reject it as `generated_entry_conflict`, without
+aborting the caller transaction.
+
+Gig payment status sync: creating a **pending** payment never touches
+`gigs.payment_status` (pending money is not cash authority). Completing a
+payment, or any other status transition, re-derives the status inside the
+same transaction: the invoice row is locked first, then the gig row
+(`FOR NO KEY UPDATE`), and the status is aggregated across all of the
+gig's `kind=invoice` documents in status `issued`, `paid`, `credited` or
+`corrected`. Per invoice, received = completed payments/deposits minus
+completed refunds. The gig is `paid` when any invoice has received ≥ net
+payable, else `deposit_paid` when any has received > 0, else `unpaid`.
+Credit notes, drafts and cancelled invoices never contribute; credited and
+corrected originals keep counting their settled receipts until the cash is
+refunded, so a later write on a sibling invoice cannot flip a settled gig.
+The gig's `updated_at` only moves when the status actually changes, and
+the transition hooks (income generation, reconciliation) see the gig fee
+re-read under the lock, so a concurrent fee edit is never applied from a
+stale snapshot.
+
+Completion follows the same invoice-state rules as creation: a pending
+deposit/payment cannot be completed once its invoice is credited,
+corrected (`payment_kind_not_allowed`) or cancelled
+(`invoice_not_payable`); only refunds may complete on credited/corrected
+originals. Failing a pending payment remains allowed.
+
+Amounts are currency-aware minor units: the gig fee (`DECIMAL`) is converted
+using the currency's exponent (JPY 0, EUR/USD 2, BHD 3); a fee with more
+precision than the currency allows is rejected rather than rounded.
+Payment, entry and source amounts are bounded by `MAX_SAFE_INTEGER` minor
+units.
 
 ### 4.1 Go API details (as implemented)
 
@@ -277,6 +325,35 @@ received > 0, else `unpaid`) in the same transaction. The gig's
   `total_minor`, a one-row `tax_breakdown` is derived from the stored
   totals, and drafts get `supply_date` = gig date. Existing drafts keep an
   empty `customer` (issue-check asks for it) and `vat_treatment: none`.
+
+### 4.2 Request boundary: Host allowlist and Origin check
+
+The API has no authentication; it is a network-private, single-owner service.
+Unsafe requests (`POST`/`PUT`/`PATCH`/`DELETE` under `/api/v1/`) pass a boundary
+(`internal/platform/http/origin.go`):
+
+1. **Host allowlist (always enforced, Origin present or not).** The `Host`
+   header must be `localhost`, `127.0.0.1`, `[::1]` or the host of
+   `CORS_ORIGIN` (any port). This closes DNS rebinding, where an attacker
+   domain is re-pointed at a private address and the browser sends
+   `Origin == Host == attacker`. Otherwise `403 csrf` with a message telling
+   the operator to set `CORS_ORIGIN`.
+2. **Origin check.** If `Origin` is present it must be exactly one value equal
+   to scheme+`Host`, or to `CORS_ORIGIN`. Without `Origin`, browser requests
+   marked cross-site/same-site via `Sec-Fetch-Site` are rejected; curl/CLI
+   without `Origin` are allowed (subject to rule 1).
+3. Content-Type must be `application/json` (or multipart on upload routes).
+
+`GET`/`HEAD`/`OPTIONS` and non-`/api/v1/` paths are not gated.
+
+**Deployment tradeoff:** reaching the API by LAN IP (`http://192.168.1.10:8080`)
+or any hostname other than the above now returns 403 for writes. Set
+`CORS_ORIGIN` to the exact origin users type, bare, e.g.
+`CORS_ORIGIN=https://dj.example` (no trailing slash or path; the API logs a
+startup warning and ignores malformed values). Only one extra host is
+supported. Behind a TLS-terminating proxy, `CORS_ORIGIN` must be the public
+`https://` origin. `X-Forwarded-*` headers are never trusted. The default
+`http://127.0.0.1:3000` works for local use.
 
 ## 5. Frontend structure
 

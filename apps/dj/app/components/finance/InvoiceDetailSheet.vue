@@ -2,7 +2,7 @@
 // Invoice detail: right-hand sheet on desktop, full-height bottom sheet on
 // phones. Open/close and the loaded invoice live in the invoice store, so
 // any entry point (finance list, gig form, gig actions) drives the same sheet.
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMediaQuery } from '@vueuse/core'
 import { DialogDescription } from 'radix-vue'
@@ -82,8 +82,24 @@ const confirmAction = ref<InvoiceConfirmAction | null>(null)
 const busy = ref(false)
 const confirmError = ref('')
 const actionError = ref('')
+const actionSnapshot = ref<Invoice | null>(null)
+let lifetime = 0
+let alive = true
+onBeforeUnmount(() => { alive = false; lifetime++ })
+watch([detailOpen, detailId], () => {
+  lifetime++
+  busy.value = false
+  confirmOpen.value = false
+  confirmAction.value = null
+  actionSnapshot.value = null
+  confirmError.value = ''
+  actionError.value = ''
+}, { flush: 'sync' })
 
 function requestAction(action: InvoiceConfirmAction): void {
+  if (!inv.value || busy.value) return
+  actionSnapshot.value = JSON.parse(JSON.stringify(inv.value)) as Invoice
+  const generation = lifetime
   actionError.value = ''
   if (action === 'pay' && inv.value && inv.value.outstanding_minor === 0) {
     void run('pay', '')
@@ -93,42 +109,50 @@ function requestAction(action: InvoiceConfirmAction): void {
   confirmAction.value = action
   // Let the dropdown finish closing (and return focus) before the dialog
   // traps focus, so the dialog remembers the trigger for focus restore.
-  setTimeout(() => { confirmOpen.value = true }, 0)
+  setTimeout(() => { if (alive && generation === lifetime && detailOpen.value) confirmOpen.value = true }, 0)
 }
 
 async function run(action: InvoiceConfirmAction, reason: string): Promise<void> {
-  const i = inv.value
-  if (!i || busy.value) return
+  const i = actionSnapshot.value
+  if (!i || busy.value || !detailOpen.value) return
+  const generation = lifetime
+  const isCurrent = () => alive && generation === lifetime && detailOpen.value
+  const notify = (options: Parameters<typeof toast>[0]): void => { if (isCurrent()) toast(options) }
   busy.value = true
   confirmError.value = ''
   const label = invoiceNumberLabel(i)
   try {
     switch (action) {
       case 'issue': {
-        const issued = await store.issueInvoice(i.id)
-        toast({ title: 'Invoice issued', description: `${invoiceNumberLabel(issued)} is issued. Nothing was sent to the promoter.` })
+        const issued = await store.issueInvoice(i.id, i.updated_at)
+        notify({ title: 'Invoice issued', description: `${invoiceNumberLabel(issued)} is issued. Nothing was sent to the promoter.` })
         break
       }
       case 'cancel':
-        await store.cancelInvoice(i.id)
-        toast({ title: 'Draft cancelled', description: 'No invoice number was used.' })
+        await store.cancelInvoice(i.id, i.updated_at)
+        notify({ title: 'Draft cancelled', description: 'No invoice number was used.' })
         break
       case 'pay':
-        await store.markPaid(i.id)
-        toast({ title: 'Marked as paid', description: `${label} is paid.` })
+        await store.markPaid(i.id, { updated_at: i.updated_at })
+        notify({ title: 'Marked as paid', description: `${label} is paid.` })
         break
       case 'credit': {
-        const res = await store.issueCreditNote(i.id, reason)
-        toast({ title: 'Credit note issued', description: `${invoiceNumberLabel(res.credit_note)} reverses ${label}.` })
+        const res = await store.issueCreditNote(i.id, reason, i.updated_at)
+        notify({ title: 'Credit note issued', description: `${invoiceNumberLabel(res.credit_note)} reverses ${label}.` })
         break
       }
-      case 'correct':
-        await store.correctInvoice(i.id, reason)
-        toast({ title: 'Replacement draft ready', description: `${label} was credited. Edit the new draft and issue it.` })
+      case 'correct': {
+        const res = await store.correctInvoice(i.id, reason, i.updated_at)
+        // The store moves the sheet to the replacement itself, which bumps
+        // `lifetime`; that move is part of this success, not a supersession.
+        const movedToReplacement = alive && detailOpen.value && detailId.value === res.replacement.id
+        if (isCurrent() || movedToReplacement) toast({ title: 'Replacement draft ready', description: `${label} was credited. Edit the new draft and issue it.` })
         break
+      }
     }
-    confirmOpen.value = false
+    if (isCurrent()) confirmOpen.value = false
   } catch (e) {
+    if (!isCurrent()) return
     const msg = inlineErrorMessage(toFinanceError(e))
     if (msg === null) {
       // 409: the sheet banner explains it and shows the latest version.
@@ -141,7 +165,7 @@ async function run(action: InvoiceConfirmAction, reason: string): Promise<void> 
       actionError.value = msg
     }
   } finally {
-    busy.value = false
+    if (isCurrent()) busy.value = false
   }
 }
 
@@ -237,7 +261,7 @@ function retry(): void {
     <InvoiceConfirmDialog
       v-model:open="confirmOpen"
       :action="confirmAction"
-      :invoice="inv"
+      :invoice="actionSnapshot"
       :busy="busy"
       :error="confirmError"
       @confirm="run(confirmAction!, $event)"

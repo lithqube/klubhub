@@ -96,18 +96,45 @@ describe('useEarningsStore', () => {
     })
   })
 
-  it('updateEntry sends the cached updated_at and refreshes on 409', async () => {
+  it('updateEntry sends the caller-supplied updated_at (does not borrow from the cache) and refreshes the single entry on 409', async () => {
     const store = useEarningsStore()
     store.entries = [makeEntry()]
     fetchMock
       .mockRejectedValueOnce(httpError(409, { error: 'conflict', message: 'stale' }))
-      .mockResolvedValueOnce({ data: [makeEntry({ updated_at: '2026-09-15T11:00:00Z' })] })
+      .mockResolvedValueOnce({ data: makeEntry({ updated_at: '2026-09-15T11:00:00Z' }) })
     await expect(store.updateEntry('ent-1', {
       kind: 'income', amount_minor: 1, currency: 'EUR', category: 'gig_fee',
       entry_date: '2026-09-15', description: 'x', notes: '', gig_id: null,
+      updated_at: '2026-09-15T10:00:00Z',
     })).rejects.toMatchObject({ code: 'conflict' })
+    // The PUT body must carry the caller's T1 updated_at token, never
+    // a newer token sourced via the store cache.
     expect(fetchMock.mock.calls[0]![1].body.updated_at).toBe('2026-09-15T10:00:00Z')
+    // The follow-up refresh targets the single entry, not the list. The
+    // dialog owns the conflict banner and decides when to adopt the new
+    // fields + version together.
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/v1/finance/entries/ent-1')
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('updateEntry keeps the original T1 token even when the cache has been refreshed to T2 before save', async () => {
+    const store = useEarningsStore()
+    store.entries = [makeEntry()]
+    // Simulate a same-ID refresh that installs T2 (different amount, new
+    // updated_at) into the cache between the dialog opening and the user
+    // saving with their original T1 snapshot.
+    fetchMock.mockResolvedValueOnce({ data: [makeEntry()] })
+    await store.fetchEntries()
+    store.entries = [makeEntry({ amount_minor: 90000, updated_at: '2026-09-15T11:00:00Z' })]
+    fetchMock.mockResolvedValueOnce({ data: makeEntry({ updated_at: '2026-09-15T12:00:00Z' }) })
+    await store.updateEntry('ent-1', {
+      kind: 'income', amount_minor: 100, currency: 'EUR', category: 'gig_fee',
+      entry_date: '2026-09-15', description: 'Local draft', notes: '', gig_id: null,
+      updated_at: '2026-09-15T10:00:00Z',
+    })
+    expect(fetchMock.mock.calls[1]![1].body.updated_at).toBe('2026-09-15T10:00:00Z')
+    expect(fetchMock.mock.calls[1]![1].body.amount_minor).toBe(100)
+    expect(fetchMock.mock.calls[1]![1].body.description).toBe('Local draft')
   })
 
   it('voidEntry flips status to voided in the local list', async () => {

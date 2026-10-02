@@ -26,6 +26,19 @@ const { listLoaded: entriesLoaded } = storeToRefs(earningsStore)
 
 const voidingEntry = ref<Entry | null>(null)
 const deletingEntry = ref<Entry | null>(null)
+const mutationBusy = ref(false)
+const mutationError = ref('')
+let refreshedRevision = earningsStore.mutationRevision
+function onConfirmedMutation(): void {
+  if (earningsStore.mutationRevision === refreshedRevision) return
+  refreshedRevision = earningsStore.mutationRevision
+  refreshAggregates()
+}
+watch(() => earningsStore.mutationRevision, onConfirmedMutation)
+function refreshAggregates(): void {
+  void earningsStore.refreshSummary()
+  void earningsStore.refreshProfitLoss()
+}
 const reconDialogOpen = ref(false)
 const reconDialogGigId = ref<string | null>(null)
 
@@ -39,26 +52,25 @@ function onDelete(entry: Entry): void {
   deletingEntry.value = entry
 }
 
-async function confirmVoid(): Promise<void> {
-  if (!voidingEntry.value) return
-  const e = voidingEntry.value
-  voidingEntry.value = null
+async function confirmMutation(action: 'void' | 'delete'): Promise<void> {
+  const target = action === 'void' ? voidingEntry : deletingEntry
+  if (!target.value || mutationBusy.value) return
+  const e = { ...target.value }
+  mutationBusy.value = true
+  mutationError.value = ''
   try {
-    await earningsStore.voidEntry(e.id)
-  } catch {
-    // Already surfaced via the store's banner / inline error.
+    if (action === 'void') await earningsStore.voidEntry(e.id, { updated_at: e.updated_at })
+    else await earningsStore.deleteEntry(e.id, { updated_at: e.updated_at })
+    target.value = null
+    onConfirmedMutation()
+  } catch (error) {
+    mutationError.value = error instanceof Error ? error.message : 'Could not change the entry.'
+  } finally {
+    mutationBusy.value = false
   }
 }
-async function confirmDelete(): Promise<void> {
-  if (!deletingEntry.value) return
-  const e = deletingEntry.value
-  deletingEntry.value = null
-  try {
-    await earningsStore.deleteEntry(e.id)
-  } catch {
-    // Same.
-  }
-}
+function confirmVoid(): Promise<void> { return confirmMutation('void') }
+function confirmDelete(): Promise<void> { return confirmMutation('delete') }
 
 function onReconciliationResolved(_rec: EntryReconciliation | { id: string; resolution: string }): void {
   // Refresh summary + P&L so the page reflects the resolution immediately.
@@ -151,15 +163,16 @@ watch(entriesLoaded, (loaded) => {
         </section>
       </div>
 
+      <p v-if="mutationError" role="alert" class="finance-notice">{{ mutationError }}</p>
       <p class="finance-notice" role="note">
-        FIN-10 — No tax or VAT is computed anywhere on this page. Multi-currency totals are
+        FIN-10 — No tax or VAT is computed on ledger entries; invoices calculate tax/VAT separately. Multi-currency totals are
         grouped by code and never converted (FIN-09). Auto-generated income tied to a paid gig
         (FIN-03) is read-only; void it instead of editing it.
       </p>
     </div>
 
     <InvoiceWorkspace />
-    <EarningsWorkspace />
+    <EarningsWorkspace @saved="onConfirmedMutation" />
 
     <!-- Void confirm — manual income/expense only. -->
     <Teleport to="body">
@@ -178,7 +191,7 @@ watch(entriesLoaded, (loaded) => {
           </p>
           <div class="finance-confirm-actions">
             <button type="button" class="btn-hud" @click="voidingEntry = null">CANCEL</button>
-            <button type="button" class="btn-hud btn-hud-violet" @click="confirmVoid">CONFIRM VOID</button>
+            <button type="button" class="btn-hud btn-hud-violet" :disabled="mutationBusy" @click="confirmVoid">CONFIRM VOID</button>
           </div>
         </div>
       </div>
@@ -196,7 +209,7 @@ watch(entriesLoaded, (loaded) => {
           <p class="finance-confirm-body">This permanently removes the entry. Auto-generated entries cannot be deleted.</p>
           <div class="finance-confirm-actions">
             <button type="button" class="btn-hud" @click="deletingEntry = null">CANCEL</button>
-            <button type="button" class="btn-hud btn-hud-error" @click="confirmDelete">DELETE</button>
+            <button type="button" class="btn-hud btn-hud-error" :disabled="mutationBusy" @click="confirmDelete">DELETE</button>
           </div>
         </div>
       </div>

@@ -155,22 +155,27 @@ export const useInvoiceStore = defineStore('invoice', () => {
     return map
   })
 
-  async function request<T>(url: string, opts: Record<string, unknown> = {}): Promise<T> {
+  let detailGeneration = 0
+  let issueCheckGeneration = 0
+  let paymentsGeneration = 0
+  async function request<T>(url: string, opts: Record<string, unknown> = {}, isCurrent: () => boolean = () => true): Promise<T> {
     try {
       const res = await $fetch<unknown>(url, opts as never)
       return res as T
     } catch (e) {
       const err = toFinanceError(e)
-      if (err.code === 'unavailable') disabled.value = true
+      if (isCurrent() && err.code === 'unavailable') disabled.value = true
       throw err
     }
   }
 
-  function upsert(inv: Invoice): void {
+  /** `touchCurrent: false` records a confirmed write in the list caches
+   * without letting it replace the detail the user has since moved to. */
+  function upsert(inv: Invoice, touchCurrent = true): void {
     const idx = invoices.value.findIndex((i) => i.id === inv.id)
     if (idx === -1) invoices.value.unshift(inv)
     else invoices.value.splice(idx, 1, inv)
-    if (current.value?.id === inv.id) current.value = inv
+    if (touchCurrent && current.value?.id === inv.id) current.value = inv
     const cached = gigInvoices.value[inv.gig_id]
     if (cached) {
       const ci = cached.findIndex((i) => i.id === inv.id)
@@ -219,19 +224,27 @@ export const useInvoiceStore = defineStore('invoice', () => {
   }
 
   async function fetchPayments(id: string): Promise<void> {
-    const res = await request<unknown>(`${BASE}/invoices/${id}/payments`)
-    if (current.value?.id === id) payments.value = unwrap<Payment[] | null>(res) ?? []
+    const lifetime = detailGeneration
+    const generation = ++paymentsGeneration
+    const isCurrent = () => lifetime === detailGeneration && generation === paymentsGeneration && current.value?.id === id
+    const res = await request<unknown>(`${BASE}/invoices/${id}/payments`, {}, isCurrent)
+    if (isCurrent()) payments.value = unwrap<Payment[] | null>(res) ?? []
   }
 
-  async function fetchIssueCheck(id: string): Promise<IssueCheck | null> {
+  async function fetchIssueCheck(id: string, callerCurrent: () => boolean = () => true): Promise<IssueCheck | null> {
+    const lifetime = detailGeneration
+    const generation = ++issueCheckGeneration
+    const isCurrent = () => callerCurrent() && lifetime === detailGeneration && generation === issueCheckGeneration && current.value?.id === id
     issueCheckLoading.value = true
     try {
-      const check = unwrap<IssueCheck>(await request(`${BASE}/invoices/${id}/issue-check`))
+      const check = unwrap<IssueCheck>(await request(`${BASE}/invoices/${id}/issue-check`, {}, isCurrent))
       const normalized = { ready: !!check?.ready, problems: check?.problems ?? [] }
-      if (current.value?.id === id) issueCheck.value = normalized
+      // Only apply the result while the user is still on the same editor
+      // session; otherwise a stale fetch could overwrite a newer selection.
+      if (isCurrent() && current.value?.id === id) issueCheck.value = normalized
       return normalized
     } finally {
-      issueCheckLoading.value = false
+      if (isCurrent()) issueCheckLoading.value = false
     }
   }
 
@@ -241,6 +254,11 @@ export const useInvoiceStore = defineStore('invoice', () => {
 
   /** Loads an invoice with its lines, then payments or the issue check. */
   async function fetchInvoice(id: string, opts: { keepNotice?: boolean } = {}): Promise<Invoice | null> {
+    const generation = ++detailGeneration
+    issueCheckGeneration++
+    paymentsGeneration++
+    issueCheckLoading.value = false
+    const isCurrent = () => generation === detailGeneration
     if (current.value?.id !== id) {
       current.value = null
       lines.value = []
@@ -251,25 +269,32 @@ export const useInvoiceStore = defineStore('invoice', () => {
     currentLoading.value = true
     currentError.value = null
     try {
-      const res = await request<{ data: Invoice; lines?: InvoiceLine[] | null }>(`${BASE}/invoices/${id}`)
+      const res = await request<{ data: Invoice; lines?: InvoiceLine[] | null }>(`${BASE}/invoices/${id}`, {}, isCurrent)
+      if (!isCurrent()) return null
       const inv = res.data
       current.value = inv
       lines.value = res.lines ?? []
       upsert(inv)
       if (acceptsPayments(inv)) await fetchPayments(id)
       else payments.value = []
-      if (inv.status === 'draft') await fetchIssueCheck(id).catch(() => undefined)
+      if (!isCurrent()) return null
+      if (inv.status === 'draft') await fetchIssueCheck(id, isCurrent).catch(() => undefined)
       else issueCheck.value = null
       return inv
     } catch (e) {
-      currentError.value = toFinanceError(e)
+      if (isCurrent()) currentError.value = toFinanceError(e)
       return null
     } finally {
-      currentLoading.value = false
+      if (isCurrent()) currentLoading.value = false
     }
   }
 
   function closeCurrent(): void {
+    detailGeneration++
+    issueCheckGeneration++
+    paymentsGeneration++
+    currentLoading.value = false
+    issueCheckLoading.value = false
     current.value = null
     lines.value = []
     payments.value = []
@@ -315,15 +340,19 @@ export const useInvoiceStore = defineStore('invoice', () => {
   // ── Writes (no optimistic updates: state changes only from responses) ──
 
   /** Shared 409/422 handling: refetch and surface the reason, then rethrow. */
-  async function handleWriteError(e: unknown, id: string | null): Promise<never> {
+  async function handleWriteError(e: unknown, id: string | null, isCurrent: () => boolean = () => true): Promise<never> {
     const err = toFinanceError(e)
+    if (!isCurrent()) throw err
     if (id && (err.code === 'conflict' || err.code === 'bad_state')) {
       notice.value = err.code === 'conflict' ? CONFLICT_NOTICE : BAD_STATE_NOTICE
-      await fetchInvoice(id, { keepNotice: true })
+      // Only refresh the store when the editor session is still live;
+      // otherwise a backgrounded write could clobber the user's newer
+      // selection in the parent component.
+      if (isCurrent()) await fetchInvoice(id, { keepNotice: true })
     } else if (id && err.code === 'not_issuable') {
-      if (current.value?.id === id) issueCheck.value = { ready: false, problems: err.problems }
+      if (isCurrent() && current.value?.id === id) issueCheck.value = { ready: false, problems: err.problems }
     } else if (id && (err.code === 'exceeds_balance' || err.code === 'invoice_not_payable')) {
-      await fetchInvoice(id, { keepNotice: true })
+      if (isCurrent()) await fetchInvoice(id, { keepNotice: true })
     }
     throw err
   }
@@ -338,56 +367,93 @@ export const useInvoiceStore = defineStore('invoice', () => {
     }
   }
 
-  async function updateInvoice(id: string, input: InvoiceUpdateInput): Promise<Invoice> {
+  async function updateInvoice(id: string, input: InvoiceUpdateInput, callerCurrent: () => boolean = () => true): Promise<Invoice> {
+    const generation = detailGeneration
+    const isCurrent = () => callerCurrent() && generation === detailGeneration
+    // FE-2 hardening: the caller owns the field/version snapshot. We must
+    // never substitute a newer Pinia cache token for the dialog's original
+    // T1 fields + token; the body is exactly what the caller passed.
     try {
       const inv = unwrap<Invoice>(
-        await request(`${BASE}/invoices/${id}`, { method: 'PUT', body: { ...input, updated_at: tokenFor(id) } }),
+        await request(`${BASE}/invoices/${id}`, { method: 'PUT', body: { ...input } }, isCurrent),
       )
+      if (!isCurrent()) { upsert(inv, false); return inv }
       upsert(inv)
       notice.value = null
-      if (inv.status === 'draft') await fetchIssueCheck(id).catch(() => undefined)
+      if (inv.status === 'draft') await fetchIssueCheck(id, isCurrent).catch(() => undefined)
       return inv
     } catch (e) {
-      return handleWriteError(e, id)
+      return handleWriteError(e, id, isCurrent)
     }
   }
 
-  async function transition(id: string, action: string, extra: Record<string, unknown> = {}): Promise<Invoice> {
+  async function transition(
+    id: string,
+    action: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<Invoice> {
+    // FE-2 hardening: caller may pass `updated_at` to lock in their original
+    // snapshot. If absent we fall back to the cache token (no dialog owns
+    // the call site for unparameterised historical transitions).
+    let generation = detailGeneration
+    const isCurrent = () => generation === detailGeneration
+    const updatedAt = typeof extra.updated_at === 'string' ? extra.updated_at : tokenFor(id)
+    const { updated_at: _ignored, ...rest } = extra
+    void _ignored
     try {
       const inv = unwrap<Invoice>(
         await request(`${BASE}/invoices/${id}/${action}`, {
           method: 'POST',
-          body: { ...extra, updated_at: tokenFor(id) },
-        }),
+          body: { ...rest, updated_at: updatedAt },
+        }, isCurrent),
       )
+      if (!isCurrent()) { upsert(inv, false); return inv }
       upsert(inv)
       notice.value = null
-      await fetchInvoice(id)
+      const refresh = fetchInvoice(id)
+      generation = detailGeneration
+      await refresh
       return inv
     } catch (e) {
-      return handleWriteError(e, id)
+      return handleWriteError(e, id, isCurrent)
     }
   }
 
-  const issueInvoice = (id: string) => transition(id, 'issue')
-  const cancelInvoice = (id: string) => transition(id, 'cancel')
-  const markPaid = (id: string, input: { paid_at?: string; payment_ref?: string } = {}) =>
-    transition(id, 'pay', { paid_at: input.paid_at ?? nowIso(), payment_ref: input.payment_ref ?? '' })
+  const issueInvoice = (id: string, updatedAt?: string) =>
+    transition(id, 'issue', updatedAt ? { updated_at: updatedAt } : {})
+  const cancelInvoice = (id: string, updatedAt?: string) =>
+    transition(id, 'cancel', updatedAt ? { updated_at: updatedAt } : {})
+  const markPaid = (id: string, input: { paid_at?: string; payment_ref?: string; updated_at?: string } = {}) =>
+    transition(id, 'pay', {
+      paid_at: input.paid_at ?? nowIso(),
+      payment_ref: input.payment_ref ?? '',
+      updated_at: input.updated_at,
+    })
 
-  async function issueCreditNote(id: string, reason: string): Promise<{ credit_note: Invoice; original: Invoice }> {
+  async function issueCreditNote(
+    id: string,
+    reason: string,
+    updatedAt?: string,
+  ): Promise<{ credit_note: Invoice; original: Invoice }> {
+    let generation = detailGeneration
+    const isCurrent = () => generation === detailGeneration
+    const token = updatedAt ?? tokenFor(id)
     try {
       const res = unwrap<{ credit_note: Invoice; original: Invoice }>(
         await request(`${BASE}/invoices/${id}/credit-note`, {
           method: 'POST',
-          body: { reason, updated_at: tokenFor(id) },
-        }),
+          body: { reason, updated_at: token },
+        }, isCurrent),
       )
+      if (!isCurrent()) { upsert(res.original, false); upsert(res.credit_note, false); return res }
       upsert(res.original)
       upsert(res.credit_note)
-      await fetchInvoice(id)
+      const refresh = fetchInvoice(id)
+      generation = detailGeneration
+      await refresh
       return res
     } catch (e) {
-      return handleWriteError(e, id)
+      return handleWriteError(e, id, isCurrent)
     }
   }
 
@@ -395,26 +461,38 @@ export const useInvoiceStore = defineStore('invoice', () => {
   async function correctInvoice(
     id: string,
     reason: string,
+    updatedAt?: string,
   ): Promise<{ credit_note: Invoice; original: Invoice; replacement: Invoice }> {
+    let generation = detailGeneration
+    const isCurrent = () => generation === detailGeneration
+    const token = updatedAt ?? tokenFor(id)
     try {
       const res = unwrap<{ credit_note: Invoice; original: Invoice; replacement: Invoice }>(
         await request(`${BASE}/invoices/${id}/correct`, {
           method: 'POST',
-          body: { reason, updated_at: tokenFor(id) },
-        }),
+          body: { reason, updated_at: token },
+        }, isCurrent),
       )
+      if (!isCurrent()) {
+        upsert(res.original, false); upsert(res.credit_note, false); upsert(res.replacement, false)
+        return res
+      }
       upsert(res.original)
       upsert(res.credit_note)
       upsert(res.replacement)
       if (detailId.value === id) detailId.value = res.replacement.id
-      await fetchInvoice(res.replacement.id)
+      const refresh = fetchInvoice(res.replacement.id)
+      generation = detailGeneration
+      await refresh
       return res
     } catch (e) {
-      return handleWriteError(e, id)
+      return handleWriteError(e, id, isCurrent)
     }
   }
 
   async function createPayment(invoiceId: string, input: PaymentCreateInput): Promise<Payment> {
+    const generation = detailGeneration
+    const isCurrent = () => generation === detailGeneration
     const currency = current.value?.id === invoiceId
       ? current.value.currency
       : invoices.value.find((i) => i.id === invoiceId)?.currency ?? ''
@@ -431,17 +509,17 @@ export const useInvoiceStore = defineStore('invoice', () => {
             reference: input.reference ?? '',
             received_at: input.received_at ?? null,
           },
-        }),
+        }, isCurrent),
       )
     } catch (e) {
-      return handleWriteError(e, invoiceId)
+      return handleWriteError(e, invoiceId, isCurrent)
     }
     // The API creates payments as pending; "already received" completes it.
     if (input.received) {
       try {
-        created = await putPaymentStatus(created, 'completed', input.received_at ?? nowIso())
+        created = await putPaymentStatus(created, 'completed', input.received_at ?? nowIso(), isCurrent)
       } catch (e) {
-        await fetchInvoice(invoiceId, { keepNotice: true })
+        if (isCurrent()) await fetchInvoice(invoiceId, { keepNotice: true })
         const err = toFinanceError(e)
         throw new FinanceApiError(
           err.status,
@@ -451,11 +529,11 @@ export const useInvoiceStore = defineStore('invoice', () => {
         )
       }
     }
-    await fetchInvoice(invoiceId, { keepNotice: true })
+    if (isCurrent()) await fetchInvoice(invoiceId, { keepNotice: true })
     return created
   }
 
-  async function putPaymentStatus(p: Payment, status: Payment['status'], receivedAt: string | null): Promise<Payment> {
+  async function putPaymentStatus(p: Payment, status: Payment['status'], receivedAt: string | null, isCurrent: () => boolean = () => true): Promise<Payment> {
     return unwrap<Payment>(
       await request(`${BASE}/payments/${p.id}`, {
         method: 'PUT',
@@ -466,17 +544,19 @@ export const useInvoiceStore = defineStore('invoice', () => {
           received_at: receivedAt,
           updated_at: p.updated_at,
         },
-      }),
+      }, isCurrent),
     )
   }
 
   async function markPaymentReceived(p: Payment): Promise<Payment> {
+    const generation = detailGeneration
+    const isCurrent = () => generation === detailGeneration
     try {
-      const updated = await putPaymentStatus(p, 'completed', p.received_at ?? nowIso())
-      await fetchInvoice(p.invoice_id, { keepNotice: true })
+      const updated = await putPaymentStatus(p, 'completed', p.received_at ?? nowIso(), isCurrent)
+      if (isCurrent()) await fetchInvoice(p.invoice_id, { keepNotice: true })
       return updated
     } catch (e) {
-      return handleWriteError(e, p.invoice_id)
+      return handleWriteError(e, p.invoice_id, isCurrent)
     }
   }
 

@@ -149,7 +149,7 @@ describe('useInvoiceStore', () => {
     expect(store.payments).toHaveLength(1)
   })
 
-  it('updateInvoice sends the updated_at token from the server copy', async () => {
+  it('updateInvoice sends the caller-supplied updated_at (does not borrow from the cache)', async () => {
     const store = useInvoiceStore()
     store.current = makeInvoice()
     fetchMock
@@ -157,6 +157,7 @@ describe('useInvoiceStore', () => {
       .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
     const inv = store.current!
     await store.updateInvoice('inv-1', {
+      updated_at: inv.updated_at,
       customer: inv.customer,
       vat_treatment: 'domestic',
       tax_rate_bps: 1900,
@@ -182,11 +183,63 @@ describe('useInvoiceStore', () => {
       .mockRejectedValueOnce(httpError(409, { error: 'conflict', message: 'stale' }))
       .mockResolvedValueOnce({ data: makeInvoice({ updated_at: '2026-09-25T12:00:00Z' }), lines: [] })
       .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
-    await expect(store.issueInvoice('inv-1')).rejects.toMatchObject({ code: 'conflict' })
+    await expect(store.issueInvoice('inv-1', '2026-09-25T10:00:00Z')).rejects.toMatchObject({ code: 'conflict' })
     expect(store.notice).toBe(CONFLICT_NOTICE)
     expect(store.current?.updated_at).toBe('2026-09-25T12:00:00Z')
     // one failed POST, one GET, one issue-check — never a second POST
     expect(fetchMock.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(1)
+  })
+
+  it('transition (issue/cancel/pay) sends the caller-supplied updated_at, not the cache-borrowed token', async () => {
+    const store = useInvoiceStore()
+    store.current = makeInvoice()
+    // First transition (issue) — one POST + the trailing fetchInvoice + one
+    // issue-check (since the response keeps status='draft' but a POST returns
+    // a row we control).
+    fetchMock
+      .mockResolvedValueOnce({ data: makeInvoice({ updated_at: '2026-09-25T13:00:00Z' }), lines: [] })
+      .mockResolvedValueOnce({ data: makeInvoice({ updated_at: '2026-09-25T13:00:00Z' }), lines: [] })
+      .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
+    await store.issueInvoice('inv-1', '2026-09-25T10:00:00Z')
+    const issuePost = fetchMock.mock.calls.find(([, opts]) => opts?.method === 'POST')
+    expect(issuePost?.[1].body.updated_at).toBe('2026-09-25T10:00:00Z')
+    // Cache is now updated to T2 (13:00:00). A subsequent transition must
+    // still pass the caller's original snapshot, not T2.
+    fetchMock.mockResolvedValueOnce({ data: makeInvoice({ status: 'paid' }), lines: [] })
+    await store.markPaid('inv-1', { updated_at: '2026-09-25T10:00:00Z', payment_ref: 'wire' })
+    const payPostCalls = fetchMock.mock.calls.filter(([, opts]) => opts?.method === 'POST')
+    expect(payPostCalls).toHaveLength(2)
+    expect(payPostCalls[1]?.[1].body.updated_at).toBe('2026-09-25T10:00:00Z')
+  })
+
+  it('issueCreditNote and correctInvoice send the caller-supplied updated_at', async () => {
+    const store = useInvoiceStore()
+    store.current = makeInvoice({ status: 'issued' })
+    // issueCreditNote: one POST + trailing fetchInvoice for id=1 (line + issue-check).
+    fetchMock
+      .mockResolvedValueOnce({
+        data: { credit_note: makeInvoice({ id: 'cn', kind: 'credit_note' }), original: store.current },
+      })
+      .mockResolvedValueOnce({ data: store.current, lines: [] })
+      .mockResolvedValueOnce({ data: [] })
+    await store.issueCreditNote('inv-1', 'refund', '2026-09-25T10:00:00Z')
+    const creditPost = fetchMock.mock.calls.find(([, opts]) => opts?.method === 'POST')
+    expect(creditPost?.[1].body).toEqual({ reason: 'refund', updated_at: '2026-09-25T10:00:00Z' })
+
+    // correctInvoice: one POST + trailing fetchInvoice for the replacement.
+    fetchMock
+      .mockResolvedValueOnce({
+        data: {
+          original: makeInvoice({ status: 'corrected', replaced_by_invoice_id: 'repl' }),
+          credit_note: makeInvoice({ id: 'cn2', kind: 'credit_note' }),
+          replacement: makeInvoice({ id: 'repl', status: 'draft' }),
+        },
+      })
+      .mockResolvedValueOnce({ data: makeInvoice({ id: 'repl', status: 'draft' }), lines: [] })
+      .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
+    await store.correctInvoice('inv-1', 'wrong', '2026-09-25T10:00:00Z')
+    const postCalls = fetchMock.mock.calls.filter(([, opts]) => opts?.method === 'POST')
+    expect(postCalls[1]?.[1].body).toEqual({ reason: 'wrong', updated_at: '2026-09-25T10:00:00Z' })
   })
 
   it('on 409 bad_state sets the bad-state banner', async () => {
@@ -238,7 +291,7 @@ describe('useInvoiceStore', () => {
       })
       .mockResolvedValueOnce({ data: replacement, lines: [] })
       .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
-    const res = await store.correctInvoice('inv-1', 'wrong address')
+    const res = await store.correctInvoice('inv-1', 'wrong address', '2026-09-25T10:00:00Z')
     expect(res.replacement.id).toBe('repl')
     expect(store.current?.id).toBe('repl')
     expect(fetchMock.mock.calls[0]![1].body).toEqual({ reason: 'wrong address', updated_at: '2026-09-25T10:00:00Z' })

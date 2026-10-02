@@ -48,7 +48,7 @@ type EntryReconciliation struct {
 	ID               uuid.UUID              `json:"id"`
 	GigID            uuid.UUID              `json:"gig_id"`
 	EntryID          uuid.UUID              `json:"entry_id"`
-	Reason           ReconciliationReason  `json:"reason"`
+	Reason           ReconciliationReason   `json:"reason"`
 	AllowedActions   []ReconciliationAction `json:"allowed_actions"`
 	GigAmountMinor   int64                  `json:"gig_amount_minor"`
 	GigCurrency      string                 `json:"gig_currency"`
@@ -303,12 +303,19 @@ func getActiveGeneratedGigIncome(ctx context.Context, db gig.PaymentTransitionTx
 // can decide whether to update the existing row via the reconciliation
 // flow or void it.
 func createGeneratedGigIncome(ctx context.Context, db gig.PaymentTransitionTx, snap gig.PaymentSnapshot, amountMinor int64, currency string) (*Entry, error) {
+	if amountMinor <= 0 || amountMinor > MaxEntryAmountMinor {
+		return nil, EntryValidationErrors{{Field: "amount_minor", Message: "must be positive and within JSON safe integer range"}}
+	}
 	date := snap.Date.Format("2006-01-02")
 	description := gigLineDescription(snap.EventName, snap.Venue, "", date)
 	gigID := snap.GigID
 	sourceDesc := "gig:" + gigID.String()
 	sourceAmount := amountMinor
 	sourceCurrency := currency
+	input := GeneratedEntryInput{Kind: EntryKindIncome, AmountMinor: amountMinor, Currency: currency,
+		Category: "gig_fee", EntryDate: date, Description: description, GigID: &gigID,
+		SourceKind: EntrySourceGigPayment, SourceID: gigID, SourceAmountMinor: &sourceAmount,
+		SourceCurrency: &sourceCurrency, SourceDescription: sourceDesc}
 
 	// Probe first. The (source_kind, source_id, kind) partial unique
 	// index only covers active, not-deleted rows; an existing voided
@@ -324,11 +331,7 @@ func createGeneratedGigIncome(ctx context.Context, db gig.PaymentTransitionTx, s
 		ORDER BY created_at DESC LIMIT 1`, gigID).Scan(scanFinanceEntry(&existing)...)
 	if err == nil {
 		if existing.Status == EntryStatusActive && existing.DeletedAt == nil {
-			if existing.AmountMinor != amountMinor || existing.Currency != currency ||
-				existing.EntryDate != date || existing.Description != description ||
-				existing.SourceAmountMinor == nil || *existing.SourceAmountMinor != sourceAmount ||
-				existing.SourceCurrency == nil || *existing.SourceCurrency != sourceCurrency ||
-				existing.SourceDescription != sourceDesc {
+			if !sameGeneratedIdentity(&existing, input) {
 				return nil, ErrGeneratedEntryConflict
 			}
 			return &existing, nil
@@ -345,20 +348,23 @@ func createGeneratedGigIncome(ctx context.Context, db gig.PaymentTransitionTx, s
 		 auto_generated, source_kind, source_id, source_amount_minor, source_currency, source_description)
 		VALUES ('income', $1, $2, 'gig_fee', $3::date, $4, '', $5,
 		 true, 'gig_payment', $6, $7, $8, $9)
+		ON CONFLICT (source_kind, source_id, kind)
+		  WHERE auto_generated=true AND source_id IS NOT NULL AND status='active' AND deleted_at IS NULL
+		DO NOTHING
 		RETURNING `+financeEntryColumns,
 		amountMinor, currency, date, description, gigID,
 		gigID, sourceAmount, sourceCurrency, sourceDesc).Scan(scanFinanceEntry(&e)...)
 	if err == nil {
 		return &e, nil
 	}
-	if !isUniqueViolation(err) {
+	if !errors.Is(err, pgx.ErrNoRows) {
 		if isEntryGigFKViolation(err) {
 			return nil, EntryValidationErrors{{Field: "gig_id", Message: "does not reference an existing gig"}}
 		}
 		return nil, err
 	}
-	// The partial index tripped because a concurrent writer just
-	// inserted the same source. Re-read and reuse the matching row.
+	// ON CONFLICT waited for the concurrent winner without aborting this
+	// transaction. A separate READ COMMITTED statement sees that row.
 	err = db.QueryRow(ctx, `SELECT `+financeEntryColumns+` FROM finance_entries
 		WHERE auto_generated=true AND source_kind='gig_payment' AND source_id=$1 AND kind='income'
 		  AND status='active' AND deleted_at IS NULL`,
@@ -369,11 +375,7 @@ func createGeneratedGigIncome(ctx context.Context, db gig.PaymentTransitionTx, s
 	if err != nil {
 		return nil, err
 	}
-	if existing.AmountMinor != amountMinor || existing.Currency != currency ||
-		existing.EntryDate != date || existing.Description != description ||
-		existing.SourceAmountMinor == nil || *existing.SourceAmountMinor != sourceAmount ||
-		existing.SourceCurrency == nil || *existing.SourceCurrency != sourceCurrency ||
-		existing.SourceDescription != sourceDesc {
+	if !sameGeneratedIdentity(&existing, input) {
 		return nil, ErrGeneratedEntryConflict
 	}
 	return &existing, nil

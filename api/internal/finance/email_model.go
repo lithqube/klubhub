@@ -125,13 +125,13 @@ type SMTPConfig struct {
 // email platform built on AWS SES (https://github.com/useplunk/plunk) that we
 // already use for the GitHub page. It exposes a public REST API:
 //
-//	POST {BaseURL}/api/v1/{ProjectID}/emails
+//	POST {BaseURL}/v1/send
 //	Authorization: Bearer {APIKey}
 //	Content-Type: application/json
 //	Body: {"from": {...}, "to": "...", "subject": "...", "body": "...", ...}
 type PlunkConfig struct {
-	BaseURL   string // e.g. "https://app.useplunk.com" or self-hosted equivalent
-	ProjectID string // Plunk project UUID
+	BaseURL   string // Plunk API base, e.g. "https://next-api.useplunk.com" or a self-hosted equivalent
+	ProjectID string // retained for configuration compatibility; project is derived from API key
 	APIKey    string // Bearer token
 	FromEmail string // default sender (override-able per message)
 	FromName  string
@@ -153,6 +153,9 @@ func NewDefaultSMTPSender(cfg SMTPConfig) *DefaultSMTPSender {
 }
 
 func (s *DefaultSMTPSender) Send(msg *EmailMessage) error {
+	if len(msg.AttachmentIDs) > 0 {
+		return fmt.Errorf("%w: attachment_ids are not supported; no email was sent", ErrEmailValidation)
+	}
 	// Defense in depth: ValidateCreateEmailRequest already rejects header
 	// injection (CR/LF/control chars) and validates addresses at the API
 	// boundary, but this sender must not trust that every caller went
@@ -253,6 +256,17 @@ func NewEmailService(repo EmailRepositoryIface, sender EmailSender) *EmailServic
 
 // Enqueue creates an email in 'queued' status without sending it.
 func (s *EmailService) Enqueue(ctx context.Context, req CreateEmailRequest) (*EmailMessage, error) {
+	return s.create(ctx, req, false)
+}
+
+func (s *EmailService) create(ctx context.Context, req CreateEmailRequest, claimed bool) (*EmailMessage, error) {
+	if validator, ok := s.sender.(interface {
+		ValidateRequest(CreateEmailRequest) error
+	}); ok {
+		if err := validator.ValidateRequest(req); err != nil {
+			return nil, err
+		}
+	}
 	if err := ValidateCreateEmailRequest(req); err != nil {
 		return nil, err
 	}
@@ -274,16 +288,21 @@ func (s *EmailService) Enqueue(ctx context.Context, req CreateEmailRequest) (*Em
 		CreatedAt:     time.Now().UTC(),
 		UpdatedAt:     time.Now().UTC(),
 	}
+	if claimed {
+		msg.Status = EmailStatusSending
+		msg.Attempts = 1
+	}
 	return s.repo.Create(ctx, msg)
 }
 
 // Send enqueues + immediately delivers an email.
 func (s *EmailService) Send(ctx context.Context, req CreateEmailRequest) (*EmailMessage, error) {
-	msg, err := s.Enqueue(ctx, req)
+	// Insert an already claimed initial attempt: never expose this row as queued.
+	msg, err := s.create(ctx, req, true)
 	if err != nil {
 		return nil, err
 	}
-	return s.deliver(ctx, msg)
+	return s.finalizeDelivery(ctx, msg)
 }
 
 // RetryFailed attempts redelivery of failed messages up to limit.
@@ -296,6 +315,12 @@ func (s *EmailService) Send(ctx context.Context, req CreateEmailRequest) (*Email
 // emailStaleSendingTimeout (e.g. because a worker crashed mid-delivery)
 // are requeued to 'failed' first so they become claimable again.
 func (s *EmailService) RetryFailed(ctx context.Context, limit int) (int, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	if limit > 16 {
+		limit = 16
+	}
 	if _, err := s.repo.RequeueStale(ctx, emailStaleSendingTimeout); err != nil {
 		return 0, err
 	}
@@ -304,38 +329,53 @@ func (s *EmailService) RetryFailed(ctx context.Context, limit int) (int, error) 
 		return 0, err
 	}
 	delivered := 0
+	var failures error
 	for _, msg := range msgs {
-		if _, err := s.finalizeDelivery(ctx, msg); err == nil {
+		out, err := s.finalizeDelivery(ctx, msg)
+		if err != nil {
+			failures = errors.Join(failures, err)
+		} else if out.Status == EmailStatusSent {
 			delivered++
 		}
 	}
-	return delivered, nil
+	return delivered, failures
 }
 
-// deliver marks msg 'sending' (incrementing attempts) and then finalizes
-// delivery. Used by Send(), where the message was just enqueued by this
-// same request and is not visible to any concurrent claimer yet.
-func (s *EmailService) deliver(ctx context.Context, msg *EmailMessage) (*EmailMessage, error) {
-	msg.Status = EmailStatusSending
-	msg.Attempts++
-	if _, err := s.repo.UpdateStatus(ctx, msg.ID, msg.Status, "", nil); err != nil {
-		return nil, err
-	}
-	return s.finalizeDelivery(ctx, msg)
-}
-
-// finalizeDelivery attempts delivery of a message that has already been
-// atomically transitioned to 'sending' (either by deliver() or by
+// finalizeDelivery attempts delivery of a message durably claimed as
+// sending (either by initial insertion or by
 // ClaimFailedForRetry) and records the final status.
 func (s *EmailService) finalizeDelivery(ctx context.Context, msg *EmailMessage) (*EmailMessage, error) {
-	err := s.sender.Send(msg)
+	deliveryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	var err error
+	if sender, ok := s.sender.(interface {
+		SendContext(context.Context, *EmailMessage) error
+	}); ok {
+		err = sender.SendContext(deliveryCtx, msg)
+	} else {
+		// Legacy synchronous adapters are only suitable for bounded test/local senders.
+		err = s.sender.Send(msg)
+	}
+	// Finalize even if the caller disconnected or shutdown cancelled delivery.
+	// A failed DB write leaves the claimed row recoverable with the SAME ID.
+	persistCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer stop()
+	claim := *msg
+	finish := func(status EmailStatus, lastError string, sentAt *time.Time) (*EmailMessage, error) {
+		if repo, ok := s.repo.(interface {
+			FinishAttempt(context.Context, *EmailMessage, EmailStatus, string, *time.Time) (*EmailMessage, error)
+		}); ok {
+			return repo.FinishAttempt(persistCtx, &claim, status, lastError, sentAt)
+		}
+		return s.repo.UpdateStatus(persistCtx, msg.ID, status, lastError, sentAt)
+	}
 	now := time.Now().UTC()
 	if err != nil {
 		// Mark failed
 		msg.Status = EmailStatusFailed
 		msg.LastError = err.Error()
 		msg.UpdatedAt = now
-		return s.repo.UpdateStatus(ctx, msg.ID, EmailStatusFailed, err.Error(), nil)
+		return finish(EmailStatusFailed, err.Error(), nil)
 	}
 
 	// Mark sent
@@ -343,7 +383,60 @@ func (s *EmailService) finalizeDelivery(ctx context.Context, msg *EmailMessage) 
 	msg.SentAt = &now
 	msg.LastError = ""
 	msg.UpdatedAt = now
-	return s.repo.UpdateStatus(ctx, msg.ID, EmailStatusSent, "", &now)
+	return finish(EmailStatusSent, "", &now)
+}
+
+// StartWorker runs one bounded delivery at a time, including an immediate
+// startup recovery pass. The caller MUST cancel ctx and wait for done before
+// closing the database. Production transports must implement SendContext.
+func (s *EmailService) StartWorker(ctx context.Context, interval time.Duration, onError func(error)) <-chan struct{} {
+	done := make(chan struct{})
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	go func() {
+		defer close(done)
+		if _, ok := s.sender.(interface {
+			SendContext(context.Context, *EmailMessage) error
+		}); !ok {
+			if onError != nil {
+				onError(errors.New("email worker requires a cancellable sender"))
+			}
+			return
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			err := s.workerTick(ctx)
+			if err != nil && ctx.Err() == nil && onError != nil {
+				onError(err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return done
+}
+
+// workerTick runs one bounded retry pass. A panic in the repository or
+// sender is converted to an error so it cannot crash the API process (chi's
+// Recoverer does not cover this goroutine).
+func (s *EmailService) workerTick(ctx context.Context) (err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("email worker panic: %v", rec)
+		}
+	}()
+	passCtx, stop := context.WithTimeout(ctx, 40*time.Second)
+	defer stop()
+	_, err = s.RetryFailed(passCtx, 1)
+	return err
 }
 
 func (s *EmailService) GetByID(ctx context.Context, id uuid.UUID) (*EmailMessage, error) {
@@ -362,6 +455,9 @@ func (s *EmailService) ListByOwner(ctx context.Context, ownerType string, ownerI
 // parsed with net/mail.ParseAddress so a value like
 // "victim@x.com\r\nBcc: attacker@evil.com" can never reach a sender.
 func ValidateCreateEmailRequest(req CreateEmailRequest) error {
+	if len(req.AttachmentIDs) > 0 {
+		return fmt.Errorf("%w: attachment_ids are not supported; no email was sent", ErrEmailValidation)
+	}
 	if !req.Kind.IsValid() {
 		return fmt.Errorf("%w: kind must be one of invoice/agreement", ErrEmailValidation)
 	}
@@ -558,16 +654,25 @@ func (r *EmailRepository) ListByOwner(ctx context.Context, ownerType string, own
 }
 
 func (r *EmailRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status EmailStatus, lastError string, sentAt *time.Time) (*EmailMessage, error) {
+	return r.updateStatus(ctx, id, status, lastError, sentAt, 0, time.Time{})
+}
+
+// FinishAttempt fences late completions from a superseded claim.
+func (r *EmailRepository) FinishAttempt(ctx context.Context, claim *EmailMessage, status EmailStatus, lastError string, sentAt *time.Time) (*EmailMessage, error) {
+	return r.updateStatus(ctx, claim.ID, status, lastError, sentAt, claim.Attempts, claim.UpdatedAt)
+}
+
+func (r *EmailRepository) updateStatus(ctx context.Context, id uuid.UUID, status EmailStatus, lastError string, sentAt *time.Time, attempts int, claimedAt time.Time) (*EmailMessage, error) {
 	const sql = `
 		UPDATE email_messages
 		SET status = $1, last_error = $2, sent_at = $3, updated_at = now()
-		WHERE id = $4
+		WHERE id = $4 AND ($5 = 0 OR (status = 'sending' AND attempts = $5 AND updated_at = $6))
 		RETURNING id, kind, owner_type, owner_id, from_email, from_name, to_email,
 			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
 	var m EmailMessage
-	err := r.db.QueryRow(ctx, sql, status, lastError, sentAt, id).Scan(
+	err := r.db.QueryRow(ctx, sql, status, lastError, sentAt, id, attempts, claimedAt).Scan(
 		&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 		&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
 		&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
@@ -608,7 +713,7 @@ func (r *EmailRepository) ListByStatus(ctx context.Context, status EmailStatus, 
 	return out, rows.Err()
 }
 
-// ClaimFailedForRetry atomically claims up to limit 'failed' rows for
+// ClaimFailedForRetry atomically claims queued and eligible failed rows for
 // redelivery: it selects eligible rows (attempts < maxAttempts, and at
 // least attempts*backoffBaseSeconds elapsed since updated_at) with
 // SELECT ... FOR UPDATE SKIP LOCKED, and in the same statement flips them
@@ -621,10 +726,13 @@ func (r *EmailRepository) ClaimFailedForRetry(ctx context.Context, limit, maxAtt
 		SET status = 'sending', attempts = attempts + 1, updated_at = now()
 		WHERE id IN (
 			SELECT id FROM email_messages
-			WHERE status = 'failed'
+			WHERE (status = 'queued' OR (status = 'failed'
+				AND updated_at < now() - make_interval(secs => (attempts * $2)::double precision)))
 				AND attempts < $1
-				AND updated_at < now() - make_interval(secs => (attempts * $2)::double precision)
-			ORDER BY created_at ASC
+            -- Plunk's default key retention is 24h. Never blindly replay
+            -- an ambiguous attempted delivery after its key may expire.
+            AND (attempts = 0 OR created_at > now() - interval '23 hours')
+            ORDER BY created_at ASC
 			LIMIT $3
 			FOR UPDATE SKIP LOCKED
 		)

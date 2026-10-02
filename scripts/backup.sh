@@ -137,7 +137,9 @@ fi
 echo "[backup] Step 3/3: Creating archive: ${ARCHIVE}"
 # `--owner=0 --group=0 --numeric-owner` so the archive extracts cleanly
 # regardless of which UID the restorer runs as.
-if ! tar --owner=0 --group=0 --numeric-owner \
+# Disable AppleDouble/xattr sidecars on macOS; harmless on GNU tar.
+# Keep restore's strict archive layout and traversal checks unchanged.
+if ! COPYFILE_DISABLE=1 tar --owner=0 --group=0 --numeric-owner \
        -czf "${ARCHIVE}" -C "${OUTPUT_DIR}" "work-${TIMESTAMP}"; then
   echo "[backup] ERROR: tar archive creation failed" >&2
   exit 1
@@ -149,5 +151,11 @@ trap - EXIT
 rm -rf "${WORK_DIR}"
 
 ARCHIVE_SIZE=$(du -sh "${ARCHIVE}" | cut -f1)
+SHA256=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
+echo "${SHA256}  ${ARCHIVE}" > "${ARCHIVE}.sha256"
 echo "[backup] Complete: ${ARCHIVE} (${ARCHIVE_SIZE})"
-echo "[backup] To restore: bash scripts/restore.sh ${ARCHIVE}"
+echo "[backup] Checksum: ${SHA256}"
+echo '[backup] Restore is destructive. See scripts/RESTORE.md and select the target explicitly.'
+echo '[backup] Set S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY securely for that target.'
+printf '[backup] Interactive restore template: bash scripts/restore.sh -f %q --project TARGET_PROJECT --archive-sha256 %q %q\n' \
+  "$COMPOSE_FILE" "$SHA256" "$ARCHIVE"

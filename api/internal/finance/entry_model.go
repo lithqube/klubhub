@@ -3,6 +3,7 @@ package finance
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -221,7 +222,17 @@ var (
 	ErrEntryImmutable         = errors.New("auto-generated finance entry is immutable")
 	ErrEntryInactive          = errors.New("voided finance entry is immutable")
 	ErrGeneratedEntryConflict = errors.New("generated finance entry retry does not match existing entry")
+	// A report that cannot be represented exactly by JSON Number clients is
+	// a rejected report request, not a partial/truncated result. Reuse the
+	// existing 400 validation_failed wire contract while retaining a typed
+	// repository error for errors.Is callers.
+	ErrEntryAggregateOverflow = fmt.Errorf("%w: finance aggregate exceeds JSON safe integer range", ErrEntryValidation)
 )
+
+// These are representation bounds, not business/currency-specific caps.
+// All amounts and totals in the current wire format are JSON numbers.
+const MaxEntryAmountMinor int64 = 9_007_199_254_740_991 // Number.MAX_SAFE_INTEGER
+const MaxSummaryAggregateMinor int64 = MaxEntryAmountMinor
 
 type EntryFieldError struct{ Field, Message string }
 
@@ -266,6 +277,9 @@ func ValidateGeneratedEntry(req GeneratedEntryInput) error {
 	if req.SourceID == uuid.Nil {
 		errs = append(errs, EntryFieldError{"source_id", "is required"})
 	}
+	if req.SourceAmountMinor != nil && (*req.SourceAmountMinor <= 0 || *req.SourceAmountMinor > MaxEntryAmountMinor) {
+		errs = append(errs, EntryFieldError{"source_amount_minor", "must be positive and within JSON safe integer range"})
+	}
 	if req.SourceCurrency != nil && !isCurrencyCode(*req.SourceCurrency) {
 		errs = append(errs, EntryFieldError{"source_currency", "must be an uppercase 3-letter code"})
 	}
@@ -282,6 +296,9 @@ func validateEntryFields(kind EntryKind, amount int64, currency, category, date,
 	}
 	if amount <= 0 {
 		errs = append(errs, EntryFieldError{"amount_minor", "must be greater than zero"})
+	} else if amount > MaxEntryAmountMinor {
+		// Preserve exact integer JSON amounts for Number-based clients.
+		errs = append(errs, EntryFieldError{"amount_minor", "must be at or below " + strconv.FormatInt(MaxEntryAmountMinor, 10) + " minor units"})
 	}
 	if !isCurrencyCode(currency) {
 		errs = append(errs, EntryFieldError{"currency", "must be an uppercase 3-letter code"})
