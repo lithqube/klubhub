@@ -186,7 +186,7 @@ async function create(): Promise<void> {
 .icr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .icr-wide { grid-column: 1 / -1; }
 .icr-locked { margin: 0; min-height: 40px; display: flex; align-items: center; padding: 0 12px; background: var(--color-surface-container-low); font-family: var(--font-command); font-size: 13px; font-weight: 700; letter-spacing: -.02em; color: var(--color-on-surface); }
-.icr-msg { margin: 4px 0 0; font-family: var(--font-data); font-size: 11px; color: var(--color-on-surface-variant); }
+.icr-msg { margin: 3px 0 0; font-family: var(--font-data); font-size: 11px; line-height: 1.4; color: var(--color-tertiary); }
 .icr-msg:empty { display: none; }
 .icr-error { color: var(--color-error); }
 .icr-link { margin-left: 6px; padding: 0; background: none; border: 0; cursor: pointer; font-family: var(--font-terminal); font-size: 9px; font-weight: 600; letter-spacing: .06em; color: var(--color-primary); text-decoration: underline; }

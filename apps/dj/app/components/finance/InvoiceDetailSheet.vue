@@ -23,6 +23,8 @@ import DialogTitle from '#kui/components/ui/dialog/DialogTitle.vue'
 import InvoiceActionsMenu from './InvoiceActionsMenu.vue'
 import InvoiceDraftEditor from './InvoiceDraftEditor.vue'
 import InvoiceTotals from './InvoiceTotals.vue'
+import InvoiceReferences from './InvoiceReferences.vue'
+import InvoicePdfLink from './InvoicePdfLink.vue'
 import InvoiceBalance from './InvoiceBalance.vue'
 import InvoicePartySummary from './InvoicePartySummary.vue'
 import PaymentLedger from './PaymentLedger.vue'
@@ -200,7 +202,10 @@ function retry(): void {
           </NuxtLink>
           <span class="section-lbl">{{ inv.issued_at ? `ISSUED ${shortDate(inv.issued_at)}` : `CREATED ${shortDate(inv.created_at)}` }}</span>
           <span v-if="inv.due_at && inv.kind === 'invoice'" class="section-lbl">DUE {{ shortDate(inv.due_at) }}</span>
-          <div class="ids-menu"><InvoiceActionsMenu :invoice="inv" @action="requestAction" /></div>
+          <div class="ids-menu">
+            <InvoicePdfLink :invoice="inv" />
+            <InvoiceActionsMenu :invoice="inv" @action="requestAction" />
+          </div>
         </div>
       </header>
       <DialogDescription class="sr-only">Invoice details, billing and payments.</DialogDescription>
@@ -251,6 +256,7 @@ function retry(): void {
         <template v-else>
           <InvoiceBalance v-if="takesPayments" :invoice="inv" />
           <InvoicePartySummary :party="inv.customer" label="BILL TO" />
+          <InvoiceReferences :invoice="inv" />
           <InvoiceTotals :invoice="inv" :lines="lines" />
           <PaymentLedger v-if="takesPayments" :invoice="inv" :payments="payments" />
           <PaymentLedger v-else-if="!isCreditNote && payments.length" :invoice="inv" :payments="payments" locked />
@@ -275,7 +281,7 @@ function retry(): void {
 .ids-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .ids-title { font-size: 16px; outline: none; overflow-wrap: anywhere; }
 .ids-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
-.ids-menu { margin-left: auto; }
+.ids-menu { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .ids-link { padding: 0; background: none; border: 0; cursor: pointer; font-family: var(--font-terminal); font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
 .ids-banner { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--color-secondary) 10%, transparent); border-left: 3px solid var(--color-secondary); font-family: var(--font-data); font-size: 12px; color: var(--color-on-surface); }
 .ids-banner span { flex: 1; }

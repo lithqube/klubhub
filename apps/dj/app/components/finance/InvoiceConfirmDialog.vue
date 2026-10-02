@@ -124,7 +124,7 @@ function confirm(): void {
 .icd-title { font-size: 14px; outline: none; }
 .icd-body { margin-top: 8px; font-family: var(--font-data); font-size: 13px; color: var(--color-on-surface-variant); }
 .icd-form { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
-.icd-msg { margin: 4px 0 0; font-family: var(--font-data); font-size: 11px; color: var(--color-on-surface-variant); }
+.icd-msg { margin: 3px 0 0; font-family: var(--font-data); font-size: 11px; line-height: 1.4; color: var(--color-tertiary); }
 .icd-error { color: var(--color-error); }
 .icd-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .btn-hud:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; transform: none; }

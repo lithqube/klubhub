@@ -92,6 +92,7 @@ function onText(key: TextKey, e: Event): void {
       <input
         :id="fieldId(path('is_business'))"
         type="checkbox"
+        class="hud-check"
         :checked="modelValue.is_business"
         @change="update('is_business', ($event.target as HTMLInputElement).checked)"
       >
@@ -137,15 +138,14 @@ function onText(key: TextKey, e: Event): void {
 
 <style scoped>
 .party { border: 0; padding: 0; margin: 0; min-width: 0; }
-.party-legend { padding: 0; margin-bottom: 8px; }
+.party-legend { padding: 0; margin-bottom: 8px; color: var(--color-on-surface); font-weight: 700; letter-spacing: .08em; }
 .party-business { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; margin-bottom: 8px; cursor: pointer; }
-.party-business input { width: 16px; height: 16px; accent-color: var(--color-primary); }
-.party-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.party-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
 .party-field { min-width: 0; }
 .party-wide { grid-column: 1 / -1; }
 .party-label { display: block; }
 .party-invalid { border-left-color: var(--color-error); }
-.party-msg { margin: 4px 0 0; font-family: var(--font-data); font-size: 11px; color: var(--color-on-surface-variant); }
+.party-msg { margin: 3px 0 0; font-family: var(--font-data); font-size: 11px; line-height: 1.4; color: var(--color-tertiary); }
 .party-msg-error { color: var(--color-error); }
 @media (max-width: 768px) {
   .party-grid { grid-template-columns: 1fr; }
