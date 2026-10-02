@@ -25,6 +25,8 @@ export const useSettingsStore = defineStore('settings', () => {
     dj_name: string;
     social_links: Record<string, string>;
     contact_info: string;
+    default_template: string;
+    logo_path: string;
   }>;
 
   // Every key of the API's UpdateSettingsRequest. PUT /settings replaces the
@@ -48,7 +50,7 @@ export const useSettingsStore = defineStore('settings', () => {
    * is why EPK settings writes never saved), and sending only the changed
    * field would wipe the rest. So fetch the current row, merge, send it all.
    */
-  async function save(patch: SettingsPatch): Promise<void> {
+  async function writePatch(patch: SettingsPatch): Promise<void> {
     saveStatus.value = 'saving';
     try {
       const current = await $fetch<Record<string, any>>('/api/v1/settings');
@@ -64,6 +66,16 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  // Saves run one at a time: each reads the row's current `updated_at`, so two
+  // overlapping saves (rapid toggles in the customizer) would send a stale
+  // token and the second would answer 409.
+  let queue: Promise<unknown> = Promise.resolve();
+  function save(patch: SettingsPatch): Promise<void> {
+    const run = queue.then(() => writePatch(patch));
+    queue = run.catch(() => undefined);
+    return run;
+  }
+
   async function loadFromApi(): Promise<void> {
     const data = await $fetch<Record<string, any>>('/api/v1/settings');
     applyProfile(data);
@@ -71,7 +83,14 @@ export const useSettingsStore = defineStore('settings', () => {
     if (data.logo_path !== undefined) logoPath.value = data.logo_path;
     if (data.logo_position !== undefined) logoPosition.value = data.logo_position;
     if (data.custom_placeholder_path !== undefined) customPlaceholderPath.value = data.custom_placeholder_path;
-    if (data.preset !== undefined) preset.value = data.preset;
+    // The Go API stores the chosen preset as `default_template`; the dev mock
+    // and demo backends also send `preset`. A saved default_template wins when
+    // both are present (a demo response keeps the old `preset` after a save).
+    if (typeof data.default_template === 'string' && data.default_template) {
+      preset.value = data.default_template;
+    } else if (data.preset !== undefined) {
+      preset.value = data.preset;
+    }
     if (data.bg_mode !== undefined) bgMode.value = data.bg_mode;
     if (data.bg_value !== undefined) bgValue.value = data.bg_value;
     // A fresh settings row carries `visible_fields: {}` (an empty object);

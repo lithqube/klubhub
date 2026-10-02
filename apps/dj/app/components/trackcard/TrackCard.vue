@@ -71,6 +71,10 @@ const backgroundStyle = computed(() => {
         height: '100%',
         padding: '40px',
         boxSizing: 'border-box',
+        // Header, list and footer stack in a column: the list takes the space left
+        // between header and footer, so a long set can never run under the footer.
+        display: 'flex',
+        flexDirection: 'column',
         color: colors.text,
         fontFamily: 'var(--font-data)',
       }"

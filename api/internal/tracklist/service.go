@@ -34,6 +34,10 @@ type tracklistRepoIface interface {
 	Get(ctx context.Context, id uuid.UUID) (*Tracklist, []Track, error)
 	List(ctx context.Context) ([]Tracklist, error)
 	UpdateTrack(ctx context.Context, tracklistID, trackID uuid.UUID, req UpdateTrackRequest) error
+	UpdateTitle(ctx context.Context, id uuid.UUID, title string) error
+	LinkedGigs(ctx context.Context, id uuid.UUID) ([]LinkedGig, error)
+	AddTrack(ctx context.Context, tracklistID uuid.UUID, req CreateTrackRequest) (*Track, error)
+	ReorderTracks(ctx context.Context, tracklistID uuid.UUID, ids []uuid.UUID) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	UpdateArtworkStatus(ctx context.Context, trackID uuid.UUID, status, url, source string) error
 	SaveManualArtwork(ctx context.Context, trackID uuid.UUID, artworkURL string) error
@@ -143,8 +147,50 @@ func (s *Service) List(ctx context.Context) ([]Tracklist, error) {
 	return s.repo.List(ctx)
 }
 
+// UpdateTitle renames a tracklist and returns it. The title is trimmed;
+// ErrInvalidTitle if it is empty, over MaxTitleChars or contains NUL.
+func (s *Service) UpdateTitle(ctx context.Context, id uuid.UUID, title string) (*Tracklist, error) {
+	title, err := NormalizeTitle(title)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateTitle(ctx, id, title); err != nil {
+		return nil, err
+	}
+	tl, _, err := s.repo.Get(ctx, id)
+	return tl, err
+}
+
+// LinkedGigs returns the gigs this tracklist is linked to.
+func (s *Service) LinkedGigs(ctx context.Context, id uuid.UUID) ([]LinkedGig, error) {
+	return s.repo.LinkedGigs(ctx, id)
+}
+
+// AddTrack adds a manually entered track at the end of a tracklist.
+// ErrInvalidTrack for a blank or over-long title, an unknown media or a bad BPM.
+func (s *Service) AddTrack(ctx context.Context, tracklistID uuid.UUID, req CreateTrackRequest) (*Track, error) {
+	req, err := req.Normalize()
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.AddTrack(ctx, tracklistID, req)
+}
+
+// ReorderTracks sets the track order and returns the tracks in that order.
+// ids must be every live track of the tracklist exactly once (ErrInvalidTrack).
+func (s *Service) ReorderTracks(ctx context.Context, tracklistID uuid.UUID, ids []uuid.UUID) ([]Track, error) {
+	if err := s.repo.ReorderTracks(ctx, tracklistID, ids); err != nil {
+		return nil, err
+	}
+	_, tracks, err := s.repo.Get(ctx, tracklistID)
+	return tracks, err
+}
+
 // UpdateTrack updates a track
 func (s *Service) UpdateTrack(ctx context.Context, tracklistID, trackID uuid.UUID, req UpdateTrackRequest) (*Track, error) {
+	if req.Media != nil && !ValidMedia(*req.Media) {
+		return nil, ErrInvalidTrack
+	}
 	err := s.repo.UpdateTrack(ctx, tracklistID, trackID, req)
 	if err != nil {
 		return nil, err
