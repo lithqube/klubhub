@@ -27,6 +27,7 @@ import InvoiceReferences from './InvoiceReferences.vue'
 import InvoicePdfLink from './InvoicePdfLink.vue'
 import InvoiceEInvoicePanel from './InvoiceEInvoicePanel.vue'
 import InvoiceEmailPanel from './InvoiceEmailPanel.vue'
+import InvoiceArchivePanel from './InvoiceArchivePanel.vue'
 import InvoiceBalance from './InvoiceBalance.vue'
 import InvoicePartySummary from './InvoicePartySummary.vue'
 import PaymentLedger from './PaymentLedger.vue'
@@ -213,6 +214,7 @@ function retry(): void {
       <DialogDescription class="sr-only">Invoice details, billing and payments.</DialogDescription>
       <InvoiceEInvoicePanel v-if="inv && inv.status !== 'draft' && inv.status !== 'cancelled'" :key="inv.id" :invoice="inv" />
       <InvoiceEmailPanel v-if="inv && inv.status !== 'draft' && inv.status !== 'cancelled'" :key="`mail-${inv.id}`" :invoice="inv" />
+      <InvoiceArchivePanel v-if="inv && inv.status !== 'draft' && inv.status !== 'cancelled'" :key="`archive-${inv.id}`" :invoice="inv" />
 
       <div v-if="notice" class="ids-banner" role="status">
         <span>{{ notice }}</span>

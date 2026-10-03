@@ -419,6 +419,8 @@ Issuing an invoice or credit note keeps what it is made of in `documents`, owned
 - Archiving needs object storage; without it nothing is archived.
 - **Older invoices** (issued before archiving existed) are archived by hand, once, with the backfill command (below).
 
+The invoice sheet shows what is archived in its **ARCHIVE** panel (collapsed by default, loaded when opened): each file with its size, date and a SHA-256 prefix (full value on hover), a download link, `V2`/`SUPERSEDED` tags for replaced versions, and a **RENDERED LATER** tag on documents created by the backfill, since those are not the files produced at issue. A server without object storage says archiving isn't enabled; it never disables the rest of finance.
+
 #### Backfilling older invoices
 
 ```bash

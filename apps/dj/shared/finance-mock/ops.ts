@@ -873,3 +873,9 @@ export function emailInvoice(db: FinanceMockDb, id: string): MockResult {
   if (inv.status === 'draft' || inv.status === 'cancelled') return fail(409, 'bad_state', 'only numbered invoices can be emailed')
   return fail(503, 'service_unavailable', 'Invoice email is not enabled on this server.')
 }
+
+/** The browser-only mock keeps no archive, like a server without object storage. */
+export function listDocuments(db: FinanceMockDb, ownerId: string): MockResult {
+  if (!db.invoices.get(ownerId)) return ok({ data: [] })
+  return fail(503, 'service_unavailable', 'Archiving is not enabled on this server.')
+}

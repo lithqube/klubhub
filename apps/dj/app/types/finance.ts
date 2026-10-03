@@ -132,6 +132,24 @@ export interface IssueCheck {
   problems: IssueProblem[]
 }
 
+/** What the server keeps of an issued invoice. Versions are kept per kind. */
+export type ArchivedDocumentKind = 'invoice_pdf' | 'einvoice_xml' | 'validation_report' | 'general'
+
+export interface ArchivedDocument {
+  id: string
+  kind: ArchivedDocumentKind
+  filename: string
+  mime_type: string
+  size_bytes: number
+  checksum_sha256: string
+  version: number
+  /** False once a newer version of the same kind replaced it. */
+  is_current: boolean
+  /** "system": archived when the invoice was issued. "backfill": rendered later for an older invoice. */
+  uploaded_by: string
+  created_at: string
+}
+
 /** What `POST /invoices/{id}/email` stores: where the message went and how delivery stands. */
 export interface InvoiceEmailResult {
   id: string

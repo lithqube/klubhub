@@ -30,6 +30,9 @@ project adheres to [Semantic Versioning](https://semver.org/).
   the e-invoice of invoices issued before archiving existed. It is
   idempotent, and what it creates is marked `uploaded_by: backfill`
   because it is rendered now, not the file produced at the time.
+- The invoice sheet has an ARCHIVE panel listing the stored PDF, e-invoice
+  XML and validation report with size, checksum and download, and tagging
+  documents rendered later by the backfill.
 
 ### Fixed
 

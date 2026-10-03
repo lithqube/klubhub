@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
+  ArchivedDocument,
   EInvoiceCheck,
   EInvoiceFormat,
   FinanceErrorBody,
@@ -99,6 +100,11 @@ export function invoicePdfUrl(id: string): string {
 /** GET endpoint returning a validated e-invoice as an attachment. Link to it; never fetch it into memory. */
 export function invoiceEInvoiceUrl(id: string, format: EInvoiceFormat): string {
   return `${BASE}/invoices/${encodeURIComponent(id)}/einvoice?format=${encodeURIComponent(format)}`
+}
+
+/** GET endpoint returning an archived document as an attachment. Link to it; never fetch it into memory. */
+export function documentDownloadUrl(id: string): string {
+  return `${BASE}/documents/${encodeURIComponent(id)}/download`
 }
 
 function unwrap<T>(res: unknown): T {
@@ -277,6 +283,22 @@ export const useInvoiceStore = defineStore('invoice', () => {
       const res = await $fetch<unknown>(`${BASE}/invoices/${encodeURIComponent(id)}/einvoice-check`, { query: { format } })
       const chk = unwrap<EInvoiceCheck>(res)
       return { format, ready: !!chk?.ready, problems: chk?.problems ?? [] }
+    } catch (e) {
+      const err = toFinanceError(e)
+      if (err.code === 'unavailable') return null
+      throw err
+    }
+  }
+
+  /**
+   * Lists what the server archived for an invoice. Resolves to null when this
+   * server keeps no archive (503); like the e-invoice calls it bypasses
+   * `request()` so a missing archive never marks all of finance disabled.
+   */
+  async function fetchInvoiceDocuments(invoiceId: string): Promise<ArchivedDocument[] | null> {
+    try {
+      const res = await $fetch<unknown>(`${BASE}/documents`, { query: { owner_type: 'invoice', owner_id: invoiceId } })
+      return unwrap<ArchivedDocument[] | null>(res) ?? []
     } catch (e) {
       const err = toFinanceError(e)
       if (err.code === 'unavailable') return null
@@ -684,7 +706,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
     // getters
     filteredInvoices, filterCounts, activeInvoiceByGig, gigById,
     // actions
-    fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck, fetchEInvoiceCheck, sendInvoiceEmail,
+    fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck, fetchEInvoiceCheck, sendInvoiceEmail, fetchInvoiceDocuments,
     fetchGigOptions, suggestTax, taxNotes, fetchTaxNotes, closeCurrent,
     createInvoice, updateInvoice, issueInvoice, cancelInvoice, markPaid,
     issueCreditNote, correctInvoice, createPayment, markPaymentReceived,
