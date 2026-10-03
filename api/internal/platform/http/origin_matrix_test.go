@@ -182,7 +182,7 @@ func TestDJMultipartRegisteredHandlerContract(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			es, ss := &originEPKService{}, &originSocialService{}
 			noop := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
-			router := apphttp.NewRouter(&config.Config{CORSOrigin: "https://dj.example"}, nil, nil, zerolog.Nop(), noop, noop, social.NewHandler(ss, nil).Routes(), epk.NewHandler(es, nil).Routes(), noop, noop, noop, nil)
+			router := apphttp.NewRouter(&config.Config{CORSOrigin: "https://dj.example"}, nil, nil, zerolog.Nop(), noop, noop, social.NewHandler(ss, nil).Routes(), epk.NewHandler(es, nil).Routes(), noop, noop, noop, nil, noop)
 			var body bytes.Buffer
 			mw := multipart.NewWriter(&body)
 			part, err := mw.CreateFormFile(tc.field, "fixture.png")
