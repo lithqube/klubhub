@@ -439,10 +439,11 @@ Run it after the server has started (it needs the migrated database, object stor
 
 `POST /invoices/{id}/email` sends the customer one message with the archived files attached (see 4.2b), through Plunk.
 
-- It first completes the archive (idempotent), then attaches only that invoice's own current `invoice_pdf` and, when present, `einvoice_xml`. The default subject and text are short and bilingual (English and German) and carry the supplier's contact details, since Plunk's send call has no reply-to here.
+- It first completes the archive (idempotent), then attaches only that invoice's own current `invoice_pdf` and, when present, `einvoice_xml`. The default subject and text are short and bilingual (English and German) and carry the supplier's contact details.
 - The stored message holds the document ids; the content is loaded at delivery, so a retry sends the same files. Attachments are base64 in Plunk's `attachments` array (max 10 files, 10 MB of base64 by default; we cap at 7 MB of content).
 - **Clients cannot attach files.** The generic `POST /emails` still rejects `attachment_ids`. Only the server-built invoice message may carry attachments, and each one must belong to the invoice the message is about, checked when the message is created and again at delivery.
 - The sender address is `PLUNK_FROM_EMAIL` (a verified Plunk domain). The SMTP sender does not support attachments.
+- **Replies go to the supplier.** The message is sent from the platform's verified address, but carries a reply-to set to the supplier's contact email from the invoice's own snapshot (the current profile for an invoice that has none), so the customer's answer reaches the DJ. It is left out, never an error, when that email is missing, malformed or the same as the sender. It is stored with the message (`email_messages.reply_to`, migration 032), so a retry sends the same one. Plunk's `reply` takes a single bare address.
 - Sending is outward facing: the UI asks for a second click that names the recipient.
 
 ### 4.3 E-invoice export

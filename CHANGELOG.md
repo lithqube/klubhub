@@ -33,6 +33,9 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - The invoice sheet has an ARCHIVE panel listing the stored PDF, e-invoice
   XML and validation report with size, checksum and download, and tagging
   documents rendered later by the backfill.
+- Invoice emails now carry a reply-to set to the supplier's contact email, so
+  customers' answers reach the DJ instead of the platform's sending address
+  (migration 032 stores it with the message so retries keep it).
 
 ### Fixed
 

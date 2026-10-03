@@ -157,6 +157,8 @@ export interface InvoiceEmailResult {
   subject: string
   /** `failed` is retried by the server; the message is not lost. */
   status: 'queued' | 'sending' | 'sent' | 'failed' | 'bounced'
+  /** Where a reply goes when it is not the sender: the supplier's contact email. Absent when none was set. */
+  reply_to?: string
   /** Files that went with it (the PDF, and the e-invoice XML when there is one). */
   attachment_ids: string[]
 }

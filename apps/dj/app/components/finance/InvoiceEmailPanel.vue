@@ -105,6 +105,7 @@ async function send(): Promise<void> {
           <template v-if="result.status === 'sent'">
             Sent to {{ result.to_email }} with {{ result.attachment_ids.length }}
             {{ result.attachment_ids.length === 1 ? 'file' : 'files' }}.
+            <template v-if="result.reply_to"> Replies go to {{ result.reply_to }}.</template>
           </template>
           <template v-else>
             Not delivered yet. It is saved and will be retried automatically.

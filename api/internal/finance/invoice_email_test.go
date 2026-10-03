@@ -379,3 +379,166 @@ func TestPlunkSender_AttachmentLimitsAndNames(t *testing.T) {
 		t.Errorf("oversize: %v (provider saw %q)", err, got.Subject)
 	}
 }
+
+// --- reply-to ----------------------------------------------------------------
+
+func TestInvoiceEmail_RepliesGoToTheSupplier(t *testing.T) {
+	m := newMailHarness(t)
+	contact := m.billing.profile.ContactEmail
+	inv := m.issueViaService(nil)
+
+	rec := m.post(inv.ID, `{}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	var out struct{ Data EmailMessage }
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+
+	if contact == "" || m.sent[0].Reply != contact {
+		t.Fatalf("Plunk reply = %q, want the supplier contact %q", m.sent[0].Reply, contact)
+	}
+	if m.sent[0].From.Email != "billing@klubhub.example" {
+		t.Errorf("from = %q: the sender must stay the verified platform address", m.sent[0].From.Email)
+	}
+	if out.Data.ReplyTo != contact {
+		t.Errorf("response reply_to = %q", out.Data.ReplyTo)
+	}
+	stored, _ := m.repo.GetByID(context.Background(), out.Data.ID)
+	if stored.ReplyTo != contact {
+		t.Errorf("stored reply_to = %q", stored.ReplyTo)
+	}
+}
+
+func TestInvoiceEmail_ReplyToIsOmittedNotAnError(t *testing.T) {
+	for name, contact := range map[string]string{
+		"missing":   "",
+		"malformed": "not an address",
+		"is sender": "billing@klubhub.example",
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := newMailHarness(t)
+			m.billing.profile.ContactEmail = contact
+			inv := m.issueViaService(nil)
+			if rec := m.post(inv.ID, `{}`); rec.Code != http.StatusCreated {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body)
+			}
+			if m.sent[0].Reply != "" {
+				t.Errorf("reply = %q, want none", m.sent[0].Reply)
+			}
+		})
+	}
+}
+
+func TestInvoiceEmail_RetryKeepsTheReplyTo(t *testing.T) {
+	m := newMailHarness(t)
+	contact := m.billing.profile.ContactEmail
+	inv := m.issueViaService(nil)
+
+	m.status = http.StatusInternalServerError
+	var out struct{ Data EmailMessage }
+	_ = json.Unmarshal(m.post(inv.ID, `{}`).Body.Bytes(), &out)
+
+	m.status = http.StatusOK
+	msg, _ := m.repo.GetByID(context.Background(), out.Data.ID)
+	msg.Status, msg.Attempts = EmailStatusSending, 2
+	if _, err := m.emails.finalizeDelivery(context.Background(), msg); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.sent) != 1 || m.sent[0].Reply != contact {
+		t.Errorf("retry reply = %v, want %q", m.sent, contact)
+	}
+}
+
+func TestPlunkSender_ReplyIsABareValidAddress(t *testing.T) {
+	var got plunkRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &got)
+		_, _ = w.Write([]byte(runtimePlunkAck))
+	}))
+	defer server.Close()
+	sender := NewPlunkSender(PlunkConfig{BaseURL: server.URL, APIKey: "k"})
+	msg := func(reply string) *EmailMessage {
+		return &EmailMessage{ID: uuid.New(), FromEmail: "a@b.example", ToEmail: "to@example.com", Subject: "s", Body: "b", ReplyTo: reply}
+	}
+
+	// Plunk's field takes an address, not "Name <address>".
+	if err := sender.Send(msg("Lina Vasquez <lina@dj.example>")); err != nil {
+		t.Fatal(err)
+	}
+	if got.Reply != "lina@dj.example" {
+		t.Errorf("reply = %q", got.Reply)
+	}
+	got = plunkRequest{}
+	if err := sender.Send(msg("")); err != nil || got.Reply != "" {
+		t.Errorf("no reply-to: err=%v reply=%q", err, got.Reply)
+	}
+	got = plunkRequest{}
+	if err := sender.Send(msg("nonsense")); !errors.Is(err, ErrEmailValidation) || got.Subject != "" {
+		t.Errorf("invalid reply-to: %v (provider saw %q)", err, got.Subject)
+	}
+}
+
+func TestEmailRequest_ReplyToIsValidated(t *testing.T) {
+	req := runtimeEmailRequest()
+	for name, bad := range map[string]string{"not an address": "nope", "header injection": "a@b.example\r\nBcc: evil@x.example"} {
+		req.ReplyTo = bad
+		if err := ValidateCreateEmailRequest(req); !errors.Is(err, ErrEmailValidation) {
+			t.Errorf("%s accepted: %v", name, err)
+		}
+	}
+	req.ReplyTo = "ok@dj.example"
+	if err := ValidateCreateEmailRequest(req); err != nil {
+		t.Errorf("valid reply-to rejected: %v", err)
+	}
+}
+
+// Every query that lists the email columns also carries reply_to.
+func TestIntegration_EmailRepo_ReplyToRoundTrips(t *testing.T) {
+	requireEntryPG(t)
+	ctx := context.Background()
+	repo := NewEmailRepository(testPool)
+	owner := uuid.New()
+	created, err := repo.Create(ctx, &EmailMessage{
+		Kind: EmailKindInvoiceIssued, OwnerType: "invoice", OwnerID: &owner,
+		FromEmail: "a@b.example", ToEmail: "c@d.example", Subject: "s", Body: "b",
+		ReplyTo: "lina@dj.example", Status: EmailStatusFailed, Attempts: 1,
+	})
+	if err != nil || created.ReplyTo != "lina@dj.example" {
+		t.Fatalf("create: %+v, %v", created, err)
+	}
+	if got, err := repo.GetByID(ctx, created.ID); err != nil || got.ReplyTo != "lina@dj.example" {
+		t.Errorf("get: %+v, %v", got, err)
+	}
+	if list, err := repo.ListByOwner(ctx, "invoice", owner); err != nil || len(list) != 1 || list[0].ReplyTo != "lina@dj.example" {
+		t.Errorf("list by owner: %+v, %v", list, err)
+	}
+	if list, err := repo.ListByStatus(ctx, EmailStatusFailed, 1000); err != nil {
+		t.Errorf("list by status: %v", err)
+	} else {
+		found := false
+		for _, m := range list {
+			found = found || m.ID == created.ID && m.ReplyTo == "lina@dj.example"
+		}
+		if !found {
+			t.Error("list by status lost the reply-to")
+		}
+	}
+	if upd, err := repo.UpdateStatus(ctx, created.ID, EmailStatusSent, "", nil); err != nil || upd.ReplyTo != "lina@dj.example" {
+		t.Errorf("update: %+v, %v", upd, err)
+	}
+	if _, err := testPool.Exec(ctx, `UPDATE email_messages SET status = 'failed', attempts = 1, updated_at = now() - interval '1 hour' WHERE id = $1`, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := repo.ClaimFailedForRetry(ctx, 1000, 5, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, m := range claimed {
+		found = found || m.ID == created.ID && m.ReplyTo == "lina@dj.example"
+	}
+	if !found {
+		t.Error("claimed retry lost the reply-to")
+	}
+}

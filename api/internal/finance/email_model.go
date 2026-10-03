@@ -83,6 +83,8 @@ type EmailMessage struct {
 	Body          string      `json:"body"             db:"body"`
 	BodyHTML      string      `json:"body_html,omitempty" db:"body_html"`
 	AttachmentIDs []uuid.UUID `json:"attachment_ids"  db:"attachment_ids"`
+	// ReplyTo is where a reply should go when it is not the sender. Empty: none.
+	ReplyTo string `json:"reply_to,omitempty" db:"reply_to"`
 	// Attachments is the content behind AttachmentIDs, loaded just before
 	// delivery. It is never stored or serialised: the row keeps only the ids.
 	Attachments []EmailAttachment `json:"-" db:"-"`
@@ -114,6 +116,7 @@ type CreateEmailRequest struct {
 	Body          string      `json:"body"`
 	BodyHTML      string      `json:"body_html,omitempty"`
 	AttachmentIDs []uuid.UUID `json:"attachment_ids,omitempty"`
+	ReplyTo       string      `json:"reply_to,omitempty"`
 }
 
 // EmailAttachment is one file sent with a message.
@@ -201,6 +204,13 @@ func (s *DefaultSMTPSender) Send(msg *EmailMessage) error {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "From: %s\r\n", from)
 	fmt.Fprintf(&buf, "To: %s\r\n", to)
+	if msg.ReplyTo != "" {
+		replyTo, err := formatAddressList([]string{msg.ReplyTo})
+		if err != nil {
+			return fmt.Errorf("smtp: invalid reply-to address: %w", err)
+		}
+		fmt.Fprintf(&buf, "Reply-To: %s\r\n", replyTo)
+	}
 	if len(msg.CCEmails) > 0 {
 		cc, err := formatAddressList(msg.CCEmails)
 		if err != nil {
@@ -325,6 +335,7 @@ func (s *EmailService) createMessage(ctx context.Context, req CreateEmailRequest
 		Body:          req.Body,
 		BodyHTML:      req.BodyHTML,
 		AttachmentIDs: attach,
+		ReplyTo:       req.ReplyTo,
 		Status:        EmailStatusQueued,
 		CreatedAt:     time.Now().UTC(),
 		UpdatedAt:     time.Now().UTC(),
@@ -600,6 +611,11 @@ func ValidateCreateEmailRequest(req CreateEmailRequest) error {
 			return err
 		}
 	}
+	if req.ReplyTo != "" {
+		if err := validateAddress("reply_to", req.ReplyTo); err != nil {
+			return err
+		}
+	}
 	if req.Subject == "" {
 		return fmt.Errorf("%w: subject is required", ErrEmailValidation)
 	}
@@ -680,10 +696,10 @@ var _ EmailRepositoryIface = (*EmailRepository)(nil)
 func (r *EmailRepository) Create(ctx context.Context, msg *EmailMessage) (*EmailMessage, error) {
 	const sql = `
 		INSERT INTO email_messages (kind, owner_type, owner_id, from_email, from_name,
-			to_email, cc_emails, bcc_emails, subject, body, body_html, attachment_ids, status, attempts)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			to_email, cc_emails, bcc_emails, subject, body, body_html, attachment_ids, status, attempts, reply_to)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
 	ownerType := ""
@@ -706,11 +722,11 @@ func (r *EmailRepository) Create(ctx context.Context, msg *EmailMessage) (*Email
 	err := r.db.QueryRow(ctx, sql,
 		msg.Kind, ownerType, msg.OwnerID, msg.FromEmail, msg.FromName,
 		msg.ToEmail, cc, bcc, msg.Subject, msg.Body, msg.BodyHTML, attachments,
-		msg.Status, msg.Attempts,
+		msg.Status, msg.Attempts, msg.ReplyTo,
 	).Scan(
 		&out.ID, &out.Kind, &out.OwnerType, &out.OwnerID, &out.FromEmail, &out.FromName,
 		&out.ToEmail, &out.CCEmails, &out.BCCEmails, &out.Subject, &out.Body,
-		&out.BodyHTML, &out.AttachmentIDs, &out.Status, &out.SentAt, &out.LastError,
+		&out.BodyHTML, &out.AttachmentIDs, &out.ReplyTo, &out.Status, &out.SentAt, &out.LastError,
 		&out.Attempts, &out.CreatedAt, &out.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert email: %w", err)
@@ -721,7 +737,7 @@ func (r *EmailRepository) Create(ctx context.Context, msg *EmailMessage) (*Email
 func (r *EmailRepository) GetByID(ctx context.Context, id uuid.UUID) (*EmailMessage, error) {
 	const sql = `
 		SELECT id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 		FROM email_messages WHERE id = $1
 	`
@@ -729,7 +745,7 @@ func (r *EmailRepository) GetByID(ctx context.Context, id uuid.UUID) (*EmailMess
 	err := r.db.QueryRow(ctx, sql, id).Scan(
 		&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 		&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-		&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+		&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 		&m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -743,7 +759,7 @@ func (r *EmailRepository) GetByID(ctx context.Context, id uuid.UUID) (*EmailMess
 func (r *EmailRepository) ListByOwner(ctx context.Context, ownerType string, ownerID uuid.UUID) ([]*EmailMessage, error) {
 	const sql = `
 		SELECT id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 		FROM email_messages WHERE owner_type = $1 AND owner_id = $2 ORDER BY created_at DESC
 	`
@@ -758,7 +774,7 @@ func (r *EmailRepository) ListByOwner(ctx context.Context, ownerType string, own
 		var m EmailMessage
 		if err := rows.Scan(&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 			&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-			&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+			&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan email: %w", err)
 		}
@@ -782,14 +798,14 @@ func (r *EmailRepository) updateStatus(ctx context.Context, id uuid.UUID, status
 		SET status = $1, last_error = $2, sent_at = $3, updated_at = now()
 		WHERE id = $4 AND ($5 = 0 OR (status = 'sending' AND attempts = $5 AND updated_at = $6))
 		RETURNING id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
 	var m EmailMessage
 	err := r.db.QueryRow(ctx, sql, status, lastError, sentAt, id, attempts, claimedAt).Scan(
 		&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 		&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-		&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+		&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 		&m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -803,7 +819,7 @@ func (r *EmailRepository) updateStatus(ctx context.Context, id uuid.UUID, status
 func (r *EmailRepository) ListByStatus(ctx context.Context, status EmailStatus, limit int) ([]*EmailMessage, error) {
 	const sql = `
 		SELECT id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 		FROM email_messages WHERE status = $1 ORDER BY created_at ASC LIMIT $2
 	`
@@ -818,7 +834,7 @@ func (r *EmailRepository) ListByStatus(ctx context.Context, status EmailStatus, 
 		var m EmailMessage
 		if err := rows.Scan(&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 			&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-			&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+			&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan email: %w", err)
 		}
@@ -851,7 +867,7 @@ func (r *EmailRepository) ClaimFailedForRetry(ctx context.Context, limit, maxAtt
 			FOR UPDATE SKIP LOCKED
 		)
 		RETURNING id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
 	rows, err := r.db.Query(ctx, sql, maxAttempts, backoffBaseSeconds, limit)
@@ -865,7 +881,7 @@ func (r *EmailRepository) ClaimFailedForRetry(ctx context.Context, limit, maxAtt
 		var m EmailMessage
 		if err := rows.Scan(&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 			&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-			&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+			&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan claimed email: %w", err)
 		}

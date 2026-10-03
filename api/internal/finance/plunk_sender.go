@@ -9,6 +9,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -53,13 +54,15 @@ func NewPlunkSender(cfg PlunkConfig) *PlunkSender {
 
 // plunkRequest is the JSON payload we send to the Plunk REST API.
 type plunkRequest struct {
-	From     plunkContact `json:"from"`
-	To       []string     `json:"to"`
-	CC       []string     `json:"cc,omitempty"`
-	BCC      []string     `json:"bcc,omitempty"`
-	Subject  string       `json:"subject"`
-	Body     string       `json:"body,omitempty"`
-	BodyHTML string       `json:"bodyHtml,omitempty"`
+	From    plunkContact `json:"from"`
+	To      []string     `json:"to"`
+	CC      []string     `json:"cc,omitempty"`
+	BCC     []string     `json:"bcc,omitempty"`
+	Subject string       `json:"subject"`
+	// Reply is a single plain address; Plunk sets it as the Reply-To header.
+	Reply    string `json:"reply,omitempty"`
+	Body     string `json:"body,omitempty"`
+	BodyHTML string `json:"bodyHtml,omitempty"`
 	// Attachments follow Plunk's send schema: base64 content, at most 10 files
 	// and 10 MB of base64 by default.
 	Attachments []plunkAttachment `json:"attachments,omitempty"`
@@ -138,7 +141,17 @@ func (p *PlunkSender) SendContext(ctx context.Context, msg *EmailMessage) error 
 		return fmt.Errorf("plunk: from email not set")
 	}
 
+	reply := ""
+	if msg.ReplyTo != "" {
+		addr, err := mail.ParseAddress(msg.ReplyTo)
+		if err != nil {
+			return fmt.Errorf("%w: reply_to is not a valid email address; no email was sent", ErrEmailValidation)
+		}
+		reply = addr.Address // Plunk takes a bare address, not "Name <addr>"
+	}
+
 	req := plunkRequest{
+		Reply:   reply,
 		From:    plunkContact{Email: fromEmail, Name: fromName},
 		To:      []string{msg.ToEmail},
 		CC:      msg.CCEmails,

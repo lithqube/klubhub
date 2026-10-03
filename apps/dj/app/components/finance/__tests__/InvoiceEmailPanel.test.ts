@@ -51,6 +51,24 @@ describe('InvoiceEmailPanel', () => {
     expect(wrapper.text()).toContain('Sent to buchhaltung@club.example with 2 files.')
   })
 
+  it('says where replies will go, when the server set a reply-to', async () => {
+    const { wrapper } = setup({ ...sent, reply_to: 'lina@dj.example' })
+    await open(wrapper)
+    await buttonByText(wrapper, 'SEND…').trigger('click')
+    await buttonByText(wrapper, 'SEND NOW').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Replies go to lina@dj.example.')
+  })
+
+  it('does not mention replies when there is no reply-to', async () => {
+    const { wrapper } = setup(sent)
+    await open(wrapper)
+    await buttonByText(wrapper, 'SEND…').trigger('click')
+    await buttonByText(wrapper, 'SEND NOW').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Replies go to')
+  })
+
   it('sends the PDF alone when the box is unticked', async () => {
     const { wrapper, spy } = setup(sent)
     await open(wrapper)

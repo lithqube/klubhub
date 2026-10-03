@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"strings"
 
 	"github.com/google/uuid"
@@ -119,13 +120,34 @@ func (m *InvoiceMailer) SendInvoiceEmail(ctx context.Context, id uuid.UUID, req 
 	ownerID := id
 	return m.emails.SendOwned(ctx, CreateEmailRequest{
 		Kind: EmailKindInvoiceIssued, OwnerType: string(DocumentOwnerInvoice), OwnerID: &ownerID,
-		FromEmail: m.fromEmail, FromName: m.fromName, ToEmail: to,
+		FromEmail: m.fromEmail, FromName: m.fromName, ToEmail: to, ReplyTo: replyToFor(data, m.fromEmail),
 		Subject: subject, Body: body, AttachmentIDs: attach,
 	})
 }
 
+// replyToFor is where the customer's answer should go: the supplier's contact
+// email, so a reply reaches the DJ and not the platform's sending address. It
+// comes from the supplier snapshot taken when the invoice was issued (the
+// current profile for an invoice that has none), and is left out, never an
+// error, when it is missing, malformed or the same as the sender.
+func replyToFor(data *InvoicePDFData, fromEmail string) string {
+	email := ""
+	var snap BillingProfileSnapshot
+	if err := snap.FromJSON(data.Invoice.BillingProfile); err == nil {
+		email = snap.ContactEmail
+	}
+	if strings.TrimSpace(email) == "" && data.BillingProfile != nil {
+		email = data.BillingProfile.ContactEmail
+	}
+	addr, err := mail.ParseAddress(strings.TrimSpace(email))
+	if err != nil || strings.EqualFold(addr.Address, fromEmail) {
+		return ""
+	}
+	return addr.Address
+}
+
 // invoiceEmailText is the default subject and body: short, bilingual, with the
-// supplier's contact details so the customer knows where to reply.
+// supplier's contact details; replies are routed there by the reply-to header.
 func invoiceEmailText(data *InvoicePDFData, withXML bool) (subject, body string) {
 	inv := data.Invoice
 	var snap BillingProfileSnapshot
