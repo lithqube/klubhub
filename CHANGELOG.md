@@ -6,6 +6,23 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-03
+
+### Upgrade notes
+
+- Database migrations 029–032 run automatically on start: e-invoice fields
+  and invoice lines, expense receipts, document kinds (with a trigger that
+  refuses to change or delete a stored document), and email reply-to.
+- Both Compose files gain an `einvoice` service (an amd64 image, run under
+  emulation on Apple Silicon) on the internal network only, and the app gets
+  `EINVOICE_URL=http://einvoice:3000`. Without it, e-invoice export answers
+  503 and nothing else changes.
+- Invoices issued before this release are not archived. After upgrading run
+  `docker compose exec app /api -backfill-archive -dry-run`, then the same
+  without `-dry-run`. See `docs/INVOICING.md`.
+- Resident Advisor import is now on by default; see below.
+
+
 ### Added
 
 - Factur-X (ZUGFeRD) and XRechnung (CII and UBL) e-invoice export for
