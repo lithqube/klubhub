@@ -132,6 +132,24 @@ export interface IssueCheck {
   problems: IssueProblem[]
 }
 
+/** What `POST /invoices/{id}/email` stores: where the message went and how delivery stands. */
+export interface InvoiceEmailResult {
+  id: string
+  to_email: string
+  subject: string
+  /** `failed` is retried by the server; the message is not lost. */
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'bounced'
+  /** Files that went with it (the PDF, and the e-invoice XML when there is one). */
+  attachment_ids: string[]
+}
+
+export interface InvoiceEmailInput {
+  /** Defaults to the customer's email on the server. */
+  to_email?: string
+  /** Omit to attach the e-invoice when there is one; true insists; false sends the PDF alone. */
+  include_einvoice?: boolean
+}
+
 /** Structured e-invoice formats the server can produce for a numbered invoice. */
 export type EInvoiceFormat = 'facturx' | 'xrechnung-cii' | 'xrechnung-ubl'
 
@@ -295,6 +313,7 @@ export type FinanceErrorCode =
   | 'conflict'
   | 'bad_state'
   | 'not_issuable'
+  | 'not_exportable'
   | 'invoice_not_payable'
   | 'exceeds_balance'
   | 'unsupported_media_type'

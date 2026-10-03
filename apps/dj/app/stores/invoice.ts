@@ -7,6 +7,8 @@ import type {
   FinanceErrorCode,
   Invoice,
   InvoiceCreateInput,
+  InvoiceEmailInput,
+  InvoiceEmailResult,
   InvoiceGigOption,
   InvoiceLine,
   InvoiceListFilter,
@@ -51,7 +53,7 @@ export class FinanceApiError extends Error {
 
 const KNOWN_CODES: FinanceErrorCode[] = [
   'validation_failed', 'bad_request', 'not_found', 'conflict', 'bad_state',
-  'not_issuable', 'invoice_not_payable', 'exceeds_balance',
+  'not_issuable', 'not_exportable', 'invoice_not_payable', 'exceeds_balance',
   'unsupported_media_type', 'too_large', 'limit_reached', 'inactive',
 ]
 
@@ -275,6 +277,23 @@ export const useInvoiceStore = defineStore('invoice', () => {
       const res = await $fetch<unknown>(`${BASE}/invoices/${encodeURIComponent(id)}/einvoice-check`, { query: { format } })
       const chk = unwrap<EInvoiceCheck>(res)
       return { format, ready: !!chk?.ready, problems: chk?.problems ?? [] }
+    } catch (e) {
+      const err = toFinanceError(e)
+      if (err.code === 'unavailable') return null
+      throw err
+    }
+  }
+
+  /**
+   * Emails the issued invoice to its customer with its PDF (and e-invoice XML)
+   * attached. Resolves to null when this server cannot send mail (503), and
+   * deliberately not through `request()` for the same reason as the check.
+   * Throws FinanceApiError for everything else, with `problems` on 422.
+   */
+  async function sendInvoiceEmail(id: string, input: InvoiceEmailInput): Promise<InvoiceEmailResult | null> {
+    try {
+      const res = await $fetch<unknown>(`${BASE}/invoices/${encodeURIComponent(id)}/email`, { method: 'POST', body: input })
+      return unwrap<InvoiceEmailResult>(res)
     } catch (e) {
       const err = toFinanceError(e)
       if (err.code === 'unavailable') return null
@@ -665,7 +684,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
     // getters
     filteredInvoices, filterCounts, activeInvoiceByGig, gigById,
     // actions
-    fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck, fetchEInvoiceCheck,
+    fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck, fetchEInvoiceCheck, sendInvoiceEmail,
     fetchGigOptions, suggestTax, taxNotes, fetchTaxNotes, closeCurrent,
     createInvoice, updateInvoice, issueInvoice, cancelInvoice, markPaid,
     issueCreditNote, correctInvoice, createPayment, markPaymentReceived,

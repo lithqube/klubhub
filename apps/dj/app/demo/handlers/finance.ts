@@ -55,6 +55,7 @@ export function registerFinance(r: DemoRouter): void {
     })
     .on('GET', `${B}/invoices/:id/einvoice-check`, (req, c) => res(ops.einvoiceCheck(c.finance, req.params.id!, query(req).format ?? '')))
     .on('GET', `${B}/invoices/:id/einvoice`, (req, c) => res(ops.einvoiceCheck(c.finance, req.params.id!, query(req).format ?? '')))
+    .on('POST', `${B}/invoices/:id/email`, (req, c) => res(ops.emailInvoice(c.finance, req.params.id!)))
     .on('GET', `${B}/invoices/:id/issue-check`, (req, c) => res(ops.issueCheck(c.finance, req.params.id!)))
     .on('POST', `${B}/invoices/:id/issue`, (req, c) => res(ops.issueInvoice(c.finance, req.params.id!, body(req))))
     .on('POST', `${B}/invoices/:id/cancel`, (req, c) => res(ops.cancelInvoice(c.finance, req.params.id!, body(req))))

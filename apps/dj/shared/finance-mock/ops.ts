@@ -865,3 +865,11 @@ export function einvoiceCheck(db: FinanceMockDb, id: string, format: string): Mo
   if (inv.status === 'draft' || inv.status === 'cancelled') return fail(409, 'bad_state', 'only numbered invoices have an e-invoice')
   return fail(503, 'service_unavailable', 'E-invoice export is not enabled on this server.')
 }
+
+/** The browser-only mock sends no mail, like a server without Plunk. */
+export function emailInvoice(db: FinanceMockDb, id: string): MockResult {
+  const inv = db.invoices.get(id)
+  if (!inv) return notFound()
+  if (inv.status === 'draft' || inv.status === 'cancelled') return fail(409, 'bad_state', 'only numbered invoices can be emailed')
+  return fail(503, 'service_unavailable', 'Invoice email is not enabled on this server.')
+}
