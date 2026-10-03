@@ -498,6 +498,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	// /entries/{id}/attachments answers 503 and the rest of finance is unaffected.
 	if storeClient != nil {
 		mux.WithDocuments(finance.NewDocumentHandler(docSvc))
+		invoiceSvc.WithArchive(docSvc)
 		mux.WithAttachments(finance.NewAttachmentHandler(finance.NewAttachmentService(
 			finance.NewAttachmentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)))
 	}

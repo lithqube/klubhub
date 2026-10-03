@@ -44,6 +44,7 @@ type documentView struct {
 	ID             uuid.UUID         `json:"id"`
 	OwnerType      DocumentOwnerType `json:"owner_type"`
 	OwnerID        uuid.UUID         `json:"owner_id"`
+	Kind           DocumentKind      `json:"kind"`
 	Filename       string            `json:"filename"`
 	MimeType       string            `json:"mime_type"`
 	SizeBytes      int64             `json:"size_bytes"`
@@ -55,7 +56,7 @@ type documentView struct {
 
 func viewOf(d *Document) documentView {
 	return documentView{
-		ID: d.ID, OwnerType: d.OwnerType, OwnerID: d.OwnerID, Filename: d.Filename,
+		ID: d.ID, OwnerType: d.OwnerType, OwnerID: d.OwnerID, Kind: d.Kind, Filename: d.Filename,
 		MimeType: d.MimeType, SizeBytes: d.SizeBytes, ChecksumSHA256: d.ChecksumSHA256,
 		Version: d.Version, IsCurrent: d.IsCurrent, CreatedAt: d.CreatedAt,
 	}

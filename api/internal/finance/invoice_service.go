@@ -45,6 +45,7 @@ type InvoiceService struct {
 	billingSvc  BillingServiceIface
 	gigProvider GigFeeProvider
 	exporter    *einvoice.Exporter // nil: e-invoice export is unavailable (einvoice.go)
+	archive     DocumentArchive    // nil: nothing is archived at issue (invoice_archive.go)
 }
 
 // NewInvoiceService returns an InvoiceService.
@@ -307,9 +308,14 @@ func (s *InvoiceService) Issue(ctx context.Context, id uuid.UUID, req IssueInvoi
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.Issue(ctx, id, req, profile, func(inv *Invoice, gigCurrency string) []tax.Problem {
+	inv, err := s.repo.Issue(ctx, id, req, profile, func(inv *Invoice, gigCurrency string) []tax.Problem {
 		return problemsFor(inv, profile, gigCurrency)
 	})
+	if err != nil {
+		return nil, err
+	}
+	s.archiveIssued(ctx, inv.ID)
+	return inv, nil
 }
 
 // Pay transitions issued → paid.
@@ -350,7 +356,14 @@ func (s *InvoiceService) creditNote(ctx context.Context, id uuid.UUID, req Credi
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.CreditNote(ctx, id, req, profile, correct)
+	res, err := s.repo.CreditNote(ctx, id, req, profile, correct)
+	if err != nil {
+		return nil, err
+	}
+	if res != nil && res.CreditNote != nil {
+		s.archiveIssued(ctx, res.CreditNote.ID)
+	}
+	return res, nil
 }
 
 // NextNumber previews the next number.

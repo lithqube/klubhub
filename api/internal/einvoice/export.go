@@ -8,7 +8,10 @@ import (
 
 // File is a finished, validated e-invoice.
 type File struct {
-	Data      []byte
+	Data []byte
+	// XML is the validated EN 16931 XML behind the file: Data itself for
+	// XRechnung, the plain CII twin of the embedded XML for Factur-X.
+	XML       []byte
 	Format    Format
 	MimeType  string
 	Extension string
@@ -85,7 +88,7 @@ func (e *Exporter) Export(ctx context.Context, d Document, f Format, pdf []byte)
 			return nil, err
 		}
 	}
-	return &File{Data: data, Format: f, MimeType: f.MimeType(), Extension: f.Extension(), Report: rep}, nil
+	return &File{Data: data, XML: xml, Format: f, MimeType: f.MimeType(), Extension: f.Extension(), Report: rep}, nil
 }
 
 // generateXML produces and validates the XML for f (the file itself for

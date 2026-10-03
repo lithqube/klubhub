@@ -235,7 +235,7 @@ rate / 10000); `net_payable = total − withholding`.
 | `GET /invoices/{id}/einvoice-check?format=` | | `{data: {format, ready, problems: [{field, message}]}}`; `format` is `facturx`, `xrechnung-cii` or `xrechnung-ubl`. Numbered documents only (`409 bad_state` otherwise); `503` when no generator is configured |
 | `GET /invoices/{id}/einvoice?format=` | | The validated e-invoice as an attachment: Factur-X PDF/A-3b (`.pdf`) or XRechnung (`.xml`), named `<number>-<format>.<ext>`; `X-EInvoice-Validation: passed`, `Cache-Control: private, no-store`. `422 {error:"not_exportable", problems}` when data is missing or the rule engine rejects it (nothing invalid is ever returned); `503` when `EINVOICE_URL` is unset; `502` if the generator misbehaves. Not persisted yet |
 | `GET /documents?owner_type=&owner_id=` | | `{data: Document[]}`: every stored version for that owner, newest first (`owner_type`: `invoice`, `agreement`, `epk`, `gig`, `other`). Needs object storage, else `503` |
-| `GET /documents/{id}` | | `{data: Document}` metadata: filename, mime type, size, `checksum_sha256`, `version`, `is_current`. The storage key is never returned |
+| `GET /documents/{id}` | | `{data: Document}` metadata: `kind`, filename, mime type, size, `checksum_sha256`, `version`, `is_current`. The storage key is never returned |
 | `GET /documents/{id}/download` | | The stored file, always `Content-Disposition: attachment`, with `X-Checksum-SHA256`, `Cache-Control: private, no-store`, `nosniff` and a sandbox CSP. There is no upload, change or delete route: the server writes documents when it archives something it produced |
 | `POST /invoices/{id}/issue` | `{updated_at}` | allocates number; `422 {error:"not_issuable", problems}` |
 | `POST /invoices/{id}/pay` | `{paid_at, payment_ref, updated_at}` | issued → paid |
@@ -400,6 +400,23 @@ startup warning and ignores malformed values). Only one extra host is
 supported. Behind a TLS-terminating proxy, `CORS_ORIGIN` must be the public
 `https://` origin. `X-Forwarded-*` headers are never trusted. The default
 `http://127.0.0.1:3000` works for local use.
+
+### 4.2b Archive at issue
+
+Issuing an invoice or credit note keeps what it is made of in `documents`, owned by the invoice (`owner_type: invoice`). Versions and "current" are per `kind`:
+
+| `kind` | What | Filename |
+|---|---|---|
+| `invoice_pdf` | The PDF as issued | `invoice-<number>.pdf` / `credit-note-<number>.pdf` |
+| `einvoice_xml` | The validated EN 16931 (CII) XML | `<number>-einvoice.xml` |
+| `validation_report` | The rule-engine result: format, syntax, whether XRechnung rules applied, `passed`, `validated_at`, violations and warnings | `<number>-validation.json` |
+
+- The number is committed first; archiving runs right after, on a context that survives the client hanging up. A failure is logged and **never fails the issue**: the PDF and e-invoice stay available on demand.
+- It is idempotent (`InvoiceService.Archive`): a kind that exists is never replaced, so archived evidence stays as issued. A concurrent archive that loses the race is treated as done.
+- An invoice that cannot be exported (missing buyer data, withholding tax) or a server without `EINVOICE_URL` still archives the PDF; the XML and report are skipped.
+- The database refuses to change or delete a stored document (trigger from migration 031); the only allowed change is losing `is_current` to a newer version.
+- Archiving needs object storage; without it nothing is archived.
+- Invoices issued before this release have no archive yet.
 
 ### 4.3 E-invoice export
 

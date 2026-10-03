@@ -18,6 +18,15 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - Read-only finance documents API (`GET /documents`, `/documents/{id}`,
   `/documents/{id}/download`): downloads are always attachments with
   checksum, `no-store` and `nosniff`; storage keys are never exposed.
+- Issuing an invoice or credit note now archives the PDF as issued and,
+  when it can be exported, the validated e-invoice XML and its validation
+  report. Documents have a `kind` (migration 031) with versions kept per
+  kind, and the database refuses to change or delete a stored document.
+
+### Fixed
+
+- Storing a second version of a document failed with "updated by another
+  writer": the old version is now demoted before the new one is inserted.
 
 ### Changed
 
