@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4.5-rider-templates
+current_phase: 6-release-planner
 current_plan: not started
-status: in_progress
-last_updated: "2026-09-30T10:00:00Z"
+status: release_v1.2.0
+last_updated: "2026-10-03T12:00:00Z"
 progress:
   total_phases: 15
   completed_phases: 8
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v1.0 milestone
-**Current phase:** 4.5-rider-templates
+**Current phase:** 6-release-planner (not started)
 **Current plan:** not started
-**Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03, 04 (Gig Tracker), 05 (Finance Tracker), 0.5 (Garage S3)
-**Status:** Phase 5 (Finance Tracker) shipped 2026-09-28 via PR #34 (#35 follow-up tests). Phase 4 (Gig Tracker) shipped via PRs #17/#18 with GigReader interface for downstream modules. Now starting Phase 4.5 (Rider Templates) — RIDER-01..05 in REQUIREMENTS.md. Branch `feat/phase-4.5-rider-templates` cut from main @ 20a6fd8.
+**Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03, 04 (Gig Tracker), 4.5 (Rider Templates), 05 (Finance Tracker), 0.5 (Garage S3)
+**Status:** Phase 5 (Finance Tracker) shipped 2026-09-28 via PR #34 (#35 follow-up tests). Phase 4 (Gig Tracker) shipped via PRs #17/#18 with GigReader interface for downstream modules. Phase 4.5 (Rider Templates) and the v1.2.0 finance work (EN 16931 e-invoicing, archive, receipts) shipped; release branch `release/v1.2.0`. Next: Phase 6 (Release Planner).
 
 ## Completed Phases Summary
 

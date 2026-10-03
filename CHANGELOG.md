@@ -6,21 +6,27 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed
-
-- The klubhub.io site and README now describe the business model: everything
-  built is free and open source (MIT), and hosted editions (KlubHub Cloud,
-  Promoter Cloud) are planned for what needs servers. The feature list adds
-  e-invoices and expenses with receipts, the "KlubHub DJ PRO commercial
-  licence" row is gone, and a test keeps prices off the page.
-
 ## [1.2.0] - 2026-10-03
 
 ### Upgrade notes
 
-- Database migrations 029–032 run automatically on start: e-invoice fields
-  and invoice lines, expense receipts, document kinds (with a trigger that
-  refuses to change or delete a stored document), and email reply-to.
+- Database migrations 023–032 run automatically on start. Since 1.1.0 they
+  add: the finance ledger (023), the storage-key renames below (024, 025),
+  rider templates (026, 027), track markers and a reorderable track position
+  (028), e-invoice fields and invoice lines (029), expense receipts (030),
+  document kinds with a trigger that refuses to change or delete a stored
+  document (031) and email reply-to (032).
+- **Browsers and scripts that reach the API by a LAN IP or another hostname
+  now get 403 on writes** (`POST`/`PUT`/`PATCH`/`DELETE` under `/api/v1`) until
+  `CORS_ORIGIN` is set to the exact origin people type, for example
+  `CORS_ORIGIN=https://dj.example`. Loopback (`localhost`, `127.0.0.1`,
+  `[::1]`) keeps working. This closes DNS rebinding; it is not
+  authentication. See `docs/INVOICING.md` and `docs/CONFIGURATION.md`.
+- Two JSON keys were renamed to match the storage backend: scheduled posts
+  now carry `imageStorageKey` (was `imageMinioPath`) and EPK exports
+  `garageObjectKey` (was `minioPath`). The bundled UI is updated; external
+  clients of those endpoints must follow. The old database columns are kept
+  for one cycle.
 - Both Compose files gain an `einvoice` service (an amd64 image, run under
   emulation on Apple Silicon) on the internal network only, and the app gets
   `EINVOICE_URL=http://einvoice:3000`. Without it, e-invoice export answers
@@ -28,10 +34,51 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - Invoices issued before this release are not archived. After upgrading run
   `docker compose exec app /api -backfill-archive -dry-run`, then the same
   without `-dry-run`. See `docs/INVOICING.md`.
-- Resident Advisor import is now on by default; see below.
-
+- `scripts/restore.sh` was rewritten with a restore drill and `scripts/RESTORE.md`;
+  read it before your next restore. `scripts/install.sh` gained checks, with
+  tests.
+- Resident Advisor import is on by default; see below.
+- `docker-compose.prod.yml` now defaults `IMAGE_TAG` to `v1.2.0` (the old
+  `v1.0.1` default was never published). Publish the image with the
+  container workflow's `tag_override=v1.2.0` before deploying; until then use
+  a `sha-<commit>` tag. See `docs/container-images.md`.
 
 ### Added
+
+- **Rider Templates (Phase 4.5).** A new `/rider` page for reusable technical
+  and hospitality riders with four free-text sections (technical, hospitality,
+  backline, other notes), quick-insert chips, autosave, and attaching a
+  template to a gig as a per-gig copy that can be overridden without touching
+  the template. The attachment exports as a PDF. New `/api/v1/rider/*` routes
+  (`/templates`, `/attachments`, `/attachments/by-gig/{gigId}`,
+  `/attachments/{id}/pdf`), migrations 026 and 027 (soft delete, unique
+  names), optimistic concurrency on updates (a stale `updatedAt` answers 409
+  and the UI offers to reload the latest) and demo support.
+- **Tracklist editor.** Add tracks by hand, drag to reorder (or Alt+Up/Down),
+  rename a tracklist inline, link it to gigs, and flag tracks as hidden gem,
+  unreleased, or played from vinyl or digital. New endpoints `PUT
+  /tracklists/{id}`, `GET /tracklists/{id}/gigs`, `POST
+  /tracklists/{id}/tracks` and `PUT /tracklists/{id}/tracks/order`; migration
+  028. The exported card shows the markers (a hidden gem masks its artist and
+  cover), adapts its density to long sets and goes to two columns past 28
+  tracks, and the preview scales the 1080×1920 card to fit.
+- The dashboard is built from real data (gigs, social queue, tracklists and
+  the finance ledger) with explicit loading and failure states per section,
+  per-currency income and outstanding invoice balances, and DEMO DATA labels
+  on anything still backed by mock data.
+- Gigs return their linked venues, contacts and tracklists
+  (`GET /gigs/{id}/tracklists` too), answer in the `{ data }` envelope, and
+  render the booking PDF with the DJ name from settings (a blank name answers
+  422). The gig form and store are concurrency-safe: a stale update shows
+  the conflict instead of overwriting another writer's change.
+- EN 16931 invoice fields and editable invoice lines, invoice and credit
+  note PDF download (`GET /invoices/{id}/pdf`), German legal notes (§ 19
+  UStG, reverse charge, outside scope; wording is common practice, not tax
+  advice) with `GET /invoices/tax-notes`, and receipts on expense entries
+  with a NO RECEIPT filter and an inline entry composer.
+- KlubHub Promoter: P3.1 audience CRM (contacts, consent records, segments,
+  CSV import and export), with tenant RLS and policy-checked routes; tech-notes
+  quick-insert chips on the venue form.
 
 - Factur-X (ZUGFeRD) and XRechnung (CII and UBL) e-invoice export for
   issued invoices and credit notes: `GET /invoices/{id}/einvoice` and
@@ -74,32 +121,6 @@ project adheres to [Semantic Versioning](https://semver.org/).
   frontend-only mock server, which have no RA endpoints, still start with it
   hidden. `docs/EDITIONS.md` and `docs/CONFIGURATION.md` are updated.
 
-### Fixed
-
-- XRechnung files for invoices outside the scope of VAT (category O) now carry a
-  VAT rate of 0 on the tax breakdown, as XRechnung rule BR-DE-14 requires.
-  Found by running the official KoSIT validator over the golden files; the
-  `einvoice-golden` CI job now does that on every change.
-- Storing a second version of a document failed with "updated by another
-  writer": the old version is now demoted before the new one is inserted.
-
-### Changed
-
-- README, `docs/INDEX.md` and `CLAUDE.md` synced to the current state
-  of the repo: the project structure tree now shows `apps/promoter`,
-  `libs/ui`, `api/cmd/promoter` and `api/internal/promoter` (previously
-  DJ-only); the Node prerequisite corrected to 22.x (matches CI, was
-  20.x); the `IMAGE_TAG=v1.0.1` publication caveat corrected to name
-  the actual unpublished tag and the real one (`1.0.1`); the browser
-  demo (`klubhub.io/demo`) linked from the README for the first time;
-  `docs/INDEX.md` gained `container-images.md`, `INVOICING.md`,
-  `DESIGN.md`, `github-pages.md` (all existed but weren't indexed) and
-  a KlubHub Promoter self-hosting pointer; `CLAUDE.md`'s project-state
-  summary (previously five months stale — still said Phase 4 was next
-  and Promoter was "branch work") updated to the current phase status.
-
-### Added
-
 - **Phase 5 — Finance: earnings ledger (FIN-01–07, FIN-09).** The
   Finance page's Earnings panel now ships the full income / expense
   ledger (FIN-01, FIN-02), gig-linked auto-income when a gig's
@@ -132,20 +153,42 @@ project adheres to [Semantic Versioning](https://semver.org/).
   with cosign (keyless, GitHub OIDC) — the same checks `promoter-ci.yml`
   already runs for the Promoter image. Still arm64-only.
 
-### Fixed
-
-- `apps/dj-e2e`'s `serve-static` served an empty `apps/dj/dist` instead
-  of the app: `nuxt build --prerender` (`build-static`) writes to
-  `apps/dj/.output/public`, so every request returned a bare directory
-  listing. `apps/dj-e2e/src/example.spec.ts` was a stale scaffold
-  placeholder asserting an `<h1>` containing "Welcome", which the
-  dashboard has never had; it now checks the page's real title.
-- `apps/dj/app/pages/index.vue`: two unused helper functions and two
-  `v-if`/`v-for` on the same element (now wrapped in `<template v-if>`),
-  the pre-existing lint errors that would have made `dj-ci.yml` red from
-  its first run.
+- **Browser-only demo at [klubhub.io/demo](https://klubhub.io/demo/).** The
+  app can be built as a static SPA with `NUXT_DEMO=1`
+  (`pnpm nx run @dev/dj:build-demo` writes `dist/demo`). An in-browser API
+  (`apps/dj/app/demo`) answers every `/api/v1` call from fictional sample
+  data kept in the visitor's `localStorage`, with a banner and a
+  **Reset demo** button. No request reaches the Go API or any third party.
+  The invoicing rules now live in `apps/dj/shared/finance-mock`, shared by
+  the demo and the Nitro dev mocks. The Pages workflow builds the demo and
+  publishes it under `/demo/`, and the site links to it. Normal dev and
+  production builds are unchanged. See [`docs/DEMO.md`](docs/DEMO.md).
+- A general edition feature-flag mechanism: `Features` in the API config
+  (`FEATURE_*` env vars), `runtimeConfig.public.features` with the
+  `useFeatures()` composable in the UI, and one registry of licensed
+  features in `apps/dj/app/utils/features.ts`. `GET /api/v1/health` now
+  also returns a `features` map.
 
 ### Changed
+
+- The klubhub.io site and README now describe the business model: everything
+  built is free and open source (MIT), and hosted editions (KlubHub Cloud,
+  Promoter Cloud) are planned for what needs servers. The feature list adds
+  e-invoices and expenses with receipts, the "KlubHub DJ PRO commercial
+  licence" row is gone, and a test keeps prices off the page.
+
+- README, `docs/INDEX.md` and `CLAUDE.md` synced to the current state
+  of the repo: the project structure tree now shows `apps/promoter`,
+  `libs/ui`, `api/cmd/promoter` and `api/internal/promoter` (previously
+  DJ-only); the Node prerequisite corrected to 22.x (matches CI, was
+  20.x); the `IMAGE_TAG=v1.0.1` publication caveat corrected to name
+  the actual unpublished tag and the real one (`1.0.1`); the browser
+  demo (`klubhub.io/demo`) linked from the README for the first time;
+  `docs/INDEX.md` gained `container-images.md`, `INVOICING.md`,
+  `DESIGN.md`, `github-pages.md` (all existed but weren't indexed) and
+  a KlubHub Promoter self-hosting pointer; `CLAUDE.md`'s project-state
+  summary (previously five months stale — still said Phase 4 was next
+  and Promoter was "branch work") updated to the current phase status.
 
 - **`PROMOTER_TAG` is now required** in `docker-compose.promoter.yml` (no
   default). It previously defaulted to `v0.1.0`, which was never
@@ -169,35 +212,32 @@ project adheres to [Semantic Versioning](https://semver.org/).
   the current one (`docker-compose.prod.yml` defaults to `v1.0.1`,
   which was never published; `1.0.1`, no `v`, is the real tag).
 
-- **Resident Advisor (RA) import is now a licensed feature and is off by
-  default.** This affects existing self-hosters: after upgrading, the RA
-  import panels on the EPK and Gigs pages and the RA link field in the EPK
-  editor are hidden. The API no longer mounts `/api/v1/epk/import-ra`,
-  `/api/v1/gigs/import-ra` or `/api/v1/gigs/info/{slug}` (they return
-  404), and it makes no requests to RA. Gigs and EPK data you already
-  imported, and any RA link you saved, are kept. To turn RA import back
-  on, set `FEATURE_RA_IMPORT=true` for the API and
-  `NUXT_PUBLIC_FEATURES_RA_IMPORT=true` for the UI. With the production
-  Compose file, `FEATURE_RA_IMPORT=true` in `.env` sets both. See
-  [`docs/EDITIONS.md`](docs/EDITIONS.md).
+- Finance hardening from an audit of all 19 findings: payment and email
+  paths, concurrency on edits and ordering, a Host allowlist for unsafe API
+  requests (see the upgrade notes), restore script improvements and frontend
+  quality fixes.
+- Dependency patch for the `devalue` runtime security advisories.
 
-### Added
+### Fixed
 
-- **Browser-only demo at [klubhub.io/demo](https://klubhub.io/demo/).** The
-  app can be built as a static SPA with `NUXT_DEMO=1`
-  (`pnpm nx run @dev/dj:build-demo` writes `dist/demo`). An in-browser API
-  (`apps/dj/app/demo`) answers every `/api/v1` call from fictional sample
-  data kept in the visitor's `localStorage`, with a banner and a
-  **Reset demo** button. No request reaches the Go API or any third party.
-  The invoicing rules now live in `apps/dj/shared/finance-mock`, shared by
-  the demo and the Nitro dev mocks. The Pages workflow builds the demo and
-  publishes it under `/demo/`, and the site links to it. Normal dev and
-  production builds are unchanged. See [`docs/DEMO.md`](docs/DEMO.md).
-- A general edition feature-flag mechanism: `Features` in the API config
-  (`FEATURE_*` env vars), `runtimeConfig.public.features` with the
-  `useFeatures()` composable in the UI, and one registry of licensed
-  features in `apps/dj/app/utils/features.ts`. `GET /api/v1/health` now
-  also returns a `features` map.
+- XRechnung files for invoices outside the scope of VAT (category O) now carry a
+  VAT rate of 0 on the tax breakdown, as XRechnung rule BR-DE-14 requires.
+  Found by running the official KoSIT validator over the golden files; the
+  `einvoice-golden` CI job now does that on every change.
+- Storing a second version of a document failed with "updated by another
+  writer": the old version is now demoted before the new one is inserted.
+
+- `apps/dj-e2e`'s `serve-static` served an empty `apps/dj/dist` instead
+  of the app: `nuxt build --prerender` (`build-static`) writes to
+  `apps/dj/.output/public`, so every request returned a bare directory
+  listing. `apps/dj-e2e/src/example.spec.ts` was a stale scaffold
+  placeholder asserting an `<h1>` containing "Welcome", which the
+  dashboard has never had; it now checks the page's real title.
+- `apps/dj/app/pages/index.vue`: two unused helper functions and two
+  `v-if`/`v-for` on the same element (now wrapped in `<template v-if>`),
+  the pre-existing lint errors that would have made `dj-ci.yml` red from
+  its first run.
+
 
 ## [1.1.0] - 2026-09-25
 

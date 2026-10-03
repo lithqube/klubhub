@@ -6,7 +6,7 @@ The production deployment uses one app package, `ghcr.io/lithqube/klubhub-dj-api
 
 The combined app image built from `apps/dj/Dockerfile` runs **Go + Nuxt/Node + Playwright under supervision**. It is not a distroless Go-only image serving a static Nuxt directory. Go owns the public listener on port 8080, serves API routes, and proxies frontend traffic to Nuxt on internal port 3000. That internal port is not published. `SERVE_FRONTEND=true` enables this production behavior; development uses an API-only image and host Nuxt instead.
 
-**Local changes are not a released image.** Fixes in this checkout require a new version publication before production operators can pull them. `docker-compose.prod.yml` defaults to `IMAGE_TAG=v1.0.1`, but that tag **was never published** — only `1.0.1` (no `v`) is, and it predates the v1.1.0 invoicing work. Export `IMAGE_TAG` to `1.0.1` or the newest `sha-<commit>` tag before deploying; do not report a local build as a successful registry deployment. This is expected to be resolved by a v1.2.0 release with matching `v1.2.0`/`1.2.0` tags.
+**Local changes are not a released image.** Fixes in this checkout require a new version publication before production operators can pull them. `docker-compose.prod.yml` defaults to `IMAGE_TAG=v1.2.0`. That tag exists only after the release image is published: run the **Publish KlubHub DJ container image** workflow manually with `tag_override=v1.2.0` and verify the manifest below. Until then, export `IMAGE_TAG` to the newest `sha-<commit>` tag. The older `v1.0.1` default was never published (only `1.0.1`, no `v`, was) and predates the invoicing work; do not use it. Do not report a local build as a successful registry deployment.
 
 ## Production image references
 
@@ -14,7 +14,7 @@ The combined app image built from `apps/dj/Dockerfile` runs **Go + Nuxt/Node + P
 |---|---|
 | `db` | `postgres:16-alpine` |
 | `storage` | `dxflrs/garage:v2.2.0` |
-| `app` (combined) | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.0.1}` |
+| `app` (combined) | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.2.0}` |
 
 The production Compose file is standalone and image-only. Do not merge it with the default development Compose file, which builds the API from local source. Override `IMAGE_REPOSITORY` only when intentionally using a different app registry package. There are no separate `/api` and `/frontend` production packages in this deployment contract.
 
@@ -29,7 +29,7 @@ The publishing workflow targets **`linux/arm64` only**, using the native `ubuntu
 Two tag paths are supported:
 
 - **Automatic runs from `main`:** when `tag_override` is empty, the workflow publishes `sha-<short SHA>`. This is the rolling CI path; it does not create stable release tags.
-- **Manual `workflow_dispatch` runs:** supply `tag_override` for release-style tags such as `v1.0.1`. Inspect the resolved tag in the run before relying on it.
+- **Manual `workflow_dispatch` runs:** supply `tag_override` for release-style tags such as `v1.2.0`. Inspect the resolved tag in the run before relying on it.
 
 The workflow disables `latest`. Pin a known release or exact published build, not an assumed moving tag.
 
