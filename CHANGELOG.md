@@ -15,6 +15,9 @@ project adheres to [Semantic Versioning](https://semver.org/).
   validated against the EN 16931 and XRechnung rules before it is
   returned; missing data is reported by field. The invoice sheet gains
   an E-INVOICE panel. See `docs/INVOICING.md`.
+- Read-only finance documents API (`GET /documents`, `/documents/{id}`,
+  `/documents/{id}/download`): downloads are always attachments with
+  checksum, `no-store` and `nosniff`; storage keys are never exposed.
 
 ### Changed
 

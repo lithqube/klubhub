@@ -488,7 +488,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 		finance.NewHandler(billingSvc),
 		finance.NewInvoiceHandler(invoiceSvc),
 		finance.NewPaymentHandler(paymentSvc),
-		nil, // documents: no HTTP handler yet
+		nil, // documents: mounted below when object storage exists
 		finance.NewAgreementTemplateHandler(tplSvc),
 		finance.NewAgreementInstanceHandler(instSvc),
 		emailHandler,
@@ -497,6 +497,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	// Receipts on ledger entries need object storage; without it
 	// /entries/{id}/attachments answers 503 and the rest of finance is unaffected.
 	if storeClient != nil {
+		mux.WithDocuments(finance.NewDocumentHandler(docSvc))
 		mux.WithAttachments(finance.NewAttachmentHandler(finance.NewAttachmentService(
 			finance.NewAttachmentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)))
 	}

@@ -26,6 +26,13 @@ type Mux struct {
 	attachments        http.Handler
 }
 
+// WithDocuments mounts the read-only document handler. Like attachments it
+// needs object storage, so it is a separate step and answers 503 without it.
+func (m *Mux) WithDocuments(h http.Handler) *Mux {
+	m.documents = h
+	return m
+}
+
 // WithAttachments mounts the receipt handler for /entries/{id}/attachments.
 // It is a separate step (not a NewMux argument) because it needs object
 // storage: without it those routes answer 503 and everything else is unchanged.

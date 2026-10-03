@@ -300,7 +300,7 @@ The pattern is the same as in Germany:
 
 | Plan item (§4 Tier 1) | State |
 |---|---|
-| 1. PDF download | Route done (`GET /invoices/{id}/pdf`, on demand). **Not done:** archive the issued PDF as an immutable document; needs a documents HTTP handler. |
+| 1. PDF download | Route done (`GET /invoices/{id}/pdf`, on demand). Documents HTTP handler done (read-only list/metadata/download, `internal/finance/document_handler.go`). **Not done:** archive the issued PDF at issue time. Open design point: the `documents` table versions per owner, so PDF, XML and report would supersede each other; archiving needs a `kind` column (migration) so each kind has its own current version. |
 | 2. EN 16931 data model, editable lines | Done: BT-32 Steuernummer, BT-10/12/13 references, BT-20 terms, BT-84/86 IBAN/BIC, BT-130 unit codes, multi-line editing, `tax.CategoryFor`. Open: allowances and charges (BG-20/21); BT-34/49 addresses and payment-means code 58 are derived at export. |
 | 3. Country legal notes | **Done for Germany** (§ 19 UStG, reverse charge with "Steuerschuldnerschaft des Leistungsempfängers", § 3a Abs. 2 UStG), bilingual DE/EN, served to the UI by `GET /invoices/tax-notes`. Needs a Steuerberater's confirmation of the wording. Other countries keep the generic English text. |
 | 4. Structured payment means | IBAN/BIC stored, validated and printed. Open: EPC/GiroCode QR on the PDF. |
@@ -309,7 +309,7 @@ The pattern is the same as in Germany:
 | 7. Credit note 381 mapping | Done (type 381 with the credited invoice as preceding document). |
 | 8. E-invoice attached to the invoice email | Not started. |
 
-Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: the documents handler, then persist the issued PDF, the e-invoice XML and its validation report as immutable documents (items 1 and 6), then attach the e-invoice to the invoice email (item 8).
+Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: add a document `kind` and persist the issued PDF, the e-invoice XML and its validation report as immutable documents (items 1 and 6), then attach the e-invoice to the invoice email (item 8).
 
 ## Sources
 

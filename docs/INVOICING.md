@@ -234,6 +234,9 @@ rate / 10000); `net_payable = total − withholding`.
 | `GET /invoices/{id}/pdf` | | `application/pdf` attachment (`invoice-<number>.pdf`, `credit-note-<number>.pdf`, or `invoice-draft-<id8>.pdf`); rendered on demand, `Cache-Control: private, no-store`. Not persisted yet |
 | `GET /invoices/{id}/einvoice-check?format=` | | `{data: {format, ready, problems: [{field, message}]}}`; `format` is `facturx`, `xrechnung-cii` or `xrechnung-ubl`. Numbered documents only (`409 bad_state` otherwise); `503` when no generator is configured |
 | `GET /invoices/{id}/einvoice?format=` | | The validated e-invoice as an attachment: Factur-X PDF/A-3b (`.pdf`) or XRechnung (`.xml`), named `<number>-<format>.<ext>`; `X-EInvoice-Validation: passed`, `Cache-Control: private, no-store`. `422 {error:"not_exportable", problems}` when data is missing or the rule engine rejects it (nothing invalid is ever returned); `503` when `EINVOICE_URL` is unset; `502` if the generator misbehaves. Not persisted yet |
+| `GET /documents?owner_type=&owner_id=` | | `{data: Document[]}`: every stored version for that owner, newest first (`owner_type`: `invoice`, `agreement`, `epk`, `gig`, `other`). Needs object storage, else `503` |
+| `GET /documents/{id}` | | `{data: Document}` metadata: filename, mime type, size, `checksum_sha256`, `version`, `is_current`. The storage key is never returned |
+| `GET /documents/{id}/download` | | The stored file, always `Content-Disposition: attachment`, with `X-Checksum-SHA256`, `Cache-Control: private, no-store`, `nosniff` and a sandbox CSP. There is no upload, change or delete route: the server writes documents when it archives something it produced |
 | `POST /invoices/{id}/issue` | `{updated_at}` | allocates number; `422 {error:"not_issuable", problems}` |
 | `POST /invoices/{id}/pay` | `{paid_at, payment_ref, updated_at}` | issued → paid |
 | `POST /invoices/{id}/cancel` | `{updated_at}` | **draft only** → cancelled |
