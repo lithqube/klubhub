@@ -131,7 +131,7 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 - [x] **FIN-07**: User can calculate profit/loss per gig, per month, and per year
 - [x] **FIN-08**: User can generate a PDF invoice from gig data with auto-incrementing invoice number (`{PREFIX}-{YYYY}-{NNN}`); prefix configurable in settings
 - [x] **FIN-09**: Multi-currency summary display groups totals by currency code with no automatic conversion
-- [ ] **FIN-10**: Tax/VAT calculation is explicitly not implemented; Finance module UI documents this limitation. The Earnings panel never computes or displays tax/VAT amounts (no rates, no breakdowns, no per-line tax).
+- [x] **FIN-10** (exclusion, met by design — nothing to build): Tax/VAT calculation is explicitly not implemented; Finance module UI documents this limitation. The Earnings panel never computes or displays tax/VAT amounts (no rates, no breakdowns, no per-line tax).
 
 ### Release Planner (REL)
 
@@ -275,7 +275,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GIG-01 to GIG-12, CONT-01 to CONT-06, INT-02 to INT-03 | Phase 4: Gig Tracker | Pending |
 | RIDER-01 to RIDER-05 | Phase 4.5: Rider Templates | Complete (v1.2.0) |
 | INT-01 | Phase 4.8: Bandsintown Sync (optional) | Pending |
-| FIN-01 to FIN-10 | Phase 5: Finance Tracker | Pending |
+| FIN-01 to FIN-09 | Phase 5: Finance Tracker | Complete (v1.1.0, v1.2.0) |
+| FIN-10 | Phase 5: Finance Tracker | Complete — an exclusion, satisfied by not computing tax/VAT |
 | REL-01 to REL-07 | Phase 6: Release Planner | Pending |
 | TOUR-01 to TOUR-07 | Phase 7: Tour Manager | Pending |
 | DASH-01 to DASH-10 | Phase 8: Unified Dashboard | Pending |

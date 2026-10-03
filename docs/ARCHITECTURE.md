@@ -2,7 +2,7 @@
 
 > **Scope:** The module and data-model sections retain the original architecture blueprint, including historical MinIO and pure-Go rendering proposals. They are not a deployment runbook or a claim that every planned feature is implemented. The runtime/deployment sections below describe the current Compose contract: Garage, host Nuxt in development, and one supervised Go + Nuxt/Node + Playwright app image in production. Use [Setup and Self-Hosting](./SELF-HOSTING.md) for provisioning and upgrades.
 >
-> Local runtime changes require a new image publication. The default production v1.0.0 tag does not establish that these fixes are released; anonymous requests for the existing package returned 403.
+> Local runtime changes require a new image publication. The default production v1.2.0 tag does not establish that these fixes are released; verify publication and GHCR access for the intended operator.
 
 **Version:** 1.0
 **Date:** 2026-03-11
@@ -1105,7 +1105,7 @@ An old `klubhub-dj` project's volumes require explicit reuse or migration. A new
 
 Host loopback publication and the API's all-interface container listener serve different purposes. S3 publication uses its own `S3_BIND`, and remote browsers need an explicit reachable `S3_PUBLIC_ENDPOINT`. CORS and TLS do not turn this unauthenticated single-user app into a public SaaS.
 
-Production does not execute local source edits: the fixes need a new image publication and verified GHCR access. The default tag remains v1.0.0; anonymous requests for that existing package returned 403. Do not infer released functionality from the local Dockerfile or documentation.
+Production does not execute local source edits: fixes need a new image publication, and the intended operator must be able to access the selected tag. The default tag is v1.2.0, but that does not establish that the image containing these fixes is published. Do not infer released functionality from the local Dockerfile or documentation.
 
 ---
 
