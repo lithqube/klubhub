@@ -20,7 +20,30 @@ import (
 //
 // They are skipped without EINVOICE_URL. scripts/einvoice-golden.sh starts the
 // pinned containers and also runs the KoSIT validator (the official XRechnung
-// schematron) over the XML.
+// schematron) over the XML, through EINVOICE_OUT_DIR (see keepGolden).
+
+// keepGolden writes what the generator produced to $EINVOICE_OUT_DIR, if set, so
+// scripts/einvoice-golden.sh can hand the very same files to the KoSIT
+// validator. A Factur-X export keeps the PDF and the XML twin that was
+// validated in-process; the XML inside the PDF is extracted from the PDF itself
+// by the script.
+func keepGolden(t *testing.T, name string, f Format, file *File) {
+	t.Helper()
+	dir := os.Getenv("EINVOICE_OUT_DIR")
+	if dir == "" {
+		return
+	}
+	base := dir + "/" + strings.NewReplacer("/", "_", " ", "_").Replace(name) + "__" + string(f)
+	write := func(path string, data []byte) {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("keep golden file: %v", err)
+		}
+	}
+	write(base+file.Extension, file.Data)
+	if f == FacturX {
+		write(base+".twin.xml", file.XML)
+	}
+}
 
 func goldenExporter(t *testing.T) *Exporter {
 	t.Helper()
@@ -87,6 +110,7 @@ func TestGolden_EveryScenarioInEveryFormat(t *testing.T) {
 				if !file.Report.OK() {
 					t.Fatalf("violations: %v", file.Report.Violations)
 				}
+				keepGolden(t, "scenario-"+name, f, file)
 				switch f {
 				case FacturX:
 					if !bytes.HasPrefix(file.Data, []byte("%PDF-")) {

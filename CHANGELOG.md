@@ -43,6 +43,10 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- XRechnung files for invoices outside the scope of VAT (category O) now carry a
+  VAT rate of 0 on the tax breakdown, as XRechnung rule BR-DE-14 requires.
+  Found by running the official KoSIT validator over the golden files; the
+  `einvoice-golden` CI job now does that on every change.
 - Storing a second version of a document failed with "updated by another
   writer": the old version is now demoted before the new one is inserted.
 

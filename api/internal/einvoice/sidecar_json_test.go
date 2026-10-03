@@ -215,15 +215,17 @@ func TestSidecarJSON_TaxCategories(t *testing.T) {
 		t.Errorf("AE category = %v", sub)
 	}
 
-	// Outside the scope of VAT: category O carries NO percentage.
+	// Outside the scope of VAT: category O has no rate on a line (EN 16931
+	// BR-O-05), but the breakdown must carry one, 0 (XRechnung BR-DE-14, found by
+	// running the official KoSIT validator).
 	out := sampleDoc()
 	o := Category{Code: "O", ExemptionCode: "VATEX-EU-O", ExemptionReason: "Nicht steuerbar"}
 	out.Lines[0].Category, out.Lines[1].Category = o, o
 	out.Taxes = []TaxLine{{Category: o, Taxable: "1200.00", Tax: "0.00"}}
 	raw, _ = out.SidecarJSON()
 	inv := at(decodeJSON(t, raw), "ubl:Invoice")
-	if p := at(inv, "cac:TaxTotal", 0, "cac:TaxSubtotal", 0, "cac:TaxCategory", "cbc:Percent"); p != nil {
-		t.Errorf("category O must not print a percentage, got %v", p)
+	if p := at(inv, "cac:TaxTotal", 0, "cac:TaxSubtotal", 0, "cac:TaxCategory", "cbc:Percent"); p != "0" {
+		t.Errorf("the category O breakdown must print a rate of 0, got %v", p)
 	}
 	if p := at(inv, "cac:InvoiceLine", 0, "cac:Item", "cac:ClassifiedTaxCategory", "cbc:Percent"); p != nil {
 		t.Errorf("line category O must not print a percentage, got %v", p)

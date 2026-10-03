@@ -202,7 +202,7 @@ Taking a receipt photo, or using the app on a phone at all, means the phone has 
 
 ## E-invoices (Factur-X, XRechnung)
 
-Both Compose files run an `einvoice` service (`gflohr/e-invoice-eu`, pinned by digest) that builds the structured invoice files, and set `EINVOICE_URL=http://einvoice:3000` on the app. It has **no authentication**, so it publishes no port and sits on the internal Compose network only; never add a `ports:` entry for it. The image is amd64-only, so on Apple Silicon it runs under emulation. Every export is checked against the EN 16931 and XRechnung rules by KlubHub's own rule engine before it is returned (not the official KoSIT validator that public-sector portals use). To turn export off, unset `EINVOICE_URL` (the invoice sheet then says it is not enabled). See [INVOICING.md](./INVOICING.md#43-e-invoice-export).
+Both Compose files run an `einvoice` service (`gflohr/e-invoice-eu`, pinned by digest) that builds the structured invoice files, and set `EINVOICE_URL=http://einvoice:3000` on the app. It has **no authentication**, so it publishes no port and sits on the internal Compose network only; never add a `ports:` entry for it. The image is amd64-only, so on Apple Silicon it runs under emulation. Every export is checked against the EN 16931 and XRechnung rules by KlubHub's own rule engine before it is returned (not the official KoSIT validator that public-sector portals use; CI runs KoSIT over the generated files). To turn export off, unset `EINVOICE_URL` (the invoice sheet then says it is not enabled). See [INVOICING.md](./INVOICING.md#43-e-invoice-export).
 
 ## Upgrades and existing installations
 

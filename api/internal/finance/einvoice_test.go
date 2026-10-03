@@ -363,6 +363,24 @@ func TestInvoiceService_EInvoiceRules(t *testing.T) {
 // EINVOICE_URL=http://127.0.0.1:3101 go test ./internal/finance -run EInvoiceGolden
 // Everything the mapper produces from real finance invoices must pass the
 // EN 16931 / XRechnung business rules, in every tax situation and format.
+// keepGolden writes an export to $EINVOICE_OUT_DIR, if set, for the KoSIT run in
+// scripts/einvoice-golden.sh (see the same helper in package einvoice).
+func keepGolden(t *testing.T, name string, f einvoice.Format, file *EInvoiceFile) {
+	t.Helper()
+	dir := os.Getenv("EINVOICE_OUT_DIR")
+	if dir == "" {
+		return
+	}
+	base := dir + "/" + strings.NewReplacer("/", "_", " ", "_").Replace(name) + "__" + string(f)
+	ext := ".xml"
+	if f == einvoice.FacturX {
+		ext = ".pdf"
+	}
+	if err := os.WriteFile(base+ext, file.Data, 0o600); err != nil {
+		t.Fatalf("keep golden file: %v", err)
+	}
+}
+
 func TestEInvoiceGolden_RealInvoicesPassTheRuleEngine(t *testing.T) {
 	url := os.Getenv("EINVOICE_URL")
 	if url == "" {
@@ -398,6 +416,7 @@ func TestEInvoiceGolden_RealInvoicesPassTheRuleEngine(t *testing.T) {
 				if !file.Report.OK() {
 					t.Fatalf("violations: %v", file.Report.Violations)
 				}
+				keepGolden(t, "invoice-"+name, f, file)
 			})
 		}
 	}
@@ -408,9 +427,12 @@ func TestEInvoiceGolden_RealInvoicesPassTheRuleEngine(t *testing.T) {
 	var res CreditNoteResult
 	decode(t, out["data"], &res)
 	for _, f := range einvoice.Formats {
-		if _, err := svc.EInvoice(context.Background(), res.CreditNote.ID, f); err != nil {
+		file, err := svc.EInvoice(context.Background(), res.CreditNote.ID, f)
+		if err != nil {
 			t.Errorf("credit note as %s: %v", f, err)
+			continue
 		}
+		keepGolden(t, "invoice-credit-note", f, file)
 	}
 }
 

@@ -114,10 +114,16 @@ func set(m obj, key, value string) {
 
 // json renders a VAT category. The exemption reason belongs to the breakdown
 // (BT-120/121), never to a line.
+//
+// Category O ("not subject to VAT") is the odd one out on rates: a line must not
+// carry one (EN 16931 BR-O-05), yet the breakdown must (XRechnung BR-DE-14), as 0.
 func (c Category) json(breakdown bool) obj {
 	m := obj{"cbc:ID": c.Code, "cac:TaxScheme": obj{"cbc:ID": "VAT"}}
-	if c.HasPercent {
+	switch {
+	case c.HasPercent:
 		m["cbc:Percent"] = c.Percent
+	case breakdown && c.Code == "O":
+		m["cbc:Percent"] = "0"
 	}
 	if breakdown {
 		set(m, "cbc:TaxExemptionReasonCode", c.ExemptionCode)
