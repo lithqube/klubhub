@@ -27,8 +27,8 @@ type Handler struct {
 
 // NewHandler creates a Handler backed by the given service.
 //
-// raClient is optional: RA import is a licensed edition feature
-// (FEATURE_RA_IMPORT). Pass nil when the feature is disabled — the
+// raClient is optional: RA import is on by default and can be turned off
+// (FEATURE_RA_IMPORT=false). Pass nil when the feature is disabled — the
 // /import-ra route is then not mounted (404) and the handler never
 // contacts Resident Advisor. No default client is created.
 func NewHandler(svc serviceIface, raClient RAArtistLoader) *Handler {

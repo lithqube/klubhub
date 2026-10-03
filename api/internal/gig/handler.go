@@ -110,8 +110,8 @@ func (h *Handler) Routes() http.Handler {
 	// RA import sub-router. Only mount when it was injected: Routes() on a
 	// nil handler mounts fine, then panics on the first request.
 	//
-	// RA import is a licensed edition feature (FEATURE_RA_IMPORT). When it
-	// is disabled the RA paths answer an explicit 404 — otherwise
+	// RA import is on by default and can be turned off (FEATURE_RA_IMPORT=false).
+	// When it is off the RA paths answer an explicit 404 — otherwise
 	// POST /import-ra would fall through to the /{id} pattern and chi
 	// would report 405, leaking that the path shape exists.
 	if h.raImportHandler != nil {

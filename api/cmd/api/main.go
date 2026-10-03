@@ -290,8 +290,8 @@ func run() error {
 	contactSvc := contact.NewService(contactRepo)
 	contactHandler := contact.NewHandler(contactSvc)
 
-	// 9a. Licensed edition feature: Resident Advisor import. Only when
-	// FEATURE_RA_IMPORT=true is an RA client constructed and the RA routes
+	// 9a. Resident Advisor import (on by default). Only while
+	// FEATURE_RA_IMPORT is not false is an RA client constructed and the RA routes
 	// mounted (/epk/import-ra, /gigs/import-ra, /gigs/info/{slug}). This
 	// must happen before gigHandler.Routes() is called below.
 	epkRAClient := wireRAImport(cfg.Features, defaultRAClient, gigHandler, gigSvc, venueSvc, contactSvc)

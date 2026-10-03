@@ -43,6 +43,11 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - The rider's New Template form is inline in the templates pane, in the
   editor's place, instead of a modal. Escape closes it only while it is empty,
   so a half-written template is never thrown away by accident.
+- Resident Advisor import is part of the open-source build and on by default
+  (EPK import panel and RA link, gig import). Set `FEATURE_RA_IMPORT=false` to
+  turn it off; the installer has `--no-ra-import`. The browser demo and the
+  frontend-only mock server, which have no RA endpoints, still start with it
+  hidden. `docs/EDITIONS.md` and `docs/CONFIGURATION.md` are updated.
 
 ### Fixed
 

@@ -139,12 +139,13 @@ export default defineNuxtConfig({
       // the Nitro handlers under apps/dj/server/api/v1/gigs/.
       // Plan B.9: no other secret-bearing fields are allowed here.
 
-      // Edition features (licensed / SaaS). All off by default so the
-      // self-hosted open-source build and the public demo never show them.
-      // Override per key at runtime, e.g. NUXT_PUBLIC_FEATURES_RA_IMPORT=true.
+      // Switchable features. RA import is part of the open-source build and
+      // on wherever a real API serves it. The browser demo and the
+      // frontend-only mock server have no RA endpoints, so it starts off
+      // there. Turn it off anywhere with NUXT_PUBLIC_FEATURES_RA_IMPORT=false.
       // Registry: app/utils/features.ts · docs/EDITIONS.md
       features: {
-        raImport: false,
+        raImport: !isDemo && !(allowsMocks && !process.env.NUXT_PUBLIC_API_BASE),
       },
       // Browser-only demo build: app/plugins/00.demo.client.ts serves the
       // API in the browser. Only the NUXT_DEMO build sets this.

@@ -36,7 +36,7 @@ curl -fsSL …/install.sh | bash -s -- --both --yes \
 | `--bind ADDR` | `127.0.0.1` | Host address to publish on (`0.0.0.0` only behind a firewall or VPN) |
 | `--dj-port`, `--s3-port`, `--promoter-port` | 8080, 39000, 8090 | Published ports |
 | `--dj-url`, `--s3-url`, `--origin` | local URLs | Browser-facing URLs (CORS, presigned storage links, Promoter origin) |
-| `--ra-import`, `--log-level LEVEL` | off, `info` | Feature and logging switches |
+| `--no-ra-import`, `--log-level LEVEL` | RA import on, `info` | Feature and logging switches |
 | `--dj-env KEY=VALUE`, `--promoter-env KEY=VALUE` | — | Any other Compose variable (repeatable), e.g. `SPOTIFY_CLIENT_ID=…` |
 | `--org-name`, `--slug`, `--owner-email`, `--owner-name`, `--timezone`, `--currency` | ask | Promoter organisation and first owner |
 | `--emulate-arm64` | off | Run the arm64-only DJ image on x86 through QEMU (slow) |
