@@ -22,6 +22,10 @@ project adheres to [Semantic Versioning](https://semver.org/).
   when it can be exported, the validated e-invoice XML and its validation
   report. Documents have a `kind` (migration 031) with versions kept per
   kind, and the database refuses to change or delete a stored document.
+- `POST /invoices/{id}/email` sends an issued invoice or credit note to
+  its customer with the archived PDF and the e-invoice XML attached, with
+  a SEND BY EMAIL panel in the invoice sheet. Clients still cannot attach
+  arbitrary documents to emails.
 
 ### Fixed
 

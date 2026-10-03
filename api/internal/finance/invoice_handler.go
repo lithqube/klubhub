@@ -17,7 +17,14 @@ import (
 
 // InvoiceHandler implements http.Handler for /api/v1/finance/invoices/*.
 type InvoiceHandler struct {
-	svc *InvoiceService
+	svc    *InvoiceService
+	mailer InvoiceEmailer // nil: POST /invoices/{id}/email answers 503
+}
+
+// WithMailer enables POST /invoices/{id}/email.
+func (h *InvoiceHandler) WithMailer(m InvoiceEmailer) *InvoiceHandler {
+	h.mailer = m
+	return h
 }
 
 // NewInvoiceHandler wires an InvoiceHandler.
@@ -124,6 +131,7 @@ func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"cancel":      h.handleCancel,
 		"credit-note": h.handleCreditNote,
 		"correct":     h.handleCorrect,
+		"email":       h.handleEmail,
 	}
 	fn, ok := handlers[action]
 	if !ok {
@@ -387,6 +395,31 @@ func writeEInvoiceError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusBadGateway, "bad_gateway", "the e-invoice could not be generated")
 	default:
 		writeInvoiceError(w, r, err)
+	}
+}
+
+// handleEmail sends the issued invoice to its customer with its PDF and, when
+// it has one, the e-invoice XML attached. 201 with the stored message; a
+// delivery that failed is reported in its status and retried by the worker.
+func (h *InvoiceHandler) handleEmail(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	if h.mailer == nil {
+		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "invoice email is not enabled on this server")
+		return
+	}
+	var req EmailInvoiceRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	msg, err := h.mailer.SendInvoiceEmail(r.Context(), id, req)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusCreated, map[string]any{"data": msg})
+	case errors.Is(err, ErrEmailUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "invoice email is not enabled on this server")
+	case errors.Is(err, ErrEmailValidation):
+		writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
+	default:
+		writeEInvoiceError(w, r, err)
 	}
 }
 

@@ -465,6 +465,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	instSvc := finance.NewAgreementInstanceService(finance.NewAgreementInstanceRepository(pool), tplRepo, docSvc)
 	entrySvc := finance.NewEntryService(finance.NewEntryRepository(pool))
 
+	invoiceHandler := finance.NewInvoiceHandler(invoiceSvc)
 	var emailHandler nethttp.Handler
 	if cfg.PlunkBaseURL != "" && cfg.PlunkProjectID != "" && cfg.PlunkAPIKey != "" {
 		sender := finance.NewPlunkSender(finance.PlunkConfig{
@@ -476,6 +477,13 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 		})
 		emailSvc := finance.NewEmailService(finance.NewEmailRepository(pool), sender)
 		emailHandler = finance.NewEmailHandler(emailSvc)
+		// Invoices go out with their archived PDF and e-invoice attached, which
+		// needs the document store the archive lives in. Set before the worker
+		// starts so retried messages can load their attachments too.
+		if storeClient != nil {
+			emailSvc.WithAttachments(docSvc)
+			invoiceHandler.WithMailer(finance.NewInvoiceMailer(invoiceSvc, emailSvc, cfg.PlunkFromEmail, cfg.PlunkFromName))
+		}
 		if len(startWorker) > 0 {
 			startWorker[0](emailSvc)
 		}
@@ -486,7 +494,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 
 	mux := finance.NewMux(
 		finance.NewHandler(billingSvc),
-		finance.NewInvoiceHandler(invoiceSvc),
+		invoiceHandler,
 		finance.NewPaymentHandler(paymentSvc),
 		nil, // documents: mounted below when object storage exists
 		finance.NewAgreementTemplateHandler(tplSvc),

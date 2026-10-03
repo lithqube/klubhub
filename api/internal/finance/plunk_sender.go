@@ -3,6 +3,7 @@ package finance
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -59,6 +60,39 @@ type plunkRequest struct {
 	Subject  string       `json:"subject"`
 	Body     string       `json:"body,omitempty"`
 	BodyHTML string       `json:"bodyHtml,omitempty"`
+	// Attachments follow Plunk's send schema: base64 content, at most 10 files
+	// and 10 MB of base64 by default.
+	Attachments []plunkAttachment `json:"attachments,omitempty"`
+}
+
+type plunkAttachment struct {
+	Filename    string `json:"filename"`
+	Content     string `json:"content"`
+	ContentType string `json:"contentType"`
+	Disposition string `json:"disposition"`
+}
+
+const (
+	maxPlunkAttachments      = 10
+	maxPlunkAttachmentBase64 = 10 << 20
+)
+
+// plunkFilename keeps a filename inside what Plunk accepts: no quotes or line
+// breaks, at most 255 characters.
+func plunkFilename(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if r == '"' || r == '\r' || r == '\n' || r == '/' || r == '\\' {
+			return '_'
+		}
+		return r
+	}, name)
+	if len(name) > 255 {
+		name = name[:255]
+	}
+	if name == "" {
+		name = "attachment"
+	}
+	return name
 }
 
 type plunkContact struct {
@@ -84,8 +118,13 @@ func (p *PlunkSender) SendContext(ctx context.Context, msg *EmailMessage) error 
 	if err := p.ValidateRequest(CreateEmailRequest{CCEmails: msg.CCEmails, BCCEmails: msg.BCCEmails}); err != nil {
 		return err
 	}
-	if len(msg.AttachmentIDs) > 0 {
-		return fmt.Errorf("%w: attachment_ids are not supported; no email was sent", ErrEmailValidation)
+	// Attachments must have been loaded by the service; never send a message
+	// that is missing files it claims to carry.
+	if len(msg.AttachmentIDs) > 0 && len(msg.Attachments) != len(msg.AttachmentIDs) {
+		return fmt.Errorf("%w: attachment content was not loaded; no email was sent", ErrEmailValidation)
+	}
+	if len(msg.Attachments) > maxPlunkAttachments {
+		return fmt.Errorf("%w: at most %d attachments are supported; no email was sent", ErrEmailValidation, maxPlunkAttachments)
 	}
 	fromEmail := msg.FromEmail
 	if fromEmail == "" {
@@ -112,6 +151,16 @@ func (p *PlunkSender) SendContext(ctx context.Context, msg *EmailMessage) error 
 		req.Body = msg.BodyHTML
 	} else {
 		req.Body = "<pre>" + html.EscapeString(msg.Body) + "</pre>"
+	}
+	encoded := 0
+	for _, a := range msg.Attachments {
+		content := base64.StdEncoding.EncodeToString(a.Content)
+		if encoded += len(content); encoded > maxPlunkAttachmentBase64 {
+			return fmt.Errorf("%w: attachments are too large; no email was sent", ErrEmailValidation)
+		}
+		req.Attachments = append(req.Attachments, plunkAttachment{
+			Filename: plunkFilename(a.Filename), Content: content, ContentType: a.MimeType, Disposition: "attachment",
+		})
 	}
 	payload, err := json.Marshal(req)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/mail"
 	"net/smtp"
@@ -82,12 +83,15 @@ type EmailMessage struct {
 	Body          string      `json:"body"             db:"body"`
 	BodyHTML      string      `json:"body_html,omitempty" db:"body_html"`
 	AttachmentIDs []uuid.UUID `json:"attachment_ids"  db:"attachment_ids"`
-	Status        EmailStatus `json:"status"          db:"status"`
-	SentAt        *time.Time  `json:"sent_at,omitempty" db:"sent_at"`
-	LastError     string      `json:"last_error,omitempty" db:"last_error"`
-	Attempts      int         `json:"attempts"        db:"attempts"`
-	CreatedAt     time.Time   `json:"created_at"      db:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"      db:"updated_at"`
+	// Attachments is the content behind AttachmentIDs, loaded just before
+	// delivery. It is never stored or serialised: the row keeps only the ids.
+	Attachments []EmailAttachment `json:"-" db:"-"`
+	Status      EmailStatus       `json:"status"          db:"status"`
+	SentAt      *time.Time        `json:"sent_at,omitempty" db:"sent_at"`
+	LastError   string            `json:"last_error,omitempty" db:"last_error"`
+	Attempts    int               `json:"attempts"        db:"attempts"`
+	CreatedAt   time.Time         `json:"created_at"      db:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"      db:"updated_at"`
 }
 
 var (
@@ -111,6 +115,24 @@ type CreateEmailRequest struct {
 	BodyHTML      string      `json:"body_html,omitempty"`
 	AttachmentIDs []uuid.UUID `json:"attachment_ids,omitempty"`
 }
+
+// EmailAttachment is one file sent with a message.
+type EmailAttachment struct {
+	Filename string
+	MimeType string
+	Content  []byte
+}
+
+// AttachmentSource is where attachment content comes from. *DocumentService
+// satisfies it.
+type AttachmentSource interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*Document, error)
+	Download(ctx context.Context, id uuid.UUID) (io.ReadCloser, *Document, error)
+}
+
+// maxEmailAttachmentBytes caps what one message carries (the content, before
+// base64 inflates it by a third). Plunk's default limit is 10 MB of base64.
+const maxEmailAttachmentBytes = 7 << 20
 
 // SMTPConfig holds SMTP credentials for delivery.
 type SMTPConfig struct {
@@ -246,8 +268,16 @@ const (
 
 // EmailService coordinates email creation and delivery.
 type EmailService struct {
-	repo   EmailRepositoryIface
-	sender EmailSender
+	repo        EmailRepositoryIface
+	sender      EmailSender
+	attachments AttachmentSource // nil: messages cannot carry attachments
+}
+
+// WithAttachments lets the service send messages that carry stored documents
+// (SendOwned). Without it such messages are refused.
+func (s *EmailService) WithAttachments(src AttachmentSource) *EmailService {
+	s.attachments = src
+	return s
 }
 
 func NewEmailService(repo EmailRepositoryIface, sender EmailSender) *EmailService {
@@ -260,6 +290,17 @@ func (s *EmailService) Enqueue(ctx context.Context, req CreateEmailRequest) (*Em
 }
 
 func (s *EmailService) create(ctx context.Context, req CreateEmailRequest, claimed bool) (*EmailMessage, error) {
+	return s.createMessage(ctx, req, claimed, false)
+}
+
+// createMessage validates and stores a message. trusted is for server-built
+// requests only: it allows AttachmentIDs, which a client-supplied request
+// never may (see ValidateCreateEmailRequest).
+func (s *EmailService) createMessage(ctx context.Context, req CreateEmailRequest, claimed, trusted bool) (*EmailMessage, error) {
+	attach := req.AttachmentIDs
+	if trusted {
+		req.AttachmentIDs = nil // checked by SendOwned; the generic rules would refuse them
+	}
 	if validator, ok := s.sender.(interface {
 		ValidateRequest(CreateEmailRequest) error
 	}); ok {
@@ -283,7 +324,7 @@ func (s *EmailService) create(ctx context.Context, req CreateEmailRequest, claim
 		Subject:       req.Subject,
 		Body:          req.Body,
 		BodyHTML:      req.BodyHTML,
-		AttachmentIDs: req.AttachmentIDs,
+		AttachmentIDs: attach,
 		Status:        EmailStatusQueued,
 		CreatedAt:     time.Now().UTC(),
 		UpdatedAt:     time.Now().UTC(),
@@ -303,6 +344,77 @@ func (s *EmailService) Send(ctx context.Context, req CreateEmailRequest) (*Email
 		return nil, err
 	}
 	return s.finalizeDelivery(ctx, msg)
+}
+
+// SendOwned sends a message built by the server that carries stored
+// documents. Every attachment must belong to the entity the message is about
+// (OwnerType/OwnerID), so a message can never carry another entity's files.
+// The ids are stored with the message and the content is loaded at delivery,
+// so a failed send is retried with the same files.
+func (s *EmailService) SendOwned(ctx context.Context, req CreateEmailRequest) (*EmailMessage, error) {
+	if len(req.AttachmentIDs) > 0 {
+		if s.attachments == nil {
+			return nil, fmt.Errorf("%w: attachments are not available; no email was sent", ErrEmailValidation)
+		}
+		if req.OwnerType == "" || req.OwnerID == nil {
+			return nil, fmt.Errorf("%w: a message with attachments needs the owner they belong to", ErrEmailValidation)
+		}
+		for _, id := range req.AttachmentIDs {
+			doc, err := s.attachments.GetByID(ctx, id)
+			if err != nil {
+				return nil, fmt.Errorf("%w: attachment %s: %v", ErrEmailValidation, id, err)
+			}
+			if err := checkAttachmentOwner(doc, req.OwnerType, *req.OwnerID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	msg, err := s.createMessage(ctx, req, true, true)
+	if err != nil {
+		return nil, err
+	}
+	return s.finalizeDelivery(ctx, msg)
+}
+
+func checkAttachmentOwner(doc *Document, ownerType string, ownerID uuid.UUID) error {
+	if string(doc.OwnerType) != ownerType || doc.OwnerID != ownerID {
+		return fmt.Errorf("%w: attachment %s does not belong to this %s", ErrEmailValidation, doc.ID, ownerType)
+	}
+	return nil
+}
+
+// loadAttachments fills msg.Attachments from the stored documents, checking
+// ownership and size again at delivery time.
+func (s *EmailService) loadAttachments(ctx context.Context, msg *EmailMessage) error {
+	if len(msg.AttachmentIDs) == 0 || len(msg.Attachments) == len(msg.AttachmentIDs) {
+		return nil
+	}
+	if s.attachments == nil || msg.OwnerID == nil {
+		return fmt.Errorf("%w: attachments cannot be loaded; no email was sent", ErrEmailValidation)
+	}
+	var out []EmailAttachment
+	total := 0
+	for _, id := range msg.AttachmentIDs {
+		rc, doc, err := s.attachments.Download(ctx, id)
+		if err != nil {
+			return fmt.Errorf("load attachment %s: %w", id, err)
+		}
+		if err := checkAttachmentOwner(doc, msg.OwnerType, *msg.OwnerID); err != nil {
+			_ = rc.Close()
+			return err
+		}
+		content, err := io.ReadAll(io.LimitReader(rc, maxEmailAttachmentBytes+1))
+		_ = rc.Close()
+		if err != nil {
+			return fmt.Errorf("read attachment %s: %w", id, err)
+		}
+		if total += len(content); total > maxEmailAttachmentBytes {
+			return fmt.Errorf("%w: attachments exceed the %d MB limit", ErrEmailValidation, maxEmailAttachmentBytes>>20)
+		}
+		out = append(out, EmailAttachment{Filename: doc.Filename, MimeType: doc.MimeType, Content: content})
+	}
+	msg.Attachments = out
+	return nil
 }
 
 // RetryFailed attempts redelivery of failed messages up to limit.
@@ -347,8 +459,10 @@ func (s *EmailService) RetryFailed(ctx context.Context, limit int) (int, error) 
 func (s *EmailService) finalizeDelivery(ctx context.Context, msg *EmailMessage) (*EmailMessage, error) {
 	deliveryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	var err error
-	if sender, ok := s.sender.(interface {
+	err := s.loadAttachments(deliveryCtx, msg)
+	if err != nil {
+		// Nothing is sent without its attachments; the row stays retryable.
+	} else if sender, ok := s.sender.(interface {
 		SendContext(context.Context, *EmailMessage) error
 	}); ok {
 		err = sender.SendContext(deliveryCtx, msg)

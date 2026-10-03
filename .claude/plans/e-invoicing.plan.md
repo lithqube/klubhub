@@ -307,9 +307,9 @@ The pattern is the same as in Germany:
 | 5. Factur-X / XRechnung `Exporter` + sidecar | **Done:** `internal/einvoice` (neutral `Document`, `Generator` interface, sidecar client, in-process `speedata/einvoice` validation before anything ships, field-level readiness problems), `GET /invoices/{id}/einvoice[-check]`, pinned `einvoice` service in the dev and prod Compose files (internal network only), minimal "E-invoice" panel in the invoice sheet, `scripts/einvoice-golden.sh` + CI job (real sidecar, veraPDF PDF/A-3b). Open: KoSIT validator in the golden run, Go-native generator. |
 | 6. Validation report stored with the invoice | **Done** with the Factur-X export at issue: the validated CII XML (`einvoice_xml`) and a JSON report (`validation_report`). Not archived when the invoice cannot be exported. |
 | 7. Credit note 381 mapping | Done (type 381 with the credited invoice as preceding document). |
-| 8. E-invoice attached to the invoice email | Not started. |
+| 8. E-invoice attached to the invoice email | **Done:** `POST /invoices/{id}/email` attaches the archived PDF and e-invoice XML via Plunk's `attachments`; owner-checked, retry-safe, UI panel with a confirm step. Not verified against a live Plunk (no SES here), only against its documented schema. Open: reply-to, sending the Factur-X PDF as one file instead of PDF + XML. |
 
-Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: attach the e-invoice to the invoice email (item 8), a backfill for invoices issued earlier, and an archive list in the invoice sheet.
+Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: a backfill for invoices issued earlier, and an archive list in the invoice sheet.
 
 ## Sources
 

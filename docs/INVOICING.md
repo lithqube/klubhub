@@ -237,6 +237,7 @@ rate / 10000); `net_payable = total − withholding`.
 | `GET /documents?owner_type=&owner_id=` | | `{data: Document[]}`: every stored version for that owner, newest first (`owner_type`: `invoice`, `agreement`, `epk`, `gig`, `other`). Needs object storage, else `503` |
 | `GET /documents/{id}` | | `{data: Document}` metadata: `kind`, filename, mime type, size, `checksum_sha256`, `version`, `is_current`. The storage key is never returned |
 | `GET /documents/{id}/download` | | The stored file, always `Content-Disposition: attachment`, with `X-Checksum-SHA256`, `Cache-Control: private, no-store`, `nosniff` and a sandbox CSP. There is no upload, change or delete route: the server writes documents when it archives something it produced |
+| `POST /invoices/{id}/email` | `{to_email?, subject?, body?, include_einvoice?}` | `201 {data: EmailMessage}`. Emails an issued, paid, credited or corrected invoice or credit note. Recipient defaults to the customer's email (`400 validation_failed` if neither exists). Attaches the archived PDF and, unless `include_einvoice` is `false`, the e-invoice XML when there is one; `include_einvoice: true` insists on it (`422 not_exportable` without one). A failed delivery is stored as `failed` and retried with the same files. `503` without Plunk, a sender address or object storage |
 | `POST /invoices/{id}/issue` | `{updated_at}` | allocates number; `422 {error:"not_issuable", problems}` |
 | `POST /invoices/{id}/pay` | `{paid_at, payment_ref, updated_at}` | issued → paid |
 | `POST /invoices/{id}/cancel` | `{updated_at}` | **draft only** → cancelled |
@@ -417,6 +418,16 @@ Issuing an invoice or credit note keeps what it is made of in `documents`, owned
 - The database refuses to change or delete a stored document (trigger from migration 031); the only allowed change is losing `is_current` to a newer version.
 - Archiving needs object storage; without it nothing is archived.
 - Invoices issued before this release have no archive yet.
+
+### 4.2c Emailing an invoice
+
+`POST /invoices/{id}/email` sends the customer one message with the archived files attached (see 4.2b), through Plunk.
+
+- It first completes the archive (idempotent), then attaches only that invoice's own current `invoice_pdf` and, when present, `einvoice_xml`. The default subject and text are short and bilingual (English and German) and carry the supplier's contact details, since Plunk's send call has no reply-to here.
+- The stored message holds the document ids; the content is loaded at delivery, so a retry sends the same files. Attachments are base64 in Plunk's `attachments` array (max 10 files, 10 MB of base64 by default; we cap at 7 MB of content).
+- **Clients cannot attach files.** The generic `POST /emails` still rejects `attachment_ids`. Only the server-built invoice message may carry attachments, and each one must belong to the invoice the message is about, checked when the message is created and again at delivery.
+- The sender address is `PLUNK_FROM_EMAIL` (a verified Plunk domain). The SMTP sender does not support attachments.
+- Sending is outward facing: the UI asks for a second click that names the recipient.
 
 ### 4.3 E-invoice export
 
