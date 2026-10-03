@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Social Media Scheduler** - Instagram OAuth, timezone-aware post scheduling, retry with backoff, queue/calendar view
 - [x] **Phase 3: EPK / Press Kit Builder** - Artist bio, press photos, tech rider, PDF export with section control, export history
 - [x] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, GigReader interface for downstream modules
-- [ ] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export (RIDER-01..05; IN PROGRESS 2026-09-30 on branch `feat/phase-4.5-rider-templates`)
+- [x] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export (RIDER-01..05; shipped in v1.2.0)
 - [ ] **Phase 4.8: Bandsintown Sync** - INSERTED (optional) — Outbound event push to Bandsintown on gig confirmed
 - [x] **Phase 5: Finance Tracker** - Income & expense ledger, multi-currency summaries, gig-linked auto-income, in-app FIN-04/05 reconciliation prompts, plus invoices/payments, versioned PDFs, event agreements and explicit email sends
 - [ ] **Phase 6: Release Planner** - Release CRUD with status workflow, deadline tracking, promo checklist with customizable default template
@@ -165,8 +165,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: DJs can create reusable technical and hospitality rider templates and attach them to gigs in the advancing stage
 **Depends on**: Phase 4
 **Requirements**: RIDER-01 through RIDER-05
-**Status**: Not started
-**Plans**: TBD
+**Status**: Complete — v1.2.0 (2026-10-03). `/rider` page, `/api/v1/rider/*`, migrations 026–027, PDF export and optimistic concurrency on updates.
+**Plans**: 5 (see `.planning/phases/`)
 
 ### Phase 4.8: Spotify Integration (INSERTED)
 
@@ -282,10 +282,10 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 | 2. Social Media Scheduler        | 7/7            | ✅ Complete  | 2026-03-22 |
 | 3. EPK / Press Kit Builder       | 7/7            | ✅ Complete  | 2026-03-23 |
 | 4. Gig Tracker                   | 5/5            | ✅ Complete 2026-09-20 | —          |
-|| 4.5. Rider Templates             | 0/TBD          | Future       | —          |
+| 4.5. Rider Templates             | —              | ✅ Complete  | 2026-10-03 |
 || 4.8. Spotify Integration (INSERTED) | 0/TBD       | Future       | —          |
 || 4.9. RA Integration (INSERTED)    | 3/3            | ✅ Complete  | 2026-09-20 |
-| 5. Finance Tracker               | Wave 0 baseline + v1.1.0 invoicing + earnings ledger | ✅ Complete  | 2026-09-28 |
+| 5. Finance Tracker               | v1.1.0 invoicing + earnings ledger + v1.2.0 e-invoicing, archive, receipts | ✅ Complete  | 2026-10-03 |
 | 6. Release Planner               | 0/TBD          | Future       | —          |
 | 7. Tour Manager                  | 0/TBD          | Future       | —          |
 | 8. Unified Dashboard             | 0/TBD          | Future       | —          |

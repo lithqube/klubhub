@@ -177,11 +177,11 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 
 ### Rider Templates (RIDER)
 
-- [ ] **RIDER-01**: User can create, edit, and delete named rider templates with four sections: technical requirements, hospitality, backline, other notes (each section is free-text)
-- [ ] **RIDER-02**: When a gig transitions to `advanced` status, user can select a rider template to attach to the gig; attachment creates a per-gig copy, not a live link to the template
-- [ ] **RIDER-03**: User can override any section of the per-gig rider copy without modifying the source template
-- [ ] **RIDER-04**: User can export the per-gig rider as a PDF using the existing PDFGenerator interface; PDF includes DJ name, venue, date, and all four rider sections
-- [ ] **RIDER-05**: All rider template and per-gig rider data stored in PostgreSQL with soft deletion
+- [x] **RIDER-01**: User can create, edit, and delete named rider templates with four sections: technical requirements, hospitality, backline, other notes (each section is free-text)
+- [x] **RIDER-02**: When a gig transitions to `advanced` status, user can select a rider template to attach to the gig; attachment creates a per-gig copy, not a live link to the template
+- [x] **RIDER-03**: User can override any section of the per-gig rider copy without modifying the source template
+- [x] **RIDER-04**: User can export the per-gig rider as a PDF using the existing PDFGenerator interface; PDF includes DJ name, venue, date, and all four rider sections
+- [x] **RIDER-05**: All rider template and per-gig rider data stored in PostgreSQL with soft deletion
 
 ### Integrations (INT)
 
@@ -273,7 +273,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SOCL-01 to SOCL-17 | Phase 2: Social Media Scheduler | Pending |
 | EPK-01 to EPK-10 | Phase 3: EPK / Press Kit Builder | Pending |
 | GIG-01 to GIG-12, CONT-01 to CONT-06, INT-02 to INT-03 | Phase 4: Gig Tracker | Pending |
-| RIDER-01 to RIDER-05 | Phase 4.5: Rider Templates | Pending |
+| RIDER-01 to RIDER-05 | Phase 4.5: Rider Templates | Complete (v1.2.0) |
 | INT-01 | Phase 4.8: Bandsintown Sync (optional) | Pending |
 | FIN-01 to FIN-10 | Phase 5: Finance Tracker | Pending |
 | REL-01 to REL-07 | Phase 6: Release Planner | Pending |

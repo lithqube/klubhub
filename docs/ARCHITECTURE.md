@@ -1027,7 +1027,7 @@ Every choice maps to a specific requirement.
 | Database | `postgres:16-alpine`; production has no host database port. |
 | Object storage | `dxflrs/garage:v2.2.0`; S3-compatible, with private Garage configuration. |
 | Development | Default Compose file builds the API; Nuxt runs on the host. |
-| Production app | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.0.0}`; supervised Go + Nuxt/Node + Playwright. |
+| Production app | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.2.0}`; supervised Go + Nuxt/Node + Playwright. |
 | Production platform | `linux/arm64`; no native amd64 release claim. |
 | Containerization | Docker Engine 24+ and Compose v2; distinct mode projects and volumes. |
 

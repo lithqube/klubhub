@@ -52,12 +52,12 @@ You get:
 | 2 | **Social Media Scheduler** | ✅ Complete | Instagram OAuth, timezone-aware scheduling, retry with exponential backoff, calendar view |
 | 3 | **EPK / Press Kit Builder** | ✅ Complete | Bio, press photos, tech rider, PDF export (go-pdf/fpdf) |
 | 4 | **Gig Tracker** | ✅ Complete | CRUD, status / payment workflows, venue & contact database, iCal feed, booking confirmation PDF |
-| 4.5 | **Rider Templates** | 🔜 Planned | Named tech/hospitality templates attachable to gigs with per-gig overrides |
-| 5 | **Finance Tracker** | ✅ Shipped (Phase 5) | Income & expense ledger (multi-currency, no auto-conversion), per-gig / per-month / per-year P&L, gig-linked auto-income on `payment_status → paid`, persistent reconciliation prompts when a gig fee/currency changes or the gig reverts from paid, in-app dialogs for FIN-04 / FIN-05, plus invoices (draft → issued → paid), deposits + partial payments, event agreements with signing workflow, EU/US-ready invoicing (customer details, VAT treatment incl. reverse charge, credit notes, artist withholding), PDF invoice rendering ([go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf)), transactional email via [Plunk](https://github.com/useplunk/plunk) (hosted or self-hosted). **Tax / VAT calculation is explicitly not implemented (FIN-10).** See [`docs/INVOICING.md`](./docs/INVOICING.md) and [`docs/release-notes/v1.1.0-phase5.md`](./docs/release-notes/v1.1.0-phase5.md). |
+| 4.5 | **Rider Templates** | ✅ Shipped (v1.2.0) | Named tech/hospitality rider templates (technical, hospitality, backline, notes) attached to gigs as per-gig copies with overrides, autosave, optimistic-concurrency conflict handling, PDF export |
+| 5 | **Finance Tracker** | ✅ Shipped (Phase 5) | Income & expense ledger (multi-currency, no auto-conversion), per-gig / per-month / per-year P&L, gig-linked auto-income on `payment_status → paid`, persistent reconciliation prompts when a gig fee/currency changes or the gig reverts from paid, in-app dialogs for FIN-04 / FIN-05, plus invoices (draft → issued → paid), deposits + partial payments, event agreements with signing workflow, EU/US-ready invoicing (customer details, VAT treatment incl. reverse charge, credit notes, artist withholding), PDF invoice rendering ([go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf)), transactional email via [Plunk](https://github.com/useplunk/plunk) (hosted or self-hosted). **v1.2.0 adds** EN 16931 invoice fields and editable lines, invoice/credit-note PDF download, **Factur-X (ZUGFeRD) and XRechnung e-invoice export** checked against the EN 16931 and XRechnung rules before it is returned, an immutable archive of issued documents (PDF, XML, validation report), send-by-email with attachments, German legal notes, and receipts on expenses. **Tax / VAT calculation is explicitly not implemented (FIN-10).** See [`docs/INVOICING.md`](./docs/INVOICING.md), [`docs/release-notes/v1.2.0.md`](./docs/release-notes/v1.2.0.md) and [`docs/release-notes/v1.1.0-phase5.md`](./docs/release-notes/v1.1.0-phase5.md). |
 | 6 | **Release Planner** | 🔜 Planned | Release status workflow, promo checklist, deadline tracking |
 | 7 | **Tour Manager** | 🔜 Planned | Tour groups, per-stop logistics, budget aggregation |
 | 8 | **Unified Dashboard** | 🔜 Planned | Cross-module overview, career analytics |
-| 9 | **Production Hardening** | ✅ Complete (this release) | arm64 images on GHCR, hardened compose, OAuth state, body caps, secrets via Docker `secrets:` block, restore drill |
+| 9 | **Production Hardening** | ✅ Complete | arm64 images on GHCR, hardened compose, OAuth state, body caps, secrets via Docker `secrets:` block, restore drill |
 
 > **Note — architecture:** the KlubHub DJ image is `linux/arm64` only, by
 > design (Apple Silicon, Raspberry Pi 5, Graviton/Ampere) — not a
@@ -103,7 +103,7 @@ The API calls the host Nuxt server at `http://host.docker.internal:4200` for ima
 
 Setup defaults to `dev`, preserves existing credentials, creates private file secrets and Garage configuration under `.local/dev` or `.local/prod`, bootstraps Garage, and starts the selected stack. Development and production use separate Compose projects and volumes, but their default host ports overlap: stop one before starting the other, or configure distinct ports.
 
-**Publication caveat:** the production file defaults to `IMAGE_TAG=v1.0.1`, which **was never published** — only `1.0.1` (no `v`) is, and it predates the v1.1.0 invoicing work. Export `IMAGE_TAG=1.0.1` explicitly, or the newest `sha-<commit>` tag, until a v1.2.0 release publishes matching tags. See [container images](./docs/container-images.md) for tag verification, and [release notes](./docs/release-notes/v1.0.1.md) for background on the earlier v1.0.0/v1.0.1 hardening.
+**Publication caveat:** the production file defaults to `IMAGE_TAG=v1.2.0`, which is pullable only once the release image has been published. Until then export the newest `sha-<commit>` tag; do not use `1.0.1`, which predates invoicing. See [container images](./docs/container-images.md) for tag verification, and the [v1.2.0 release notes](./docs/release-notes/v1.2.0.md).
 
 **Existing installation?** Do not start a new project over an old deployment without a migration plan. The old `klubhub-dj` project's volumes need explicit reuse or migration; see [safe upgrades](./docs/SELF-HOSTING.md#upgrades-and-existing-installations).
 
@@ -268,7 +268,7 @@ Back up both Postgres and Garage, along with the private configuration needed to
 The full v1 release plan lives in [`docs/v1-release-plan.md`](./docs/v1-release-plan.md).
 At a glance:
 
-- **Now:** Phase 5 — Finance Tracker is fully shipped in v1.1.0: invoicing, payments, agreements, PDF/Plunk email, plus the income/expense ledger (multi-currency summaries, P&L, gig-linked auto-income, FIN-04/05 reconciliation prompts)
+- **Now:** v1.2.0 — Phase 4.5 Rider Templates and Phase 5 Finance are complete: invoicing, payments, agreements, the expense ledger with receipts, and EN 16931 e-invoicing (Factur-X / XRechnung) with an archive of issued documents and send-by-email; the tracklist editor and a real-data dashboard also landed
 - **Next:** Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard)
 
 Per-phase status is tracked in [`CHANGELOG.md`](./CHANGELOG.md) and the
