@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The klubhub.io site and README now describe the business model: everything
+  built is free and open source (MIT), and hosted editions (KlubHub Cloud,
+  Promoter Cloud) are planned for what needs servers. The feature list adds
+  e-invoices and expenses with receipts, the "KlubHub DJ PRO commercial
+  licence" row is gone, and a test keeps prices off the page.
+
 ## [1.2.0] - 2026-10-03
 
 ### Upgrade notes
