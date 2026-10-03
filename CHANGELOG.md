@@ -36,6 +36,9 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - Invoice emails now carry a reply-to set to the supplier's contact email, so
   customers' answers reach the DJ instead of the platform's sending address
   (migration 032 stores it with the message so retries keep it).
+- The New Invoice form is inline above the invoice list instead of a modal,
+  like the entry composer. Billing a gig from the gigs page now takes you to
+  it with the gig chosen.
 
 ### Fixed
 

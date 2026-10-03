@@ -149,6 +149,8 @@ export const useInvoiceStore = defineStore('invoice', () => {
   // point: the finance list, the gig form strip and the gig actions. ──
   const createOpen = ref(false)
   const createPresetGigId = ref<string | null>(null)
+  /** Bumped on every request for the composer so an already open one pulls focus back. */
+  const createSeq = ref(0)
   const detailOpen = ref(false)
   const detailId = ref<string | null>(null)
 
@@ -675,6 +677,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
   function openCreate(gigId: string | null = null): void {
     createPresetGigId.value = gigId
     createOpen.value = true
+    createSeq.value++
   }
 
   function setCreateOpen(open: boolean): void {
@@ -702,7 +705,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
     invoices, listLoading, listLoaded, listError, disabled, filter, summaries,
     current, lines, payments, currentLoading, currentError, issueCheck, issueCheckLoading, notice,
     gigOptions, gigsLoading, gigsLoaded, gigsError, gigInvoices,
-    createOpen, createPresetGigId, detailOpen, detailId,
+    createOpen, createPresetGigId, createSeq, detailOpen, detailId,
     // getters
     filteredInvoices, filterCounts, activeInvoiceByGig, gigById,
     // actions

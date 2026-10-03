@@ -465,11 +465,13 @@ Run it after the server has started (it needs the migrated database, object stor
 - `app/utils/vatTreatment.ts` — labels and descriptions per treatment.
 - `app/stores/invoice.ts` — all `$fetch` calls for invoices, payments and summaries; keeps `updated_at` per invoice.
 - `app/stores/earnings.ts` — all `$fetch` calls for the ledger: entries, summary, profit-loss and reconciliations.
-- `app/components/finance/` — `InvoiceList`, `InvoiceCreateDialog`,
-  `InvoiceDetailSheet`, `InvoicePartyFields` (reusable for supplier later),
+- `app/components/finance/` — `InvoiceList`, `InvoiceCreateForm` (inline above
+  the list on the finance page, not a modal; the gig pages send you there with
+  the gig chosen), `InvoiceDetailSheet` with its `InvoiceEInvoicePanel`,
+  `InvoiceEmailPanel` and `InvoiceArchivePanel`, `InvoicePartyFields` (reusable for supplier later),
   `InvoiceTaxFields`, `InvoiceIssueChecklist`, `PaymentLedger`, `PaymentForm`,
   `InvoiceConfirmDialog`, plus the earnings components
-  `EarningsWorkspace`, `EntryFormDialog`, `EntryList`, `EntryProfitLoss`,
+  `EarningsWorkspace`, `EntryForm` (inline), `EntryList`, `EntryProfitLoss`,
   `EntryReconciliationDialog`, `EntryReconciliationPanel`, `EntrySummary`.
 - `server/api/v1/finance/**` — in-memory mocks implementing this contract
   (invoices, payments, billing-profile, agreements, emails, entries,

@@ -144,6 +144,7 @@ function createGigInvoice() {
   if (!id) return
   close()
   invoiceStore.openCreate(id)
+  void navigateTo('/finance') // the draft form is inline on the finance page
 }
 
 function viewGigInvoice() {

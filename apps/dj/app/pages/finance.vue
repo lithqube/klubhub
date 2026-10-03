@@ -6,6 +6,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import InvoiceList from '../components/finance/InvoiceList.vue'
+import InvoiceCreateForm from '../components/finance/InvoiceCreateForm.vue'
 import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
 import BillingProfileForm from '../components/finance/BillingProfileForm.vue'
 import EarningsWorkspace from '../components/finance/EarningsWorkspace.vue'
@@ -15,13 +16,21 @@ import EntryReconciliationDialog from '../components/finance/EntryReconciliation
 import EntryReconciliationPanel from '../components/finance/EntryReconciliationPanel.vue'
 import { useInvoiceStore } from '../stores/invoice'
 import { useEarningsStore } from '../stores/earnings'
-import type { Entry, EntryReconciliation } from '../types/finance'
+import type { Entry, EntryReconciliation, Invoice } from '../types/finance'
+import { useToast } from '#kui/components/ui/toast/use-toast'
 
 useHead({ title: 'Finance — KlubHub DJ' })
 
 const invoiceStore = useInvoiceStore()
 const earningsStore = useEarningsStore()
-const { disabled: invoiceDisabled } = storeToRefs(invoiceStore)
+const { disabled: invoiceDisabled, createOpen: invoiceCreateOpen, createPresetGigId, createSeq: invoiceCreateSeq } = storeToRefs(invoiceStore)
+const { toast } = useToast()
+
+function onInvoiceCreated(inv: Invoice): void {
+  toast({ title: 'Draft created', description: 'Review the customer and tax, then issue it. Nothing was sent.' })
+  // Open the sheet after the form has unmounted so focus lands in the sheet.
+  setTimeout(() => { void invoiceStore.openDetail(inv.id) }, 80)
+}
 const { listLoaded: entriesLoaded, createOpen, createKind, editId } = storeToRefs(earningsStore)
 
 const voidingEntry = ref<Entry | null>(null)
@@ -118,11 +127,19 @@ watch(entriesLoaded, (loaded) => {
             class="btn-hud btn-hud-cta btn-hud-xs new-invoice-btn"
             style="padding:0 10px;"
             :disabled="invoiceDisabled"
+            :aria-expanded="invoiceCreateOpen"
             @click="invoiceStore.openCreate()"
           >
             + NEW INVOICE
           </button>
         </div>
+        <InvoiceCreateForm
+          v-if="invoiceCreateOpen && !invoiceDisabled"
+          :preset-gig-id="createPresetGigId"
+          :focus-seq="invoiceCreateSeq"
+          @close="invoiceStore.setCreateOpen(false)"
+          @created="onInvoiceCreated"
+        />
         <InvoiceList />
       </section>
 
