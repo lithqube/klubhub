@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -101,6 +102,31 @@ func (f *fakeInvoiceRepo) List(_ context.Context, filter InvoiceFilter) ([]*Invo
 		out = append(out, f.snapshot(inv))
 	}
 	return out, nil
+}
+
+// NumberedIDs mirrors InvoiceRepository.NumberedIDs: numbered documents, oldest first.
+func (f *fakeInvoiceRepo) NumberedIDs(_ context.Context) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var numbered []*Invoice
+	for _, inv := range f.invoices {
+		switch inv.Status {
+		case InvoiceStatusIssued, InvoiceStatusPaid, InvoiceStatusCredited, InvoiceStatusCorrected:
+			numbered = append(numbered, inv)
+		}
+	}
+	sort.Slice(numbered, func(i, j int) bool {
+		a, b := numbered[i], numbered[j]
+		if a.IssuedAt != nil && b.IssuedAt != nil && !a.IssuedAt.Equal(*b.IssuedAt) {
+			return a.IssuedAt.Before(*b.IssuedAt)
+		}
+		return a.CreatedAt.Before(b.CreatedAt)
+	})
+	ids := make([]uuid.UUID, len(numbered))
+	for i, inv := range numbered {
+		ids[i] = inv.ID
+	}
+	return ids, nil
 }
 
 // lock mirrors lockForTransition: not found, then stale token.

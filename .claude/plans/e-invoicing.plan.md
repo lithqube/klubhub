@@ -300,7 +300,7 @@ The pattern is the same as in Germany:
 
 | Plan item (§4 Tier 1) | State |
 |---|---|
-| 1. PDF download | Route done (`GET /invoices/{id}/pdf`, on demand). Documents HTTP handler done (read-only list/metadata/download, `internal/finance/document_handler.go`). **Archived at issue** (`invoice_pdf`, immutable, per-kind versions, checksum; migration 031). Open: backfill for invoices issued before 2026-10-03, an archive list in the invoice sheet. |
+| 1. PDF download | Route done (`GET /invoices/{id}/pdf`, on demand). Documents HTTP handler done (read-only list/metadata/download, `internal/finance/document_handler.go`). **Archived at issue** (`invoice_pdf`, immutable, per-kind versions, checksum; migration 031). Backfill for older invoices: `api -backfill-archive [-dry-run]` (idempotent, marked `uploaded_by: backfill`, rendered now not as issued). Open: an archive list in the invoice sheet. |
 | 2. EN 16931 data model, editable lines | Done: BT-32 Steuernummer, BT-10/12/13 references, BT-20 terms, BT-84/86 IBAN/BIC, BT-130 unit codes, multi-line editing, `tax.CategoryFor`. Open: allowances and charges (BG-20/21); BT-34/49 addresses and payment-means code 58 are derived at export. |
 | 3. Country legal notes | **Done for Germany** (§ 19 UStG, reverse charge with "Steuerschuldnerschaft des Leistungsempfängers", § 3a Abs. 2 UStG), bilingual DE/EN, served to the UI by `GET /invoices/tax-notes`. Needs a Steuerberater's confirmation of the wording. Other countries keep the generic English text. |
 | 4. Structured payment means | IBAN/BIC stored, validated and printed. Open: EPC/GiroCode QR on the PDF. |
@@ -309,7 +309,7 @@ The pattern is the same as in Germany:
 | 7. Credit note 381 mapping | Done (type 381 with the credited invoice as preceding document). |
 | 8. E-invoice attached to the invoice email | **Done:** `POST /invoices/{id}/email` attaches the archived PDF and e-invoice XML via Plunk's `attachments`; owner-checked, retry-safe, UI panel with a confirm step. Not verified against a live Plunk (no SES here), only against its documented schema. Open: reply-to, sending the Factur-X PDF as one file instead of PDF + XML. |
 
-Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: a backfill for invoices issued earlier, and an archive list in the invoice sheet.
+Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: an archive list in the invoice sheet, reply-to on the invoice email, and a decision on sending the Factur-X PDF as a single file.
 
 ## Sources
 

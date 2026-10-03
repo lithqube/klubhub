@@ -66,6 +66,8 @@ func main() {
 	// GHCR image manifest sanity check.
 	printVersion := fs.Bool("version", false, "print the binary version and exit")
 	healthcheck := fs.Bool("healthcheck", false, "probe /api/v1/health and exit 0 on 200, non-zero otherwise")
+	backfill := fs.Bool("backfill-archive", false, "archive the PDF and e-invoice of invoices issued before archiving existed, then exit")
+	dryRun := fs.Bool("dry-run", false, "with -backfill-archive: report what would be archived and write nothing")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		// flag.ContinueOnError returns ErrHelp on -h/-help; treat that as
 		// a non-fatal success so `docker run /api -help` does not crash.
@@ -83,6 +85,9 @@ func main() {
 	}
 	if *healthcheck {
 		os.Exit(runHealthcheck())
+	}
+	if *backfill {
+		os.Exit(runBackfillArchive(*dryRun))
 	}
 
 	if err := run(); err != nil {
@@ -441,10 +446,11 @@ func buildFinanceRuntime(ctx context.Context, cfg *config.Config, pool *pgxpool.
 	return handler, done
 }
 
-// buildFinanceHandler composes the finance routes. Email is only mounted
-// when Plunk is fully configured; otherwise /finance/emails answers 503
-// instead of queuing mail that can never be delivered.
-func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger, startWorker ...func(*finance.EmailService)) *finance.Mux {
+// newInvoiceService wires the invoice service exactly as the API runs it: with
+// the e-invoice exporter when EINVOICE_URL is set, and with the document
+// archive when object storage exists. The server and `-backfill-archive` both
+// use it, so they cannot drift apart.
+func newInvoiceService(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, logger zerolog.Logger) (*finance.Service, *finance.InvoiceService) {
 	billingSvc := finance.NewService(finance.NewRepository(pool))
 	invoiceSvc := finance.NewInvoiceService(finance.NewInvoiceRepository(pool), billingSvc, finance.NewPGGigFeeProvider(pool))
 	if cfg.EInvoiceURL != "" {
@@ -453,6 +459,17 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	} else {
 		logger.Info().Msg("e-invoice export disabled: EINVOICE_URL is not set")
 	}
+	if storeClient != nil {
+		invoiceSvc.WithArchive(finance.NewDocumentService(finance.NewDocumentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket))
+	}
+	return billingSvc, invoiceSvc
+}
+
+// buildFinanceHandler composes the finance routes. Email is only mounted
+// when Plunk is fully configured; otherwise /finance/emails answers 503
+// instead of queuing mail that can never be delivered.
+func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger, startWorker ...func(*finance.EmailService)) *finance.Mux {
+	billingSvc, invoiceSvc := newInvoiceService(cfg, pool, storeClient, logger)
 	// The transition processor is shared with the gig service so the
 	// manual gig-edit path and the invoice-payment sync path see the
 	// same finance-entry state. Without sharing, two independent
@@ -506,7 +523,6 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	// /entries/{id}/attachments answers 503 and the rest of finance is unaffected.
 	if storeClient != nil {
 		mux.WithDocuments(finance.NewDocumentHandler(docSvc))
-		invoiceSvc.WithArchive(docSvc)
 		mux.WithAttachments(finance.NewAttachmentHandler(finance.NewAttachmentService(
 			finance.NewAttachmentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)))
 	}

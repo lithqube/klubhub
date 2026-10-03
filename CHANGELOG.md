@@ -26,6 +26,10 @@ project adheres to [Semantic Versioning](https://semver.org/).
   its customer with the archived PDF and the e-invoice XML attached, with
   a SEND BY EMAIL panel in the invoice sheet. Clients still cannot attach
   arbitrary documents to emails.
+- `api -backfill-archive [-dry-run]` archives the PDF and, where possible,
+  the e-invoice of invoices issued before archiving existed. It is
+  idempotent, and what it creates is marked `uploaded_by: backfill`
+  because it is rendered now, not the file produced at the time.
 
 ### Fixed
 

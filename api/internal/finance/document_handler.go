@@ -51,14 +51,17 @@ type documentView struct {
 	ChecksumSHA256 string            `json:"checksum_sha256"`
 	Version        int               `json:"version"`
 	IsCurrent      bool              `json:"is_current"`
-	CreatedAt      time.Time         `json:"created_at"`
+	// UploadedBy is "system" for a document archived when it was issued and
+	// "backfill" for one rendered later for an older invoice.
+	UploadedBy string    `json:"uploaded_by"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 func viewOf(d *Document) documentView {
 	return documentView{
 		ID: d.ID, OwnerType: d.OwnerType, OwnerID: d.OwnerID, Kind: d.Kind, Filename: d.Filename,
 		MimeType: d.MimeType, SizeBytes: d.SizeBytes, ChecksumSHA256: d.ChecksumSHA256,
-		Version: d.Version, IsCurrent: d.IsCurrent, CreatedAt: d.CreatedAt,
+		Version: d.Version, IsCurrent: d.IsCurrent, UploadedBy: d.UploadedBy, CreatedAt: d.CreatedAt,
 	}
 }
 

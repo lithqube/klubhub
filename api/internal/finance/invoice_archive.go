@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -84,6 +85,16 @@ func (s *InvoiceService) archiveIssued(ctx context.Context, id uuid.UUID) {
 // generator configured) still gets its PDF archived; the rest is skipped, not
 // an error.
 func (s *InvoiceService) Archive(ctx context.Context, id uuid.UUID) error {
+	return s.archiveAs(ctx, id, archivedBySystem)
+}
+
+// uploaded_by values that say how a document came to be archived.
+const (
+	archivedBySystem   = "system"   // at issue, as it was issued
+	archivedByBackfill = "backfill" // rendered later for an invoice issued before archiving existed
+)
+
+func (s *InvoiceService) archiveAs(ctx context.Context, id uuid.UUID, by string) error {
 	if s.archive == nil {
 		return nil
 	}
@@ -114,7 +125,7 @@ func (s *InvoiceService) Archive(ctx context.Context, id uuid.UUID) error {
 		}
 		_, err := s.archive.Create(ctx, CreateDocumentRequest{
 			OwnerType: DocumentOwnerInvoice, OwnerID: id, Kind: kind,
-			Filename: filename, MimeType: mimeType, UploadedBy: "system",
+			Filename: filename, MimeType: mimeType, UploadedBy: by,
 		}, bytes.NewReader(content))
 		if errors.Is(err, ErrDocumentConflict) {
 			return nil // a concurrent archive got there first
@@ -149,4 +160,171 @@ func (s *InvoiceService) Archive(ctx context.Context, id uuid.UUID) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// NumberedInvoiceLister lists every numbered invoice and credit note, oldest
+// first. *InvoiceRepository satisfies it.
+type NumberedInvoiceLister interface {
+	NumberedIDs(ctx context.Context) ([]uuid.UUID, error)
+}
+
+// NumberedIDs lists the ids of every document that has a number: issued, paid,
+// credited and corrected invoices and credit notes, oldest first.
+func (r *InvoiceRepository) NumberedIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id FROM invoices
+		WHERE status IN ('issued', 'paid', 'credited', 'corrected')
+		ORDER BY issued_at NULLS LAST, created_at, id`)
+	if err != nil {
+		return nil, fmt.Errorf("list numbered invoices: %w", err)
+	}
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan invoice id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// BackfillOptions controls BackfillArchive.
+type BackfillOptions struct {
+	// DryRun reports what would be archived and writes nothing.
+	DryRun bool
+	// Progress, if set, is called after each invoice with a one-line outcome.
+	Progress func(done, total int, number, outcome string)
+}
+
+// BackfillFailure is one invoice that could not be archived.
+type BackfillFailure struct {
+	ID     uuid.UUID `json:"id"`
+	Number string    `json:"number"`
+	Error  string    `json:"error"`
+}
+
+// BackfillReport is the outcome of BackfillArchive.
+type BackfillReport struct {
+	DryRun bool `json:"dry_run"`
+	Total  int  `json:"total"`
+	// Complete had every kind already; Archived got at least one new document
+	// (or, in a dry run, would).
+	Complete int `json:"complete"`
+	Archived int `json:"archived"`
+	// Created counts new documents per kind (always zero in a dry run).
+	Created map[DocumentKind]int `json:"created"`
+	// WithoutEInvoice is how many are left with no e-invoice XML afterwards:
+	// invoices that cannot be exported (older ones often lack the buyer and
+	// line data EN 16931 needs) or a generator that was not reachable. A later
+	// run tries them again.
+	WithoutEInvoice int               `json:"without_einvoice"`
+	Failed          []BackfillFailure `json:"failed"`
+}
+
+// BackfillArchive archives the invoices and credit notes that were issued
+// before archiving existed, with the same rules as at issue: PDF always, the
+// validated XML and report when the invoice can be exported.
+//
+// What it stores is rendered now from the invoice as stored (including the
+// supplier snapshot taken when it was issued). It is not the file that was
+// produced or sent back then, and the layout may have changed since, so these
+// documents are marked uploaded_by "backfill" rather than "system".
+//
+// It is idempotent and safe to run beside a live server: a kind that exists is
+// never replaced, and one invoice failing does not stop the rest.
+func (s *InvoiceService) BackfillArchive(ctx context.Context, opts BackfillOptions) (*BackfillReport, error) {
+	if s.archive == nil {
+		return nil, ErrEmailUnavailable
+	}
+	lister, ok := s.repo.(NumberedInvoiceLister)
+	if !ok {
+		return nil, errors.New("this invoice repository cannot list numbered invoices")
+	}
+	ids, err := lister.NumberedIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rep := &BackfillReport{DryRun: opts.DryRun, Total: len(ids), Created: map[DocumentKind]int{}, Failed: []BackfillFailure{}}
+
+	kindsOf := func(id uuid.UUID) (map[DocumentKind]bool, error) {
+		docs, err := s.archive.ListByOwner(ctx, DocumentOwnerInvoice, id)
+		if err != nil {
+			return nil, err
+		}
+		out := map[DocumentKind]bool{}
+		for _, d := range docs {
+			out[d.Kind] = true
+		}
+		return out, nil
+	}
+	note := func(i int, number, outcome string) {
+		if opts.Progress != nil {
+			opts.Progress(i+1, len(ids), number, outcome)
+		}
+	}
+
+	for i, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return rep, err
+		}
+		inv, _, err := s.repo.GetByID(ctx, id)
+		number := id.String()
+		if err == nil {
+			number = inv.Number()
+		}
+		fail := func(err error) {
+			rep.Failed = append(rep.Failed, BackfillFailure{ID: id, Number: number, Error: err.Error()})
+			note(i, number, "FAILED: "+err.Error())
+		}
+		if err != nil {
+			fail(err)
+			continue
+		}
+		before, err := kindsOf(id)
+		if err != nil {
+			fail(err)
+			continue
+		}
+		if before[DocumentKindInvoicePDF] && before[DocumentKindEInvoiceXML] && before[DocumentKindValidationReport] {
+			rep.Complete++
+			note(i, number, "already complete")
+			continue
+		}
+		if opts.DryRun {
+			rep.Archived++
+			note(i, number, "would archive")
+			continue
+		}
+
+		archiveCtx, cancel := context.WithTimeout(ctx, archiveTimeout)
+		err = s.archiveAs(archiveCtx, id, archivedByBackfill)
+		cancel()
+		after, lerr := kindsOf(id)
+		if lerr != nil {
+			fail(lerr)
+			continue
+		}
+		var added []string
+		for kind := range after {
+			if !before[kind] {
+				rep.Created[kind]++
+				added = append(added, string(kind))
+			}
+		}
+		if !after[DocumentKindEInvoiceXML] {
+			rep.WithoutEInvoice++
+		}
+		switch {
+		case err != nil:
+			fail(err)
+		case len(added) > 0:
+			rep.Archived++
+			note(i, number, "archived "+strings.Join(added, ", "))
+		default:
+			note(i, number, "nothing to add")
+		}
+	}
+	return rep, nil
 }

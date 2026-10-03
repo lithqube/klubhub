@@ -417,7 +417,21 @@ Issuing an invoice or credit note keeps what it is made of in `documents`, owned
 - An invoice that cannot be exported (missing buyer data, withholding tax) or a server without `EINVOICE_URL` still archives the PDF; the XML and report are skipped.
 - The database refuses to change or delete a stored document (trigger from migration 031); the only allowed change is losing `is_current` to a newer version.
 - Archiving needs object storage; without it nothing is archived.
-- Invoices issued before this release have no archive yet.
+- **Older invoices** (issued before archiving existed) are archived by hand, once, with the backfill command (below).
+
+#### Backfilling older invoices
+
+```bash
+docker compose exec app /api -backfill-archive -dry-run   # report only, writes nothing
+docker compose exec app /api -backfill-archive
+```
+
+Run it after the server has started (it needs the migrated database, object storage and, for e-invoices, `EINVOICE_URL`). It walks every issued, paid, credited and corrected invoice and credit note, oldest first, and archives what is missing by the same rules as at issue. It prints one line per invoice and a summary, and exits non-zero if any invoice failed.
+
+- **Idempotent and safe beside a live server.** A kind that already exists is never replaced, so it is safe to repeat, and invoices archived at issue are left alone. One failing invoice does not stop the rest.
+- **What it stores was rendered now, not then.** The PDF is produced from the invoice as stored (including the supplier snapshot taken at issue), not the file generated or sent at the time, and the layout may have changed since. These documents are marked `uploaded_by: "backfill"` (`"system"` is an archive made at issue), which the documents API shows.
+- **Older invoices often cannot be exported as e-invoices:** they may lack the buyer address, delivery date or line data EN 16931 needs. They get their PDF only; the summary counts them under "without an e-invoice". Fix the data if it can still be changed, or leave them; a later run retries them (cheaply, since the generator is only called for invoices that pass the field check).
+- If the e-invoice generator is down, the PDFs are still archived and the summary says how many are missing an e-invoice. Run again once it is back.
 
 ### 4.2c Emailing an invoice
 
