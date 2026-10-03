@@ -33,6 +33,23 @@ describe('InvoiceEInvoicePanel', () => {
     expect(wrapper.get('a.iep-download').attributes('href')).toBe('/api/v1/finance/invoices/inv-9/einvoice?format=facturx')
   })
 
+  it('does not claim more than it checked: Factur-X vs XRechnung wording', async () => {
+    const { wrapper } = setup({ format: 'facturx', ready: true, problems: [] })
+    await open(wrapper)
+    expect(wrapper.text()).toContain("Passes KlubHub's EN 16931 checks.")
+    expect(wrapper.text()).not.toContain('KoSIT')
+
+    await wrapper.findAll('[role=radio]')[1]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain("Passes KlubHub's EN 16931 and XRechnung checks.")
+    expect(wrapper.text()).toContain('Not run through the official KoSIT validator')
+    expect(wrapper.text()).not.toContain('every EN 16931 rule')
+
+    await wrapper.findAll('[role=radio]')[2]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('official KoSIT validator')
+  })
+
   it('lists what is missing instead of a download', async () => {
     const { wrapper } = setup({ format: 'facturx', ready: false, problems: [{ field: 'buyer.city', message: 'Buyer city is required' }] })
     await open(wrapper)

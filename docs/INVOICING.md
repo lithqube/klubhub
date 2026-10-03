@@ -450,6 +450,7 @@ Run it after the server has started (it needs the migrated database, object stor
 
 `internal/einvoice` is independent of finance types: `finance/einvoice.go` maps a numbered invoice (using the supplier snapshot taken at issue) to a neutral `Document`, and an `Exporter` turns it into a file through a `Generator` interface. Today the generator is the `gflohr/e-invoice-eu` sidecar (`EINVOICE_URL`); a Go-native one can replace it without touching callers.
 
+- **What "passes" means.** The rule check is KlubHub's own engine (`speedata/einvoice`: EN 16931, plus the German XRechnung BR-DE rules for XRechnung), not the official KoSIT validator and XRechnung schematron that public-sector portals run. For XRechnung the UI therefore says it was not run through KoSIT, and a public buyer's portal could still reject a file. The CI golden run checks Factur-X PDFs for PDF/A-3b with veraPDF; running KoSIT there is still open.
 - **Nothing invalid ships.** The sidecar neither calculates nor checks rules, so the XML is generated first and validated in-process with `speedata/einvoice` (EN 16931 BR-*, BR-CO-*, XRechnung BR-DE-*). For Factur-X the PDF is wrapped only after that passes.
 - **Missing data is reported by field** (`einvoice.Prepare`): seller and buyer address, tax number or VAT ID, delivery date, and for XRechnung the buyer reference (Leitweg-ID), seller contact name, phone and email, and IBAN.
 - **Cannot be expressed, so blocked:** withholding tax (EN 16931 has no field for it) and currencies with more than two decimals.

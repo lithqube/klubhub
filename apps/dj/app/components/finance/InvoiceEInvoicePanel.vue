@@ -4,7 +4,7 @@
 // so this panel asks first and lists what is missing instead of offering a
 // download that would be refused. The file itself is a plain link to a GET
 // that answers with an attachment; it never passes through JS memory.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { EInvoiceCheck, EInvoiceFormat, Invoice } from '../../types/finance'
 import { invoiceEInvoiceUrl, useInvoiceStore } from '../../stores/invoice'
 import { invoiceNumberLabel } from '../../utils/invoiceDisplay'
@@ -43,6 +43,18 @@ async function run(): Promise<void> {
     if (mine === seq) loading.value = false
   }
 }
+
+/**
+ * What a passing check does and does not mean. The check is KlubHub's own rule
+ * engine (EN 16931 plus the German XRechnung rules), not the official KoSIT
+ * validator that public-sector portals run, so for XRechnung the claim stops
+ * short of "valid".
+ */
+const passNote = computed(() =>
+  format.value === 'facturx'
+    ? "Passes KlubHub's EN 16931 checks."
+    : "Passes KlubHub's EN 16931 and XRechnung checks. Not run through the official KoSIT validator, so a public buyer's portal could still reject it.",
+)
 
 function toggle(): void {
   open.value = !open.value
@@ -87,7 +99,7 @@ function pick(f: EInvoiceFormat): void {
 
       <template v-else-if="check">
         <div v-if="check.ready" class="iep-ready">
-          <p class="iep-note" role="status">Passes every EN 16931 rule check.</p>
+          <p class="iep-note" role="status">{{ passNote }}</p>
           <a
             class="btn-hud btn-hud-sm iep-download"
             :href="invoiceEInvoiceUrl(invoice.id, format)"

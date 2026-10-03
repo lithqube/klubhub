@@ -12,7 +12,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
   issued invoices and credit notes: `GET /invoices/{id}/einvoice` and
   `/einvoice-check`. A pinned, internal-only `einvoice` generator
   service ships in the Compose files (`EINVOICE_URL`). Every file is
-  validated against the EN 16931 and XRechnung rules before it is
+  checked against the EN 16931 and XRechnung rules (KlubHub's own engine, not
+  the official KoSIT validator) before it is
   returned; missing data is reported by field. The invoice sheet gains
   an E-INVOICE panel. See `docs/INVOICING.md`.
 - Read-only finance documents API (`GET /documents`, `/documents/{id}`,
