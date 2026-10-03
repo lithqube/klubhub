@@ -11,7 +11,7 @@ This file provides Claude-specific instructions for working with the KlubHub DJ 
 - Social media scheduler (Instagram)
 - EPK / Press Kit Builder (PDF export)
 - Gig tracker (complete)
-- Finance tracker: invoicing, payments, agreements and email shipped in v1.1.0; income/expense (earnings) tracking is the remaining Phase 5 work
+- Finance tracker: invoicing, payments, agreements and email shipped in v1.1.0; v1.2.0 adds EN 16931 e-invoicing (Factur-X / XRechnung export validated before it ships, archive of issued documents, send by email with attachments), receipts on expenses, and German legal notes; income/expense (earnings) tracking is the remaining Phase 5 work
 
 **Current state:** Phases 0 through 4, 1.5, 1.5.5 complete. v1.0.0/v1.0.1 released. v1.1.0 shipped Phase 5's invoicing half; earnings tracking is in progress. Next: Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard). See `.planning/ROADMAP.md` for per-phase status.
 

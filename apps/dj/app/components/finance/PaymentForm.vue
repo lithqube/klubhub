@@ -109,7 +109,7 @@ const limitLabel = computed(() =>
     </div>
 
     <label class="pf-check">
-      <input v-model="received" type="checkbox">
+      <input v-model="received" type="checkbox" class="hud-check">
       <span class="input-label" style="margin:0;">ALREADY RECEIVED</span>
     </label>
     <p class="pf-msg" style="margin-top:-6px;">
@@ -150,11 +150,10 @@ const limitLabel = computed(() =>
 .pf-amount-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .pf-amount-row { display: flex; gap: 8px; }
 .pf-fill { height: 40px; min-height: 40px; }
-.pf-msg { margin: 4px 0 0; font-family: var(--font-data); font-size: 11px; color: var(--color-on-surface-variant); }
+.pf-msg { margin: 3px 0 0; font-family: var(--font-data); font-size: 11px; line-height: 1.4; color: var(--color-tertiary); }
 .pf-msg:empty { display: none; }
 .pf-msg-error { color: var(--color-error); }
 .pf-check { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; }
-.pf-check input { width: 16px; height: 16px; accent-color: var(--color-primary); }
 .pf-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .pf-label { display: block; }
 .pf-actions { display: flex; justify-content: flex-end; gap: 8px; }

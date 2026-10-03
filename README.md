@@ -23,7 +23,7 @@ Own your data, your storage, your workflow.
 
 Each product lives under `apps/` (and its own `api/cmd/<product>` binary). **KlubHub DJ** is the first and only fully released product. **KlubHub Promoter** (for promoters, collectives and event organisers) lives under `apps/promoter` and `api/cmd/promoter`; see [its self-hosting preview](./docs/SELF-HOSTING.md#klubhub-promoter--self-hosting-preview) and [security model](./SECURITY.md#klubhub-promoter-security-model). **KlubHub Label** will land the same way, once planned. Products share the Kinetic HUD design system as a Nuxt layer in `libs/ui`.
 
-Most KlubHub DJ features will stay open source under this repository's MIT license; some future features across the family may be offered as SaaS. SaaS scope, pricing, and availability have not been announced.
+Everything in KlubHub DJ today is open source under this repository's MIT license and stays that way: your own data, and anything the law asks of you such as e-invoicing, is free. Hosted editions (KlubHub Cloud, and hosted public pages for Promoter) are planned for what needs servers, such as posting to more platforms, hosted press-kit pages, AI captions and shared team workspaces. Pricing and launch dates have not been announced.
 
 The public brand site for the whole family lives at `apps/site/` and deploys to **[klubhub.io](https://klubhub.io)** — see [GitHub Pages setup](./docs/github-pages.md) for local preview, deployment, and DNS configuration.
 
@@ -168,7 +168,7 @@ klubhub/
 │   │   ├── gig/                     # gig CRUD, iCal feed, booking PDF (DJ)
 │   │   ├── venue/  contact/         # venue & contact databases (DJ)
 │   │   ├── artwork/                 # cover art lookup (Spotify, Discogs) (DJ)
-│   │   ├── ra/                      # Resident Advisor import client (DJ, licensed feature)
+│   │   ├── ra/                      # Resident Advisor import client (DJ, open source, on by default)
 │   │   └── promoter/                # org, event, lineup, guestlist, door, retention, sealed ban list (Promoter)
 │   │       └── migrations/          # goose SQL migrations for KlubHub Promoter
 │   └── testdata/                    # integration test fixtures

@@ -3,9 +3,55 @@ package finance
 import (
 	"fmt"
 	"net/mail"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
+
+var bicPattern = regexp.MustCompile(`^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$`)
+
+// ibanLengths maps an ISO 3166 country to its IBAN length (SEPA area plus the
+// other common IBAN countries). A country not listed is rejected.
+var ibanLengths = map[string]int{
+	"AD": 24, "AE": 23, "AL": 28, "AT": 20, "AZ": 28, "BA": 20, "BE": 16, "BG": 22, "BH": 22, "BR": 29,
+	"CH": 21, "CY": 28, "CZ": 24, "DE": 22, "DK": 18, "EE": 20, "ES": 24, "FI": 18, "FR": 27, "GB": 22,
+	"GE": 22, "GI": 23, "GR": 27, "HR": 21, "HU": 28, "IE": 22, "IL": 23, "IS": 26, "IT": 27, "JO": 30,
+	"KW": 30, "LB": 28, "LI": 21, "LT": 20, "LU": 20, "LV": 21, "MC": 27, "MD": 24, "ME": 22, "MK": 19,
+	"MT": 31, "NL": 18, "NO": 15, "PL": 28, "PT": 25, "QA": 29, "RO": 24, "RS": 22, "SA": 24, "SE": 24,
+	"SI": 19, "SK": 24, "SM": 27, "TR": 26, "UA": 29, "VA": 22, "XK": 20,
+}
+
+// normalizeBillingRequest trims free text and puts the IBAN and BIC in their
+// canonical form (upper-case, no spaces) so storage and comparison are stable.
+func normalizeBillingRequest(r *UpdateBillingProfileRequest) {
+	r.TaxNumber = strings.TrimSpace(r.TaxNumber)
+	compact := strings.NewReplacer(" ", "", "\t", "")
+	r.IBAN = strings.ToUpper(compact.Replace(strings.TrimSpace(r.IBAN)))
+	r.BIC = strings.ToUpper(compact.Replace(strings.TrimSpace(r.BIC)))
+}
+
+// validIBAN reports whether s, already normalised, is a well-formed IBAN: a
+// known country with the right length and a valid ISO 7064 mod-97 checksum.
+func validIBAN(s string) bool {
+	if len(s) < 5 {
+		return false
+	}
+	if n, ok := ibanLengths[s[:2]]; !ok || len(s) != n {
+		return false
+	}
+	rem := 0
+	for _, r := range s[4:] + s[:4] {
+		switch {
+		case r >= '0' && r <= '9':
+			rem = (rem*10 + int(r-'0')) % 97
+		case r >= 'A' && r <= 'Z':
+			rem = (rem*100 + int(r-'A') + 10) % 97
+		default:
+			return false // lower-case, spaces and punctuation are not normalised input
+		}
+	}
+	return rem == 1
+}
 
 // RequiredFieldsForIssue returns the field names that must be non-empty
 // before any document (invoice or agreement) can be issued. The list is
@@ -95,6 +141,16 @@ func Validate(r *UpdateBillingProfileRequest) ValidationErrors {
 
 	if r.DefaultVATRateBps < 0 || r.DefaultVATRateBps > 10000 {
 		errs = append(errs, FieldError{"default_vat_rate_bps", "must be between 0 and 10000 basis points"})
+	}
+
+	if utf8.RuneCountInString(r.TaxNumber) > 40 {
+		errs = append(errs, FieldError{"tax_number", "exceeds 40 characters"})
+	}
+	if r.IBAN != "" && !validIBAN(r.IBAN) {
+		errs = append(errs, FieldError{"iban", "not a valid IBAN (check the country, length and check digits)"})
+	}
+	if r.BIC != "" && !bicPattern.MatchString(r.BIC) {
+		errs = append(errs, FieldError{"bic", "must be an 8 or 11 character BIC/SWIFT code"})
 	}
 
 	if utf8.RuneCountInString(r.TradingName) > 200 {

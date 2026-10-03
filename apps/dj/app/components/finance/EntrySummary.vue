@@ -137,7 +137,7 @@ defineExpose({ refresh })
 .es-btn:hover { color: var(--color-primary); }
 .es-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 .es-btn-on { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
-.es-select { height: 28px; padding: 0 8px; font-family: var(--font-command); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.es-select { width: auto; min-width: 76px; height: 28px; padding: 0 8px; font-family: var(--font-command); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .es-state { padding: 14px; display: flex; flex-direction: column; gap: 6px; }
 .es-state-title { font-family: var(--font-command); font-size: 12px; font-weight: 700; letter-spacing: -.02em; text-transform: uppercase; color: var(--color-on-surface); }
 .es-state-text { font-family: var(--font-data); font-size: 12px; color: var(--color-on-surface-variant); }
@@ -145,9 +145,9 @@ defineExpose({ refresh })
 .es-row { display: grid; grid-template-columns: 56px 1fr 1fr; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px dashed color-mix(in srgb, var(--color-on-surface) 10%, transparent); }
 .es-row:last-child { border-bottom: 0; }
 .es-cur { font-family: var(--font-command); font-size: 13px; font-weight: 700; color: var(--color-on-surface); text-align: center; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--color-on-surface) 20%, transparent); }
-.es-amt { font-family: var(--font-command); font-size: 14px; font-weight: 700; letter-spacing: -.02em; text-align: right; }
-.es-amt-pos { color: var(--color-primary); }
-.es-amt-neg { color: var(--color-error); }
+.es-amt { font-family: var(--font-command); font-size: 14px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; text-align: right; color: var(--color-on-surface); }
+/* Income and expense differ by sign and column; the signature and error colours stay reserved. */
+.es-amt-pos, .es-amt-neg { color: var(--color-on-surface); }
 @media (max-width: 768px) {
   .es-row { grid-template-columns: 1fr 1fr; row-gap: 4px; }
   .es-cur { grid-column: 1 / -1; justify-self: start; }

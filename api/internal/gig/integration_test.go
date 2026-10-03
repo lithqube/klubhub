@@ -458,7 +458,7 @@ func TestIntegration_MigrationsRunClean(t *testing.T) {
 		gigRepo := gig.NewRepository(testPool)
 		gigSvc := gig.NewService(gigRepo, nil, nil, trackRepo, nil)
 
-		h := gig.NewHandler(gigSvc, "test-secret")
+		h := gig.NewHandler(gigSvc, "test-secret", nil)
 	h.SetRAImportHandler(gig.NewRAImportHandler(nil, nil, nil, nil))
 
 	router := h.Routes()
@@ -552,7 +552,7 @@ func TestIntegration_MigrationsRunClean(t *testing.T) {
 			t.Skip("postgres unavailable")
 		}
 
-	h := gig.NewHandler(nil, "test-secret")
+	h := gig.NewHandler(nil, "test-secret", nil)
 	h.SetRAImportHandler(gig.NewRAImportHandler(nil, nil, nil, nil))
 
 	router := h.Routes()

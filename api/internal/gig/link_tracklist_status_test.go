@@ -35,7 +35,7 @@ func TestHandleLinkTracklist_ErrorStatuses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(&linkErrService{err: tt.err}, "test-secret-value-0123456789abcdef")
+			h := NewHandler(&linkErrService{err: tt.err}, "test-secret-value-0123456789abcdef", nil)
 			url := "/" + uuid.NewString() + "/tracklists/" + uuid.NewString()
 			req := httptest.NewRequest(http.MethodPost, url, nil)
 			rec := httptest.NewRecorder()

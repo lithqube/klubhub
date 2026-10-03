@@ -8,6 +8,83 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The klubhub.io site and README now describe the business model: everything
+  built is free and open source (MIT), and hosted editions (KlubHub Cloud,
+  Promoter Cloud) are planned for what needs servers. The feature list adds
+  e-invoices and expenses with receipts, the "KlubHub DJ PRO commercial
+  licence" row is gone, and a test keeps prices off the page.
+
+## [1.2.0] - 2026-10-03
+
+### Upgrade notes
+
+- Database migrations 029–032 run automatically on start: e-invoice fields
+  and invoice lines, expense receipts, document kinds (with a trigger that
+  refuses to change or delete a stored document), and email reply-to.
+- Both Compose files gain an `einvoice` service (an amd64 image, run under
+  emulation on Apple Silicon) on the internal network only, and the app gets
+  `EINVOICE_URL=http://einvoice:3000`. Without it, e-invoice export answers
+  503 and nothing else changes.
+- Invoices issued before this release are not archived. After upgrading run
+  `docker compose exec app /api -backfill-archive -dry-run`, then the same
+  without `-dry-run`. See `docs/INVOICING.md`.
+- Resident Advisor import is now on by default; see below.
+
+
+### Added
+
+- Factur-X (ZUGFeRD) and XRechnung (CII and UBL) e-invoice export for
+  issued invoices and credit notes: `GET /invoices/{id}/einvoice` and
+  `/einvoice-check`. A pinned, internal-only `einvoice` generator
+  service ships in the Compose files (`EINVOICE_URL`). Every file is
+  checked against the EN 16931 and XRechnung rules (KlubHub's own engine, not
+  the official KoSIT validator) before it is
+  returned; missing data is reported by field. The invoice sheet gains
+  an E-INVOICE panel. See `docs/INVOICING.md`.
+- Read-only finance documents API (`GET /documents`, `/documents/{id}`,
+  `/documents/{id}/download`): downloads are always attachments with
+  checksum, `no-store` and `nosniff`; storage keys are never exposed.
+- Issuing an invoice or credit note now archives the PDF as issued and,
+  when it can be exported, the validated e-invoice XML and its validation
+  report. Documents have a `kind` (migration 031) with versions kept per
+  kind, and the database refuses to change or delete a stored document.
+- `POST /invoices/{id}/email` sends an issued invoice or credit note to
+  its customer with the archived PDF and the e-invoice XML attached, with
+  a SEND BY EMAIL panel in the invoice sheet. Clients still cannot attach
+  arbitrary documents to emails.
+- `api -backfill-archive [-dry-run]` archives the PDF and, where possible,
+  the e-invoice of invoices issued before archiving existed. It is
+  idempotent, and what it creates is marked `uploaded_by: backfill`
+  because it is rendered now, not the file produced at the time.
+- The invoice sheet has an ARCHIVE panel listing the stored PDF, e-invoice
+  XML and validation report with size, checksum and download, and tagging
+  documents rendered later by the backfill.
+- Invoice emails now carry a reply-to set to the supplier's contact email, so
+  customers' answers reach the DJ instead of the platform's sending address
+  (migration 032 stores it with the message so retries keep it).
+- The New Invoice form is inline above the invoice list instead of a modal,
+  like the entry composer. Billing a gig from the gigs page now takes you to
+  it with the gig chosen.
+- The rider's New Template form is inline in the templates pane, in the
+  editor's place, instead of a modal. Escape closes it only while it is empty,
+  so a half-written template is never thrown away by accident.
+- Resident Advisor import is part of the open-source build and on by default
+  (EPK import panel and RA link, gig import). Set `FEATURE_RA_IMPORT=false` to
+  turn it off; the installer has `--no-ra-import`. The browser demo and the
+  frontend-only mock server, which have no RA endpoints, still start with it
+  hidden. `docs/EDITIONS.md` and `docs/CONFIGURATION.md` are updated.
+
+### Fixed
+
+- XRechnung files for invoices outside the scope of VAT (category O) now carry a
+  VAT rate of 0 on the tax breakdown, as XRechnung rule BR-DE-14 requires.
+  Found by running the official KoSIT validator over the golden files; the
+  `einvoice-golden` CI job now does that on every change.
+- Storing a second version of a document failed with "updated by another
+  writer": the old version is now demoted before the new one is inserted.
+
+### Changed
+
 - README, `docs/INDEX.md` and `CLAUDE.md` synced to the current state
   of the repo: the project structure tree now shows `apps/promoter`,
   `libs/ui`, `api/cmd/promoter` and `api/internal/promoter` (previously

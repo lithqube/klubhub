@@ -36,7 +36,7 @@ curl -fsSL …/install.sh | bash -s -- --both --yes \
 | `--bind ADDR` | `127.0.0.1` | Host address to publish on (`0.0.0.0` only behind a firewall or VPN) |
 | `--dj-port`, `--s3-port`, `--promoter-port` | 8080, 39000, 8090 | Published ports |
 | `--dj-url`, `--s3-url`, `--origin` | local URLs | Browser-facing URLs (CORS, presigned storage links, Promoter origin) |
-| `--ra-import`, `--log-level LEVEL` | off, `info` | Feature and logging switches |
+| `--no-ra-import`, `--log-level LEVEL` | RA import on, `info` | Feature and logging switches |
 | `--dj-env KEY=VALUE`, `--promoter-env KEY=VALUE` | — | Any other Compose variable (repeatable), e.g. `SPOTIFY_CLIENT_ID=…` |
 | `--org-name`, `--slug`, `--owner-email`, `--owner-name`, `--timezone`, `--currency` | ask | Promoter organisation and first owner |
 | `--emulate-arm64` | off | Run the arm64-only DJ image on x86 through QEMU (slow) |
@@ -188,6 +188,21 @@ See [Configuration](./CONFIGURATION.md) for overrides. Setup does not load a roo
 - Set `CORS_ORIGIN` for the actual frontend origin when changing the scheme, hostname, or port. CORS is not authentication.
 
 A host reverse proxy forwards production UI and API traffic to **one upstream**, `127.0.0.1:8080`. Add authentication at that boundary and keep the backend loopback-bound. A proxy running in another container needs a deliberately configured Docker-network upstream; its own loopback is not the app container. S3 needs its own reachable route for browser downloads. Do not forward the internal Nuxt port or Garage administration ports.
+
+## Phone access
+
+Taking a receipt photo, or using the app on a phone at all, means the phone has to reach the server. By default nothing is published beyond `127.0.0.1`, and the app has **no login**, so do not just bind it to your Wi-Fi.
+
+- **The camera works over plain HTTP.** The "Take photo" button is a file input with `capture`, which hands off to the phone's own camera app; it needs neither HTTPS nor a permission prompt. What does need a secure context (HTTPS or `localhost`) is a live camera preview inside the page and installing the app as a PWA; KlubHub uses neither.
+- **Preferred: a private network such as [Tailscale](https://tailscale.com).** Put the server and the phone on the same tailnet and open the server's tailnet address (`tailscale serve` can give it HTTPS). Nothing is exposed to the internet and there is nothing to authenticate.
+- **Or a reverse proxy with authentication** (Caddy, nginx) on your own domain, forwarding only to `127.0.0.1:8080` (see above). Set `CORS_ORIGIN` to the public origin.
+- **Home Wi-Fi only:** set `BIND_ADDRESS=0.0.0.0` only behind a firewall on a network you trust. Never on shared or public Wi-Fi.
+- **Uploads go through the API**, not straight to S3, so the phone only needs to reach the app port. `S3_PUBLIC_ENDPOINT` matters only for presigned downloads elsewhere in the app.
+- **No phone at all:** on a laptop, drag and drop or the file picker work the same, so a scanner's output folder or AirDropped photos are fine.
+
+## E-invoices (Factur-X, XRechnung)
+
+Both Compose files run an `einvoice` service (`gflohr/e-invoice-eu`, pinned by digest) that builds the structured invoice files, and set `EINVOICE_URL=http://einvoice:3000` on the app. It has **no authentication**, so it publishes no port and sits on the internal Compose network only; never add a `ports:` entry for it. The image is amd64-only, so on Apple Silicon it runs under emulation. Every export is checked against the EN 16931 and XRechnung rules by KlubHub's own rule engine before it is returned (not the official KoSIT validator that public-sector portals use; CI runs KoSIT over the generated files). To turn export off, unset `EINVOICE_URL` (the invoice sheet then says it is not enabled). See [INVOICING.md](./INVOICING.md#43-e-invoice-export).
 
 ## Upgrades and existing installations
 

@@ -174,10 +174,31 @@ so the customer can be pre-filled. Billing profiles gain
 | US | any | `none`, rate 0 (user may switch to `us_sales_tax`) |
 | other / unknown country | any | `none`, rate 0 |
 
-Default notes (`tax_note`, editable while draft):
-- `reverse_charge`: "Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC)."
-- `exempt`: "VAT exempt: small business scheme." (country-specific wording is a §6 extension)
-- `outside_scope`: "Outside the scope of EU VAT: place of supply outside the EU."
+Default notes (`tax_note`, editable while draft) come from the `tax.Notes`
+registry, keyed by the supplier's country (the billing profile's
+`address_country`) and the treatment. Domestic VAT, US sales tax and `none`
+print no note.
+
+| Treatment | Germany (`DE`): German / English in one string | Every other country |
+|---|---|---|
+| `exempt` | "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. / VAT is not charged under § 19 UStG (German small-business scheme)." | "VAT exempt: small business scheme." |
+| `reverse_charge` | "Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge): Die Umsatzsteuer ist vom Leistungsempfänger zu entrichten (Art. 196 MwStSystRL). / Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC)." | "Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC)." |
+| `outside_scope` | "Nicht steuerbare sonstige Leistung, Leistungsort außerhalb Deutschlands (§ 3a Abs. 2 UStG). / Not subject to German VAT: the place of supply is outside Germany (§ 3a(2) UStG)." | "Outside the scope of EU VAT: place of supply outside the EU." |
+
+The German wording is bilingual because the customer's language is unknown and
+the German phrase is the one a German bookkeeper or the Finanzamt looks for
+(§ 14a Abs. 5 UStG requires "Steuerschuldnerschaft des Leistungsempfängers" on
+a reverse-charge invoice). It is the common practice for these cases, **not
+tax advice**: have a Steuerberater confirm it. Other countries get their own
+entries when their country module is written (`tax/notes_de.go` is the model);
+nothing invents legal text for a country that has none.
+
+`GET /invoices/tax-notes` returns `{data: {country, notes: {treatment: text}}}`
+for the billing profile's country. The draft editor loads it once and uses it
+when the user switches treatment, so wording that was a default (the country's
+or the generic one) is replaced and never left under the wrong treatment, while
+a note the user wrote themselves is kept. Notes already stored on existing
+drafts and issued invoices are never rewritten.
 
 Issue validation (`GET /invoices/{id}/issue-check`, enforced by `POST …/issue`):
 - supplier: `legal_name`, `address_line1`, `city`, `postal_code`, `country`
@@ -205,17 +226,29 @@ rate / 10000); `net_payable = total − withholding`.
 | `GET /invoices?status=&gig_id=&kind=` | | `{data: Invoice[]}` newest first, max 100 |
 | `POST /invoices` | `{gig_id, customer?, vat_treatment?, tax_rate_bps?, withholding_rate_bps?, supply_date?, due_at?, number_prefix?}` | `201 {data: Invoice}` draft; omitted fields are pre-filled (customer from gig contact, supply date from gig, treatment from `Suggest`) |
 | `GET /invoices/tax-suggestion?customer_country=&customer_vat_id=&customer_is_business=` | | `{data: {vat_treatment, tax_rate_bps, tax_note, reason}}` |
+| `GET /invoices/tax-notes` | | `{data: {country, notes: {reverse_charge?, exempt?, outside_scope?}}}`: the legal wording for the billing profile's country (generic English when it has no entry) |
 | `GET /invoices/summaries` | | `{data: {[currency]: {currency, draft_count, issued_count, paid_count, outstanding_minor, paid_minor}}}` |
 | `GET /invoices/{id}` | | `{data: Invoice, lines: InvoiceLine[]}` |
 | `PUT /invoices/{id}` | `{customer, vat_treatment, tax_rate_bps, tax_note, withholding_rate_bps, supply_date, due_at, number_prefix, internal_notes, updated_at}` | draft only; totals recomputed |
 | `GET /invoices/{id}/issue-check` | | `{data: {ready: boolean, problems: IssueProblem[]}}` |
+| `GET /invoices/{id}/pdf` | | `application/pdf` attachment (`invoice-<number>.pdf`, `credit-note-<number>.pdf`, or `invoice-draft-<id8>.pdf`); rendered on demand, `Cache-Control: private, no-store`. Not persisted yet |
+| `GET /invoices/{id}/einvoice-check?format=` | | `{data: {format, ready, problems: [{field, message}]}}`; `format` is `facturx`, `xrechnung-cii` or `xrechnung-ubl`. Numbered documents only (`409 bad_state` otherwise); `503` when no generator is configured |
+| `GET /invoices/{id}/einvoice?format=` | | The validated e-invoice as an attachment: Factur-X PDF/A-3b (`.pdf`) or XRechnung (`.xml`), named `<number>-<format>.<ext>`; `X-EInvoice-Validation: passed`, `Cache-Control: private, no-store`. `422 {error:"not_exportable", problems}` when data is missing or the rule engine rejects it (nothing invalid is ever returned); `503` when `EINVOICE_URL` is unset; `502` if the generator misbehaves. Not persisted yet |
+| `GET /documents?owner_type=&owner_id=` | | `{data: Document[]}`: every stored version for that owner, newest first (`owner_type`: `invoice`, `agreement`, `epk`, `gig`, `other`). Needs object storage, else `503` |
+| `GET /documents/{id}` | | `{data: Document}` metadata: `kind`, filename, mime type, size, `checksum_sha256`, `version`, `is_current`. The storage key is never returned |
+| `GET /documents/{id}/download` | | The stored file, always `Content-Disposition: attachment`, with `X-Checksum-SHA256`, `Cache-Control: private, no-store`, `nosniff` and a sandbox CSP. There is no upload, change or delete route: the server writes documents when it archives something it produced |
+| `POST /invoices/{id}/email` | `{to_email?, subject?, body?, include_einvoice?}` | `201 {data: EmailMessage}`. Emails an issued, paid, credited or corrected invoice or credit note. Recipient defaults to the customer's email (`400 validation_failed` if neither exists). Attaches the archived PDF and, unless `include_einvoice` is `false`, the e-invoice XML when there is one; `include_einvoice: true` insists on it (`422 not_exportable` without one). A failed delivery is stored as `failed` and retried with the same files. `503` without Plunk, a sender address or object storage |
 | `POST /invoices/{id}/issue` | `{updated_at}` | allocates number; `422 {error:"not_issuable", problems}` |
 | `POST /invoices/{id}/pay` | `{paid_at, payment_ref, updated_at}` | issued → paid |
 | `POST /invoices/{id}/cancel` | `{updated_at}` | **draft only** → cancelled |
 | `POST /invoices/{id}/credit-note` | `{reason, updated_at}` | `201 {data: {credit_note, original}}` |
 | `POST /invoices/{id}/correct` | `{reason, updated_at}` | `201 {data: {credit_note, original, replacement}}` (replacement is a draft copy) |
 | `GET/POST /invoices/{id}/payments`, `GET/PUT /payments/{id}` | unchanged | balances use `net_payable_minor`; not allowed on credit notes; on `credited`/`corrected` originals only `kind: refund` is accepted (bounded by completed receipts) — new `deposit`/`payment` kinds are rejected as `payment_kind_not_allowed` |
-| `GET /entries?kind=&status=&currency=&category=&gig_id=&from=&to=` | | `{data: Entry[]}` newest first |
+| `GET /entries?kind=&status=&currency=&category=&gig_id=&from=&to=&receipt=` | | `{data: Entry[]}` newest first; each entry carries `attachment_count`; `receipt=missing\|present`: `missing` = **active expenses** with no files (income such as gig payments, and voided entries, are never "missing"); `present` = any entry with at least one file |
+| `POST /entries/{id}/attachments` | multipart, one `file` part | `201 {data: EntryAttachment}`. JPEG, PNG, WebP or PDF only (detected from the bytes, not the name), 15 MB each, 10 per entry. `415 unsupported_media_type`, `413 too_large`, `409 limit_reached`, `409 inactive` (voided entry) |
+| `GET /entries/{id}/attachments` | | `{data: EntryAttachment[]}` oldest first |
+| `GET /entries/{id}/attachments/{aid}` | | the file; `?inline=1` shows images inline (thumbnails), a PDF is always a download. `private, no-store`, `nosniff`, sandboxed CSP |
+| `DELETE /entries/{id}/attachments/{aid}` | | `204`; refused (`409 inactive`) once the entry is voided |
 | `POST /entries` | `{kind, amount_minor, currency, category, entry_date, description?, notes?, gig_id?}` | `201 {data: Entry}` |
 | `GET /entries/{id}` | | `{data: Entry}` |
 | `PUT /entries/{id}` | same as create + `updated_at` | `200 {data: Entry}` |
@@ -225,6 +258,20 @@ rate / 10000); `net_payable = total − withholding`.
 | `GET /profit-loss?scope=gig\|month\|year&from=&to=&gig_id?` | | `{data: ProfitLossTotals[]}` grouped by currency (FIN-07) |
 | `GET /reconciliations?status=&reason=&gig_id=` | | `{data: EntryReconciliation[]}` (FIN-04 / FIN-05 queue) |
 | `POST /reconciliations/{id}/resolve` | `{action: 'update'\|'delete'\|'void'\|'keep'}` | `200 {data: EntryReconciliation}`; applies the chosen action to the linked entry |
+
+**Receipts on entries.** A receipt, supplier bill or scan is stored as-is in
+object storage (never re-encoded; the sha256 of the original is recorded) and
+listed under its entry in `finance_entry_attachments` (migration 030). It is a
+separate table from `documents` on purpose: `documents` keeps one current
+version per owner, while an expense can carry several files. Files are never
+removed with an entry: voiding or soft-deleting an entry keeps them, and a
+voided entry's files can no longer be added or removed. Uploads go through the
+API (not presigned S3 links), so a phone only needs to reach one address; the
+routes answer `503` when object storage is not configured. How long to keep
+receipts is a tax-law question (Germany: generally 8 years for Buchungsbelege):
+confirm with your Steuerberater. A phone photo needs no HTTPS (the browser hands
+off to the camera app), but the phone must be able to reach the server: see
+[Phone access](./SELF-HOSTING.md#phone-access).
 
 Errors: `400 validation_failed`, `404 not_found`, `409 conflict` (stale
 `updated_at`), `409 bad_state` (wrong status for the action), `422
@@ -355,6 +402,64 @@ supported. Behind a TLS-terminating proxy, `CORS_ORIGIN` must be the public
 `https://` origin. `X-Forwarded-*` headers are never trusted. The default
 `http://127.0.0.1:3000` works for local use.
 
+### 4.2b Archive at issue
+
+Issuing an invoice or credit note keeps what it is made of in `documents`, owned by the invoice (`owner_type: invoice`). Versions and "current" are per `kind`:
+
+| `kind` | What | Filename |
+|---|---|---|
+| `invoice_pdf` | The PDF as issued | `invoice-<number>.pdf` / `credit-note-<number>.pdf` |
+| `einvoice_xml` | The validated EN 16931 (CII) XML | `<number>-einvoice.xml` |
+| `validation_report` | The rule-engine result: format, syntax, whether XRechnung rules applied, `passed`, `validated_at`, violations and warnings | `<number>-validation.json` |
+
+- The number is committed first; archiving runs right after, on a context that survives the client hanging up. A failure is logged and **never fails the issue**: the PDF and e-invoice stay available on demand.
+- It is idempotent (`InvoiceService.Archive`): a kind that exists is never replaced, so archived evidence stays as issued. A concurrent archive that loses the race is treated as done.
+- An invoice that cannot be exported (missing buyer data, withholding tax) or a server without `EINVOICE_URL` still archives the PDF; the XML and report are skipped.
+- The database refuses to change or delete a stored document (trigger from migration 031); the only allowed change is losing `is_current` to a newer version.
+- Archiving needs object storage; without it nothing is archived.
+- **Older invoices** (issued before archiving existed) are archived by hand, once, with the backfill command (below).
+
+The invoice sheet shows what is archived in its **ARCHIVE** panel (collapsed by default, loaded when opened): each file with its size, date and a SHA-256 prefix (full value on hover), a download link, `V2`/`SUPERSEDED` tags for replaced versions, and a **RENDERED LATER** tag on documents created by the backfill, since those are not the files produced at issue. A server without object storage says archiving isn't enabled; it never disables the rest of finance.
+
+#### Backfilling older invoices
+
+```bash
+docker compose exec app /api -backfill-archive -dry-run   # report only, writes nothing
+docker compose exec app /api -backfill-archive
+```
+
+Run it after the server has started (it needs the migrated database, object storage and, for e-invoices, `EINVOICE_URL`). It walks every issued, paid, credited and corrected invoice and credit note, oldest first, and archives what is missing by the same rules as at issue. It prints one line per invoice and a summary, and exits non-zero if any invoice failed.
+
+- **Idempotent and safe beside a live server.** A kind that already exists is never replaced, so it is safe to repeat, and invoices archived at issue are left alone. One failing invoice does not stop the rest.
+- **What it stores was rendered now, not then.** The PDF is produced from the invoice as stored (including the supplier snapshot taken at issue), not the file generated or sent at the time, and the layout may have changed since. These documents are marked `uploaded_by: "backfill"` (`"system"` is an archive made at issue), which the documents API shows.
+- **Older invoices often cannot be exported as e-invoices:** they may lack the buyer address, delivery date or line data EN 16931 needs. They get their PDF only; the summary counts them under "without an e-invoice". Fix the data if it can still be changed, or leave them; a later run retries them (cheaply, since the generator is only called for invoices that pass the field check).
+- If the e-invoice generator is down, the PDFs are still archived and the summary says how many are missing an e-invoice. Run again once it is back.
+
+### 4.2c Emailing an invoice
+
+`POST /invoices/{id}/email` sends the customer one message with the archived files attached (see 4.2b), through Plunk.
+
+- It first completes the archive (idempotent), then attaches only that invoice's own current `invoice_pdf` and, when present, `einvoice_xml`. The default subject and text are short and bilingual (English and German) and carry the supplier's contact details.
+- The stored message holds the document ids; the content is loaded at delivery, so a retry sends the same files. Attachments are base64 in Plunk's `attachments` array (max 10 files, 10 MB of base64 by default; we cap at 7 MB of content).
+- **Clients cannot attach files.** The generic `POST /emails` still rejects `attachment_ids`. Only the server-built invoice message may carry attachments, and each one must belong to the invoice the message is about, checked when the message is created and again at delivery.
+- The sender address is `PLUNK_FROM_EMAIL` (a verified Plunk domain). The SMTP sender does not support attachments.
+- **Replies go to the supplier.** The message is sent from the platform's verified address, but carries a reply-to set to the supplier's contact email from the invoice's own snapshot (the current profile for an invoice that has none), so the customer's answer reaches the DJ. It is left out, never an error, when that email is missing, malformed or the same as the sender. It is stored with the message (`email_messages.reply_to`, migration 032), so a retry sends the same one. Plunk's `reply` takes a single bare address.
+- Sending is outward facing: the UI asks for a second click that names the recipient.
+
+### 4.3 E-invoice export
+
+`internal/einvoice` is independent of finance types: `finance/einvoice.go` maps a numbered invoice (using the supplier snapshot taken at issue) to a neutral `Document`, and an `Exporter` turns it into a file through a `Generator` interface. Today the generator is the `gflohr/e-invoice-eu` sidecar (`EINVOICE_URL`); a Go-native one can replace it without touching callers.
+
+- **What "passes" means.** At export time the rule check is KlubHub's own engine (`speedata/einvoice`: EN 16931, plus the German XRechnung BR-DE rules for XRechnung), not the official KoSIT validator and XRechnung schematron that public-sector portals run, so for XRechnung the UI says it was not run through KoSIT and a public buyer's portal could still reject a file. KoSIT is not run per invoice (it needs a JVM); it runs in CI instead, below. If KoSIT rejects something our engine accepted, that is a bug in our output, fixed in the generator mapping (this is how the category O breakdown rate, BR-DE-14, was found).
+- **Golden checks** (`bash scripts/einvoice-golden.sh`, also the `einvoice-golden` CI job) run real invoices through the pinned sidecar in every format and tax situation (domestic, multi-line, reverse charge, § 19, outside scope, credit note), then check: KlubHub's rules, PDF/A-3b with veraPDF, and the **official KoSIT validator** (1.6.3 with the XRechnung 3.0.2 configuration) over every generated XML *and* over the XML extracted from each Factur-X PDF. Any rejection, or any file KoSIT did not look at, fails the run. The KoSIT jar and configuration, and the JRE and veraPDF images, are pinned by SHA-256 / digest in the script. Needs `pdfdetach` (`brew install poppler`).
+- **Nothing invalid ships.** The sidecar neither calculates nor checks rules, so the XML is generated first and validated in-process with `speedata/einvoice` (EN 16931 BR-*, BR-CO-*, XRechnung BR-DE-*). For Factur-X the PDF is wrapped only after that passes.
+- **Missing data is reported by field** (`einvoice.Prepare`): seller and buyer address, tax number or VAT ID, delivery date, and for XRechnung the buyer reference (Leitweg-ID), seller contact name, phone and email, and IBAN.
+- **Cannot be expressed, so blocked:** withholding tax (EN 16931 has no field for it) and currencies with more than two decimals.
+- **Outside the scope of VAT** (category `O`) invoices carry no VAT IDs (BR-O-02) and need the seller's Steuernummer.
+- Credit notes export as type 381 with the credited invoice as the preceding document.
+- The sidecar has no authentication: it publishes no port and is reachable only on the compose `internal` network.
+- Golden checks against the real generator and veraPDF (PDF/A-3b): `bash scripts/einvoice-golden.sh` (also a CI job).
+
 ## 5. Frontend structure
 
 - `app/types/finance.ts` — the shapes above.
@@ -362,11 +467,13 @@ supported. Behind a TLS-terminating proxy, `CORS_ORIGIN` must be the public
 - `app/utils/vatTreatment.ts` — labels and descriptions per treatment.
 - `app/stores/invoice.ts` — all `$fetch` calls for invoices, payments and summaries; keeps `updated_at` per invoice.
 - `app/stores/earnings.ts` — all `$fetch` calls for the ledger: entries, summary, profit-loss and reconciliations.
-- `app/components/finance/` — `InvoiceList`, `InvoiceCreateDialog`,
-  `InvoiceDetailSheet`, `InvoicePartyFields` (reusable for supplier later),
+- `app/components/finance/` — `InvoiceList`, `InvoiceCreateForm` (inline above
+  the list on the finance page, not a modal; the gig pages send you there with
+  the gig chosen), `InvoiceDetailSheet` with its `InvoiceEInvoicePanel`,
+  `InvoiceEmailPanel` and `InvoiceArchivePanel`, `InvoicePartyFields` (reusable for supplier later),
   `InvoiceTaxFields`, `InvoiceIssueChecklist`, `PaymentLedger`, `PaymentForm`,
   `InvoiceConfirmDialog`, plus the earnings components
-  `EarningsWorkspace`, `EntryFormDialog`, `EntryList`, `EntryProfitLoss`,
+  `EarningsWorkspace`, `EntryForm` (inline), `EntryList`, `EntryProfitLoss`,
   `EntryReconciliationDialog`, `EntryReconciliationPanel`, `EntrySummary`.
 - `server/api/v1/finance/**` — in-memory mocks implementing this contract
   (invoices, payments, billing-profile, agreements, emails, entries,
@@ -380,11 +487,11 @@ supported. Behind a TLS-terminating proxy, `CORS_ORIGIN` must be the public
 | Planned feature | Where it plugs in |
 |---|---|
 | Second supplier tax number, company registration, legal footer (review item 5) | `billing_profiles` columns → `Party`-like supplier snapshot → `InvoicePartyFields` reused for the billing profile form; printed by the PDF renderer footer. |
-| Country-specific legal notes (e.g. DE §19 UStG, FR late-payment wording) | `tax.Notes` registry keyed by `(country, treatment)`; `Suggest` already returns `tax_note`. |
+| More country-specific legal notes (FR late-payment wording, other countries) | **Germany is done** (`tax/notes_de.go`, §3). Add another country the same way: register `(country, treatment)` entries in an `init()`, mirror them in `shared/finance-mock/rules.ts`, and the UI picks them up through `GET /invoices/tax-notes`. |
 | Local-currency VAT (Art. 230) | `invoices.fx_rate` + `tax_minor_local`; computed in `tax.ComputeTotals`. |
 | Per-line tax / editable lines | `invoice_lines.tax_bps` already per line; `tax.ComputeTotals` already groups by rate. |
 | E-invoicing (EN 16931 UBL / Factur-X / Peppol) | new `Exporter` next to `PDFRenderer`, fed the same issued invoice + snapshots. |
-| PDF download endpoint | `GET /invoices/{id}/pdf` using `PDFRenderer` + `DocumentService` (store once at issue). |
+| Archive the issued PDF | `GET /invoices/{id}/pdf` is built and renders on demand. Still planned: store the rendered document once at issue via `DocumentService` (immutable original, sha256) and serve that copy; needs a documents HTTP handler (`api/cmd/api/main.go` still wires `nil`). |
 | Retention | issued invoices are immutable and never deleted; enforce in any future delete API. |
 
 ## 7. Shared rule: gig payment_status → ledger

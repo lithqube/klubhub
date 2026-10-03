@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -65,9 +66,13 @@ func (f *fakeInvoiceRepo) CreateDraft(_ context.Context, in DraftInput) (*Invoic
 	}
 	f.invoices[inv.ID] = inv
 	for i, l := range in.Lines {
+		unit := l.UnitCode
+		if unit == "" {
+			unit = DefaultUnitCode
+		}
 		f.lines[inv.ID] = append(f.lines[inv.ID], &InvoiceLine{
 			ID: uuid.New(), InvoiceID: inv.ID, SortOrder: i, Description: l.Description, Quantity: l.Quantity,
-			UnitMinor: l.UnitMinor, TaxBps: t.LineTaxBps[i], LineTotalMinor: int64(l.Quantity) * l.UnitMinor, CreatedAt: now,
+			UnitMinor: l.UnitMinor, UnitCode: unit, TaxBps: t.LineTaxBps[i], LineTotalMinor: int64(l.Quantity) * l.UnitMinor, CreatedAt: now,
 		})
 	}
 	return f.snapshot(inv), nil
@@ -99,6 +104,31 @@ func (f *fakeInvoiceRepo) List(_ context.Context, filter InvoiceFilter) ([]*Invo
 	return out, nil
 }
 
+// NumberedIDs mirrors InvoiceRepository.NumberedIDs: numbered documents, oldest first.
+func (f *fakeInvoiceRepo) NumberedIDs(_ context.Context) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var numbered []*Invoice
+	for _, inv := range f.invoices {
+		switch inv.Status {
+		case InvoiceStatusIssued, InvoiceStatusPaid, InvoiceStatusCredited, InvoiceStatusCorrected:
+			numbered = append(numbered, inv)
+		}
+	}
+	sort.Slice(numbered, func(i, j int) bool {
+		a, b := numbered[i], numbered[j]
+		if a.IssuedAt != nil && b.IssuedAt != nil && !a.IssuedAt.Equal(*b.IssuedAt) {
+			return a.IssuedAt.Before(*b.IssuedAt)
+		}
+		return a.CreatedAt.Before(b.CreatedAt)
+	})
+	ids := make([]uuid.UUID, len(numbered))
+	for i, inv := range numbered {
+		ids[i] = inv.ID
+	}
+	return ids, nil
+}
+
 // lock mirrors lockForTransition: not found, then stale token.
 func (f *fakeInvoiceRepo) lock(id uuid.UUID, token time.Time) (*Invoice, error) {
 	inv, ok := f.invoices[id]
@@ -125,11 +155,22 @@ func (f *fakeInvoiceRepo) UpdateDraft(_ context.Context, id uuid.UUID, req Updat
 	if !isDraft(inv) {
 		return nil, ErrInvoiceBadState
 	}
+	if req.Lines != nil {
+		f.lines[id] = nil
+		for i, l := range req.Lines {
+			f.lines[id] = append(f.lines[id], &InvoiceLine{
+				ID: uuid.New(), InvoiceID: id, SortOrder: i, Description: l.Description, Quantity: l.Quantity,
+				UnitMinor: l.UnitMinor, UnitCode: l.UnitCode, LineTotalMinor: int64(l.Quantity) * l.UnitMinor, CreatedAt: inv.CreatedAt,
+			})
+		}
+	}
 	lines := f.lines[id]
 	taxLines := make([]tax.Line, len(lines))
 	for i, l := range lines {
 		taxLines[i] = tax.Line{NetMinor: l.LineTotalMinor}
 	}
+	inv.BuyerReference, inv.PurchaseOrderRef, inv.ContractRef, inv.PaymentTerms =
+		req.BuyerReference, req.PurchaseOrderRef, req.ContractRef, req.PaymentTerms
 	t := tax.ComputeTotals(taxLines, req.TaxRateBps, req.WithholdingRateBps)
 	for i, l := range lines {
 		l.TaxBps = t.LineTaxBps[i]
@@ -484,7 +525,8 @@ func TestInvoiceHandler_CreateDraftOverridesAndValidation(t *testing.T) {
 	inv := hs.createDraft(`{"gig_id":"` + hs.gigID.String() + `","vat_treatment":"exempt","withholding_rate_bps":1500,
 		"supply_date":"2026-10-04","due_at":"2026-11-01","number_prefix":"gig",
 		"customer":{"legal_name":"Promo SARL","country":"fr","vat_id":"fr 123"}}`)
-	if inv.VATTreatment != tax.Exempt || inv.TaxRateBps != 0 || !strings.Contains(inv.TaxNote, "exempt") {
+	// The harness supplier is German, so choosing "exempt" prints the § 19 UStG wording.
+	if inv.VATTreatment != tax.Exempt || inv.TaxRateBps != 0 || inv.TaxNote != tax.Notes.Note("DE", tax.Exempt) || !strings.Contains(inv.TaxNote, "§ 19 UStG") {
 		t.Fatalf("explicit treatment: %+v", inv)
 	}
 	if inv.WithholdingMinor != 3750 || inv.NetPayableMinor != 21250 || inv.NumberPrefix != "GIG" {

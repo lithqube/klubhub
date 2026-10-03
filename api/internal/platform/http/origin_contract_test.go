@@ -49,7 +49,7 @@ func originRouter(repo *originEmailRepo, sender *originSender) http.Handler {
 	noop := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	email := finance.NewEmailHandler(finance.NewEmailService(repo, sender))
 	mux := finance.NewMux(nil, nil, nil, nil, nil, nil, email, nil)
-	return apphttp.NewRouter(&config.Config{CORSOrigin: "https://dj.example"}, nil, nil, zerolog.Nop(), noop, noop, noop, noop, noop, noop, noop, mux)
+	return apphttp.NewRouter(&config.Config{CORSOrigin: "https://dj.example"}, nil, nil, zerolog.Nop(), noop, noop, noop, noop, noop, noop, noop, mux, noop)
 }
 
 const originEmailBody = `{"kind":"invoice_issued","from_email":"sender@example.test","to_email":"recipient@example.test","subject":"local fixture","body":"no real email"}`

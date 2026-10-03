@@ -8,7 +8,7 @@ import type { Entry } from '../../../types/finance'
 // Narrow the transport mock signature; Nitro's recursive route overloads are not the test contract.
 const transport = () => vi.mocked($fetch as unknown as (url: string, options?: { method?: string; params?: unknown; body?: unknown }) => Promise<unknown>)
 function deferred<T>() { let resolve!: (v: T) => void; let reject!: (e: unknown) => void; const promise = new Promise<T>((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
-const entry: Entry = { id: 'e', kind: 'income', amount_minor: 100, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-01', description: 'Fee', notes: '', gig_id: null, status: 'active', auto_generated: false, source_kind: 'manual', source_id: null, source_amount_minor: null, source_currency: null, source_description: '', created_at: 'T1', updated_at: 'T1', deleted_at: null }
+const entry: Entry = { id: 'e', kind: 'income', amount_minor: 100, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-01', description: 'Fee', notes: '', gig_id: null, status: 'active', auto_generated: false, source_kind: 'manual', source_id: null, source_amount_minor: null, source_currency: null, source_description: '', created_at: 'T1', updated_at: 'T1', deleted_at: null, attachment_count: 0 }
 let w: VueWrapper
 beforeEach(() => { setActivePinia(createPinia()); vi.stubGlobal('useHead', vi.fn()); vi.stubGlobal('$fetch', vi.fn()); document.body.replaceChildren() })
 afterEach(() => { w?.unmount(); vi.unstubAllGlobals(); vi.restoreAllMocks() })

@@ -77,9 +77,13 @@ function patch(p: Partial<TaxFieldsValue>): void {
   emit('update:modelValue', latest)
 }
 
+// The supplier country's legal wording; until it loads (or if it cannot) the
+// built-in generic wording applies.
+void store.fetchTaxNotes()
+
 function onTreatment(e: Event): void {
   const next = (e.target as HTMLSelectElement).value as VatTreatment
-  const changed = applyTreatmentChange(latest, next)
+  const changed = applyTreatmentChange(latest, next, store.taxNotes)
   rateText.value = bpsToPercent(changed.tax_rate_bps)
   patch(changed)
 }
@@ -216,13 +220,13 @@ function err(path: string, local = ''): string {
 
 <style scoped>
 .tax { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.tax-legend { padding: 0; margin-bottom: 8px; }
+.tax-legend { padding: 0; margin-bottom: 8px; color: var(--color-on-surface); font-weight: 700; letter-spacing: .08em; }
 .tax-row { display: flex; gap: 8px; align-items: flex-end; }
 .tax-grow { flex: 1; min-width: 0; }
 .tax-label { display: block; }
 .tax-suggest { height: 40px; min-height: 40px; }
-.tax-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
-.tax-msg { margin: 4px 0 0; font-family: var(--font-data); font-size: 11px; color: var(--color-on-surface-variant); }
+.tax-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.tax-msg { margin: 3px 0 0; font-family: var(--font-data); font-size: 11px; line-height: 1.4; color: var(--color-tertiary); }
 .tax-msg:empty { display: none; }
 .tax-msg-error { color: var(--color-error); }
 .hud-input:disabled { opacity: 1; color: var(--color-tertiary); cursor: not-allowed; }

@@ -43,13 +43,19 @@ function flash(message: string) {
   setTimeout(() => (showToast.value = false), 2000)
 }
 
+// Drafting an invoice is an inline form on the finance page: go there with this gig chosen.
+function startInvoice(gigId: string) {
+  invoiceStore.openCreate(gigId)
+  void navigateTo('/finance')
+}
+
 async function openInvoice() {
   invoiceBusy.value = true
   try {
     const list = await invoiceStore.fetchInvoicesForGig(props.gig.id)
     const active = list.find(isActiveInvoice)
     if (active) void invoiceStore.openDetail(active.id)
-    else invoiceStore.openCreate(props.gig.id)
+    else startInvoice(props.gig.id)
   } catch (e) {
     flash(toFinanceError(e).message)
   } finally {

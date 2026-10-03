@@ -13,7 +13,7 @@ import (
 
 func hostRouter(cors string) http.Handler {
 	noop := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	return apphttp.NewRouter(&config.Config{CORSOrigin: cors}, nil, nil, zerolog.Nop(), noop, noop, noop, noop, noop, noop, noop, noop)
+	return apphttp.NewRouter(&config.Config{CORSOrigin: cors}, nil, nil, zerolog.Nop(), noop, noop, noop, noop, noop, noop, noop, noop, noop)
 }
 
 // DNS rebinding: attacker domain resolves to a private address, so the

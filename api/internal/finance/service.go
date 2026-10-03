@@ -30,6 +30,7 @@ func (s *Service) Get(ctx context.Context) (*BillingProfile, error) {
 // Update validates the request and then writes it under the optimistic
 // concurrency token. The returned profile carries the new UpdatedAt.
 func (s *Service) Update(ctx context.Context, req *UpdateBillingProfileRequest) (*BillingProfile, error) {
+	normalizeBillingRequest(req)
 	if errs := Validate(req); len(errs) > 0 {
 		return nil, errs
 	}

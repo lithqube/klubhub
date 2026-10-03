@@ -78,6 +78,13 @@ const parseFile = async (file: File) => {
     const error = err as { message?: string };
     uiStore.uploadError = error.message ?? 'Failed to parse file';
   } finally {
+    // Always tear the simulation down — without this the setInterval
+    // keeps firing for the lifetime of the component, leaking timers
+    // and (on a subsequent upload) racing against a fresh simulation.
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
     uiStore.uploadLoading = false;
   }
 };

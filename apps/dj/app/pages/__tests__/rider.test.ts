@@ -169,11 +169,11 @@ describe('/rider templates tab', () => {
 
     await find('rider-new-template').trigger('click')
     await flushPromises()
-    await wrapper!.find('[data-testid="rider-template-dialog-name"]').setValue('Festival')
-    await wrapper!.find('[data-testid="rider-template-dialog-submit"]').trigger('click')
+    await wrapper!.find('[data-testid="rider-template-create-name"]').setValue('Festival')
+    await wrapper!.find('[data-testid="rider-template-create-submit"]').trigger('click')
     await flushPromises()
 
-    expect(find('rider-template-dialog').exists()).toBe(false) // closed
+    expect(find('rider-template-create').exists()).toBe(false) // the form is gone
     expect(nameInput().value).toBe('Festival') // and the new template is open for editing
     usedTargets.push({ kind: 'template', id: `created-${n}` })
   })
@@ -185,8 +185,8 @@ describe('/rider templates tab', () => {
 
     await find('rider-new-template').trigger('click')
     await flushPromises()
-    await wrapper!.find('[data-testid="rider-template-dialog-name"]').setValue('Zulu')
-    await wrapper!.find('[data-testid="rider-template-dialog-submit"]').trigger('click')
+    await wrapper!.find('[data-testid="rider-template-create-name"]').setValue('Zulu')
+    await wrapper!.find('[data-testid="rider-template-create-submit"]').trigger('click')
     await flushPromises()
 
     expect(nameInput().value).toBe('Zulu')

@@ -22,11 +22,17 @@ import { defineNuxtConfig } from 'nuxt/config';
 // routes, no proxy. NUXT_APP_BASE_URL overrides the /demo/ base locally.
 const isDemo = process.env.NUXT_DEMO === '1' || process.env.NUXT_DEMO === 'true'
 const demoBaseURL = process.env.NUXT_APP_BASE_URL || '/demo/'
+// NODE_ENV is the compiler mode, not a deployment stage (staging builds
+// also use production). No stage variable existed in this app: deployments
+// opting into staging mocks must explicitly set NUXT_DEPLOYMENT_STAGE=staging.
+// An explicit unknown stage fails closed, even with NODE_ENV=development.
+const deploymentStage = process.env.NUXT_DEPLOYMENT_STAGE ?? process.env.NODE_ENV
+const allowsMocks = deploymentStage === 'development' || deploymentStage === 'staging'
 // App pages prerendered as SPA shells so deep links work on static hosting
 // (/render/* is the screenshot target and stays out of the demo).
 const DEMO_ROUTES = ['/', '/tracklist', '/social', '/epk', '/gigs', '/rider', '/finance']
 
-if (process.env.NODE_ENV === 'production' && !isDemo) {
+if (process.env.NODE_ENV === 'production' && !allowsMocks && !isDemo) {
   if (!process.env.NUXT_PUBLIC_API_BASE) {
     throw new Error(
       'Refusing to build a production Nuxt image without NUXT_PUBLIC_API_BASE. ' +
@@ -47,6 +53,17 @@ export default defineNuxtConfig({
   extends: [fileURLToPath(new URL('../../libs/ui/nuxt.config.ts', import.meta.url))],
   workspaceDir: '../../',
   modules: ['@pinia/nuxt'],
+  hooks: {
+    'app:resolve'(app) {
+      // Exclude the import root BEFORE Nuxt generates its plugin imports.
+      // A runtime `if (public.demo)` still emits the fixture/seed chunk.
+      // Only the separate NUXT_DEMO target may depend on app/demo at all;
+      // NUXT_PUBLIC_DEMO at deployment cannot restore this removed code.
+      if (!isDemo) {
+        app.plugins = app.plugins.filter(plugin => !plugin.src.endsWith('/plugins/00.demo.client.ts'))
+      }
+    },
+  },
   devtools: { enabled: true },
   devServer: {
     host: 'localhost',
@@ -89,7 +106,13 @@ export default defineNuxtConfig({
         },
       }
     : {},
-  nitro: isDemo
+  nitro: {
+    // Nitro scans relative to server/, not the app root. Fail closed for
+    // unknown/test stages and real-API builds, not merely their labels.
+    ignore: !isDemo && (!allowsMocks || process.env.NUXT_PUBLIC_API_BASE)
+      ? ['api/v1/**']
+      : [],
+    ...(isDemo
     ? {
         prerender: { crawlLinks: false, routes: DEMO_ROUTES },
         output: { dir: '.output-demo' },
@@ -106,7 +129,8 @@ export default defineNuxtConfig({
           },
         },
       }
-    : {},
+    : {}),
+  },
   runtimeConfig: {
     public: {
       // Plan B.5: removed icalSecret from public runtime config — anything
@@ -115,16 +139,20 @@ export default defineNuxtConfig({
       // the Nitro handlers under apps/dj/server/api/v1/gigs/.
       // Plan B.9: no other secret-bearing fields are allowed here.
 
-      // Edition features (licensed / SaaS). All off by default so the
-      // self-hosted open-source build and the public demo never show them.
-      // Override per key at runtime, e.g. NUXT_PUBLIC_FEATURES_RA_IMPORT=true.
+      // Switchable features. RA import is part of the open-source build and
+      // on wherever a real API serves it. The browser demo and the
+      // frontend-only mock server have no RA endpoints, so it starts off
+      // there. Turn it off anywhere with NUXT_PUBLIC_FEATURES_RA_IMPORT=false.
       // Registry: app/utils/features.ts · docs/EDITIONS.md
       features: {
-        raImport: false,
+        raImport: !isDemo && !(allowsMocks && !process.env.NUXT_PUBLIC_API_BASE),
       },
       // Browser-only demo build: app/plugins/00.demo.client.ts serves the
       // API in the browser. Only the NUXT_DEMO build sets this.
       demo: isDemo,
+      // Label every dashboard section backed by the existing mock API. A
+      // dev server proxying the real Go API is not a mock-data dashboard.
+      dashboardMockData: isDemo || (allowsMocks && !process.env.NUXT_PUBLIC_API_BASE),
     },
   },
   ...(isDemo

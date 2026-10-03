@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h } from 'vue'
-import EntryFormDialog from '../EntryFormDialog.vue'
+import EntryForm from '../EntryForm.vue'
 import InvoiceDetailSheet from '../InvoiceDetailSheet.vue'
 import InvoiceDraftEditor from '../InvoiceDraftEditor.vue'
 import { useEarningsStore } from '../../../stores/earnings'
@@ -22,7 +22,7 @@ vi.mock('#kui/components/ui/toast/use-toast', () => ({ useToast: () => ({ toast:
 
 type Call = [string, { method?: string; body?: Record<string, unknown> }?]
 const transport = () => vi.mocked($fetch as unknown as (url: string, options?: Call[1]) => Promise<unknown>)
-const entry = (over: Partial<Entry> = {}): Entry => ({ id: 'e', kind: 'income', amount_minor: 100, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-01', description: 'Fee', notes: '', gig_id: null, status: 'active', auto_generated: false, source_kind: 'manual', source_id: null, source_amount_minor: null, source_currency: null, source_description: '', created_at: 'T1', updated_at: 'T1', deleted_at: null, ...over })
+const entry = (over: Partial<Entry> = {}): Entry => ({ id: 'e', kind: 'income', amount_minor: 100, currency: 'EUR', category: 'gig_fee', entry_date: '2026-09-01', description: 'Fee', notes: '', gig_id: null, status: 'active', auto_generated: false, source_kind: 'manual', source_id: null, source_amount_minor: null, source_currency: null, source_description: '', created_at: 'T1', updated_at: 'T1', deleted_at: null, attachment_count: 0, ...over })
 function deferred<T>() { let resolve!: (v: T) => void; let reject!: (e: unknown) => void; const promise = new Promise<T>((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 const slots = defineComponent({ setup(_, { slots }) { return () => h('div', slots.default?.()) } })
 const CONFLICT_COPY = 'Discard your changes and reload to continue.'
@@ -65,13 +65,13 @@ describe('Important 1: Correct toast', () => {
 })
 
 describe('Important 2: conflict copy', () => {
-  it('entry dialog says discard and reload; no retry promise; reload button gets focus', async () => {
+  it('entry form says discard and reload; no retry promise; reload button gets focus', async () => {
     const s = useEarningsStore(); s.entries = [entry()]
-    w = mount(EntryFormDialog, { attachTo: document.body, props: { open: true, kind: 'income', editId: 'e' } }); await flushPromises()
-    // useDialogFocus moves focus to the title on a real ~16ms timer. Let that
-    // settle first, otherwise on a slow runner it fires after the conflict
+    w = mount(EntryForm, { attachTo: document.body, props: { kind: 'income', editId: 'e' } }); await flushPromises()
+    // The composer moves focus to its first field on a real ~16ms timer. Let
+    // that settle first, otherwise on a slow runner it fires after the conflict
     // handler focuses the reload button and steals focus back.
-    await vi.waitFor(() => expect(document.activeElement).toBe(document.querySelector('.ee-title')))
+    await vi.waitFor(() => expect(document.activeElement).toBe(document.querySelector('#ee-amount')))
     transport().mockRejectedValueOnce(new FinanceApiError(409, 'conflict', 'Changed')).mockResolvedValueOnce({ data: entry({ updated_at: 'T2' }) })
     ;(document.querySelector('#ee-description') as HTMLInputElement).value = 'Mine'
     document.querySelector('#ee-description')!.dispatchEvent(new Event('input', { bubbles: true }))
@@ -107,11 +107,11 @@ describe('minors', () => {
     expect(w.find('.draft-status').text()).toContain('Could not reload the invoice.')
   })
 
-  it('a superseded entry read with nothing cached is retried, so the dialog loads instead of staying blank', async () => {
+  it('a superseded entry read with nothing cached is retried, so the form loads instead of staying blank', async () => {
     const s = useEarningsStore()
     const first = deferred<unknown>()
     transport().mockReturnValueOnce(first.promise)
-    w = mount(EntryFormDialog, { attachTo: document.body, props: { open: true, kind: 'income', editId: 'e' } }); await flushPromises()
+    w = mount(EntryForm, { attachTo: document.body, props: { kind: 'income', editId: 'e' } }); await flushPromises()
     const second = deferred<unknown>(); transport().mockReturnValueOnce(second.promise)
     const retry = deferred<unknown>(); transport().mockReturnValueOnce(retry.promise)
     const newer = s.fetchEntry('e')
@@ -126,10 +126,10 @@ describe('minors', () => {
     second.resolve({ data: entry() }); await newer; await flushPromises()
   })
 
-  it('a superseded entry read that stays superseded with nothing cached ends in a real error, not a blank dialog', async () => {
+  it('a superseded entry read that stays superseded with nothing cached ends in a real error, not a blank form', async () => {
     const s = useEarningsStore()
     const first = deferred<unknown>(); transport().mockReturnValueOnce(first.promise)
-    w = mount(EntryFormDialog, { attachTo: document.body, props: { open: true, kind: 'income', editId: 'e' } }); await flushPromises()
+    w = mount(EntryForm, { attachTo: document.body, props: { kind: 'income', editId: 'e' } }); await flushPromises()
     const second = deferred<unknown>(); transport().mockReturnValueOnce(second.promise)
     const retry = deferred<unknown>(); transport().mockReturnValueOnce(retry.promise)
     const newer = s.fetchEntry('e')
@@ -143,7 +143,7 @@ describe('minors', () => {
 
   it('a superseded reload read during discard is not reported as an error', async () => {
     const s = useEarningsStore(); s.entries = [entry()]
-    w = mount(EntryFormDialog, { attachTo: document.body, props: { open: true, kind: 'income', editId: 'e' } }); await flushPromises()
+    w = mount(EntryForm, { attachTo: document.body, props: { kind: 'income', editId: 'e' } }); await flushPromises()
     transport().mockRejectedValueOnce(new FinanceApiError(409, 'conflict', 'Changed')).mockResolvedValueOnce({ data: entry({ updated_at: 'T2' }) })
     document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await flushPromises()
     const first = deferred<unknown>(); transport().mockReturnValueOnce(first.promise)
@@ -157,7 +157,7 @@ describe('minors', () => {
 
   it('a props.kind change while editing keeps unsaved edits', async () => {
     const s = useEarningsStore(); s.entries = [entry()]
-    w = mount(EntryFormDialog, { attachTo: document.body, props: { open: true, kind: 'income', editId: 'e' } }); await flushPromises()
+    w = mount(EntryForm, { attachTo: document.body, props: { kind: 'income', editId: 'e' } }); await flushPromises()
     const el = document.querySelector('#ee-description') as HTMLInputElement
     el.value = 'Unsaved'; el.dispatchEvent(new Event('input', { bubbles: true })); await flushPromises()
     await w.setProps({ kind: 'expense' }); await flushPromises()

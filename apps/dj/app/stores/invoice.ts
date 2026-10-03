@@ -1,10 +1,15 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
+  ArchivedDocument,
+  EInvoiceCheck,
+  EInvoiceFormat,
   FinanceErrorBody,
   FinanceErrorCode,
   Invoice,
   InvoiceCreateInput,
+  InvoiceEmailInput,
+  InvoiceEmailResult,
   InvoiceGigOption,
   InvoiceLine,
   InvoiceListFilter,
@@ -16,6 +21,8 @@ import type {
   Party,
   Payment,
   PaymentCreateInput,
+  TaxNotes,
+  TaxNotesMap,
   TaxSuggestion,
 } from '../types/finance'
 import { isActiveInvoice, matchesFilter, todayIso, LIST_FILTERS } from '../utils/invoiceDisplay'
@@ -40,14 +47,15 @@ export class FinanceApiError extends Error {
     this.status = status
     this.code = code
     this.problems = problems
-    const m = /(?:validation failed:\s*)?([a-z_]+(?:\.[a-z_0-9]+)*):\s/.exec(message)
+    const m = /(?:validation failed:\s*)?([a-z_]+(?:\[\d+\])?(?:\.[a-z_0-9]+(?:\[\d+\])?)*):\s/.exec(message)
     this.field = status === 400 && m ? (m[1] ?? null) : null
   }
 }
 
 const KNOWN_CODES: FinanceErrorCode[] = [
   'validation_failed', 'bad_request', 'not_found', 'conflict', 'bad_state',
-  'not_issuable', 'invoice_not_payable', 'exceeds_balance',
+  'not_issuable', 'not_exportable', 'invoice_not_payable', 'exceeds_balance',
+  'unsupported_media_type', 'too_large', 'limit_reached', 'inactive',
 ]
 
 function readBody(data: unknown): Partial<FinanceErrorBody> {
@@ -71,6 +79,8 @@ export function toFinanceError(e: unknown): FinanceApiError {
   if (status === 503) code = 'unavailable'
   else if ((KNOWN_CODES as string[]).includes(raw)) code = raw as FinanceErrorCode
   else if (status === 0) code = 'network'
+  else if (status === 413) code = 'too_large'
+  else if (status === 415) code = 'unsupported_media_type'
   else if (status === 400) code = 'validation_failed'
   else if (status === 404) code = 'not_found'
   else if (status === 409) code = 'conflict'
@@ -80,6 +90,21 @@ export function toFinanceError(e: unknown): FinanceApiError {
       ? DISABLED_MESSAGE
       : body.message || (status === 0 ? 'Could not reach the server.' : err.message || 'Request failed.')
   return new FinanceApiError(status, code, message, Array.isArray(body.problems) ? body.problems : [])
+}
+
+/** GET endpoint returning the invoice PDF as an attachment. Link to it; never fetch it into memory. */
+export function invoicePdfUrl(id: string): string {
+  return `${BASE}/invoices/${encodeURIComponent(id)}/pdf`
+}
+
+/** GET endpoint returning a validated e-invoice as an attachment. Link to it; never fetch it into memory. */
+export function invoiceEInvoiceUrl(id: string, format: EInvoiceFormat): string {
+  return `${BASE}/invoices/${encodeURIComponent(id)}/einvoice?format=${encodeURIComponent(format)}`
+}
+
+/** GET endpoint returning an archived document as an attachment. Link to it; never fetch it into memory. */
+export function documentDownloadUrl(id: string): string {
+  return `${BASE}/documents/${encodeURIComponent(id)}/download`
 }
 
 function unwrap<T>(res: unknown): T {
@@ -124,6 +149,8 @@ export const useInvoiceStore = defineStore('invoice', () => {
   // point: the finance list, the gig form strip and the gig actions. ──
   const createOpen = ref(false)
   const createPresetGigId = ref<string | null>(null)
+  /** Bumped on every request for the composer so an already open one pulls focus back. */
+  const createSeq = ref(0)
   const detailOpen = ref(false)
   const detailId = ref<string | null>(null)
 
@@ -248,6 +275,56 @@ export const useInvoiceStore = defineStore('invoice', () => {
     }
   }
 
+  /**
+   * Asks whether an invoice can be exported as `format`. Resolves to null when
+   * this server has no e-invoice generator (503). That is deliberately not
+   * `request()`: a missing generator must not mark all of finance disabled.
+   */
+  async function fetchEInvoiceCheck(id: string, format: EInvoiceFormat): Promise<EInvoiceCheck | null> {
+    try {
+      const res = await $fetch<unknown>(`${BASE}/invoices/${encodeURIComponent(id)}/einvoice-check`, { query: { format } })
+      const chk = unwrap<EInvoiceCheck>(res)
+      return { format, ready: !!chk?.ready, problems: chk?.problems ?? [] }
+    } catch (e) {
+      const err = toFinanceError(e)
+      if (err.code === 'unavailable') return null
+      throw err
+    }
+  }
+
+  /**
+   * Lists what the server archived for an invoice. Resolves to null when this
+   * server keeps no archive (503); like the e-invoice calls it bypasses
+   * `request()` so a missing archive never marks all of finance disabled.
+   */
+  async function fetchInvoiceDocuments(invoiceId: string): Promise<ArchivedDocument[] | null> {
+    try {
+      const res = await $fetch<unknown>(`${BASE}/documents`, { query: { owner_type: 'invoice', owner_id: invoiceId } })
+      return unwrap<ArchivedDocument[] | null>(res) ?? []
+    } catch (e) {
+      const err = toFinanceError(e)
+      if (err.code === 'unavailable') return null
+      throw err
+    }
+  }
+
+  /**
+   * Emails the issued invoice to its customer with its PDF (and e-invoice XML)
+   * attached. Resolves to null when this server cannot send mail (503), and
+   * deliberately not through `request()` for the same reason as the check.
+   * Throws FinanceApiError for everything else, with `problems` on 422.
+   */
+  async function sendInvoiceEmail(id: string, input: InvoiceEmailInput): Promise<InvoiceEmailResult | null> {
+    try {
+      const res = await $fetch<unknown>(`${BASE}/invoices/${encodeURIComponent(id)}/email`, { method: 'POST', body: input })
+      return unwrap<InvoiceEmailResult>(res)
+    } catch (e) {
+      const err = toFinanceError(e)
+      if (err.code === 'unavailable') return null
+      throw err
+    }
+  }
+
   function acceptsPayments(inv: Invoice): boolean {
     return inv.kind === 'invoice' && inv.status !== 'draft' && inv.status !== 'cancelled'
   }
@@ -337,6 +414,22 @@ export const useInvoiceStore = defineStore('invoice', () => {
     return unwrap<TaxSuggestion>(res)
   }
 
+  // ── Legal-note wording for the supplier's country ──
+  // Loaded once and shared; the draft editor swaps the note itself when the
+  // user changes the treatment. A failure is silent: the built-in wording in
+  // utils/vatTreatment.ts applies, and the next editor tries again.
+  const taxNotes = ref<TaxNotesMap | null>(null)
+  let taxNotesRequest: Promise<void> | null = null
+
+  function fetchTaxNotes(): Promise<void> {
+    if (taxNotes.value) return Promise.resolve()
+    taxNotesRequest ??= request<unknown>(`${BASE}/invoices/tax-notes`)
+      .then((res) => { taxNotes.value = unwrap<TaxNotes>(res).notes })
+      .catch(() => { /* keep the built-in defaults */ })
+      .finally(() => { taxNotesRequest = null })
+    return taxNotesRequest
+  }
+
   // ── Writes (no optimistic updates: state changes only from responses) ──
 
   /** Shared 409/422 handling: refetch and surface the reason, then rethrow. */
@@ -380,10 +473,23 @@ export const useInvoiceStore = defineStore('invoice', () => {
       if (!isCurrent()) { upsert(inv, false); return inv }
       upsert(inv)
       notice.value = null
+      // The PUT answers with the invoice only; a replaced line list has to
+      // be read back before the editor reseeds from it.
+      if (input.lines) await refreshLines(id, isCurrent)
       if (inv.status === 'draft') await fetchIssueCheck(id, isCurrent).catch(() => undefined)
       return inv
     } catch (e) {
       return handleWriteError(e, id, isCurrent)
+    }
+  }
+
+  /** Re-reads just the lines of the shown invoice (after a PUT that replaced them). */
+  async function refreshLines(id: string, isCurrent: () => boolean): Promise<void> {
+    try {
+      const res = await request<{ data: Invoice; lines?: InvoiceLine[] | null }>(`${BASE}/invoices/${id}`, {}, isCurrent)
+      if (isCurrent() && current.value?.id === id) lines.value = res.lines ?? []
+    } catch {
+      if (isCurrent()) notice.value = 'Saved, but the line items could not be reloaded. Reopen the invoice to see them.'
     }
   }
 
@@ -571,6 +677,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
   function openCreate(gigId: string | null = null): void {
     createPresetGigId.value = gigId
     createOpen.value = true
+    createSeq.value++
   }
 
   function setCreateOpen(open: boolean): void {
@@ -598,12 +705,12 @@ export const useInvoiceStore = defineStore('invoice', () => {
     invoices, listLoading, listLoaded, listError, disabled, filter, summaries,
     current, lines, payments, currentLoading, currentError, issueCheck, issueCheckLoading, notice,
     gigOptions, gigsLoading, gigsLoaded, gigsError, gigInvoices,
-    createOpen, createPresetGigId, detailOpen, detailId,
+    createOpen, createPresetGigId, createSeq, detailOpen, detailId,
     // getters
     filteredInvoices, filterCounts, activeInvoiceByGig, gigById,
     // actions
-    fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck,
-    fetchGigOptions, suggestTax, closeCurrent,
+    fetchInvoices, fetchSummaries, fetchInvoicesForGig, fetchInvoice, fetchPayments, fetchIssueCheck, fetchEInvoiceCheck, sendInvoiceEmail, fetchInvoiceDocuments,
+    fetchGigOptions, suggestTax, taxNotes, fetchTaxNotes, closeCurrent,
     createInvoice, updateInvoice, issueInvoice, cancelInvoice, markPaid,
     issueCreditNote, correctInvoice, createPayment, markPaymentReceived,
     setFilter, clearNotice, openCreate, setCreateOpen, openDetail, setDetailOpen,

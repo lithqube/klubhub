@@ -92,22 +92,37 @@ test('separates future products and SaaS from available source', async () => {
     assert.ok(html.includes(name));
   }
   assert.match(html, /No hosted service is available from this site today/);
-  assert.match(html, /pricing, and launch date have not been announced/);
+  assert.match(html, /Pricing and launch dates have not been announced/);
 });
 
 test('lists the shipped KlubHub DJ modules and the editions', async () => {
   const html = await read('index.html');
   for (const feature of [
     'Tracklist artwork', 'Social scheduling', 'Press kits',
-    'Gig tracking', 'Invoices and agreements',
+    'Gig tracking', 'Invoices and agreements', 'E-invoices',
+    'Expenses and receipts',
   ]) {
     assert.ok(html.includes(feature), feature);
   }
-  for (const edition of ['SELF-HOSTED', 'COMMERCIAL LICENSE', 'MANAGED SAAS']) {
+  for (const edition of ['SELF-HOSTED', 'MANAGED CLOUD', 'HOSTED PAGES']) {
     assert.ok(html.includes(edition), edition);
   }
+  // The open-core plan has no separate commercial licence for the MIT code.
+  assert.doesNotMatch(html, /COMMERCIAL LICENSE|DJ PRO/);
+  // The business model is stated: own data and legal duties are free.
+  assert.match(html, /your own data, and anything the law asks of you[^.]*is free/);
   // Resident Advisor integration is intentionally not marketed for now.
   assert.doesNotMatch(html, /Resident Advisor|\bRA\b|ra\.co/);
+});
+
+// Prices in the business plan are hypotheses that no customer has been asked
+// about. The page may say what is free and what will be hosted, but it must not
+// quote a price, a plan name with a price, or a billing period.
+test('promises no prices', async () => {
+  const html = await read('index.html');
+  assert.doesNotMatch(html, /[€$£]\s?\d/);
+  assert.doesNotMatch(html, /\d\s?(€|EUR|USD|\$)/);
+  assert.doesNotMatch(html, /per month|\/\s?month|per year|\/\s?year|free trial/i);
 });
 
 test('newsletter form is wired to Plunk public-key track endpoint', async () => {

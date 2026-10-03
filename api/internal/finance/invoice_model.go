@@ -93,34 +93,39 @@ func (p Party) TaxCustomer() tax.Customer {
 // units (cents etc.) stored as int64 to avoid floating-point drift. JSON
 // names are the wire contract of docs/INVOICING.md §2.
 type Invoice struct {
-	ID                  uuid.UUID          `json:"id"`
-	Kind                InvoiceKind        `json:"kind"`
-	GigID               uuid.UUID          `json:"gig_id"`
-	CreditsInvoiceID    *uuid.UUID         `json:"credits_invoice_id"`
-	ReplacedByInvoiceID *uuid.UUID         `json:"replaced_by_invoice_id"`
-	InvoiceNumber       *string            `json:"invoice_number"` // nil while draft
-	NumberPrefix        string             `json:"number_prefix"`
-	NumberSeq           *int64             `json:"number_seq"`
-	Currency            string             `json:"currency"`
-	Status              InvoiceStatus      `json:"status"`
-	SupplyDate          *string            `json:"supply_date"` // YYYY-MM-DD
-	IssuedAt            *time.Time         `json:"issued_at"`
-	DueAt               *time.Time         `json:"due_at"`
-	PaidAt              *time.Time         `json:"paid_at"`
-	PaymentRef          string             `json:"payment_ref"`
-	InternalNotes       string             `json:"internal_notes"`
-	Customer            Party              `json:"customer"`
-	BillingProfile      json.RawMessage    `json:"billing_profile"` // supplier snapshot, set at issue
-	VATTreatment        tax.Treatment      `json:"vat_treatment"`
-	TaxRateBps          int64              `json:"tax_rate_bps"`
-	TaxNote             string             `json:"tax_note"`
-	SubtotalMinor       int64              `json:"subtotal_minor"`
-	TaxMinor            int64              `json:"tax_minor"`
-	TotalMinor          int64              `json:"total_minor"`
-	WithholdingRateBps  int64              `json:"withholding_rate_bps"`
-	WithholdingMinor    int64              `json:"withholding_minor"`
-	NetPayableMinor     int64              `json:"net_payable_minor"`
-	TaxBreakdown        []tax.BreakdownRow `json:"tax_breakdown"`
+	ID                  uuid.UUID     `json:"id"`
+	Kind                InvoiceKind   `json:"kind"`
+	GigID               uuid.UUID     `json:"gig_id"`
+	CreditsInvoiceID    *uuid.UUID    `json:"credits_invoice_id"`
+	ReplacedByInvoiceID *uuid.UUID    `json:"replaced_by_invoice_id"`
+	InvoiceNumber       *string       `json:"invoice_number"` // nil while draft
+	NumberPrefix        string        `json:"number_prefix"`
+	NumberSeq           *int64        `json:"number_seq"`
+	Currency            string        `json:"currency"`
+	Status              InvoiceStatus `json:"status"`
+	SupplyDate          *string       `json:"supply_date"` // YYYY-MM-DD
+	IssuedAt            *time.Time    `json:"issued_at"`
+	DueAt               *time.Time    `json:"due_at"`
+	PaidAt              *time.Time    `json:"paid_at"`
+	PaymentRef          string        `json:"payment_ref"`
+	InternalNotes       string        `json:"internal_notes"`
+	// EN 16931 references and terms (BT-10, BT-13, BT-12, BT-20); all optional.
+	BuyerReference     string             `json:"buyer_reference"`
+	PurchaseOrderRef   string             `json:"purchase_order_ref"`
+	ContractRef        string             `json:"contract_ref"`
+	PaymentTerms       string             `json:"payment_terms"`
+	Customer           Party              `json:"customer"`
+	BillingProfile     json.RawMessage    `json:"billing_profile"` // supplier snapshot, set at issue
+	VATTreatment       tax.Treatment      `json:"vat_treatment"`
+	TaxRateBps         int64              `json:"tax_rate_bps"`
+	TaxNote            string             `json:"tax_note"`
+	SubtotalMinor      int64              `json:"subtotal_minor"`
+	TaxMinor           int64              `json:"tax_minor"`
+	TotalMinor         int64              `json:"total_minor"`
+	WithholdingRateBps int64              `json:"withholding_rate_bps"`
+	WithholdingMinor   int64              `json:"withholding_minor"`
+	NetPayableMinor    int64              `json:"net_payable_minor"`
+	TaxBreakdown       []tax.BreakdownRow `json:"tax_breakdown"`
 	// Computed on read from payments; 0 for drafts and credit notes.
 	ReceivedMinor    int64     `json:"received_minor"`
 	PendingMinor     int64     `json:"pending_minor"`
@@ -165,6 +170,7 @@ type InvoiceLine struct {
 	Description    string    `json:"description"          db:"description"`
 	Quantity       int       `json:"quantity"             db:"quantity"`
 	UnitMinor      int64     `json:"unit_minor"           db:"unit_minor"`
+	UnitCode       string    `json:"unit_code"            db:"unit_code"` // UN/ECE Rec. 20 (BT-130)
 	TaxBps         int64     `json:"tax_bps"              db:"tax_bps"`
 	LineTotalMinor int64     `json:"line_total_minor"     db:"line_total_minor"`
 	CreatedAt      time.Time `json:"created_at"           db:"created_at"`
@@ -296,7 +302,25 @@ type UpdateInvoiceRequest struct {
 	DueAt              *FlexTime     `json:"due_at"`
 	NumberPrefix       string        `json:"number_prefix"`
 	InternalNotes      string        `json:"internal_notes"`
-	UpdatedAt          time.Time     `json:"updated_at"`
+	BuyerReference     string        `json:"buyer_reference"`
+	PurchaseOrderRef   string        `json:"purchase_order_ref"`
+	ContractRef        string        `json:"contract_ref"`
+	PaymentTerms       string        `json:"payment_terms"`
+	// Lines, when present, replaces every line of the draft; omitted (null)
+	// keeps the existing lines so older clients keep working. An empty list
+	// is rejected: an invoice needs at least one line.
+	Lines     []InvoiceLineInput `json:"lines"`
+	UpdatedAt time.Time          `json:"updated_at"`
+}
+
+// InvoiceLineInput is one line of a PUT /invoices/{id} replacement. The line
+// total (quantity × unit) and tax rate are derived, never sent.
+type InvoiceLineInput struct {
+	Description string `json:"description"`
+	Quantity    int    `json:"quantity"`
+	UnitMinor   int64  `json:"unit_minor"`
+	// UnitCode defaults to C62 ("piece") when empty.
+	UnitCode string `json:"unit_code"`
 }
 
 // IssueInvoiceRequest is the body of POST /invoices/{id}/issue.
@@ -344,6 +368,7 @@ type DraftLine struct {
 	Description string
 	Quantity    int
 	UnitMinor   int64
+	UnitCode    string // "" means DefaultUnitCode
 }
 
 // DraftInput is a fully resolved, validated draft handed to the repository.

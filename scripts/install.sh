@@ -76,7 +76,7 @@ DJ configuration
   --s3-port PORT           storage (S3) port (default: 39000)
   --s3-url URL             storage URL browsers use for images/downloads
                            (default: http://127.0.0.1:<s3-port>)
-  --ra-import              enable Resident Advisor import
+  --no-ra-import           turn Resident Advisor import off (it is on by default)
   --dj-env KEY=VALUE       any other docker-compose.prod.yml variable (repeatable),
                            e.g. SPOTIFY_CLIENT_ID=… LOG_LEVEL=debug
 
@@ -187,7 +187,8 @@ parse_args() {
       --dj-url) need_val "$@"; normalize_origin "$1" "$2"; set_var dj "CORS_ORIGIN=$NORM_ORIGIN"; shift ;;
       --s3-port) need_val "$@"; valid_port "$1" "$2"; set_var dj "S3_PORT=$2"; shift ;;
       --s3-url) need_val "$@"; valid_url "$1" "$2"; set_var dj "S3_PUBLIC_ENDPOINT=$2"; shift ;;
-      --ra-import) set_var dj "FEATURE_RA_IMPORT=true" ;;
+      --ra-import) set_var dj "FEATURE_RA_IMPORT=true" ;; # on by default; kept so old command lines still work
+      --no-ra-import) set_var dj "FEATURE_RA_IMPORT=false" ;;
       --dj-env) need_val "$@"; set_var dj "$2"; shift ;;
       --promoter-port) need_val "$@"; valid_port "$1" "$2"; set_var promoter "PROMOTER_HOST_PORT=$2"; shift ;;
       --origin) need_val "$@"; valid_url "$1" "$2"; ORIGIN="$2"; shift ;;

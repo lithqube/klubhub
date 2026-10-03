@@ -35,7 +35,7 @@ func raTestRouter(t *testing.T, features config.Features) (http.Handler, *int) {
 		calls++
 		return fakeRAClient{}
 	}
-	gigHandler := gig.NewHandler(nil, "test-secret")
+	gigHandler := gig.NewHandler(nil, "test-secret", nil)
 	loader := wireRAImport(features, newClient, gigHandler, nil, nil, nil)
 	epkHandler := epk.NewHandler(nil, loader)
 

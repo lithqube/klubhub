@@ -18,7 +18,7 @@ import RiderAttachmentCard from '../components/rider/RiderAttachmentCard.vue'
 import RiderAttachmentEditor from '../components/rider/RiderAttachmentEditor.vue'
 import RiderAttachmentList from '../components/rider/RiderAttachmentList.vue'
 import RiderPageHeader from '../components/rider/RiderPageHeader.vue'
-import RiderTemplateDialog from '../components/rider/RiderTemplateDialog.vue'
+import RiderTemplateCreateForm from '../components/rider/RiderTemplateCreateForm.vue'
 import RiderTemplateEditor from '../components/rider/RiderTemplateEditor.vue'
 import RiderTemplateList from '../components/rider/RiderTemplateList.vue'
 
@@ -32,7 +32,19 @@ const route = useRoute()
 
 const tab = ref<'templates' | 'attachments'>('templates')
 const selectedTemplateId = ref<string | null>(null)
-const showCreateDialog = ref(false)
+// A new template is composed inline in the templates pane, in place of the editor.
+const creatingTemplate = ref(false)
+const createFocusSeq = ref(0)
+function startTemplate(): void {
+  creatingTemplate.value = true
+  createFocusSeq.value++
+}
+// Picking another template, or leaving the tab, walks away from the draft.
+function selectTemplate(id: string): void {
+  creatingTemplate.value = false
+  selectedTemplateId.value = id
+}
+watch(tab, (t) => { if (t !== 'templates') creatingTemplate.value = false })
 
 // ── templates ──
 const templatesState = ref<LoadState>('loading')
@@ -186,7 +198,8 @@ onBeforeUnmount(() => {
               class="btn-hud btn-hud-cta"
               style="width:100%;"
               data-testid="rider-new-template"
-              @click="showCreateDialog = true"
+              :aria-expanded="creatingTemplate"
+              @click="startTemplate"
             >+ NEW TEMPLATE</button>
             <div class="rider-sidebar-list">
               <p v-if="templatesState === 'loading'" class="rider-note" role="status" data-testid="rider-templates-loading">LOADING TEMPLATES…</p>
@@ -198,12 +211,18 @@ onBeforeUnmount(() => {
                 v-else
                 :templates="store.templates.map(t => ({ id: t.id, name: t.name }))"
                 :selected-id="selectedTemplateId"
-                @select="(id: string) => (selectedTemplateId = id)"
+                @select="selectTemplate"
               />
             </div>
           </div>
           <div class="rider-main">
-            <RiderTemplateEditor v-if="templatesState === 'ready' && selectedTemplate" :key="selectedTemplate.id" :template="selectedTemplate" />
+            <RiderTemplateCreateForm
+              v-if="creatingTemplate"
+              :focus-seq="createFocusSeq"
+              @close="creatingTemplate = false"
+              @created="onTemplateCreated"
+            />
+            <RiderTemplateEditor v-else-if="templatesState === 'ready' && selectedTemplate" :key="selectedTemplate.id" :template="selectedTemplate" />
             <p v-else-if="templatesState === 'ready'" class="rider-note">
               {{ store.templates.length === 0 ? 'Create a template to reuse the same rider on many gigs.' : 'Select a template or create a new one.' }}
             </p>
@@ -216,12 +235,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </template>
-
-    <RiderTemplateDialog
-      :open="showCreateDialog"
-      @close="showCreateDialog = false"
-      @created="onTemplateCreated"
-    />
   </div>
 </template>
 

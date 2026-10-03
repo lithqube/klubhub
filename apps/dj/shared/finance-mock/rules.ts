@@ -1,7 +1,7 @@
 // Pure invoicing rules (docs/INVOICING.md §3–§4.1) shared by the Nitro dev
 // mocks (server/api/v1/finance) and the browser demo (app/demo). No I/O.
 
-import type { Party, TaxSuggestion, VatTreatment } from '../../app/types/finance'
+import type { BillingProfile, Party, TaxSuggestion, VatTreatment } from '../../app/types/finance'
 
 /** Billing profile shape used by the mocks. */
 export type Supplier = Party & { vat_exempt_small_business: boolean; default_vat_rate_bps: number }
@@ -40,10 +40,30 @@ export function isTreatment(v: unknown): v is VatTreatment {
   return typeof v === 'string' && (TREATMENTS as string[]).includes(v)
 }
 
-export const NOTES: Partial<Record<VatTreatment, string>> = {
+type Notes = Partial<Record<VatTreatment, string>>
+
+// Legal wording per supplier country: a mirror of api/internal/finance/tax
+// (notes.go for the generic defaults, notes_de.go for Germany). Keep the text
+// identical to the Go registry; the DE entries are bilingual "German / English".
+const GENERIC_NOTES: Notes = {
   reverse_charge: 'Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC).',
   exempt: 'VAT exempt: small business scheme.',
   outside_scope: 'Outside the scope of EU VAT: place of supply outside the EU.',
+}
+
+const DE_NOTES: Notes = {
+  exempt: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. / '
+    + 'VAT is not charged under § 19 UStG (German small-business scheme).',
+  reverse_charge: 'Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge): '
+    + 'Die Umsatzsteuer ist vom Leistungsempfänger zu entrichten (Art. 196 MwStSystRL). / '
+    + 'Reverse charge: VAT to be accounted for by the recipient (Art. 196 Directive 2006/112/EC).',
+  outside_scope: 'Nicht steuerbare sonstige Leistung, Leistungsort außerhalb Deutschlands (§ 3a Abs. 2 UStG). / '
+    + 'Not subject to German VAT: the place of supply is outside Germany (§ 3a(2) UStG).',
+}
+
+/** The legal wording a supplier in `country` prints per treatment (those that carry one). */
+export function notesFor(country: string): Notes {
+  return country.trim().toUpperCase() === 'DE' ? { ...GENERIC_NOTES, ...DE_NOTES } : { ...GENERIC_NOTES }
 }
 
 export function party(p: Partial<Party>): Party {
@@ -74,8 +94,9 @@ export const DEFAULT_SUPPLIER: Supplier = {
 export function suggest(supplier: Supplier, customer: Pick<Party, 'country' | 'vat_id' | 'is_business'>): TaxSuggestion {
   const sc = supplier.country.toUpperCase()
   const cc = (customer.country || '').toUpperCase()
+  const notes = notesFor(sc)
   const out = (t: VatTreatment, rate: number, reason: string): TaxSuggestion => ({
-    vat_treatment: t, tax_rate_bps: rate, tax_note: NOTES[t] ?? '', reason,
+    vat_treatment: t, tax_rate_bps: rate, tax_note: notes[t] ?? '', reason,
   })
   if (EU.has(sc)) {
     if (supplier.vat_exempt_small_business) return out('exempt', 0, 'You use the small-business VAT exemption.')
@@ -145,4 +166,66 @@ export function addDays(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().slice(0, 10)
+}
+
+// ── EN 16931 data model (billing profile bank details, invoice lines) ──
+
+/** IBAN length per country, as in api/internal/finance/validation.go. */
+const IBAN_LENGTHS: Record<string, number> = {
+  AD: 24, AE: 23, AL: 28, AT: 20, AZ: 28, BA: 20, BE: 16, BG: 22, BH: 22, BR: 29,
+  CH: 21, CY: 28, CZ: 24, DE: 22, DK: 18, EE: 20, ES: 24, FI: 18, FR: 27, GB: 22,
+  GE: 22, GI: 23, GR: 27, HR: 21, HU: 28, IE: 22, IL: 23, IS: 26, IT: 27, JO: 30,
+  KW: 30, LB: 28, LI: 21, LT: 20, LU: 20, LV: 21, MC: 27, MD: 24, ME: 22, MK: 19,
+  MT: 31, NL: 18, NO: 15, PL: 28, PT: 25, QA: 29, RO: 24, RS: 22, SA: 24, SE: 24,
+  SI: 19, SK: 24, SM: 27, TR: 26, UA: 29, VA: 22, XK: 20,
+}
+
+/** Removes spaces and tabs and upper-cases (IBAN and BIC storage form). */
+export function compactUpper(v: unknown): string {
+  return String(v ?? '').trim().replace(/[ \t]/g, '').toUpperCase()
+}
+
+/** Known country, right length, ISO 7064 mod-97 check; `s` must already be compact + upper-case. */
+export function validIban(s: string): boolean {
+  if (s.length < 5 || IBAN_LENGTHS[s.slice(0, 2)] !== s.length) return false
+  let rem = 0
+  for (const ch of s.slice(4) + s.slice(0, 4)) {
+    if (ch >= '0' && ch <= '9') rem = (rem * 10 + Number(ch)) % 97
+    else if (ch >= 'A' && ch <= 'Z') rem = (rem * 100 + (ch.charCodeAt(0) - 55)) % 97
+    else return false
+  }
+  return rem === 1
+}
+
+export const BIC_PATTERN = /^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/
+
+/** UN/ECE Rec. 20 units allowed on invoice lines. */
+export const UNIT_CODES = ['C62', 'HUR', 'DAY', 'LS', 'KMT']
+
+// Fictional billing profile (the supplier above, as the profile endpoint shows it).
+export const DEFAULT_BILLING_PROFILE: BillingProfile = {
+  id: '00000000-0000-4000-8000-0000000000b1',
+  legal_name: 'Sam Example',
+  trading_name: 'Sample DJ Services',
+  entity_kind: 'sole_trader',
+  tax_id: 'DE000000000',
+  tax_id_kind: 'vat',
+  contact_email: 'bookings@example.com',
+  contact_phone: '',
+  address_line1: '1 Example Street',
+  address_line2: '',
+  address_city: 'Berlin',
+  address_region: '',
+  address_postal: '10000',
+  address_country: 'DE',
+  jurisdiction: 'DE',
+  payment_instructions: '',
+  default_currency: 'EUR',
+  tax_number: '',
+  iban: '',
+  bic: '',
+  vat_exempt_small_business: false,
+  default_vat_rate_bps: 1900,
+  updated_at: '2026-01-01T00:00:00Z',
+  created_at: '2026-01-01T00:00:00Z',
 }

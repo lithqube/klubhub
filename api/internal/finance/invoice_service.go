@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/klubhub/dj/api/internal/einvoice"
 	"github.com/klubhub/dj/api/internal/finance/tax"
 )
 
@@ -43,6 +44,8 @@ type InvoiceService struct {
 	repo        InvoiceRepositoryIface
 	billingSvc  BillingServiceIface
 	gigProvider GigFeeProvider
+	exporter    *einvoice.Exporter // nil: e-invoice export is unavailable (einvoice.go)
+	archive     DocumentArchive    // nil: nothing is archived at issue (invoice_archive.go)
 }
 
 // NewInvoiceService returns an InvoiceService.
@@ -160,6 +163,51 @@ func (s *InvoiceService) GetByID(ctx context.Context, id uuid.UUID) (*Invoice, [
 	return s.repo.GetByID(ctx, id)
 }
 
+// pdfData gathers everything RenderInvoice prints. Issued documents carry
+// their own supplier snapshot, so the live billing profile is loaded only
+// for drafts. A credit note also needs the number of the invoice it reverses.
+func (s *InvoiceService) pdfData(ctx context.Context, id uuid.UUID) (*InvoicePDFData, error) {
+	inv, lines, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	data := &InvoicePDFData{Invoice: inv, Lines: lines}
+
+	if inv.Kind == InvoiceKindCreditNote && inv.CreditsInvoiceID != nil {
+		orig, _, err := s.repo.GetByID(ctx, *inv.CreditsInvoiceID)
+		switch {
+		case err == nil:
+			data.CreditedInvoiceNumber = orig.Number()
+			data.CreditedIssueDate = dateString(orig.IssuedAt)
+		case !errors.Is(err, ErrInvoiceNotFound):
+			return nil, err
+		}
+	}
+	// Same test the renderer applies: an empty `{}` is not a snapshot.
+	var snap BillingProfileSnapshot
+	if len(inv.BillingProfile) == 0 || snap.FromJSON(inv.BillingProfile) != nil || snap.LegalName == "" {
+		if data.BillingProfile, err = s.profile(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return data, nil
+}
+
+// PDF renders the invoice or credit note as a PDF. It returns the bytes and
+// the suggested filename. The document is rendered on demand from the stored
+// invoice; nothing is persisted.
+func (s *InvoiceService) PDF(ctx context.Context, id uuid.UUID) ([]byte, string, error) {
+	data, err := s.pdfData(ctx, id)
+	if err != nil {
+		return nil, "", err
+	}
+	b, name, _, err := NewPDFRenderer().RenderInvoice(ctx, data)
+	if err != nil {
+		return nil, "", err
+	}
+	return b, name, nil
+}
+
 // List returns invoices matching the filter.
 func (s *InvoiceService) List(ctx context.Context, filter InvoiceFilter) ([]*Invoice, error) {
 	return s.repo.List(ctx, filter)
@@ -183,6 +231,28 @@ func (s *InvoiceService) TaxSuggestion(ctx context.Context, customer Party) (tax
 	}
 	normalizeParty(&customer)
 	return tax.Suggest(supplierFromProfile(profile), customer.TaxCustomer()), nil
+}
+
+// TaxNotes is the legal wording the billing profile's country prints for each
+// treatment that has one. The UI fetches it once and swaps the draft's note
+// itself when the user changes the treatment.
+type TaxNotes struct {
+	Country string                   `json:"country"`
+	Notes   map[tax.Treatment]string `json:"notes"`
+}
+
+// TaxNotes returns the notes for the supplier country (the billing profile's
+// country, ” when none is set: the generic wording then applies).
+func (s *InvoiceService) TaxNotes(ctx context.Context) (*TaxNotes, error) {
+	profile, err := s.profile(ctx)
+	if err != nil {
+		return nil, err
+	}
+	country := ""
+	if profile != nil {
+		country = strings.ToUpper(strings.TrimSpace(profile.AddressCountry))
+	}
+	return &TaxNotes{Country: country, Notes: tax.NotesFor(country)}, nil
 }
 
 // problemsFor runs tax.ValidateForIssue for an invoice. It is pure so it
@@ -238,9 +308,14 @@ func (s *InvoiceService) Issue(ctx context.Context, id uuid.UUID, req IssueInvoi
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.Issue(ctx, id, req, profile, func(inv *Invoice, gigCurrency string) []tax.Problem {
+	inv, err := s.repo.Issue(ctx, id, req, profile, func(inv *Invoice, gigCurrency string) []tax.Problem {
 		return problemsFor(inv, profile, gigCurrency)
 	})
+	if err != nil {
+		return nil, err
+	}
+	s.archiveIssued(ctx, inv.ID)
+	return inv, nil
 }
 
 // Pay transitions issued → paid.
@@ -281,7 +356,14 @@ func (s *InvoiceService) creditNote(ctx context.Context, id uuid.UUID, req Credi
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.CreditNote(ctx, id, req, profile, correct)
+	res, err := s.repo.CreditNote(ctx, id, req, profile, correct)
+	if err != nil {
+		return nil, err
+	}
+	if res != nil && res.CreditNote != nil {
+		s.archiveIssued(ctx, res.CreditNote.ID)
+	}
+	return res, nil
 }
 
 // NextNumber previews the next number.

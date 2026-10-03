@@ -268,6 +268,49 @@ The pattern is the same as in Germany:
 - **Spike task:** check GOBL's per-country regimes (it already organises tax rules by country) as a source for the module boundaries, even if we keep our own tax engine.
 - **Next modules:** UK (VAT, no mandate yet), ES (Verifactu 2027), IT (SdI), FR (2026/27 reform). Add them when there are users there.
 
+## 8. Spike results (2026-10-02)
+
+**Setup:** a synthetic German B2B invoice (19% VAT, two lines, umlauts in a line description) rendered with our real fpdf `RenderInvoice`. It was sent to `gflohr/e-invoice-eu:slim` (`sha256:c5d7f966…9664`, 100 MB, bound to 127.0.0.1) and checked with KoSIT validator 1.6.3 + XRechnung config 2026-08-31 (XRechnung 3.0.2), veraPDF REST 1.30.2, and `speedata/einvoice`. Throwaway harness only; nothing was committed.
+
+| Check | Result |
+|---|---|
+| `Factur-X-EN16931` and `Factur-X-XRechnung` hybrid PDF from our fpdf output | **veraPDF: PDF/A-3b compliant, 0 failed rules.** The plain fpdf PDF fails PDF/A-1b with 8 rules, so the check discriminates. The decision gate is **passed**: no Ghostscript fallback or `pdfa-lab` is needed |
+| Embedded XML extracted from the PDF (`factur-x.xml` / `xrechnung.xml`) | KoSIT: schema + schematron accepted, EN 16931 and XRechnung scenarios |
+| `XRECHNUNG-CII`, `XRECHNUNG-UBL` | KoSIT accepted (after the fixes below) |
+| Credit note (type 381) in CII and UBL | KoSIT accepted. The §1 "CII has no credit notes" concern doesn't apply to output validity |
+| Reverse charge (`AE` + `VATEX-EU-AE`, FR buyer) | KoSIT accepted |
+| §19 exempt (`E`, Steuernummer only) | Accepted **only after adding BT-29** (see fix 3) |
+| Negative control: totals that don't add up | e-invoice-eu returns **201** and writes the file. KoSIT rejects it (BR-CO-16). The sidecar does not protect us from bad totals |
+| Inbound: `speedata/einvoice` parse of all outputs | Parses CII and UBL with auto-detection; reads BT-1/2/3/10, parties, lines, totals; `Validate()` passes valid files and rejects the bad-totals file with BR-CO-16. `gobl.cii` was not tried, since speedata covers the need |
+
+**Fixes the Go mapping must apply:**
+1. **JSON shape.** Repeatable nodes must be arrays even with one element: `cac:PartyTaxScheme`, `cac:PaymentMeans`, `cac:TaxTotal`, `cac:InvoiceLine`, `cac:TaxSubtotal`. Attributes are `"cbc:X@currencyID"` siblings, and every value is a string.
+2. **Always send `cac:Delivery/cbc:ActualDeliveryDate`.** Without it the CII output omits `ApplicableHeaderTradeDelivery` and fails the XSD. Our `supply_date` maps to it (BT-72), so it becomes a required issue-time field.
+3. **Steuernummer-only sellers (§19):** send the Steuernummer both as BT-32 (`PartyTaxScheme` with `TaxScheme/ID = FC`) and as BT-29 (`cac:PartyIdentification/cbc:ID`). Otherwise BR-CO-26 rejects the invoice.
+4. **Seller name differs by syntax.** CII prints `PartyLegalEntity/RegistrationName`, UBL prints `PartyName`. Keep both fields set and consistent (legal name vs trading name).
+5. **XRechnung mandatory inputs seen in practice:** BT-10 buyer reference, seller contact (name, phone, email), BT-34/BT-49 email endpoints (scheme `EM`), payment means 58 + IBAN, and the Delivery block above. Our model has none of these yet (§2 table).
+
+**Consequences for the plan:**
+- Compute totals in Go, then **validate before storing**: run `speedata/einvoice` `Validate()` in-process on every generated XML, and keep KoSIT as the CI golden test. At runtime KoSIT would need a JRE sidecar; the in-process check is enough for BR-* rules but is not the official XRechnung schematron. Decide whether to store a KoSIT report only for XRechnung output.
+- `gflohr/e-invoice-eu-validator` is **not published as a Docker image** (the pull failed). Use the KoSIT jar directly in CI.
+- The slim image's PDF wrap is solid for our fpdf output (fonts already embedded). Item 5 stays on the plan as written.
+- Build tooling note: the finance package's `TestMain` starts a Postgres container; set `SKIP_INTEGRATION=1` for tests that don't need one.
+
+## 9. Progress (updated 2026-10-03)
+
+| Plan item (§4 Tier 1) | State |
+|---|---|
+| 1. PDF download | Route done (`GET /invoices/{id}/pdf`, on demand). Documents HTTP handler done (read-only list/metadata/download, `internal/finance/document_handler.go`). **Archived at issue** (`invoice_pdf`, immutable, per-kind versions, checksum; migration 031). Backfill for older invoices: `api -backfill-archive [-dry-run]` (idempotent, marked `uploaded_by: backfill`, rendered now not as issued). Archive list: ARCHIVE panel in the invoice sheet (files, checksums, downloads, RENDERED LATER tag). |
+| 2. EN 16931 data model, editable lines | Done: BT-32 Steuernummer, BT-10/12/13 references, BT-20 terms, BT-84/86 IBAN/BIC, BT-130 unit codes, multi-line editing, `tax.CategoryFor`. Open: allowances and charges (BG-20/21); BT-34/49 addresses and payment-means code 58 are derived at export. |
+| 3. Country legal notes | **Done for Germany** (§ 19 UStG, reverse charge with "Steuerschuldnerschaft des Leistungsempfängers", § 3a Abs. 2 UStG), bilingual DE/EN, served to the UI by `GET /invoices/tax-notes`. Needs a Steuerberater's confirmation of the wording. Other countries keep the generic English text. |
+| 4. Structured payment means | IBAN/BIC stored, validated and printed. Open: EPC/GiroCode QR on the PDF. |
+| 5. Factur-X / XRechnung `Exporter` + sidecar | **Done:** `internal/einvoice` (neutral `Document`, `Generator` interface, sidecar client, in-process `speedata/einvoice` validation before anything ships, field-level readiness problems), `GET /invoices/{id}/einvoice[-check]`, pinned `einvoice` service in the dev and prod Compose files (internal network only), minimal "E-invoice" panel in the invoice sheet, `scripts/einvoice-golden.sh` + CI job (real sidecar, veraPDF PDF/A-3b). **KoSIT 1.6.3 + XRechnung 3.0.2 config now runs in the golden run** over every generated file and the XML embedded in each Factur-X PDF (42 files accepted); it found and fixed a real bug (category O breakdown rate, BR-DE-14). Open: Go-native generator. |
+| 6. Validation report stored with the invoice | **Done** with the Factur-X export at issue: the validated CII XML (`einvoice_xml`) and a JSON report (`validation_report`). Not archived when the invoice cannot be exported. |
+| 7. Credit note 381 mapping | Done (type 381 with the credited invoice as preceding document). |
+| 8. E-invoice attached to the invoice email | **Done:** `POST /invoices/{id}/email` attaches the archived PDF and e-invoice XML via Plunk's `attachments`; owner-checked, retry-safe, UI panel with a confirm step. Not verified against a live Plunk (no SES here), only against its documented schema. Reply-to is set to the supplier's contact email. Open: sending the Factur-X PDF as one file instead of PDF + XML. |
+
+Tier 2 (Promoter inbound parsing, self-billing, settlement, DATEV) and the `billing` extraction have not been started. Suggested next: a decision on sending the Factur-X PDF as a single file.
+
 ## Sources
 
 **e-invoice-eu (repo at commit `dc96ee0`, 2026-09-30):**

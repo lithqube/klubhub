@@ -17,6 +17,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/klubhub/dj/api/internal/artwork"
 	"github.com/klubhub/dj/api/internal/contact"
+	"github.com/klubhub/dj/api/internal/einvoice"
 	"github.com/klubhub/dj/api/internal/epk"
 	"github.com/klubhub/dj/api/internal/finance"
 	"github.com/klubhub/dj/api/internal/gig"
@@ -50,7 +51,7 @@ const healthcheckTimeout = 5 * time.Second
 //
 // for release builds. The defaults below apply when no ldflags are passed.
 var productName = "KlubHub-DJ"
-var version = "1.1.0"
+var version = "1.2.0"
 
 func main() {
 	// Plan B.2 — `-healthcheck` is the JSON-array-friendly form used by
@@ -65,6 +66,8 @@ func main() {
 	// GHCR image manifest sanity check.
 	printVersion := fs.Bool("version", false, "print the binary version and exit")
 	healthcheck := fs.Bool("healthcheck", false, "probe /api/v1/health and exit 0 on 200, non-zero otherwise")
+	backfill := fs.Bool("backfill-archive", false, "archive the PDF and e-invoice of invoices issued before archiving existed, then exit")
+	dryRun := fs.Bool("dry-run", false, "with -backfill-archive: report what would be archived and write nothing")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		// flag.ContinueOnError returns ErrHelp on -h/-help; treat that as
 		// a non-fatal success so `docker run /api -help` does not crash.
@@ -82,6 +85,9 @@ func main() {
 	}
 	if *healthcheck {
 		os.Exit(runHealthcheck())
+	}
+	if *backfill {
+		os.Exit(runBackfillArchive(*dryRun))
 	}
 
 	if err := run(); err != nil {
@@ -220,6 +226,10 @@ func run() error {
 		InstagramRedirectURI: cfg.InstagramRedirectURI,
 		TokenEncryptionKey:   []byte(cfg.TokenEncryptionKey),
 	}, socialStateStore)
+	// C.1: Post-image uploads go through the Service so it owns the
+	// validation + S3-write + DB-update sequence as a single unit.
+	// Worker keeps its own (presign-side) view of storage.
+	socialSvc.SetStorage(storeClient)
 	socialHandler := social.NewHandler(socialSvc, storeClient)
 
 	// 7a. Wire and start the background publish worker. The returned
@@ -272,7 +282,7 @@ func run() error {
 	// `?secret=ICAL_SECRET` was accepted. The secret is now env-injected
 	// (config.ICALSecret, required) and the handler fails closed on
 	// empty/missing/placeholder values.
-	gigHandler := gig.NewHandler(gigSvc, cfg.ICALSecret)
+	gigHandler := gig.NewHandler(gigSvc, cfg.ICALSecret, settingsSvc)
 
 	venueSvc := venue.NewService(venueRepo)
 	venueHandler := venue.NewHandler(venueSvc)
@@ -280,8 +290,8 @@ func run() error {
 	contactSvc := contact.NewService(contactRepo)
 	contactHandler := contact.NewHandler(contactSvc)
 
-	// 9a. Licensed edition feature: Resident Advisor import. Only when
-	// FEATURE_RA_IMPORT=true is an RA client constructed and the RA routes
+	// 9a. Resident Advisor import (on by default). Only while
+	// FEATURE_RA_IMPORT is not false is an RA client constructed and the RA routes
 	// mounted (/epk/import-ra, /gigs/import-ra, /gigs/info/{slug}). This
 	// must happen before gigHandler.Routes() is called below.
 	epkRAClient := wireRAImport(cfg.Features, defaultRAClient, gigHandler, gigSvc, venueSvc, contactSvc)
@@ -436,12 +446,30 @@ func buildFinanceRuntime(ctx context.Context, cfg *config.Config, pool *pgxpool.
 	return handler, done
 }
 
+// newInvoiceService wires the invoice service exactly as the API runs it: with
+// the e-invoice exporter when EINVOICE_URL is set, and with the document
+// archive when object storage exists. The server and `-backfill-archive` both
+// use it, so they cannot drift apart.
+func newInvoiceService(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, logger zerolog.Logger) (*finance.Service, *finance.InvoiceService) {
+	billingSvc := finance.NewService(finance.NewRepository(pool))
+	invoiceSvc := finance.NewInvoiceService(finance.NewInvoiceRepository(pool), billingSvc, finance.NewPGGigFeeProvider(pool))
+	if cfg.EInvoiceURL != "" {
+		invoiceSvc.WithEInvoice(&einvoice.Exporter{Gen: einvoice.NewSidecarClient(cfg.EInvoiceURL, nil)})
+		logger.Info().Str("einvoice_url", cfg.EInvoiceURL).Msg("e-invoice export enabled")
+	} else {
+		logger.Info().Msg("e-invoice export disabled: EINVOICE_URL is not set")
+	}
+	if storeClient != nil {
+		invoiceSvc.WithArchive(finance.NewDocumentService(finance.NewDocumentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket))
+	}
+	return billingSvc, invoiceSvc
+}
+
 // buildFinanceHandler composes the finance routes. Email is only mounted
 // when Plunk is fully configured; otherwise /finance/emails answers 503
 // instead of queuing mail that can never be delivered.
 func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger, startWorker ...func(*finance.EmailService)) *finance.Mux {
-	billingSvc := finance.NewService(finance.NewRepository(pool))
-	invoiceSvc := finance.NewInvoiceService(finance.NewInvoiceRepository(pool), billingSvc, finance.NewPGGigFeeProvider(pool))
+	billingSvc, invoiceSvc := newInvoiceService(cfg, pool, storeClient, logger)
 	// The transition processor is shared with the gig service so the
 	// manual gig-edit path and the invoice-payment sync path see the
 	// same finance-entry state. Without sharing, two independent
@@ -454,6 +482,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	instSvc := finance.NewAgreementInstanceService(finance.NewAgreementInstanceRepository(pool), tplRepo, docSvc)
 	entrySvc := finance.NewEntryService(finance.NewEntryRepository(pool))
 
+	invoiceHandler := finance.NewInvoiceHandler(invoiceSvc)
 	var emailHandler nethttp.Handler
 	if cfg.PlunkBaseURL != "" && cfg.PlunkProjectID != "" && cfg.PlunkAPIKey != "" {
 		sender := finance.NewPlunkSender(finance.PlunkConfig{
@@ -465,6 +494,13 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 		})
 		emailSvc := finance.NewEmailService(finance.NewEmailRepository(pool), sender)
 		emailHandler = finance.NewEmailHandler(emailSvc)
+		// Invoices go out with their archived PDF and e-invoice attached, which
+		// needs the document store the archive lives in. Set before the worker
+		// starts so retried messages can load their attachments too.
+		if storeClient != nil {
+			emailSvc.WithAttachments(docSvc)
+			invoiceHandler.WithMailer(finance.NewInvoiceMailer(invoiceSvc, emailSvc, cfg.PlunkFromEmail, cfg.PlunkFromName))
+		}
 		if len(startWorker) > 0 {
 			startWorker[0](emailSvc)
 		}
@@ -473,16 +509,24 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 		logger.Info().Msg("finance email disabled: PLUNK_BASE_URL, PLUNK_PROJECT_ID and PLUNK_API_KEY(_FILE) are not all set")
 	}
 
-	return finance.NewMux(
+	mux := finance.NewMux(
 		finance.NewHandler(billingSvc),
-		finance.NewInvoiceHandler(invoiceSvc),
+		invoiceHandler,
 		finance.NewPaymentHandler(paymentSvc),
-		nil, // documents: no HTTP handler yet
+		nil, // documents: mounted below when object storage exists
 		finance.NewAgreementTemplateHandler(tplSvc),
 		finance.NewAgreementInstanceHandler(instSvc),
 		emailHandler,
 		finance.NewEntryHandler(entrySvc),
 	)
+	// Receipts on ledger entries need object storage; without it
+	// /entries/{id}/attachments answers 503 and the rest of finance is unaffected.
+	if storeClient != nil {
+		mux.WithDocuments(finance.NewDocumentHandler(docSvc))
+		mux.WithAttachments(finance.NewAttachmentHandler(finance.NewAttachmentService(
+			finance.NewAttachmentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)))
+	}
+	return mux
 }
 
 // raClient is everything the RA-backed handlers need from the Resident

@@ -123,26 +123,37 @@ type Config struct {
 	PlunkFromEmail string `envconfig:"PLUNK_FROM_EMAIL" default:""`
 	PlunkFromName  string `envconfig:"PLUNK_FROM_NAME" default:""`
 
-	// Edition features: capabilities reserved for the licensed / SaaS
-	// editions. Every flag is OFF by default so the self-hosted open-source
-	// build (and the public demo) never exposes them. See docs/EDITIONS.md.
+	// Optional: e-invoice generator sidecar (gflohr/e-invoice-eu) behind
+	// Factur-X / XRechnung export. It has no authentication: point this only at
+	// an address that nothing outside the stack can reach (the compose
+	// service name on the internal network). Leave empty to disable export;
+	// the e-invoice routes then answer 503.
+	EInvoiceURL string `envconfig:"EINVOICE_URL" default:""`
+
+	// Switchable features. Each has its own default (see Features below), and
+	// any of them can be turned off with FEATURE_<NAME>=false. See
+	// docs/EDITIONS.md.
 	Features Features `envconfig:"FEATURE"`
 }
 
-// Features lists the edition-gated capabilities. Each field maps to a
+// Features lists the switchable capabilities. Each field maps to a
 // FEATURE_<NAME> env var (the struct is nested under the FEATURE prefix).
-// Add new paid features here with `default:"false"`, register them in
-// Enabled() below, and document them in docs/EDITIONS.md.
+// A feature that is part of the open-source build defaults to "true" and can
+// be turned off; one that must be opted into (a paid or risky integration)
+// defaults to "false". Register every field in Enabled() below and document it
+// in docs/EDITIONS.md.
 type Features struct {
 	// RAImport enables the Resident Advisor integration: EPK artist
 	// import (/api/v1/epk/import-ra) and gig import
-	// (/api/v1/gigs/import-ra, /api/v1/gigs/info/{slug}). When false the
-	// routes are not mounted (404) and no RA client is constructed, so the
-	// API never makes outbound requests to RA. Env: FEATURE_RA_IMPORT.
-	RAImport bool `envconfig:"RA_IMPORT" default:"false"`
+	// (/api/v1/gigs/import-ra, /api/v1/gigs/info/{slug}). On by default; set
+	// FEATURE_RA_IMPORT=false to turn it off, and the routes are then not
+	// mounted (404) and no RA client is constructed, so the API never makes
+	// outbound requests to RA. RA is only contacted when a user asks for an
+	// import.
+	RAImport bool `envconfig:"RA_IMPORT" default:"true"`
 }
 
-// Enabled reports every edition feature and whether it is switched on,
+// Enabled reports every switchable feature and whether it is on,
 // keyed by the stable snake_case feature name used in docs and the
 // health response.
 func (f Features) Enabled() map[string]bool {

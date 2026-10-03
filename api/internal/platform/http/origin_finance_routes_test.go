@@ -18,7 +18,7 @@ import (
 func TestDJFinanceRegisteredRoutesOriginContract(t *testing.T) {
 	noop := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
 	mux := finance.NewMux(finance.NewHandler(nil), finance.NewInvoiceHandler(nil), finance.NewPaymentHandler(nil), nil, finance.NewAgreementTemplateHandler(nil), finance.NewAgreementInstanceHandler(nil), finance.NewEmailHandler(nil), finance.NewEntryHandler(nil))
-	router := apphttp.NewRouter(&config.Config{CORSOrigin: "https://dj.example"}, nil, nil, zerolog.Nop(), noop, noop, noop, noop, noop, noop, noop, mux)
+	router := apphttp.NewRouter(&config.Config{CORSOrigin: "https://dj.example"}, nil, nil, zerolog.Nop(), noop, noop, noop, noop, noop, noop, noop, mux, noop)
 	const id = "11111111-1111-1111-1111-111111111111"
 	for _, route := range []struct{ method, path string }{
 		{"PUT", "billing-profile"}, {"POST", "invoices"}, {"POST", "invoices/" + id + "/payments"}, {"PUT", "payments/" + id},

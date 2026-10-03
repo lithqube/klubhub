@@ -70,6 +70,24 @@ services:
       start_period: 5s
     stop_grace_period: 30s
 
+  # E-invoice generator (Factur-X / XRechnung). It has no authentication, so it
+  # publishes no port and only the app container can reach it. Pinned by digest.
+  einvoice:
+    image: gflohr/e-invoice-eu:slim@sha256:c5d7f966d604661de7c4b55bf33d08c8d489ecc228e92b82e4f3f51e9dbb9664
+    # Published for amd64 only; Apple Silicon runs it under emulation.
+    platform: linux/amd64
+    restart: unless-stopped
+    networks: [ internal ]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ ALL ]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: "1.0"
+    pids_limit: 200
+
   app:
     # Single Go + Nuxt container. In dev SERVE_FRONTEND=false so the embedded
     # Nuxt is not proxied; the host Nuxt (pnpm nx serve dj --host 0.0.0.0)
@@ -100,16 +118,17 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:4200}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SHUTDOWN_TIMEOUT_SEC: ${SHUTDOWN_TIMEOUT_SEC:-30}
+      EINVOICE_URL: http://einvoice:3000
       NUXT_INTERNAL_URL: http://host.docker.internal:4200
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       DISCOGS_API_KEY: ${DISCOGS_API_KEY:-}
       INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
       INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
-      # Licensed edition features (docs/EDITIONS.md): off unless set in .env.
-      # Dev Nuxt runs on the host, so export NUXT_PUBLIC_FEATURES_RA_IMPORT
-      # there as well to show the RA UI.
-      FEATURE_RA_IMPORT: ${FEATURE_RA_IMPORT:-false}
+      # Switchable features (docs/EDITIONS.md). RA import is on unless .env sets
+      # it false. Dev Nuxt runs on the host and is on too whenever it proxies a
+      # real API; to turn it off there, export NUXT_PUBLIC_FEATURES_RA_IMPORT=false.
+      FEATURE_RA_IMPORT: ${FEATURE_RA_IMPORT:-true}
     secrets:
       - postgres_password
       - token_encryption_key

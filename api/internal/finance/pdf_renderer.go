@@ -26,6 +26,9 @@ type InvoicePDFData struct {
 	// CreditedInvoiceNumber is the number of the invoice a credit note
 	// reverses (printed as the reference).
 	CreditedInvoiceNumber string
+	// CreditedIssueDate is that invoice's issue date (YYYY-MM-DD); the
+	// e-invoice of a credit note names it (BG-3).
+	CreditedIssueDate string
 }
 
 // BillingProfileSnapshot is the billing profile data snapshotted at invoice issuance.
@@ -44,6 +47,9 @@ type BillingProfileSnapshot struct {
 	AddressPostal       string     `json:"address_postal"`
 	AddressCountry      string     `json:"address_country"`
 	PaymentInstructions string     `json:"payment_instructions"`
+	TaxNumber           string     `json:"tax_number"`
+	IBAN                string     `json:"iban"`
+	BIC                 string     `json:"bic"`
 }
 
 // FromJSON parses the JSON snapshot into the struct.
@@ -58,6 +64,7 @@ func snapshotFromProfile(p *BillingProfile) BillingProfileSnapshot {
 		AddressLine1: p.AddressLine1, AddressLine2: p.AddressLine2, AddressCity: p.AddressCity,
 		AddressRegion: p.AddressRegion, AddressPostal: p.AddressPostal, AddressCountry: p.AddressCountry,
 		PaymentInstructions: p.PaymentInstructions,
+		TaxNumber:           p.TaxNumber, IBAN: p.IBAN, BIC: p.BIC,
 	}
 }
 
@@ -156,6 +163,15 @@ func buildInvoiceView(data *InvoicePDFData) invoiceView {
 	v.Details = append(v.Details,
 		pdfRow{Label: "Currency:", Value: cur},
 		pdfRow{Label: "VAT treatment:", Value: treatmentLabels[inv.VATTreatment]})
+	for _, ref := range []pdfRow{
+		{Label: "Buyer reference:", Value: inv.BuyerReference},
+		{Label: "Order no.:", Value: inv.PurchaseOrderRef},
+		{Label: "Contract:", Value: inv.ContractRef},
+	} {
+		if ref.Value != "" {
+			v.Details = append(v.Details, ref)
+		}
+	}
 
 	// Supplier: the snapshot taken at issue; drafts fall back to the live profile.
 	var snap BillingProfileSnapshot
@@ -172,6 +188,9 @@ func buildInvoiceView(data *InvoicePDFData) invoiceView {
 				label = "VAT ID"
 			}
 			v.Supplier = append(v.Supplier, label+": "+snap.TaxID)
+		}
+		if snap.TaxNumber != "" {
+			v.Supplier = append(v.Supplier, "Tax no.: "+snap.TaxNumber)
 		}
 		if snap.ContactEmail != "" {
 			v.Supplier = append(v.Supplier, snap.ContactEmail)
@@ -201,7 +220,7 @@ func buildInvoiceView(data *InvoicePDFData) invoiceView {
 
 	for i, l := range data.Lines {
 		v.Lines = append(v.Lines, []string{
-			fmt.Sprintf("%d", i+1), truncate(l.Description, 50), fmt.Sprintf("%d", l.Quantity),
+			fmt.Sprintf("%d", i+1), truncate(l.Description, 50), quantityLabel(l.Quantity, l.UnitCode),
 			money(l.UnitMinor), formatBps(l.TaxBps), money(l.LineTotalMinor),
 		})
 	}
@@ -244,6 +263,15 @@ func buildInvoiceView(data *InvoicePDFData) invoiceView {
 			{Label: "Received:", Value: money(received)},
 			{Label: "Outstanding:", Value: money(outstanding), Bold: true},
 		}
+		if haveSnap && snap.IBAN != "" {
+			v.Payment = append(v.Payment, pdfRow{Label: "IBAN:", Value: formatIBAN(snap.IBAN)})
+			if snap.BIC != "" {
+				v.Payment = append(v.Payment, pdfRow{Label: "BIC:", Value: snap.BIC})
+			}
+		}
+		if inv.PaymentTerms != "" {
+			v.Instruction = strings.TrimSpace(inv.PaymentTerms + "\n" + v.Instruction)
+		}
 	}
 
 	kind := "invoice"
@@ -256,6 +284,30 @@ func buildInvoiceView(data *InvoicePDFData) invoiceView {
 	}
 	v.Filename = fmt.Sprintf("%s-%s.pdf", kind, strings.ReplaceAll(name, "/", "-"))
 	return v
+}
+
+// unitLabels are the short quantity suffixes for the line units. Pieces (C62)
+// print as a bare number.
+var unitLabels = map[string]string{"HUR": "h", "DAY": "d", "LS": "ls", "KMT": "km"}
+
+// quantityLabel prints a line quantity with its unit, e.g. "200 km".
+func quantityLabel(qty int, unitCode string) string {
+	if label := unitLabels[unitCode]; label != "" {
+		return fmt.Sprintf("%d %s", qty, label)
+	}
+	return fmt.Sprintf("%d", qty)
+}
+
+// formatIBAN groups a normalised IBAN in blocks of four for reading.
+func formatIBAN(iban string) string {
+	var b strings.Builder
+	for i, r := range iban {
+		if i > 0 && i%4 == 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // addressLines formats a postal block, skipping empty parts.

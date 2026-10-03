@@ -5,8 +5,21 @@
 // zero-padded IDs). Never add real venues, promoters or tax numbers.
 
 import type { Party } from '../../app/types/finance'
-import type { FinanceMockDb, MockGig } from './db'
-import { addDays, party } from './rules'
+import { buildPdf } from '../../app/demo/lib/pdf'
+import { sha256Hex } from './attachments'
+import type { FinanceMockDb, MockGig, StoredEntry } from './db'
+import { addDays, party, uuid } from './rules'
+
+/** A tiny 72x96 grey "paper" PNG, so the seeded receipt has a thumbnail. */
+const RECEIPT_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAEgAAABgCAIAAAAxcKNLAAAA7UlEQVR4nO3asQ3CQBAFUVdF5IDIRRC5/4DIBdABQpxPu3N/pCmAp1t9Em/X9V6yrfwXCBOWC9v3x7yECRO2LgydMFrCaH2Dneerbb7YcgmjFQkrn77fN7AdrObF0AmjJYwWY+7/2NJeME9R2HoJo1W5isvCpsojTxGdMFqRMNAGtobdK488RXTCaEXCQBtIgg3KI08RnTBakbDy3RtZ/3pYwYuhE0ZLGK36VZy0pe1gnqKwxRJGK/J7xfI/qxF55CmiE0YrEgbawO6wG+U1p3gcz7sSJqx5kTDQBsJgI/LIU0QnjJYwWsJoCaP1AT5MiAfus8qLAAAAAElFTkSuQmCC'
+
+function seedReceipt(db: FinanceMockDb, entry: StoredEntry, filename: string, bytes: Uint8Array, mime: 'image/png' | 'application/pdf'): void {
+  db.putAttachment({
+    id: uuid(), entry_id: entry.id, filename, mime_type: mime, size_bytes: bytes.length,
+    checksum_sha256: sha256Hex(bytes), created_at: db.stamp(), bytes,
+  })
+}
 
 export const FINANCE_GIG_IDS = {
   domestic: '00000000-0000-4000-8000-000000000101',
@@ -143,7 +156,7 @@ export function seedFinanceEntries(db: FinanceMockDb, gigDate: (id: string) => s
   })
 
   // Manual expenses across the seeded months.
-  db.addEntry({
+  const travel = db.addEntry({
     kind: 'expense',
     amount_minor: 18000,
     currency: 'EUR',
@@ -152,6 +165,13 @@ export function seedFinanceEntries(db: FinanceMockDb, gigDate: (id: string) => s
     description: '',
     notes: 'Travel & accommodation — Club Alpha weekend',
   })
+  // This expense carries two receipts (a photo and a PDF); the other seeded
+  // expenses carry none, so the list shows both states.
+  seedReceipt(db, travel, 'hotel-receipt.png', Uint8Array.from(atob(RECEIPT_PNG_BASE64), (c) => c.charCodeAt(0)), 'image/png')
+  seedReceipt(db, travel, 'train-tickets.pdf', new TextEncoder().encode(buildPdf([
+    { text: 'TRAIN TICKETS (SAMPLE)', size: 16, bold: true },
+    { text: 'Fictional receipt for the demo data. Club Alpha weekend, 2 x return, EUR 62.00.' },
+  ])), 'application/pdf')
   db.addEntry({
     kind: 'expense',
     amount_minor: 9500,

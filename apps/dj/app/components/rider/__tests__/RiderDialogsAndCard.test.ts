@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import RiderTemplateDialog from '../RiderTemplateDialog.vue'
 import AttachRiderDialog from '../AttachRiderDialog.vue'
 import RiderAttachmentCard from '../RiderAttachmentCard.vue'
 import { useRiderStore } from '../../../stores/rider'
@@ -30,35 +29,6 @@ beforeEach(() => {
   vi.stubGlobal('$fetch', vi.fn())
 })
 afterEach(() => { vi.unstubAllGlobals() })
-
-describe('RiderTemplateDialog', () => {
-  it('renders when open is true (the prop must be declared) and not when false', async () => {
-    const closed = mount(RiderTemplateDialog, { props: { open: false } })
-    expect(closed.find('[data-testid="rider-template-dialog"]').exists()).toBe(false)
-    const open = mount(RiderTemplateDialog, { props: { open: true } })
-    expect(open.find('[data-testid="rider-template-dialog"]').exists()).toBe(true)
-  })
-
-  it('shows the API\'s reason when creating fails, and limits the name length up front', async () => {
-    const w = mount(RiderTemplateDialog, { props: { open: true } })
-    const name = w.find('[data-testid="rider-template-dialog-name"]')
-    expect(name.attributes('maxlength')).toBe('200')
-
-    fetchMock().mockRejectedValueOnce(Object.assign(new Error('x'), { statusCode: 422, data: { error: 'invalid rider input: name is required' } }))
-    await name.setValue('Club')
-    await w.find('[data-testid="rider-template-dialog-submit"]').trigger('click')
-    await flushPromises()
-    expect(w.text()).toContain('name is required')
-  })
-
-  it('clears its fields when closed, so a reopened dialog does not invite a duplicate create', async () => {
-    const w = mount(RiderTemplateDialog, { props: { open: true } })
-    await w.find('[data-testid="rider-template-dialog-name"]').setValue('Standard club')
-    await w.setProps({ open: false })
-    await w.setProps({ open: true })
-    expect((w.find('[data-testid="rider-template-dialog-name"]').element as HTMLInputElement).value).toBe('')
-  })
-})
 
 describe('AttachRiderDialog', () => {
   it('loads the templates when opened with none cached, so the picker offers more than "blank"', async () => {

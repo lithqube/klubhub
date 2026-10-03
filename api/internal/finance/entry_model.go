@@ -60,6 +60,28 @@ type Entry struct {
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
 	DeletedAt         *time.Time      `json:"deleted_at"`
+	// AttachmentCount is the number of receipt files on the entry; read paths
+	// fill it, so a row can show a paperclip without fetching the files.
+	AttachmentCount int `json:"attachment_count"`
+}
+
+// ReceiptFilter narrows a list by receipt files.
+//
+//	missing  active EXPENSES with no files: the ones that still need a receipt.
+//	         Income (gig payments, royalties) and voided entries are never
+//	         "missing" (a voided entry can no longer take files).
+//	present  any entry with at least one file.
+type ReceiptFilter string
+
+const (
+	ReceiptAny     ReceiptFilter = ""
+	ReceiptMissing ReceiptFilter = "missing"
+	ReceiptPresent ReceiptFilter = "present"
+)
+
+// IsValid reports whether f is a known receipt filter.
+func (f ReceiptFilter) IsValid() bool {
+	return f == ReceiptAny || f == ReceiptMissing || f == ReceiptPresent
 }
 
 type CreateEntryRequest struct {
@@ -109,6 +131,7 @@ type EntryFilter struct {
 	GigID    *uuid.UUID
 	From     string
 	To       string
+	Receipt  ReceiptFilter
 }
 
 type DateRange struct {

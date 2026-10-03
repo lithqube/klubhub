@@ -29,6 +29,10 @@ function makeInvoice(overrides: Partial<Invoice> = {}): Invoice {
     paid_at: null,
     payment_ref: '',
     internal_notes: '',
+    buyer_reference: '',
+    purchase_order_ref: '',
+    contract_ref: '',
+    payment_terms: '',
     customer: { ...emptyParty(), legal_name: 'Club Alpha' },
     billing_profile: null,
     vat_treatment: 'domestic',
@@ -167,6 +171,10 @@ describe('useInvoiceStore', () => {
       due_at: inv.due_at,
       number_prefix: 'INV',
       internal_notes: '',
+      buyer_reference: '',
+      purchase_order_ref: '',
+      contract_ref: '',
+      payment_terms: '',
     })
     const [url, opts] = fetchMock.mock.calls[0]!
     expect(url).toBe('/api/v1/finance/invoices/inv-1')
@@ -337,6 +345,41 @@ describe('useInvoiceStore', () => {
     expect(s.vat_treatment).toBe('reverse_charge')
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/finance/invoices/tax-suggestion', {
       params: { customer_country: 'FR', customer_vat_id: 'FR123', customer_is_business: 'true' },
+    })
+  })
+
+  describe('fetchTaxNotes', () => {
+    const NOTES = { exempt: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. / VAT not charged.', reverse_charge: 'Steuerschuldnerschaft des Leistungsempfängers' }
+
+    it('loads the supplier country\'s wording once and caches it', async () => {
+      const store = useInvoiceStore()
+      expect(store.taxNotes).toBeNull()
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await store.fetchTaxNotes()
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/finance/invoices/tax-notes', {})
+      expect(store.taxNotes).toEqual(NOTES)
+
+      await store.fetchTaxNotes()
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('shares one request between concurrent callers', async () => {
+      const store = useInvoiceStore()
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await Promise.all([store.fetchTaxNotes(), store.fetchTaxNotes(), store.fetchTaxNotes()])
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('stays quiet on failure (the built-in defaults apply) and tries again next time', async () => {
+      const store = useInvoiceStore()
+      fetchMock.mockRejectedValueOnce(new Error('offline'))
+      await expect(store.fetchTaxNotes()).resolves.toBeUndefined()
+      expect(store.taxNotes).toBeNull()
+      expect(store.listError).toBeNull()
+
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await store.fetchTaxNotes()
+      expect(store.taxNotes).toEqual(NOTES)
     })
   })
 

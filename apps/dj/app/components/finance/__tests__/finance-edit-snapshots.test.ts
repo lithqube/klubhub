@@ -37,7 +37,7 @@ function entry(over: Partial<Entry> = {}): Entry {
     status: 'active', auto_generated: false, source_kind: 'manual', source_id: null,
     source_amount_minor: null, source_currency: null, source_description: '',
     created_at: '2026-09-15T10:00:00Z', updated_at: '2026-09-15T10:00:00Z',
-    deleted_at: null, ...over,
+    deleted_at: null, attachment_count: 0, ...over,
   }
 }
 
