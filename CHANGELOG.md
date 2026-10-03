@@ -40,6 +40,9 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - The New Invoice form is inline above the invoice list instead of a modal,
   like the entry composer. Billing a gig from the gigs page now takes you to
   it with the gig chosen.
+- The rider's New Template form is inline in the templates pane, in the
+  editor's place, instead of a modal. Escape closes it only while it is empty,
+  so a half-written template is never thrown away by accident.
 
 ### Fixed
 
