@@ -80,7 +80,7 @@ class SetupTests(unittest.TestCase):
                                         check=True, capture_output=True, text=True)
                 configs[mode] = json.loads(result.stdout)
         for config in configs.values():
-            self.assertEqual(set(config["services"]), {"app", "db", "storage"})
+            self.assertEqual(set(config["services"]), {"app", "db", "storage", "einvoice"})
             app = config["services"]["app"]
             self.assertEqual(app["environment"]["BIND_ADDRESS"], "0.0.0.0")
             self.assertEqual(app["ports"][0]["host_ip"], "127.0.0.1")
