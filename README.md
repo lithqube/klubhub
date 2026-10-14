@@ -270,6 +270,7 @@ At a glance:
 
 - **Now:** v1.2.0 — Phase 4.5 Rider Templates and Phase 5 Finance are complete: invoicing, payments, agreements, the expense ledger with receipts, and EN 16931 e-invoicing (Factur-X / XRechnung) with an archive of issued documents and send-by-email; the tracklist editor and a real-data dashboard also landed
 - **Next:** Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard)
+- **Later:** US market — US-compatible e-invoicing (UBL) and payee tax forms (W-9, 1099-NEC, W-8BEN withholding, 1042-S); scope in [the invoicing doc](./docs/INVOICING.md)
 
 Per-phase status is tracked in [`CHANGELOG.md`](./CHANGELOG.md) and the
 roadmap doc. Releases follow [semver](https://semver.org) once v1.0.0 ships.
