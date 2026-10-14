@@ -296,5 +296,253 @@ describe('useSocialStore', () => {
       })).rejects.toBe(failure);
       expect(mockShowError).toHaveBeenCalledWith(String(failure));
     });
+
+    it('falls back to the store account id when the request omits accountId', async () => {
+      const store = useSocialStore();
+      store.account = mockAccount;
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ data: mockPost })
+        .mockResolvedValueOnce({ data: [] });
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+
+      await store.createPost({
+        postType: 'feed',
+        caption: 'Test',
+        scheduledAt: '2026-10-24T23:45',
+        timezoneName: 'Europe/Berlin',
+      });
+
+      const formData = mockFetch.mock.calls[0][1].body as FormData;
+      expect(formData.get('account_id')).toBe('acc-1');
+    });
+
+    it('omits account_id entirely when neither request nor store has one', async () => {
+      const store = useSocialStore();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ data: mockPost })
+        .mockResolvedValueOnce({ data: [] });
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+
+      await store.createPost({
+        postType: 'feed',
+        caption: 'Test',
+        scheduledAt: '2026-10-24T23:45',
+        timezoneName: 'Europe/Berlin',
+      });
+
+      const formData = mockFetch.mock.calls[0][1].body as FormData;
+      expect(formData.get('account_id')).toBeNull();
+    });
+
+    it('omits image_id and image_file when not provided', async () => {
+      const store = useSocialStore();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ data: mockPost })
+        .mockResolvedValueOnce({ data: [] });
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+
+      await store.createPost({
+        postType: 'feed',
+        caption: 'Test',
+        scheduledAt: '2026-10-24T23:45',
+        timezoneName: 'Europe/Berlin',
+      });
+
+      const formData = mockFetch.mock.calls[0][1].body as FormData;
+      expect([...formData.keys()]).toEqual(['post_type', 'caption', 'scheduled_at', 'timezone_name']);
+    });
+  });
+
+  describe('editPost()', () => {
+    it('PUTs the request and replaces the post in the list (snake_case mapped)', async () => {
+      const store = useSocialStore();
+      store.posts = [mockPost];
+      const updatedRaw = { ...rawPost, caption: 'Edited caption' };
+      const mockFetch = vi.fn().mockResolvedValue({ data: updatedRaw });
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+
+      await store.editPost('post-1', { caption: 'Edited caption' });
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/v1/social/posts/post-1', {
+        method: 'PUT',
+        body: { caption: 'Edited caption' },
+      });
+      expect(store.posts[0].caption).toBe('Edited caption');
+      expect(store.posts[0].accountId).toBe('acc-1');
+    });
+
+    it('leaves the list unchanged when the post is not present', async () => {
+      const store = useSocialStore();
+      store.posts = [mockPost];
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockResolvedValue({ data: { ...rawPost, id: 'other' } });
+
+      await store.editPost('missing', { caption: 'X' });
+
+      expect(store.posts[0].caption).toBe('Test caption');
+    });
+
+    it('shows the error and does not throw', async () => {
+      const store = useSocialStore();
+      const failure = new Error('edit failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      await store.editPost('post-1', { caption: 'X' });
+
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+    });
+  });
+
+  describe('deletePost()', () => {
+    it('DELETEs and removes the post from the list', async () => {
+      const store = useSocialStore();
+      store.posts = [mockPost, { ...mockPost, id: 'post-2' }];
+      const mockFetch = vi.fn().mockResolvedValue(undefined);
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+
+      await store.deletePost('post-1');
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/v1/social/posts/post-1', { method: 'DELETE' });
+      expect(store.posts.map((p) => p.id)).toEqual(['post-2']);
+    });
+
+    it('keeps the list and shows the error on failure', async () => {
+      const store = useSocialStore();
+      store.posts = [mockPost];
+      const failure = new Error('delete failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      await store.deletePost('post-1');
+
+      expect(store.posts).toHaveLength(1);
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+    });
+  });
+
+  describe('downloadImage()', () => {
+    it('fetches the image as a blob', async () => {
+      const store = useSocialStore();
+      const blob = new Blob(['img'], { type: 'image/png' });
+      const mockFetch = vi.fn().mockResolvedValue(blob);
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+
+      const result = await store.downloadImage('post-1');
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/v1/social/posts/post-1/image', {
+        responseType: 'blob',
+      });
+      expect(result).toBe(blob);
+    });
+
+    it('returns null and shows the error on failure', async () => {
+      const store = useSocialStore();
+      const failure = new Error('no image');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      expect(await store.downloadImage('post-1')).toBeNull();
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+    });
+  });
+
+  describe('initiateOAuth()', () => {
+    it('returns the authorization url', async () => {
+      const store = useSocialStore();
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockResolvedValue({ url: 'https://instagram.com/oauth' });
+
+      expect(await store.initiateOAuth()).toBe('https://instagram.com/oauth');
+      expect(global.$fetch).toHaveBeenCalledWith('/api/v1/social/auth/url');
+    });
+
+    it('returns null when the response has no url', async () => {
+      const store = useSocialStore();
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockResolvedValue({});
+
+      expect(await store.initiateOAuth()).toBeNull();
+    });
+
+    it('returns null and shows the error on failure', async () => {
+      const store = useSocialStore();
+      const failure = new Error('oauth failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      expect(await store.initiateOAuth()).toBeNull();
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+    });
+  });
+
+  describe('disconnectAccount()', () => {
+    it('DELETEs the account and clears it from the store', async () => {
+      const store = useSocialStore();
+      store.account = mockAccount;
+      const mockFetch = vi.fn().mockResolvedValue(undefined);
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = mockFetch;
+
+      await store.disconnectAccount('acc-1');
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/v1/social/accounts/acc-1', { method: 'DELETE' });
+      expect(store.account).toBeNull();
+    });
+
+    it('keeps the account and shows the error on failure', async () => {
+      const store = useSocialStore();
+      store.account = mockAccount;
+      const failure = new Error('disconnect failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      await store.disconnectAccount('acc-1');
+
+      expect(store.account).toEqual(mockAccount);
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+    });
+  });
+
+  describe('error paths', () => {
+    it('loadPosts shows the error and stops loading on failure', async () => {
+      const store = useSocialStore();
+      const failure = new Error('posts failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      await store.loadPosts();
+
+      expect(store.loading).toBe(false);
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+    });
+
+    it('loadAccount shows the error on failure', async () => {
+      const store = useSocialStore();
+      const failure = new Error('account failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      await store.loadAccount();
+
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+    });
+
+    it('retryPost shows the error on failure', async () => {
+      const store = useSocialStore();
+      const failure = new Error('retry failed');
+      // @ts-expect-error - mocking global $fetch
+      global.$fetch = vi.fn().mockRejectedValue(failure);
+
+      await store.retryPost('post-1');
+
+      expect(mockShowError).toHaveBeenCalledWith(String(failure));
+    });
   });
 });

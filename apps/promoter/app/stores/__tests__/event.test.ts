@@ -63,3 +63,93 @@ describe('useVenueStore', () => {
     await expect(useVenueStore().revealVenue('v1')).rejects.toMatchObject({ error: 'mfa_required', status: 403 })
   })
 })
+
+describe('useEventStore detail and exports', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    fetchMock.mockReset()
+  })
+
+  it('fetchList records an ApiError and stops loading on failure', async () => {
+    fetchMock.mockRejectedValue({ statusCode: 500, data: { error: 'boom' } })
+    const s = useEventStore()
+    await s.fetchList('upcoming')
+    expect(s.error).toMatchObject({ error: 'boom', status: 500 })
+    expect(s.loading).toBe(false)
+    expect(s.lists.upcoming).toEqual([])
+  })
+
+  it('fetchEvent stores the detail', async () => {
+    fetchMock.mockResolvedValue({ id: 'e1', version: 1 })
+    const s = useEventStore()
+    expect(await s.fetchEvent('e1')).toEqual({ id: 'e1', version: 1 })
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/events/e1', {})
+    expect(s.current?.id).toBe('e1')
+    expect(s.error).toBeNull()
+  })
+
+  it('fetchEvent clears current and records the error on failure', async () => {
+    fetchMock.mockRejectedValue({ statusCode: 404, data: { error: 'not_found' } })
+    const s = useEventStore()
+    s.current = { id: 'stale' } as never
+    expect(await s.fetchEvent('e1')).toBeNull()
+    expect(s.current).toBeNull()
+    expect(s.error).toMatchObject({ error: 'not_found', status: 404 })
+  })
+
+  it('updateEvent PUTs version and event and keeps the detail', async () => {
+    fetchMock.mockResolvedValue({ id: 'e1', version: 2 })
+    const s = useEventStore()
+    const input = { title: 'Party' } as never
+    const detail = await s.updateEvent('e1', 1, input)
+    const [url, opts] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/api/v1/events/e1')
+    expect(opts.method).toBe('PUT')
+    expect(opts.body).toEqual({ version: 1, event: input })
+    expect(opts.headers['X-KlubHub-CSRF']).toBe('1')
+    expect(detail.version).toBe(2)
+    expect(s.current?.version).toBe(2)
+  })
+
+  it('replaceStages PUTs the version and stages', async () => {
+    fetchMock.mockResolvedValue({ id: 'e1', version: 5 })
+    const s = useEventStore()
+    await s.replaceStages('e1', 4, [{ name: 'Main' }] as never)
+    const [url, opts] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/api/v1/events/e1/stages')
+    expect(opts.method).toBe('PUT')
+    expect(opts.body).toEqual({ version: 4, stages: [{ name: 'Main' }] })
+  })
+
+  it('changeStatus POSTs version and status', async () => {
+    fetchMock.mockResolvedValue({ id: 'e1', version: 3, status: 'published' })
+    const s = useEventStore()
+    await s.changeStatus('e1', 2, 'published')
+    const [url, opts] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/api/v1/events/e1/status')
+    expect(opts.method).toBe('POST')
+    expect(opts.body).toEqual({ version: 2, status: 'published' })
+  })
+
+  it('fetches the export pack, JSON-LD and ICS', async () => {
+    fetchMock.mockResolvedValueOnce({ events: [] })
+      .mockResolvedValueOnce({ '@context': 'https://schema.org' })
+      .mockResolvedValueOnce('BEGIN:VCALENDAR')
+    const s = useEventStore()
+    expect(await s.fetchExport('e1')).toEqual({ events: [] })
+    expect(await s.fetchJsonLd('e1')).toEqual({ '@context': 'https://schema.org' })
+    expect(await s.fetchIcs('e1')).toBe('BEGIN:VCALENDAR')
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/events/e1/export')
+    expect(fetchMock.mock.calls[1]![0]).toBe('/api/v1/events/e1/export/jsonld')
+    expect(fetchMock.mock.calls[2]![0]).toBe('/api/v1/events/e1/export/ics')
+    expect(fetchMock.mock.calls[2]![1].responseType).toBe('text')
+  })
+
+  it('wraps export failures in an ApiError', async () => {
+    fetchMock.mockRejectedValue({ statusCode: 503, data: { error: 'unavailable' } })
+    const s = useEventStore()
+    await expect(s.fetchExport('e1')).rejects.toMatchObject({ error: 'unavailable', status: 503 })
+    await expect(s.fetchJsonLd('e1')).rejects.toMatchObject({ error: 'unavailable', status: 503 })
+    await expect(s.fetchIcs('e1')).rejects.toMatchObject({ error: 'unavailable', status: 503 })
+  })
+})

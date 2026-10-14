@@ -1,6 +1,6 @@
 import { encode } from 'uqr'
-import { describe, expect, it } from 'vitest'
-import { decodeFrame, loadJsQR, scaledSize } from '../qrDecode'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { decodeFrame, loadJsQR, nativeQrDetector, scaledSize, type JsQR } from '../qrDecode'
 
 /** Render a QR matrix into an RGBA buffer: `px` pixels per module, 4-module quiet zone. */
 function rgbaFor(text: string, px = 4) {
@@ -39,5 +39,76 @@ describe('qrDecode', () => {
     expect(scaledSize(1920, 1080)).toEqual({ w: 640, h: 360 })
     expect(scaledSize(480, 640)).toEqual({ w: 480, h: 640 })
     expect(scaledSize(0, 0)).toEqual({ w: 0, h: 0 })
+  })
+
+  it('honours a custom max width and never upscales', () => {
+    expect(scaledSize(1000, 500, 250)).toEqual({ w: 250, h: 125 })
+    expect(scaledSize(100, 50, 250)).toEqual({ w: 100, h: 50 })
+    expect(scaledSize(0, 100)).toEqual({ w: 0, h: 0 })
+    expect(scaledSize(100, 0)).toEqual({ w: 0, h: 0 })
+  })
+
+  it('decodeFrame returns null when jsQR finds nothing or empty data', () => {
+    const frame = new Uint8ClampedArray(8 * 8 * 4).fill(255)
+    const nothing: JsQR = () => null
+    expect(decodeFrame(nothing, frame, 8, 8)).toBeNull()
+    const empty: JsQR = () => ({ data: '' }) as never
+    expect(decodeFrame(empty, frame, 8, 8)).toBeNull()
+  })
+
+  it('decodeFrame passes dontInvert and returns the payload', () => {
+    const frame = new Uint8ClampedArray(8 * 8 * 4).fill(255)
+    const spy: JsQR = vi.fn(() => ({ data: 'DICE-0001' }) as never)
+    expect(decodeFrame(spy, frame, 8, 8)).toBe('DICE-0001')
+    expect(spy).toHaveBeenCalledWith(frame, 8, 8, { inversionAttempts: 'dontInvert' })
+  })
+
+  it('decodeFrame rejects zero dimensions and short buffers', () => {
+    const jsqr: JsQR = () => ({ data: 'x' }) as never
+    expect(decodeFrame(jsqr, new Uint8ClampedArray(0), 0, 8)).toBeNull()
+    expect(decodeFrame(jsqr, new Uint8ClampedArray(0), 8, 0)).toBeNull()
+    expect(decodeFrame(jsqr, new Uint8ClampedArray(4), 8, 8)).toBeNull()
+  })
+
+  it('loadJsQR resolves to the jsQR function and caches the module', async () => {
+    const a = await loadJsQR()
+    const b = await loadJsQR()
+    expect(typeof a).toBe('function')
+    expect(b).toBe(a)
+  })
+
+  describe('nativeQrDetector', () => {
+    afterEach(() => {
+      delete (globalThis as Record<string, unknown>).BarcodeDetector
+    })
+
+    it('returns null when BarcodeDetector is missing', async () => {
+      expect(await nativeQrDetector()).toBeNull()
+    })
+
+    it('returns a detector when qr_code is supported', async () => {
+      const detect = vi.fn()
+      ;(globalThis as Record<string, unknown>).BarcodeDetector = class {
+        static getSupportedFormats = async () => ['qr_code', 'code_128']
+        detect = detect
+      }
+      const d = await nativeQrDetector()
+      expect(d).not.toBeNull()
+      expect(typeof d!.detect).toBe('function')
+    })
+
+    it('returns null when qr_code is not among the supported formats', async () => {
+      ;(globalThis as Record<string, unknown>).BarcodeDetector = class {
+        static getSupportedFormats = async () => ['code_128']
+      }
+      expect(await nativeQrDetector()).toBeNull()
+    })
+
+    it('returns null when getSupportedFormats throws', async () => {
+      ;(globalThis as Record<string, unknown>).BarcodeDetector = class {
+        static getSupportedFormats = async () => { throw new Error('denied') }
+      }
+      expect(await nativeQrDetector()).toBeNull()
+    })
   })
 })
