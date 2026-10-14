@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Safe self-hosted updates: re-running the installer (or `./klubhub update`)
+  now backs up the databases, Garage storage and secrets to
+  `.local/backups/<timestamp>/` before pulling new images, records the
+  previous version, and prunes dangling images afterwards. `./klubhub backup`
+  takes a manual snapshot and `./klubhub rollback` restores the previous
+  version (one step back). `./klubhub update --release` (installer `--release`)
+  pins the update to the newest `v*` release tag. If a service fails its
+  health check after an update, the installer prints the rollback
+  instructions. See `docs/SELF-HOSTING.md`.
+
 ## [1.2.0] - 2026-10-03
 
 ### Upgrade notes
