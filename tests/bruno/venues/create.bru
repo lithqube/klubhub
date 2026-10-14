@@ -1,0 +1,41 @@
+meta {
+  name: Create venue
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/venues
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bruno Club",
+    "city": "Berlin",
+    "country": "DE",
+    "capacity": 500,
+    "website": "https://bruno.example.org",
+    "tech_contact_name": "Bruno Tech",
+    "tech_contact_email": "tech@bruno.example.org",
+    "tech_contact_phone": "+49 30 123",
+    "notes": "created by the Bruno collection"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.name: eq Bruno Club
+  res.body.city: eq Berlin
+  res.body.id: isNotEmpty
+}
+
+script:post-response {
+  bru.setVar("createdVenueId", res.getBody().id);
+}

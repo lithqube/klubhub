@@ -1,0 +1,20 @@
+meta {
+  name: List venues
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/venues
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}

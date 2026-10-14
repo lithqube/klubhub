@@ -1,0 +1,27 @@
+meta {
+  name: Link venue to gig
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/api/v1/gigs/{{createdGigId}}/link-venue
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "venue_id": "{{venueId}}",
+    "is_primary": true
+  }
+}
+
+assert {
+  res.status: eq 204
+}

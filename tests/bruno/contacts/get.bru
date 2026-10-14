@@ -1,0 +1,21 @@
+meta {
+  name: Get contact by id
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/contacts/{{createdContactId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+  res.body.name: eq Bruno Contact
+  res.body.email: eq bruno@example.org
+}

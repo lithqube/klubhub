@@ -1,0 +1,33 @@
+meta {
+  name: Update settings rejects bodies over 1 MiB
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/v1/settings
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "dj_name": "{{bigPad}}"
+  }
+}
+
+assert {
+  res.status: eq 413
+  res.body.error: eq request_too_large
+}
+
+script:pre-request {
+  // The settings handler caps request bodies at 1 MiB; pad past it so the
+  // MaxBytesReader overflow is translated into a 413 by the handler.
+  bru.setVar("bigPad", "x".repeat(1024 * 1024 + 16));
+}

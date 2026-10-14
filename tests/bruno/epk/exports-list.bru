@@ -1,0 +1,20 @@
+meta {
+  name: List EPK exports
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/epk/exports
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+  res.body.data: isArray
+}

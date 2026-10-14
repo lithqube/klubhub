@@ -1,0 +1,32 @@
+meta {
+  name: Update gig
+  type: http
+  seq: 14
+}
+
+put {
+  url: {{baseUrl}}/api/v1/gigs/{{createdGigId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "venue": "Bruno Arena 2",
+    "updated_at": "{{createdGigUpdatedAt}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.venue: eq Bruno Arena 2
+}
+
+script:post-response {
+  bru.setVar("createdGigUpdatedAt", res.getBody().updated_at);
+}

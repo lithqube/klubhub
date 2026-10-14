@@ -1,0 +1,23 @@
+meta {
+  name: Create venue rejects invalid JSON
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/venues
+  body: text
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:text {
+  {not valid json
+}
+
+assert {
+  res.status: eq 400
+}

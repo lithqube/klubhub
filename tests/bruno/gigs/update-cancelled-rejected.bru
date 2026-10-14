@@ -1,0 +1,27 @@
+meta {
+  name: Cancelled gig rejects further status changes
+  type: http
+  seq: 17
+}
+
+put {
+  url: {{baseUrl}}/api/v1/gigs/{{createdGigId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "status": "confirmed",
+    "updated_at": "{{createdGigUpdatedAt}}"
+  }
+}
+
+assert {
+  res.status: eq 403
+}

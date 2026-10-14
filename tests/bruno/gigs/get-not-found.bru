@@ -1,0 +1,19 @@
+meta {
+  name: Unknown gig returns 404
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/v1/gigs/11111111-1111-1111-1111-111111111111
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 404
+}

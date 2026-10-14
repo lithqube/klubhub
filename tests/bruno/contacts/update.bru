@@ -1,0 +1,29 @@
+meta {
+  name: Update contact
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/v1/contacts/{{createdContactId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bruno Contact 2",
+    "company": "Bruno GmbH"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.name: eq Bruno Contact 2
+  res.body.company: eq Bruno GmbH
+}

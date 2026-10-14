@@ -1,0 +1,29 @@
+meta {
+  name: Update venue
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/v1/venues/{{createdVenueId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bruno Club 2",
+    "city": "Leipzig"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.name: eq Bruno Club 2
+  res.body.city: eq Leipzig
+}

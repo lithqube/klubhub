@@ -1,0 +1,27 @@
+meta {
+  name: Create contact rejects missing name
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/contacts
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "noname@example.org",
+    "type": "promoter"
+  }
+}
+
+assert {
+  res.status: eq 400
+}

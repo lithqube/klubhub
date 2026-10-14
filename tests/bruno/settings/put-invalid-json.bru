@@ -1,0 +1,24 @@
+meta {
+  name: Update settings rejects invalid JSON
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/v1/settings
+  body: text
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:text {
+  {not valid json
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq bad_request
+}

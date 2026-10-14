@@ -17,3 +17,9 @@ headers {
 assert {
   res.status: eq 200
 }
+
+script:post-response {
+  // Settings PUT is optimistic-concurrency guarded: the body must echo the
+  // current updated_at. Capture it here so settings/put can send it back.
+  bru.setVar("settingsUpdatedAt", res.getBody().updated_at);
+}
