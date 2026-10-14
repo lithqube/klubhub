@@ -33,6 +33,7 @@ class Sandbox:
         self.dir = self.root / 'inst'
         self.bin = self.root / 'bin'
         self.bin.mkdir()
+        self.new_session = True
         # Safety net: anything not explicitly stubbed by a test must fail, never
         # reach the real docker daemon, network or repository.
         for name in ('docker', 'git', 'curl', 'aws'):
@@ -54,7 +55,7 @@ class Sandbox:
         # New session + closed stdin: no controlling terminal, so /dev/tty is
         # never read and the installer can never prompt the developer.
         return subprocess.run(['bash', '-c', script], env=self.env(**extra), stdin=subprocess.DEVNULL,
-                              capture_output=True, text=True, timeout=60, start_new_session=True)
+                              capture_output=True, text=True, timeout=60, start_new_session=self.new_session)
 
 
 def sourced(body):
@@ -217,7 +218,12 @@ class OfferPublicUrlTests(unittest.TestCase):
         self.addCleanup(os.close, master)
         self.addCleanup(os.close, slave)
         os.write(master, answers.encode())
-        r = sb.bash(sourced(f'DIR="{sb.dir}"; YES={yes}; CHECK=0; DJ=1; TTY="{os.ttyname(slave)}"\noffer_public_url'))
+        # No new session: a session leader that opens the pty slave acquires it as
+        # controlling terminal and then blocks on exit while the master is open
+        # (macOS). The offer flow reads $TTY (the slave), never /dev/tty.
+        sb.new_session = False
+        # DJ_PORT is set by load_settings in the real flow; the helper needs it under set -u.
+        r = sb.bash(sourced(f'DIR="{sb.dir}"; DJ_PORT=8080; YES={yes}; CHECK=0; DJ=1; TTY="{os.ttyname(slave)}"\noffer_public_url'))
         self.assertEqual(r.returncode, 0, r.stderr)
         return read_env(envfile), r
 
