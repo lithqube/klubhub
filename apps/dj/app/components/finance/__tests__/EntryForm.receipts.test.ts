@@ -352,6 +352,9 @@ describe('edit', () => {
     fetchMock.mockResolvedValueOnce({ data: [makeAttachment()] })
     mountForm({ editId: 'e-1' })
     await flushPromises()
+    // Let the form's mount-time focus timer (focusWhenReady, ~16 ms) fire before
+    // interacting, so it cannot steal focus back from the confirmation buttons.
+    await new Promise((r) => setTimeout(r, 30))
 
     ;(document.querySelector('[aria-label="Remove receipt receipt.png"]') as HTMLButtonElement).click()
     await flushPromises()
