@@ -42,6 +42,10 @@ const subtitle = computed(() => {
 })
 
 async function refresh(): Promise<void> {
+  // During SSR/prerender there is no API: skip the fetch so a failed request
+  // cannot store a FinanceApiError (Error subclass) in Pinia state and break
+  // Nuxt's payload serialization. The client fires the watcher on hydration.
+  if (import.meta.server) return
   if (localMode.value === 'month') {
     await store.refreshSummary({ scope: 'month', year: localYear.value, month: localMonth.value })
   } else {
@@ -49,10 +53,7 @@ async function refresh(): Promise<void> {
   }
 }
 
-// Client-only immediate fire: during SSR/prerender the fetch would fail and
-// store a FinanceApiError (an Error subclass) in Pinia state, which Nuxt's
-// payload serializer cannot stringify ("Cannot stringify arbitrary non-POJOs").
-watch([localMode, localYear, localMonth], () => { void refresh() }, { immediate: import.meta.client })
+watch([localMode, localYear, localMonth], () => { void refresh() }, { immediate: true })
 
 const rows = computed(() => Object.values(summary.value as Record<string, EntryTotals>))
 const state = computed<'loading' | 'error' | 'rows' | 'empty'>(() => {

@@ -221,7 +221,7 @@ describe('RaEventImport interactions', () => {
   it('shows the store error when the fetch fails', async () => {
     mockFetch.mockRejectedValue({ data: { error: 'artist not found' } })
     const wrapper = mountWith(true)
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     await fetchEvents(wrapper)
 

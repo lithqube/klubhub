@@ -85,7 +85,7 @@ describe('argon2InThread', () => {
 
 describe('deriveKey', () => {
   it('throws on unusable parameters without calling the KDF', async () => {
-    await expect(deriveKey('pw', { ...tiny, alg: 'nope' })).rejects.toThrow('unsupported kdf parameters')
+    await expect(deriveKey('pw', { ...tiny, alg: 'nope' as KdfParams['alg'] })).rejects.toThrow('unsupported kdf parameters')
   })
 
   it('derives in-thread where there is no Worker (jsdom)', async () => {

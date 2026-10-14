@@ -43,6 +43,10 @@ const subtitle = computed(() => {
 })
 
 async function refresh(): Promise<void> {
+  // During SSR/prerender there is no API: skip the fetch so a failed request
+  // cannot store a FinanceApiError (Error subclass) in Pinia state and break
+  // Nuxt's payload serialization. The client fires the watcher on hydration.
+  if (import.meta.server) return
   if (mode.value === 'gig') {
     const id = props.gigId ?? props.gig?.id
     if (id) await store.refreshProfitLoss({ scope: 'gig', gig_id: id })
@@ -54,10 +58,7 @@ async function refresh(): Promise<void> {
   }
 }
 
-// Client-only immediate fire: see EntrySummary.vue — an SSR-time fetch failure
-// would put a FinanceApiError (Error subclass) into Pinia state and break
-// prerender payload serialization.
-watch([mode, localYear, localMonth, () => props.gigId, () => props.gig?.id], () => { void refresh() }, { immediate: import.meta.client })
+watch([mode, localYear, localMonth, () => props.gigId, () => props.gig?.id], () => { void refresh() }, { immediate: true })
 
 const rows = computed(() => Object.values((profitLossByScope.value?.data ?? {}) as Record<string, ProfitLossTotals>))
 const state = computed<'loading' | 'error' | 'empty' | 'rows'>(() => {

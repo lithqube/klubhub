@@ -98,15 +98,15 @@ describe('qrDecode', () => {
     })
 
     it('returns null when qr_code is not among the supported formats', async () => {
-      ;(globalThis as Record<string, unknown>).BarcodeDetector = class {
-        static getSupportedFormats = async () => ['code_128']
+      ;(globalThis as Record<string, unknown>).BarcodeDetector = {
+        getSupportedFormats: async () => ['code_128'],
       }
       expect(await nativeQrDetector()).toBeNull()
     })
 
     it('returns null when getSupportedFormats throws', async () => {
-      ;(globalThis as Record<string, unknown>).BarcodeDetector = class {
-        static getSupportedFormats = async () => { throw new Error('denied') }
+      ;(globalThis as Record<string, unknown>).BarcodeDetector = {
+        getSupportedFormats: async () => { throw new Error('denied') },
       }
       expect(await nativeQrDetector()).toBeNull()
     })

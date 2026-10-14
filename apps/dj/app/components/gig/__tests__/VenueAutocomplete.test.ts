@@ -119,7 +119,7 @@ describe('VenueAutocomplete', () => {
   })
 
   it('hides the clear button while loading', async () => {
-    let resolveFetch: (v: Venue[]) => void = () => {}
+    let resolveFetch: (v: Venue[]) => void = () => undefined
     mockFetch.mockReturnValue(new Promise<Venue[]>((r) => { resolveFetch = r }))
     const wrapper = mountAc(makeVenue())
     await wrapper.find('input').setValue('berg')

@@ -153,7 +153,7 @@ describe('useGigStore', () => {
       mockFetch.mockRejectedValue(new Error('boom'));
       const store = setup();
       store.gigs = [makeGig()];
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       await store.fetchGigs();
       expect(store.gigs).toEqual([]);
       expect(store.loading).toBe(false);
@@ -180,7 +180,7 @@ describe('useGigStore', () => {
     it('returns null on error', async () => {
       mockFetch.mockRejectedValue(new Error('boom'));
       const store = setup();
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       expect(await store.fetchGigDetail('gig-9')).toBeNull();
       spy.mockRestore();
     });
@@ -223,7 +223,7 @@ describe('useGigStore', () => {
       mockFetch.mockRejectedValue(new Error('boom'));
       const store = setup();
       store.gigs = [makeGig({ id: 'old' })];
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       expect(await store.createGig(payload)).toBeNull();
       expect(store.gigs.map((g) => g.id)).toEqual(['old']);
       spy.mockRestore();
@@ -239,26 +239,25 @@ describe('useGigStore', () => {
       const result = await store.updateGig('gig-1', { event_name: 'Renamed' });
       expect(mockFetch).toHaveBeenCalledWith('/api/v1/gigs/gig-1', {
         method: 'PUT',
-        body: { event_name: 'Renamed' },
+        body: { event_name: 'Renamed', updated_at: null },
       });
       expect(result?.event_name).toBe('Renamed');
       expect(store.gigs[0].event_name).toBe('Renamed');
       expect(store.gigs[1].id).toBe('gig-2');
     });
 
-    it('leaves the list alone when the gig is not present', async () => {
-      mockFetch.mockResolvedValue(makeGig({ id: 'gig-9' }));
+    it('upserts the gig into the list when it was not present', async () => {
+      mockFetch.mockResolvedValue(makeGig({ id: 'gig-9', event_name: 'X' }));
       const store = setup();
       store.gigs = [makeGig({ id: 'gig-1' })];
       await store.updateGig('gig-9', { event_name: 'X' });
-      expect(store.gigs).toHaveLength(1);
-      expect(store.gigs[0].id).toBe('gig-1');
+      expect(store.gigs.map((g) => g.id)).toEqual(['gig-1', 'gig-9']);
     });
 
     it('returns null on error', async () => {
       mockFetch.mockRejectedValue(new Error('boom'));
       const store = setup();
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       expect(await store.updateGig('gig-1', {})).toBeNull();
       spy.mockRestore();
     });
@@ -277,7 +276,7 @@ describe('useGigStore', () => {
     it('returns false on error', async () => {
       mockFetch.mockRejectedValue(new Error('boom'));
       const store = setup();
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       expect(await store.deleteGig('gig-1')).toBe(false);
       spy.mockRestore();
     });
@@ -325,7 +324,7 @@ describe('useGigStore', () => {
     it('each link action returns false on error', async () => {
       mockFetch.mockRejectedValue(new Error('boom'));
       const store = setup();
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       expect(await store.linkVenue('g', 'v', false)).toBe(false);
       expect(await store.linkContact('g', 'c', 'r')).toBe(false);
       expect(await store.linkTracklist('g', 't')).toBe(false);
@@ -357,7 +356,7 @@ describe('useGigStore', () => {
       const store = setup();
       expect(await store.fetchGigsAutocomplete('x')).toEqual([]);
       mockFetch.mockRejectedValue(new Error('boom'));
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       expect(await store.fetchGigsAutocomplete('x')).toEqual([]);
       spy.mockRestore();
     });

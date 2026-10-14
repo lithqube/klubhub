@@ -3,13 +3,16 @@ package artwork_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/klubhub/dj/api/internal/artwork"
 )
 
 // stubSearcher is a scriptable SpotifySearcher/DiscogsSearcher/MusicBrainzSearcher.
+// FetchAll runs workers concurrently, so the call counter is mutex-guarded.
 type stubSearcher struct {
+	mu  sync.Mutex
 	url string
 	err error
 	// calls records how often Search was invoked.
@@ -17,12 +20,15 @@ type stubSearcher struct {
 }
 
 func (s *stubSearcher) Search(ctx context.Context, title, artist string) (string, error) {
+	s.mu.Lock()
 	s.calls++
+	s.mu.Unlock()
 	return s.url, s.err
 }
 
 // recordingCache records Put calls and serves scripted Get hits.
 type recordingCache struct {
+	mu     sync.Mutex
 	hit    string
 	puts   []putCall
 	putErr error
@@ -34,6 +40,8 @@ type putCall struct {
 
 func (c *recordingCache) Get(ctx context.Context, title, artist string) string { return c.hit }
 func (c *recordingCache) Put(ctx context.Context, title, artist, imageURL string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.puts = append(c.puts, putCall{title, artist, imageURL})
 	return c.putErr
 }

@@ -75,7 +75,7 @@ describe('useTracklistStore', () => {
     it('returns null on error', async () => {
       mockFetch.mockRejectedValue(new Error('boom'));
       const store = useTracklistStore();
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       expect(await store.fetchTracklist('tl-1')).toBeNull();
       spy.mockRestore();
     });
@@ -102,7 +102,7 @@ describe('useTracklistStore', () => {
       mockFetch.mockRejectedValue(new Error('boom'));
       const store = useTracklistStore();
       store.pastTracklists = [{ id: 'tl-1' } as any];
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       await store.loadPastTracklists();
       expect(store.pastTracklists).toEqual([]);
       spy.mockRestore();

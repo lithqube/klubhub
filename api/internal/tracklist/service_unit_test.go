@@ -47,6 +47,16 @@ func (r *uploadRepoStub) UpdateTrack(_ context.Context, _, _ uuid.UUID, req Upda
 	r.updatedReq = req
 	return r.updateErr
 }
+func (r *uploadRepoStub) UpdateTitle(context.Context, uuid.UUID, string) error { return nil }
+func (r *uploadRepoStub) LinkedGigs(context.Context, uuid.UUID) ([]LinkedGig, error) {
+	return nil, nil
+}
+func (r *uploadRepoStub) AddTrack(_ context.Context, _ uuid.UUID, req CreateTrackRequest) (*Track, error) {
+	return &Track{Title: req.Title, Artist: req.Artist}, nil
+}
+func (r *uploadRepoStub) ReorderTracks(context.Context, uuid.UUID, []uuid.UUID) error {
+	return nil
+}
 func (r *uploadRepoStub) SoftDelete(context.Context, uuid.UUID) error { return nil }
 func (r *uploadRepoStub) UpdateArtworkStatus(context.Context, uuid.UUID, string, string, string) error {
 	return nil

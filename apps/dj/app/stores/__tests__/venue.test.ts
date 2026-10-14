@@ -69,7 +69,7 @@ describe('useVenueStore', () => {
   it('fetchAutocomplete returns [] and keeps state on error', async () => {
     mockFetch.mockRejectedValue(new Error('boom'));
     const store = setup();
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(await store.fetchAutocomplete('berg')).toEqual([]);
     expect(store.venues).toEqual([]);
     spy.mockRestore();

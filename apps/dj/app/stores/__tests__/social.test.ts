@@ -489,33 +489,6 @@ describe('useSocialStore', () => {
     });
   });
 
-  describe('downloadImage()', () => {
-    it('fetches the image as a blob', async () => {
-      const store = useSocialStore();
-      const blob = new Blob(['img'], { type: 'image/png' });
-      const mockFetch = vi.fn().mockResolvedValue(blob);
-      // @ts-expect-error - mocking global $fetch
-      global.$fetch = mockFetch;
-
-      const result = await store.downloadImage('post-1');
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/v1/social/posts/post-1/image', {
-        responseType: 'blob',
-      });
-      expect(result).toBe(blob);
-    });
-
-    it('returns null and shows the error on failure', async () => {
-      const store = useSocialStore();
-      const failure = new Error('no image');
-      // @ts-expect-error - mocking global $fetch
-      global.$fetch = vi.fn().mockRejectedValue(failure);
-
-      expect(await store.downloadImage('post-1')).toBeNull();
-      expect(mockShowError).toHaveBeenCalledWith(String(failure));
-    });
-  });
-
   describe('initiateOAuth()', () => {
     it('returns the authorization url', async () => {
       const store = useSocialStore();

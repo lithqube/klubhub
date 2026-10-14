@@ -166,7 +166,7 @@ describe('EpkRaImportPanel apply flow (real stores)', () => {
   it('shows the store error when the artist fetch fails', async () => {
     mockFetch.mockRejectedValue({ data: { error: 'artist not found' } })
     const wrapper = mountPanel()
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     await fetchArtist(wrapper)
 
