@@ -49,7 +49,10 @@ async function refresh(): Promise<void> {
   }
 }
 
-watch([localMode, localYear, localMonth], () => { void refresh() }, { immediate: true })
+// Client-only immediate fire: during SSR/prerender the fetch would fail and
+// store a FinanceApiError (an Error subclass) in Pinia state, which Nuxt's
+// payload serializer cannot stringify ("Cannot stringify arbitrary non-POJOs").
+watch([localMode, localYear, localMonth], () => { void refresh() }, { immediate: import.meta.client })
 
 const rows = computed(() => Object.values(summary.value as Record<string, EntryTotals>))
 const state = computed<'loading' | 'error' | 'rows' | 'empty'>(() => {

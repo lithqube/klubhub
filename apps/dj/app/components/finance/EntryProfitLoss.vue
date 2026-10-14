@@ -53,7 +53,10 @@ async function refresh(): Promise<void> {
   }
 }
 
-watch([mode, localYear, localMonth, () => props.gigId, () => props.gig?.id], () => { void refresh() }, { immediate: true })
+// Client-only immediate fire: see EntrySummary.vue — an SSR-time fetch failure
+// would put a FinanceApiError (Error subclass) into Pinia state and break
+// prerender payload serialization.
+watch([mode, localYear, localMonth, () => props.gigId, () => props.gig?.id], () => { void refresh() }, { immediate: import.meta.client })
 
 const rows = computed(() => Object.values((profitLossByScope.value?.data ?? {}) as Record<string, ProfitLossTotals>))
 const state = computed<'loading' | 'error' | 'empty' | 'rows'>(() => {
