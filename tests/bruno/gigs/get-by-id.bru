@@ -16,6 +16,6 @@ headers {
 
 assert {
   res.status: eq 200
-  res.body.event_name: eq Bruno Party
-  res.body.fee_currency: eq EUR
+  res.body.data.event_name: eq Bruno Party
+  res.body.data.fee_currency: eq EUR
 }

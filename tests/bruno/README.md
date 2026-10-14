@@ -65,8 +65,9 @@ back to `multipart-form` or the upload test will send an empty body.
 | `contactId` | all-zeros UUID | Contact linked to the created gig |
 
 `scripts/test-dj-api.sh` overrides all of these with freshly seeded IDs
-via `--env-var`. Override at runtime via Bruno's `--env <name>` flag with
-an `.env.bruno` file alongside the collection.
+via `--env-var`. Override at runtime with Bruno's `--env-file <file>` flag
+pointing at a `.bru` environment file alongside the collection, or select a
+named environment with `--env <name>`.
 
 ## Coverage map
 

@@ -24,9 +24,9 @@ body:json {
 
 assert {
   res.status: eq 200
-  res.body.venue: eq Bruno Arena 2
+  res.body.data.venue: eq Bruno Arena 2
 }
 
 script:post-response {
-  bru.setVar("createdGigUpdatedAt", res.getBody().updated_at);
+  bru.setVar("createdGigUpdatedAt", res.getBody().data.updated_at);
 }

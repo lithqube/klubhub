@@ -34,13 +34,13 @@ body:json {
 
 assert {
   res.status: eq 201
-  res.body.event_name: eq Bruno Party
-  res.body.status: eq inquiry
-  res.body.payment_status: eq unpaid
-  res.body.id: isNotEmpty
+  res.body.data.event_name: eq Bruno Party
+  res.body.data.status: eq inquiry
+  res.body.data.payment_status: eq unpaid
+  res.body.data.id: isNotEmpty
 }
 
 script:post-response {
-  bru.setVar("createdGigId", res.getBody().id);
-  bru.setVar("createdGigUpdatedAt", res.getBody().updated_at);
+  bru.setVar("createdGigId", res.getBody().data.id);
+  bru.setVar("createdGigUpdatedAt", res.getBody().data.updated_at);
 }

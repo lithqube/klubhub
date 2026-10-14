@@ -83,7 +83,7 @@ S3_PORT="$(free_port)"
 python3 "$ROOT/scripts/test-dj-api-s3-stub.py" "$S3_PORT" >"$WORK/s3.log" 2>&1 &
 S3_PID=$!
 for _ in $(seq 1 20); do
-    if curl -fsS "http://127.0.0.1:$S3_PORT/klubhub?location=" >/dev/null 2>&1; then break; fi
+    if curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$S3_PORT/klubhub?location=" >/dev/null 2>&1; then break; fi
     kill -0 "$S3_PID" 2>/dev/null || { echo "S3 stub exited during start" >&2; exit 1; }
     sleep 0.5
 done
@@ -113,25 +113,25 @@ echo "==> Starting the DJ API on $BASE_URL"
 "$WORK/api" >"$WORK/api.log" 2>&1 &
 API_PID=$!
 for _ in $(seq 1 60); do
-    if curl -fsS "$BASE_URL/api/v1/health" >/dev/null 2>&1; then break; fi
+    if curl -fsS --connect-timeout 2 --max-time 5 "$BASE_URL/api/v1/health" >/dev/null 2>&1; then break; fi
     kill -0 "$API_PID" 2>/dev/null || { echo "API exited during start" >&2; exit 1; }
     sleep 0.5
 done
-curl -fsS "$BASE_URL/api/v1/health" >/dev/null || { echo "API did not become healthy" >&2; exit 1; }
+curl -fsS --connect-timeout 2 --max-time 5 "$BASE_URL/api/v1/health" >/dev/null || { echo "API did not become healthy" >&2; exit 1; }
 
 echo "==> Seeding fixtures (gig, tracklist, venue, contact)"
-GIG_ID="$(curl -fsS -X POST "$BASE_URL/api/v1/gigs" \
+GIG_ID="$(curl -fsS --connect-timeout 2 --max-time 30 -X POST "$BASE_URL/api/v1/gigs" \
     -H 'Content-Type: application/json' \
     -d '{"date":"2026-12-01T20:00:00Z","venue":"Seed Arena","city":"Berlin","country":"DE","event_name":"Seed Party","promoter_name":"Seed Promoter","promoter_email":"seed@example.org","promoter_phone":"+49 000","fee_amount":500.5,"fee_currency":"EUR","set_length_minutes":120,"notes":"seeded by test-dj-api.sh"}' \
-    | jq -r '.id')"
-TRACKLIST_ID="$(curl -fsS -X POST "$BASE_URL/api/v1/tracklists/upload" \
+    | jq -r '.data.id')"
+TRACKLIST_ID="$(curl -fsS --connect-timeout 2 --max-time 30 -X POST "$BASE_URL/api/v1/tracklists/upload" \
     -F "file=@$ROOT/api/testdata/rekordbox_sample.txt" \
     | jq -r '.tracklist.id')"
-VENUE_ID="$(curl -fsS -X POST "$BASE_URL/api/v1/venues" \
+VENUE_ID="$(curl -fsS --connect-timeout 2 --max-time 30 -X POST "$BASE_URL/api/v1/venues" \
     -H 'Content-Type: application/json' \
     -d '{"name":"Seed Venue","city":"Berlin","country":"DE","tech_contact_name":"Seed Tech","tech_contact_email":"tech@example.org","tech_contact_phone":"+49 111","notes":"seeded by test-dj-api.sh"}' \
     | jq -r '.id')"
-CONTACT_ID="$(curl -fsS -X POST "$BASE_URL/api/v1/contacts" \
+CONTACT_ID="$(curl -fsS --connect-timeout 2 --max-time 30 -X POST "$BASE_URL/api/v1/contacts" \
     -H 'Content-Type: application/json' \
     -d '{"name":"Seed Contact","email":"contact@example.org","phone":"+49 222","type":"promoter","notes":"seeded by test-dj-api.sh"}' \
     | jq -r '.id')"

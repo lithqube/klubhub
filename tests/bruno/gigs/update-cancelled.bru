@@ -24,9 +24,9 @@ body:json {
 
 assert {
   res.status: eq 200
-  res.body.status: eq cancelled
+  res.body.data.status: eq cancelled
 }
 
 script:post-response {
-  bru.setVar("createdGigUpdatedAt", res.getBody().updated_at);
+  bru.setVar("createdGigUpdatedAt", res.getBody().data.updated_at);
 }
