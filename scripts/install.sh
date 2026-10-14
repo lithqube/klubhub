@@ -16,7 +16,12 @@
 #      container, nothing to install), the stack, and your organisation with a
 #      one-time owner sign-up link
 #   5. saves your settings and writes <dir>/klubhub for status, logs, stop,
-#      start, config, update and backup reminders
+#      start, config, update, backup, rollback and backup reminders
+#
+# Re-running is an update: it backs up data and secrets to .local/backups/
+# first, rolls the containers to the newest published image for the ref
+# (--release picks the newest v* tag), and records the previous version so
+# ./klubhub rollback can restore it.
 #
 # Everything binds to 127.0.0.1 unless you pass --bind. Reach it from other
 # devices over a VPN (e.g. Tailscale) or a reverse proxy you control; see
@@ -57,7 +62,11 @@ Products
 
 Install
   --dir DIR                install directory (default: ~/klubhub)
-  --ref REF                branch, tag or commit to install (default: main)
+  --ref REF                branch, tag or commit to install (default: main;
+                           --release picks the newest v* release tag instead)
+  --release                update to the newest v* release tag (overrides a
+                           saved ref; an explicit --ref still wins)
+  --backup-only            back up data + secrets into .local/backups/ and exit
   --dj-tag TAG             DJ image tag (default: newest image built from the
                            installed commit or its history)
   --promoter-tag TAG       Promoter image tag (same default)
@@ -175,6 +184,7 @@ parse_args() {
   [[ -z "${KLUBHUB_S3_PORT:-}" ]]        || set_var dj "S3_PORT=$KLUBHUB_S3_PORT"
   [[ -z "${KLUBHUB_S3_URL:-}" ]]         || set_var dj "S3_PUBLIC_ENDPOINT=$KLUBHUB_S3_URL"
   [[ -z "${KLUBHUB_PROMOTER_PORT:-}" ]]  || set_var promoter "PROMOTER_HOST_PORT=$KLUBHUB_PROMOTER_PORT"
+  RELEASE="${KLUBHUB_RELEASE:-0}"; BACKUP_ONLY="${KLUBHUB_BACKUP_ONLY:-0}"
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --dj) DJ=1 ;; --promoter) PROMOTER=1 ;; --both) DJ=1; PROMOTER=1 ;;
@@ -203,6 +213,8 @@ parse_args() {
       --currency) need_val "$@"; CURRENCY="$2"; shift ;;
       --emulate-arm64) EMULATE=1 ;;
       --check) CHECK=1 ;;
+      --release) RELEASE=1 ;;
+      --backup-only) BACKUP_ONLY=1 ;;
       -y|--yes) YES=1 ;;
       -h|--help) usage; exit 0 ;;
       *) usage >&2; die "Unknown option: $1" ;;
@@ -429,8 +441,22 @@ fetch_repo() {
   git -C "$DIR" fetch -q --depth "$HISTORY" origin "$REF" || die "Could not fetch '$REF' from $REPO_URL."
   git -C "$DIR" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD
   COMMIT="$(git -C "$DIR" rev-parse --short=7 HEAD)"
+  COMMIT_FULL="$(git -C "$DIR" rev-parse HEAD)"
   ok "commit $COMMIT"
   mkdir -p "$DIR/.local"; chmod 700 "$DIR/.local"
+}
+
+latest_release() { # newest v* tag on the remote (annotated tags list a ^{} deref line)
+  git ls-remote --tags "$REPO_URL" 'refs/tags/v*' 2>/dev/null \
+    | sed -e 's|.*refs/tags/||' -e '/\^{}$/d' | sort -V | tail -n1
+}
+resolve_ref() { # sets REF: --release > --ref/env > saved ref > main
+  if [[ "${RELEASE:-0}" == 1 && -z "${REF:-}" ]]; then
+    REF="$(latest_release)"
+    [[ -n "$REF" ]] || die "No v* release tags found in $REPO_URL"
+    ok "latest release: $REF"
+  fi
+  REF="${REF:-$(saved KLUBHUB_REF)}"; REF="${REF:-main}"
 }
 
 registry_token() { # repo — anonymous pull token, no docker login needed
@@ -475,7 +501,7 @@ install_dj() {
   check_ports klubhub-dj-prod "UI/API $DJ_PORT" "storage $S3_PORT_V"
   (cd "$DIR" && IMAGE_TAG="$DJ_TAG" with_env "$DIR/.local/dj.env" bash scripts/setup.sh prod) \
     || die "DJ setup failed (see above). Re-running is safe."
-  wait_http "http://$DJ_HOST:$DJ_PORT/api/v1/health" "DJ" 300
+  wait_http "http://$DJ_HOST:$DJ_PORT/api/v1/health" "DJ" 300 || health_failed "DJ"
 }
 
 # --------------------------------------------------------------- Promoter ----
@@ -498,6 +524,11 @@ local_tz() {
   elif have timedatectl; then tz="$(timedatectl show -p Timezone --value 2>/dev/null || true)"; fi
   printf '%s' "${tz:-UTC}"
 }
+dj_compose() {
+  (cd "$DIR" && IMAGE_TAG="$(saved KLUBHUB_DJ_TAG)" with_env "$DIR/.local/dj.env" \
+    docker compose --env-file /dev/null -p klubhub-dj-prod -f docker-compose.prod.yml "$@")
+}
+
 promoter_compose() {
   (cd "$DIR" && PROMOTER_TAG="$PROMOTER_TAG" PROMOTER_PUBLIC_ORIGIN="$ORIGIN" \
     with_env "$DIR/.local/promoter.env" docker compose --env-file /dev/null -f docker-compose.promoter.yml "$@")
@@ -521,7 +552,7 @@ install_promoter() {
   fi
 
   promoter_compose up -d --quiet-pull || die "Starting Promoter failed. Logs: $DIR/klubhub logs promoter"
-  wait_http "http://$P_HOST:$P_PORT/api/v1/health" "Promoter" 240
+  wait_http "http://$P_HOST:$P_PORT/api/v1/health" "Promoter" 240 || health_failed "Promoter"
 
   if [[ -e "$DIR/.local/promoter/bootstrapped" ]]; then ok "organisation already set up"; return; fi
   printf '\n  %sYour organisation%s %s(the first owner gets a one-time sign-up link)%s\n' "$B" "$N" "$D" "$N"
@@ -548,17 +579,96 @@ install_promoter() {
   fi
 }
 
-wait_http() { # url, label, seconds
+wait_http() { # url, label, seconds — returns 1 (never dies) so callers can react
   local url="$1" label="$2" deadline=$(( $(date +%s) + $3 ))
   printf '  waiting for %s to be ready ' "$label"
   until curl -fsS -o /dev/null "$url" 2>/dev/null; do
-    [[ $(date +%s) -lt $deadline ]] || { echo; die "$label did not become ready in $3 s. Logs: $DIR/klubhub logs"; }
+    [[ $(date +%s) -lt $deadline ]] || { echo; return 1; }
     printf '.'; sleep 3
   done
   printf ' %sready%s\n' "$G" "$N"
 }
+health_failed() { # label — update-aware failure after the stack was rolled
+  if [[ "${IS_UPDATE:-0}" == 1 ]]; then
+    printf '\n%s✗ %s did not become ready after the update.%s\n' "$R" "$1" "$N" >&2
+    printf '  The previous version is recorded in .local/installer.env (KLUBHUB_PREV_*).%s\n' "$N" >&2
+    printf '  Roll back with: %s/klubhub rollback%s\n' "$DIR" "$N" >&2
+    printf '  If the update ran database migrations, restore the newest backup in %s/.local/backups/ first.%s\n' "$DIR" "$N" >&2
+  fi
+  die "$1 did not become ready. Logs: $DIR/klubhub logs"
+}
 
 # ------------------------------------------------------------ management ----
+backup_stack() { # snapshot data + secrets before an update pulls new images
+  local ts dir tmp f db_user db_name
+  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  dir="$DIR/.local/backups/$ts"
+  mkdir -p "$dir"
+  step "Backing up current data to .local/backups/$ts"
+  # Host files: secrets and settings (small; always safe to copy).
+  if [[ -d "$DIR/secrets/prod" ]]; then cp -a "$DIR/secrets/prod" "$dir/secrets-prod"; fi
+  if [[ -d "$DIR/.local/promoter" ]]; then cp -a "$DIR/.local/promoter" "$dir/promoter-local"; fi
+  for f in dj.env promoter.env installer.env; do
+    if [[ -f "$DIR/.local/$f" ]]; then cp -a "$DIR/.local/$f" "$dir/$f"; fi
+  done
+  # Databases: logical dump while the stack is up; raw volume copy when stopped.
+  if [[ "$DJ" == 1 ]]; then
+    db_user="$(env_get "$DIR/.local/dj.env" POSTGRES_USER)"; db_user="${db_user:-klubhub}"
+    db_name="$(env_get "$DIR/.local/dj.env" POSTGRES_DB)"; db_name="${db_name:-klubhub}"
+    if [[ -n "$(dj_compose ps -q db 2>/dev/null)" ]]; then
+      dj_compose exec -T db pg_dump -U "$db_user" "$db_name" >"$dir/dj-postgres.sql" \
+        || { rm -f "$dir/dj-postgres.sql"; die "DJ database dump failed; not updating without a backup. Back up manually, then re-run."; }
+      ok "DJ database dumped"
+    else
+      tmp="$(mktemp -d)"; mkdir -p "$tmp/data"
+      if dj_compose cp db:/var/lib/postgresql/data/. "$tmp/data" 2>/dev/null; then
+        tar -czf "$dir/dj-postgres-data.tar.gz" -C "$tmp" data
+        ok "DJ database volume copied (stack was stopped)"
+      elif docker volume inspect klubhub-dj-prod_db_data >/dev/null 2>&1; then
+        rm -rf "$tmp"
+        die "DJ database volume exists but could not be copied; not updating without a backup."
+      else
+        warn "DJ database volume not found; nothing to back up."
+      fi
+      rm -rf "$tmp"
+    fi
+    # Garage object storage (shell-free image: copy out through the daemon).
+    tmp="$(mktemp -d)"; mkdir -p "$tmp/data"
+    if dj_compose cp storage:/data/. "$tmp/data" 2>/dev/null; then
+      tar -czf "$dir/dj-garage-data.tar.gz" -C "$tmp" data
+      ok "Garage storage copied"
+    else
+      warn "Garage data could not be copied; the update continues without it."
+    fi
+    rm -rf "$tmp"
+  fi
+  if [[ "$PROMOTER" == 1 ]]; then
+    if [[ -n "$(promoter_compose ps -q promoter-db 2>/dev/null)" ]]; then
+      promoter_compose exec -T promoter-db pg_dump -U klubhub_owner promoter >"$dir/promoter-postgres.sql" \
+        || { rm -f "$dir/promoter-postgres.sql"; die "Promoter database dump failed; not updating without a backup. Back up manually, then re-run."; }
+      ok "Promoter database dumped"
+    else
+      tmp="$(mktemp -d)"; mkdir -p "$tmp/data"
+      if promoter_compose cp promoter-db:/var/lib/postgresql/data/. "$tmp/data" 2>/dev/null; then
+        tar -czf "$dir/promoter-postgres-data.tar.gz" -C "$tmp" data
+        ok "Promoter database volume copied (stack was stopped)"
+      elif docker volume inspect klubhub-promoter_promoter-db >/dev/null 2>&1; then
+        rm -rf "$tmp"
+        die "Promoter database volume exists but could not be copied; not updating without a backup."
+      else
+        warn "Promoter database volume not found; nothing to back up."
+      fi
+      rm -rf "$tmp"
+    fi
+  fi
+  ok "backup complete: $dir"
+  BACKUP_DIR="$dir"
+}
+prune_images() { # after an update: drop dangling layers; keep old tags for rollback
+  docker image prune -f >/dev/null 2>&1 || true
+  ok "pruned dangling images (previous release tags are kept for ./klubhub rollback)"
+}
+
 save_installer() { # keep a copy for ./klubhub set/update (curl | bash leaves no file)
   local src="${BASH_SOURCE[0]:-}" dst="$DIR/.local/install.sh"
   if [[ -f "$src" && "$src" -ef "$dst" ]]; then return 0
@@ -571,10 +681,18 @@ save_installer() { # keep a copy for ./klubhub set/update (curl | bash leaves no
 write_settings() {
   if [[ "$DJ_KEEP" == 1 ]]; then DJ=1; DJ_TAG="${DJ_TAG:-$(saved KLUBHUB_DJ_TAG)}"; fi
   if [[ "$PROMOTER_KEEP" == 1 ]]; then PROMOTER=1; PROMOTER_TAG="${PROMOTER_TAG:-$(saved KLUBHUB_PROMOTER_TAG)}"; ORIGIN="${ORIGIN:-$(saved KLUBHUB_ORIGIN)}"; fi
+  # Rollback breadcrumb: keep the previous ref/commit/tags so ./klubhub
+  # rollback can restore them (one step back; backups hold the data).
+  local prev_ref prev_commit prev_dj prev_prom
+  prev_ref="$(saved KLUBHUB_REF)"; prev_commit="$(saved KLUBHUB_COMMIT)"
+  prev_dj="$(saved KLUBHUB_DJ_TAG)"; prev_prom="$(saved KLUBHUB_PROMOTER_TAG)"
   (umask 077; {
     echo "# Written by the KlubHub installer; reused by ./klubhub and re-runs."
     echo "KLUBHUB_DJ=$DJ"; echo "KLUBHUB_PROMOTER=$PROMOTER"; echo "KLUBHUB_REF=$REF"
+    echo "KLUBHUB_COMMIT=${COMMIT_FULL:-}"
     echo "KLUBHUB_DJ_TAG=${DJ_TAG:-}"; echo "KLUBHUB_PROMOTER_TAG=${PROMOTER_TAG:-}"; echo "KLUBHUB_ORIGIN=${ORIGIN:-}"
+    echo "KLUBHUB_PREV_REF=${prev_ref:-}"; echo "KLUBHUB_PREV_COMMIT=${prev_commit:-}"
+    echo "KLUBHUB_PREV_DJ_TAG=${prev_dj:-}"; echo "KLUBHUB_PREV_PROMOTER_TAG=${prev_prom:-}"
     echo "KLUBHUB_INSTALLER_URL=$INSTALLER_URL"
   } >"$DIR/.local/installer.env")
   save_installer
@@ -582,7 +700,8 @@ write_settings() {
 #!/usr/bin/env bash
 # KlubHub control, written by scripts/install.sh.
 #   ./klubhub status | logs [dj|promoter] | stop | start | restart | config
-#             | set dj|promoter KEY=VALUE… | update [ref] | backup-info
+#             | set dj|promoter KEY=VALUE… | update [--release | ref] | backup
+#             | rollback | backup-info
 set -euo pipefail
 cd "$(dirname "$0")"
 v() { sed -n "s/^$1=//p" .local/installer.env | tail -1; }
@@ -613,14 +732,34 @@ case "${1:-status}" in
            # shellcheck disable=SC2046
            installer $(products) --dir "$PWD" --yes "${flags[@]}" ;;
   update)  # shellcheck disable=SC2046
-           installer $(products) --dir "$PWD" --ref "${2:-$(v KLUBHUB_REF)}" --yes ;;
+           case "${2:-}" in
+             --release) installer $(products) --dir "$PWD" --release --yes ;;
+             "") installer $(products) --dir "$PWD" --ref "$(v KLUBHUB_REF)" --yes ;;
+             *) installer $(products) --dir "$PWD" --ref "$2" --yes ;;
+           esac ;;
+  backup)  installer --dir "$PWD" --backup-only ;;
+  rollback)
+           prev_ref="$(v KLUBHUB_PREV_REF)"; prev_commit="$(v KLUBHUB_PREV_COMMIT)"
+           prev_dj="$(v KLUBHUB_PREV_DJ_TAG)"; prev_prom="$(v KLUBHUB_PREV_PROMOTER_TAG)"
+           if [[ -z "$prev_commit$prev_dj$prev_prom" ]]; then
+             echo "No previous version recorded (nothing to roll back to)." >&2; exit 1
+           fi
+           flags=()
+           [[ -n "$prev_commit" ]] && flags+=(--ref "$prev_commit")
+           [[ -n "$prev_dj" ]] && flags+=(--dj-tag "$prev_dj")
+           [[ -n "$prev_prom" ]] && flags+=(--promoter-tag "$prev_prom")
+           echo "Rolling back to ${prev_ref:-the previous version} (commit ${prev_commit:-unknown})"
+           # shellcheck disable=SC2046
+           installer $(products) --dir "$PWD" --yes "${flags[@]}"
+           echo "If the update ran database migrations, restore the newest backup in .local/backups/ first." ;;
   backup-info)
+    echo "Updates back up automatically to .local/backups/ before pulling new images."
     echo "Back up these folders (encrypted, offline) together with your data backups:"
     if [[ "$DJ" == 1 ]]; then echo "  $PWD/secrets/prod       DJ secrets and storage configuration"; fi
     if [[ "$PROMOTER" == 1 ]]; then echo "  $PWD/.local/promoter    Promoter secrets, encryption key (KEK) and NATS keys"; fi
     echo "  $PWD/.local/*.env       your settings (may include API keys you passed)"
     echo "Losing the Promoter KEK makes guest and finance data unreadable, by design." ;;
-  *) echo "usage: ./klubhub status | logs [dj|promoter] | stop | start | restart | config | set dj|promoter KEY=VALUE… | update [ref] | backup-info" >&2; exit 2 ;;
+  *) echo "usage: ./klubhub status | logs [dj|promoter] | stop | start | restart | config | set dj|promoter KEY=VALUE… | update [--release | ref] | backup | rollback | backup-info" >&2; exit 2 ;;
 esac
 EOF
   chmod +x "$DIR/klubhub"
@@ -642,7 +781,10 @@ summary() {
   printf '\n  %sBack up your keys now%s (offline: a password manager or an encrypted drive):\n' "$Y" "$N"
   if [[ "$DJ" == 1 ]]; then printf '    %s/secrets/prod\n' "$DIR"; fi
   if [[ "$PROMOTER" == 1 ]]; then printf '    %s/.local/promoter   %s(holds the encryption key: lose it and guest data is gone)%s\n' "$DIR" "$D" "$N"; fi
-  printf '\n  Manage it with %s%s/klubhub%s status | logs | config | set | update | backup-info\n' "$B" "$DIR" "$N"
+  printf '\n  Manage it with %s%s/klubhub%s status | logs | config | set | update | backup | rollback | backup-info\n' "$B" "$DIR" "$N"
+  if [[ -n "${BACKUP_DIR:-}" ]]; then
+    printf '  Pre-update backup: %s\n  Roll back with: %s/klubhub rollback\n' "$BACKUP_DIR" "$DIR"
+  fi
   local bind; bind="$(env_get "$DIR/.local/promoter.env" PROMOTER_BIND)$(env_get "$DIR/.local/dj.env" API_BIND)"
   if [[ -z "$bind" || "$bind" == 127.0.0.1* ]]; then
     printf '  Everything listens on 127.0.0.1 only. For other devices use a VPN (e.g. Tailscale)\n  or a reverse proxy with --dj-url/--s3-url/--origin: docs/SELF-HOSTING.md\n\n'
@@ -671,16 +813,21 @@ main() {
   parse_args "$@"
   printf '%sKlubHub installer%s\n' "$B" "$N"
   choose_products
-  REF="${REF:-$(saved KLUBHUB_REF)}"; REF="${REF:-main}"
+  IS_UPDATE=0
+  if [[ -f "$DIR/.local/installer.env" ]]; then IS_UPDATE=1; fi
+  if [[ "${BACKUP_ONLY:-0}" == 1 ]]; then load_settings; backup_stack; return 0; fi
   preflight
+  resolve_ref
   fetch_repo
   load_settings
   # Before --check returns and before install_dj reads dj.env: offer_public_url
   # skips itself for --check/--yes/no TTY; the warning stays useful in all modes.
   if [[ "$DJ" == 1 ]]; then offer_public_url; cors_exposure_warning; fi
   if [[ "$CHECK" == 1 ]]; then check_only; return; fi
+  if [[ "$IS_UPDATE" == 1 ]]; then backup_stack; fi
   if [[ "$DJ" == 1 ]]; then install_dj; fi
   if [[ "$PROMOTER" == 1 ]]; then install_promoter; fi
+  if [[ "$IS_UPDATE" == 1 ]]; then prune_images; fi
   write_settings
   summary
 }
