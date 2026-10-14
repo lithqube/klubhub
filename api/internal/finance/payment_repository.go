@@ -15,8 +15,8 @@ import (
 
 // PaymentRepository persists Payment rows.
 type PaymentRepository struct {
-	pool         *pgxpool.Pool
-	transitions  gig.PaymentTransitionProcessor
+	pool        *pgxpool.Pool
+	transitions gig.PaymentTransitionProcessor
 }
 
 // NewPaymentRepository returns a PaymentRepository backed by pool. No
@@ -39,6 +39,24 @@ func (r *PaymentRepository) Pool() *pgxpool.Pool { return r.pool }
 // Create inserts a new payment row with status 'pending'. The parent
 // invoice is locked for the duration of the transaction so the balance
 // check and the insert are atomic with respect to other payment writes.
+// The gig payment status is NOT synced here: pending money is not cash
+// authority, and a pending deposit on a sibling invoice must never
+// overwrite a settled gig. Status sync runs on Update when the payment
+// completes (or fails out).
+//
+// Invoice-state policy (docs/INVOICING.md §2):
+//
+//	kind=invoice  status=draft          → reject (ErrPaymentInvoiceState)
+//	kind=invoice  status=issued|paid     → accept all kinds
+//	kind=invoice  status=credited|corrected → only refund kind (returning
+//	                                        previously-collected cash); new
+//	                                        deposits/payments rejected with
+//	                                        ErrPaymentKindNotAllowed
+//	kind=credit_note → reject all (ErrPaymentInvoiceState)
+//
+// Refunds on retired invoices stay bounded by checkPaymentBalance, which
+// compares pending plus completed refunds against completed incoming
+// money on the same invoice.
 func (r *PaymentRepository) Create(ctx context.Context, invoiceID uuid.UUID, req CreatePaymentRequest) (*Payment, error) {
 	var p Payment
 	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
@@ -46,10 +64,17 @@ func (r *PaymentRepository) Create(ctx context.Context, invoiceID uuid.UUID, req
 		if err != nil {
 			return err
 		}
-		// Credit notes are never payable; only issued/paid invoices take money.
-		if kind != InvoiceKindInvoice || (status != InvoiceStatusIssued && status != InvoiceStatusPaid) {
+		// Only issued/paid or retired originals are eligible. Keep cancelled
+		// and draft invoices closed to every payment kind.
+		if kind != InvoiceKindInvoice || (status != InvoiceStatusIssued && status != InvoiceStatusPaid && status != InvoiceStatusCredited && status != InvoiceStatusCorrected) {
 			return ErrPaymentInvoiceState
 		}
+		// Retired invoices (credited/corrected) only accept refunds; new
+		// deposits or payments would mint money out of a retired document.
+		if (status == InvoiceStatusCredited || status == InvoiceStatusCorrected) && req.Kind != PaymentKindRefund {
+			return ErrPaymentKindNotAllowed
+		}
+		// On issued/paid invoices all kinds are accepted.
 		if currency != req.Currency {
 			return PaymentValidationErrors{{"currency", "must match invoice currency " + currency}}
 		}
@@ -64,7 +89,10 @@ func (r *PaymentRepository) Create(ctx context.Context, invoiceID uuid.UUID, req
 		if err := checkPaymentBalance(ctx, tx, invoiceID); err != nil {
 			return err
 		}
-		return syncGigPaymentStatusWith(ctx, tx, invoiceID, r.transitions)
+		// Pending-only writes do not change cash authority; do not call
+		// syncGigPaymentStatusWith here (a pending deposit on a sibling
+		// invoice must not rewrite a settled gig's payment_status).
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -105,50 +133,51 @@ func lockInvoiceForPayment(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) 
 //   - pending + completed money in (deposits, payments) minus completed
 //     refunds never exceeds net payable, so an invoice can't be
 //     over-collected even while payments are still pending;
-//   - completed refunds never exceed completed money in.
+//   - pending + completed refunds never exceed completed money in, so a
+//     refund can never be created for more cash than the invoice has
+//     already taken in (relevant on credited/corrected invoices where a
+//     pending refund would otherwise sit above current receipts until
+//     completion, letting a bad actor over-refund at completion time).
 func checkPaymentBalance(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) error {
-	var total, committedIn, completedIn, refunded int64
+	// SUM(bigint) is numeric in PostgreSQL. Compare there, rather than
+	// narrowing potentially overflowing legacy aggregates into Go int64.
+	var exceeds bool
 	err := tx.QueryRow(ctx, `
-		SELECT i.net_payable_minor,
-		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind <> 'refund' AND p.status IN ('pending','completed')), 0),
-		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind <> 'refund' AND p.status = 'completed'), 0),
-		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind = 'refund' AND p.status = 'completed'), 0)
-		FROM invoices i
-		LEFT JOIN payments p ON p.invoice_id = i.id
-		WHERE i.id = $1
-		GROUP BY i.net_payable_minor`, invoiceID).Scan(&total, &committedIn, &completedIn, &refunded)
+		SELECT reserved_refunds > completed_in OR committed_in - completed_refunds > net_payable_minor
+		FROM (
+		 SELECT i.net_payable_minor,
+		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind <> 'refund' AND p.status IN ('pending','completed')), 0) AS committed_in,
+		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind <> 'refund' AND p.status = 'completed'), 0) AS completed_in,
+		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind = 'refund' AND p.status IN ('pending','completed')), 0) AS reserved_refunds,
+		       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.kind = 'refund' AND p.status = 'completed'), 0) AS completed_refunds
+		 FROM invoices i
+		 LEFT JOIN payments p ON p.invoice_id = i.id
+		 WHERE i.id = $1
+		 GROUP BY i.net_payable_minor
+		) balances`, invoiceID).Scan(&exceeds)
 	if err != nil {
 		return fmt.Errorf("check payment balance: %w", err)
 	}
-	if refunded > completedIn {
-		return ErrPaymentExceedsBalance
-	}
-	if committedIn-refunded > total {
+	if exceeds {
 		return ErrPaymentExceedsBalance
 	}
 	return nil
 }
 
-// syncGigPaymentStatus derives gigs.payment_status from the invoice balance
-// in the caller's transaction: 'paid' when received ≥ net payable,
-// 'deposit_paid' when received > 0, else 'unpaid' (received = completed
-// deposits + payments − completed refunds). When a transition processor
-// is wired, the before/after snapshots of the gig are run through it so
-// the invoice-driven sync path participates in FIN-03/04/05. The gig's
-// updated_at (its concurrency token) only moves when the status actually
-// changes; if the processor wires a different updated_at in the same tx
-// the gig-write happens after the sync so the processor sees the new
-// status as the "after" snapshot.
-func syncGigPaymentStatus(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID) error {
-	return syncGigPaymentStatusWith(ctx, tx, invoiceID, nil)
-}
-
-// syncGigPaymentStatusWith is the same as syncGigPaymentStatus but lets
-// the caller pass in an optional processor for FIN-03/04/05 integration.
+// syncGigPaymentStatusWith derives gig authority from all eligible
+// issued/paid/credited/corrected invoices for the gig: any fully-collected invoice means
+// paid, otherwise any positive collected balance on a sibling means
+// deposit_paid, otherwise unpaid. Each invoice's collected payments +
+// deposits − completed refunds is compared to its own net payable;
+// currencies and liabilities are never mixed. Pending-only writes do
+// not call this path. The invoice lock precedes the shared gig lock
+// (FOR NO KEY UPDATE so foreign-key key-share locks from new invoices
+// are not blocked). No sibling invoice row locks are taken; the gig
+// row is the serialisation point.
 func syncGigPaymentStatusWith(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUID, processor gig.PaymentTransitionProcessor) error {
-	// Compute the target status from the current balance. Read the gig
-	// before/after under the same transaction so the transition
-	// processor sees a consistent snapshot.
+	// Lock the gig row under the same transaction. NO KEY UPDATE
+	// serialises gig edits without blocking FK KEY SHARE locks taken
+	// by invoice INSERTs that point at the gig.
 	type gigRow struct {
 		id        uuid.UUID
 		date      time.Time
@@ -160,23 +189,30 @@ func syncGigPaymentStatusWith(ctx context.Context, tx pgx.Tx, invoiceID uuid.UUI
 	}
 	var before gigRow
 	if err := tx.QueryRow(ctx, `SELECT g.id, g.date, g.event_name, g.venue, g.fee_amount, g.fee_currency, g.payment_status
-		FROM gigs g JOIN invoices i ON i.gig_id = g.id WHERE i.id = $1`, invoiceID).
+		FROM gigs g JOIN invoices i ON i.gig_id = g.id WHERE i.id = $1 FOR NO KEY UPDATE OF g`, invoiceID).
 		Scan(&before.id, &before.date, &before.eventName, &before.venue, &before.fee, &before.currency, &before.before); err != nil {
 		return fmt.Errorf("load gig for payment sync: %w", err)
 	}
 
+	// Aggregate across the gig's invoices (kind=invoice; issued, paid, and
+	// retired credited/corrected originals). Retired originals still hold
+	// settled receipts net of completed refunds, so they keep counting
+	// until the cash is returned. Drafts, cancelled invoices and credit
+	// notes never contribute; pending money alone never drags the gig
+	// below the highest settled state of any single invoice.
 	var target gig.PaymentStatus
 	if err := tx.QueryRow(ctx, `WITH bal AS (
-		SELECT i.net_payable_minor AS net,
+		SELECT i.id,
+		       i.net_payable_minor AS net,
 		       COALESCE(SUM(CASE WHEN p.kind = 'refund' THEN -p.amount_minor ELSE p.amount_minor END)
 		                FILTER (WHERE p.status = 'completed'), 0) AS received
 		FROM invoices i
 		LEFT JOIN payments p ON p.invoice_id = i.id
-		WHERE i.id = $1
-		GROUP BY i.net_payable_minor
-	) SELECT (CASE WHEN received >= net THEN 'paid'
-	               WHEN received > 0    THEN 'deposit_paid'
-	               ELSE 'unpaid' END)::payment_status FROM bal`, invoiceID).Scan(&target); err != nil {
+		WHERE i.gig_id = $1 AND i.kind = 'invoice' AND i.status IN ('issued','paid','credited','corrected')
+		GROUP BY i.id, i.net_payable_minor
+	) SELECT (CASE WHEN COALESCE(bool_or(net > 0 AND received >= net), false) THEN 'paid'
+	               WHEN COALESCE(bool_or(received > 0), false) THEN 'deposit_paid'
+	               ELSE 'unpaid' END)::payment_status FROM bal`, before.id).Scan(&target); err != nil {
 		return fmt.Errorf("compute gig payment target: %w", err)
 	}
 
@@ -254,15 +290,36 @@ func (r *PaymentRepository) Update(ctx context.Context, id uuid.UUID, req Update
 	var p Payment
 	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		var invoiceID uuid.UUID
-		err := tx.QueryRow(ctx, `SELECT invoice_id FROM payments WHERE id = $1`, id).Scan(&invoiceID)
+		var curKind PaymentKind
+		var curStatus PaymentStatus
+		err := tx.QueryRow(ctx, `SELECT invoice_id, kind, status FROM payments WHERE id = $1`, id).Scan(&invoiceID, &curKind, &curStatus)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrPaymentNotFound
 		}
 		if err != nil {
 			return fmt.Errorf("get payment invoice: %w", err)
 		}
-		if _, _, _, err := lockInvoiceForPayment(ctx, tx, invoiceID); err != nil {
+		invStatus, invKind, _, err := lockInvoiceForPayment(ctx, tx, invoiceID)
+		if err != nil {
 			return err
+		}
+		// Completing a payment mints (or returns) cash, so it follows the
+		// same invoice-state policy as Create: a pending incoming payment
+		// created while the invoice was issued must not complete once the
+		// invoice is credited/corrected (only refunds may) or cancelled.
+		// Failing/releasing a pending payment stays allowed.
+		if req.Status == PaymentStatusCompleted && curStatus != PaymentStatusCompleted {
+			switch {
+			case invKind != InvoiceKindInvoice:
+				return ErrPaymentInvoiceState
+			case invStatus == InvoiceStatusIssued || invStatus == InvoiceStatusPaid:
+			case invStatus == InvoiceStatusCredited || invStatus == InvoiceStatusCorrected:
+				if curKind != PaymentKindRefund {
+					return ErrPaymentKindNotAllowed
+				}
+			default:
+				return ErrPaymentInvoiceState
+			}
 		}
 		err = tx.QueryRow(ctx, `
 			UPDATE payments SET

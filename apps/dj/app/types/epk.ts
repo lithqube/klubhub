@@ -23,7 +23,8 @@ export interface EPKContent {
 
 export interface EPKExport {
   id: string
-  minioPath: string
+  /** Garage (S3-compatible) object key for the exported PDF. */
+  garageObjectKey: string
   createdAt: string
 }
 

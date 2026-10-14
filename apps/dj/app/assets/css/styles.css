@@ -7,6 +7,41 @@
 @import "#kui/assets/css/kinetic.css";
 
 @layer components {
+  /* ── Square checkbox (zero-radius rule; native boxes are rounded) ──
+     Off: dashed schematic outline. On: signature outline + solid square mark. */
+  .hud-check {
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    display: inline-grid;
+    place-content: center;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    background: transparent;
+    border: 1px dashed var(--color-tertiary);
+    cursor: pointer;
+    transition: border-color .15s, background-color .15s;
+  }
+  .hud-check::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    background: var(--color-primary);
+    transform: scale(0);
+    transition: transform .12s;
+  }
+  .hud-check:hover { border-color: var(--color-primary); }
+  .hud-check:checked {
+    border-style: solid;
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+  .hud-check:checked::after { transform: scale(1); }
+  .hud-check:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+  .hud-check:disabled { opacity: .45; cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) { .hud-check, .hud-check::after { transition: none; } }
+
   /* ── Social post card ── */
   .spost {
     padding: 12px 14px;

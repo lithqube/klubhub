@@ -8,6 +8,58 @@ import {
   vatTreatmentMeta,
 } from '../vatTreatment'
 
+// The server owns the legal wording per supplier country (GET /invoices/tax-notes).
+// When the user switches treatment the note must follow, and wording that was
+// only ever a default (generic English or the country's) must never stay behind
+// under a treatment it does not belong to.
+describe('applyTreatmentChange with the supplier country\'s notes', () => {
+  const DE = {
+    exempt: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. / VAT is not charged under § 19 UStG.',
+    reverse_charge: 'Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge) / Reverse charge.',
+    outside_scope: 'Nicht steuerbare sonstige Leistung (§ 3a Abs. 2 UStG).',
+  } as const
+  const from = (vat_treatment: 'domestic' | 'exempt' | 'reverse_charge' | 'outside_scope', tax_note: string) =>
+    ({ vat_treatment, tax_rate_bps: 0, tax_note })
+
+  it('moves to the country\'s wording for the new treatment', () => {
+    expect(applyTreatmentChange(from('domestic', ''), 'exempt', DE).tax_note).toBe(DE.exempt)
+    expect(applyTreatmentChange(from('domestic', ''), 'reverse_charge', DE).tax_note).toBe(DE.reverse_charge)
+  })
+
+  it('drops the country\'s wording when the new treatment carries none (no § 19 text left on a domestic invoice)', () => {
+    expect(applyTreatmentChange(from('exempt', DE.exempt), 'domestic', DE).tax_note).toBe('')
+    expect(applyTreatmentChange(from('reverse_charge', DE.reverse_charge), 'domestic', DE).tax_note).toBe('')
+  })
+
+  it('swaps one country default for another', () => {
+    expect(applyTreatmentChange(from('exempt', DE.exempt), 'reverse_charge', DE).tax_note).toBe(DE.reverse_charge)
+  })
+
+  it('still recognises the generic English default of an older draft as replaceable', () => {
+    const generic = VAT_TREATMENTS.exempt.defaultNote
+    expect(applyTreatmentChange(from('exempt', generic), 'reverse_charge', DE).tax_note).toBe(DE.reverse_charge)
+    expect(applyTreatmentChange(from('exempt', generic), 'domestic', DE).tax_note).toBe('')
+  })
+
+  it('keeps wording the user wrote themselves', () => {
+    const own = 'Befreit nach Rücksprache mit dem Finanzamt.'
+    expect(applyTreatmentChange(from('exempt', own), 'reverse_charge', DE).tax_note).toBe(own)
+    expect(applyTreatmentChange(from('exempt', own), 'domestic', DE).tax_note).toBe(own)
+  })
+
+  it('falls back to the built-in defaults when the notes are not known yet', () => {
+    expect(applyTreatmentChange(from('domestic', ''), 'exempt').tax_note).toBe(VAT_TREATMENTS.exempt.defaultNote)
+    expect(applyTreatmentChange(from('domestic', ''), 'exempt', {}).tax_note).toBe(VAT_TREATMENTS.exempt.defaultNote)
+    // A treatment the server sent nothing for keeps its built-in default.
+    expect(applyTreatmentChange(from('domestic', ''), 'outside_scope', { exempt: DE.exempt }).tax_note)
+      .toBe(VAT_TREATMENTS.outside_scope.defaultNote)
+  })
+
+  it('still forces the rate to 0 for fixed-rate treatments', () => {
+    expect(applyTreatmentChange({ vat_treatment: 'domestic', tax_rate_bps: 1900, tax_note: '' }, 'exempt', DE).tax_rate_bps).toBe(0)
+  })
+})
+
 describe('vatTreatment table', () => {
   it('covers every treatment exactly once in the display order', () => {
     expect([...VAT_TREATMENT_ORDER].sort()).toEqual(Object.keys(VAT_TREATMENTS).sort())

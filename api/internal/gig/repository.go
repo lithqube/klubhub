@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/klubhub/dj/api/internal/contact"
+	"github.com/klubhub/dj/api/internal/venue"
 )
 
 // Repository provides DB access for gigs.
@@ -19,6 +21,25 @@ type Repository struct {
 // NewRepository creates a new Repository backed by the given pool.
 func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
+}
+
+// LinkedVenues returns full live venue records from the existing join table.
+func (r *Repository) LinkedVenues(ctx context.Context, id uuid.UUID) ([]*venue.Venue, error) {
+	rows, err := r.pool.Query(ctx, `SELECT v.* FROM venues v JOIN gig_venues gv ON gv.venue_id = v.id WHERE gv.gig_id = $1 AND v.deleted_at IS NULL ORDER BY gv.is_primary DESC, v.name, v.id`, id)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[venue.Venue])
+}
+
+// LinkedContacts returns full live contact records, once per contact even if
+// the same contact has multiple roles on a gig.
+func (r *Repository) LinkedContacts(ctx context.Context, id uuid.UUID) ([]*contact.Contact, error) {
+	rows, err := r.pool.Query(ctx, `SELECT c.* FROM contacts c WHERE c.deleted_at IS NULL AND EXISTS (SELECT 1 FROM gig_contacts gc WHERE gc.contact_id = c.id AND gc.gig_id = $1) ORDER BY c.name, c.id`, id)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[contact.Contact])
 }
 
 // GetByID returns a gig by ID, or ErrNotFound.

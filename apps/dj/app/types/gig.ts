@@ -1,4 +1,5 @@
 import type { GigFinanceReconciliation } from './finance'
+import type { Tracklist } from './tracklist'
 
 export type GigStatus = 'inquiry' | 'confirmed' | 'advanced' | 'played' | 'cancelled'
 export type PaymentStatus = 'unpaid' | 'deposit_paid' | 'paid' | 'overdue' | 'waived'
@@ -22,8 +23,13 @@ export interface Gig {
   gig_reader_venue_id: string | null
   gig_reader_contact_id: string | null
   created_at: string
-  updated_at: string
+  updated_at: string | null
   deleted_at: string | null
+  // List/get payloads contain full reusable entities; empty relations are [].
+  // Optional because create/update and the legacy /detail endpoint return Gig.
+  linkedVenues?: Array<Venue> | null
+  linkedContacts?: Array<Contact> | null
+  linkedTracklists?: Array<Tracklist> | null
   // Linked relationships (populated by GET /{id}/detail)
   linked_venues?: LinkedVenue[]
   linked_contacts?: LinkedContact[]
@@ -81,6 +87,15 @@ export interface GigCreate {
   payment_status?: PaymentStatus
 }
 
+// Preserve the existing Gig/null success/failure contract; conflicts are distinct
+// and must be resolved explicitly before submitting a new edit snapshot.
+export class GigConflictError extends Error {
+  constructor(public readonly latest: Gig | null) {
+    super('This gig was changed by another writer.')
+    this.name = 'GigConflictError'
+  }
+}
+
 export interface GigUpdate {
   date?: string
   venue?: string
@@ -96,7 +111,7 @@ export interface GigUpdate {
   notes?: string
   status?: GigStatus
   payment_status?: PaymentStatus
-  updated_at?: string
+  updated_at?: string | null
 }
 
 export interface Venue {

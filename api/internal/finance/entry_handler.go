@@ -134,7 +134,7 @@ func (h *EntryHandler) handleGet(w http.ResponseWriter, r *http.Request, id uuid
 
 func (h *EntryHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := EntryFilter{Kind: EntryKind(q.Get("kind")), Status: EntryStatus(q.Get("status")), Currency: q.Get("currency"), Category: q.Get("category"), From: q.Get("from"), To: q.Get("to")}
+	f := EntryFilter{Kind: EntryKind(q.Get("kind")), Status: EntryStatus(q.Get("status")), Currency: q.Get("currency"), Category: q.Get("category"), From: q.Get("from"), To: q.Get("to"), Receipt: ReceiptFilter(q.Get("receipt"))}
 	if raw := q.Get("gig_id"); raw != "" {
 		id, err := uuid.Parse(raw)
 		if err != nil || id == uuid.Nil {

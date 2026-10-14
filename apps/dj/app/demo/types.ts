@@ -1,6 +1,7 @@
 // Types for the in-browser demo backend (docs/DEMO.md).
 
 import type { FinanceMockDb, FinanceSnapshot } from '../../shared/finance-mock/db'
+import type { RiderMockDb, RiderSnapshot } from '../../shared/rider-mock/db'
 import type { EPKContent, EPKExport } from '../types/epk'
 import type { Party } from '../types/finance'
 import type { Contact, Gig, Venue } from '../types/gig'
@@ -52,11 +53,14 @@ export interface DemoState {
   venues: Venue[]
   contacts: Contact[]
   finance: FinanceSnapshot
+  /** Absent in states saved before rider existed; the backend then seeds it. */
+  rider?: RiderSnapshot
 }
 
 export interface DemoContext {
   state: DemoState
   finance: FinanceMockDb
+  rider: RiderMockDb
   now: () => Date
   /** App base URL, e.g. "/demo/". */
   baseURL: string

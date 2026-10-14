@@ -17,6 +17,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
 	"github.com/klubhub/dj/api/internal/platform/crypto"
+	"github.com/minio/minio-go/v7"
 )
 
 // Sentinel errors returned by the service layer.
@@ -42,6 +43,7 @@ type repoIface interface {
 	GetPost(ctx context.Context, id uuid.UUID) (*ScheduledPost, error)
 	ListPosts(ctx context.Context) ([]ScheduledPost, error)
 	UpdatePost(ctx context.Context, id uuid.UUID, caption, imagePath string, scheduledAt time.Time, tzName string) (*ScheduledPost, error)
+	UpdatePostImage(ctx context.Context, id uuid.UUID, imagePath string) error
 	UpdatePostStatus(ctx context.Context, id uuid.UUID, status PostStatus, errReason string) error
 	DisconnectAccountCascade(ctx context.Context, accountID uuid.UUID) error
 	SetNextRetry(ctx context.Context, id uuid.UUID, retryCount int, nextRetryAt time.Time) error
@@ -62,6 +64,19 @@ type Service struct {
 	repo       repoIface
 	cfg        ServiceConfig
 	stateStore *StateStore
+	storage    serviceStorageIface
+}
+
+// storageIface is the subset of the storage client the Service uses for
+// uploading post images to Garage S3. Defined here so the Service can be
+// constructed against an in-memory fake in unit tests.
+//
+// Named `serviceStorageIface` to avoid colliding with the identically
+// named interface in worker.go (which carries the presign-side methods
+// the worker needs).
+type serviceStorageIface interface {
+	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	Bucket() string
 }
 
 // NewService creates a Service with the given repository and config.
@@ -86,6 +101,14 @@ func NewServiceWithState(repo repoIface, cfg ServiceConfig, store *StateStore) *
 // stopped independently of the service).
 func (s *Service) SetStateStore(store *StateStore) {
 	s.stateStore = store
+}
+
+// SetStorage injects a Garage S3 storage client into an existing Service.
+// UploadPostImage requires this dependency; without it the handler will
+// surface a 500. Wired separately so callers that never exercise image
+// upload don't have to provide one.
+func (s *Service) SetStorage(storage serviceStorageIface) {
+	s.storage = storage
 }
 
 // GetOAuthURL builds the Instagram OAuth authorisation URL.
@@ -295,7 +318,7 @@ type CreatePostRequest struct {
 	AccountID      uuid.UUID
 	PostType       PostType
 	Caption        string
-	ImageMinioPath string
+	ImageStorageKey string
 	ScheduledAt    string // datetime-local format "2006-01-02T15:04"
 	TimezoneName   string
 	ImageData      []byte // if non-nil, validate and upload was already done by caller
@@ -303,10 +326,10 @@ type CreatePostRequest struct {
 
 // EditPostRequest is the input for editing a scheduled post.
 type EditPostRequest struct {
-	Caption        string
-	ImageMinioPath string
-	ScheduledAt    string
-	TimezoneName   string
+	Caption         string
+	ImageStorageKey string `json:"imageId"`
+	ScheduledAt     string
+	TimezoneName    string
 }
 
 // SchedulePost creates a new scheduled post, converting local time to UTC.
@@ -323,13 +346,13 @@ func (s *Service) SchedulePost(ctx context.Context, req CreatePostRequest) (*Sch
 	}
 
 	return s.repo.CreatePost(ctx, ScheduledPost{
-		AccountID:      req.AccountID,
-		Status:         PostStatusScheduled,
-		PostType:       req.PostType,
-		Caption:        req.Caption,
-		ImageMinioPath: req.ImageMinioPath,
-		ScheduledAtUTC: scheduledAt,
-		TimezoneName:   req.TimezoneName,
+		AccountID:       req.AccountID,
+		Status:          PostStatusScheduled,
+		PostType:        req.PostType,
+		Caption:         req.Caption,
+		ImageStorageKey: req.ImageStorageKey,
+		ScheduledAtUTC:  scheduledAt,
+		TimezoneName:    req.TimezoneName,
 	})
 }
 
@@ -349,7 +372,7 @@ func (s *Service) EditPost(ctx context.Context, id uuid.UUID, req EditPostReques
 		return nil, fmt.Errorf("parse scheduled_at: %w", err)
 	}
 
-	return s.repo.UpdatePost(ctx, id, req.Caption, req.ImageMinioPath, scheduledAt, req.TimezoneName)
+	return s.repo.UpdatePost(ctx, id, req.Caption, req.ImageStorageKey, scheduledAt, req.TimezoneName)
 }
 
 // DisconnectAccount marks the account as disconnected and moves scheduled posts to draft.
@@ -363,6 +386,72 @@ func (s *Service) DisconnectAccount(ctx context.Context, id uuid.UUID) error {
 // RetryPost resets a failed post back to scheduled status.
 func (s *Service) RetryPost(ctx context.Context, id uuid.UUID) error {
 	return s.repo.ResetPostForRetry(ctx, id)
+}
+
+// PostImageResult is the response shape returned by UploadPostImage.
+// Path is the Garage S3 object key; the handler wraps it in
+// {data: {path: "..."}}.
+type PostImageResult struct {
+	Path string `json:"path"`
+}
+
+// UploadPostImage validates the bytes, stores them in Garage under a
+// fresh UUID-based key, and updates the post's image_storage_key column.
+//
+// Pre-conditions:
+//   - postID must exist (ErrNotFound otherwise — the handler maps this
+//     to a 404).
+//   - post status must be scheduled (ErrEditBlocked maps to 409). The
+//     repository repeats this check atomically in the UPDATE predicate.
+//   - data must pass ValidateImage for the post's existing PostType
+//     (ErrInvalidMIME / ErrFileTooLarge / ErrInvalidDimensions otherwise —
+//     the handler maps these to 422).
+//
+// The Garage object key has the form `social/<post-id>/<uuid>.<ext>`
+// where `<ext>` is derived from the validated MIME type. Server-side
+// generation (rather than trusting the client filename) is what
+// eliminates the path-traversal class of bugs called out in the C.1
+// risk register.
+//
+// The image_storage_key is written LAST so that a storage write failure
+// cannot leave a post pointing at a non-existent object. If the DB
+// write fails (including a raced lifecycle transition) after a successful
+// upload, the object remains orphaned in Garage. Cleanup is deferred and
+// is NOT implemented by this operation.
+func (s *Service) UploadPostImage(ctx context.Context, postID uuid.UUID, data []byte, _ string) (*PostImageResult, error) {
+	if s.storage == nil {
+		return nil, fmt.Errorf("storage client not configured")
+	}
+
+	post, err := s.repo.GetPost(ctx, postID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Match EditPost: only scheduled posts may change their image.
+	if post.Status != PostStatusScheduled {
+		return nil, ErrEditBlocked
+	}
+	if err := s.ValidateImage(data, post.PostType); err != nil {
+		return nil, err
+	}
+
+	mt := mimetype.Detect(data)
+	ext := "jpg"
+	if mt.String() == "image/png" {
+		ext = "png"
+	}
+	key := fmt.Sprintf("social/%s/%s.%s", postID.String(), uuid.New().String(), ext)
+
+	if _, err := s.storage.PutObject(ctx, s.storage.Bucket(), key, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{ContentType: mt.String()}); err != nil {
+		return nil, fmt.Errorf("store image: %w", err)
+	}
+
+	if err := s.repo.UpdatePostImage(ctx, postID, key); err != nil {
+		return nil, fmt.Errorf("update post image path: %w", err)
+	}
+
+	return &PostImageResult{Path: key}, nil
 }
 
 // ListPosts returns all non-deleted posts.
@@ -396,7 +485,15 @@ func (s *Service) ValidateImage(data []byte, postType PostType) error {
 	// 3. Dimension / aspect ratio check
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return fmt.Errorf("decode image config: %w", err)
+		return fmt.Errorf("%w: decode image config: %v", ErrInvalidDimensions, err)
+	}
+
+	// Bound allocations before decoding pixel data. Even a tiny compressed
+	// upload can advertise enormous dimensions. Use division to avoid overflow.
+	const maxSide = 8192
+	const maxPixels = 16_000_000
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > maxSide || cfg.Height > maxSide || cfg.Width > maxPixels/cfg.Height {
+		return fmt.Errorf("%w: image exceeds decode budget", ErrInvalidDimensions)
 	}
 
 	w, h := float64(cfg.Width), float64(cfg.Height)
@@ -417,6 +514,11 @@ func (s *Service) ValidateImage(data []byte, postType PostType) error {
 		}
 	}
 
+	// A valid header is not a valid image. Decode the complete supported
+	// JPEG/PNG after preflight, before any storage or database mutation.
+	if _, _, err := image.Decode(bytes.NewReader(data)); err != nil {
+		return fmt.Errorf("%w: decode image: %v", ErrInvalidDimensions, err)
+	}
 	return nil
 }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { version as appVersion } from '../../package.json'
 import { useGigStore } from '../stores/gig'
 import { useSocialStore } from '../stores/social'
 import { countdownLabel, formatDayLabel, formatMoney } from '../utils/quickPreview'
@@ -181,7 +182,7 @@ watch(() => socialStore.posts, refreshSoon, { deep: true })
       <!-- Right-align: version tag -->
       <div class="ml-auto">
         <span class="font-terminal tracking-terminal text-tertiary text-[8px] uppercase">
-          KLUBHUB_DJ v1.0
+          KLUBHUB_DJ v{{ appVersion }}
         </span>
       </div>
     </div>

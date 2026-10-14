@@ -77,6 +77,12 @@ var (
 	ErrPaymentInvoiceNotFound = errors.New("invoice not found")
 	// ErrPaymentInvoiceState: payments are only accepted on issued/paid invoices.
 	ErrPaymentInvoiceState = errors.New("invoice does not accept payments in its current status")
+	// ErrPaymentKindNotAllowed: the requested payment kind is not allowed on
+	// this invoice status. A credited or corrected invoice only accepts
+	// bounded refunds (returning previously-collected cash to the
+	// customer); deposit/payment incoming money is forbidden because the
+	// invoice has already been retired.
+	ErrPaymentKindNotAllowed = errors.New("payment kind is not allowed on this invoice status")
 	// ErrPaymentExceedsBalance: the write would over-collect the invoice or
 	// refund more than was received.
 	ErrPaymentExceedsBalance = errors.New("payment exceeds invoice balance")

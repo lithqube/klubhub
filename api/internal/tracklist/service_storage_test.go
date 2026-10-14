@@ -39,6 +39,18 @@ func (r *artworkRepoStub) List(context.Context) ([]Tracklist, error) { return ni
 func (r *artworkRepoStub) UpdateTrack(context.Context, uuid.UUID, uuid.UUID, UpdateTrackRequest) error {
 	return nil
 }
+func (r *artworkRepoStub) UpdateTitle(context.Context, uuid.UUID, string) error { return nil }
+
+func (r *artworkRepoStub) LinkedGigs(context.Context, uuid.UUID) ([]LinkedGig, error) {
+	return nil, nil
+}
+
+func (r *artworkRepoStub) AddTrack(context.Context, uuid.UUID, CreateTrackRequest) (*Track, error) {
+	return nil, nil
+}
+
+func (r *artworkRepoStub) ReorderTracks(context.Context, uuid.UUID, []uuid.UUID) error { return nil }
+
 func (r *artworkRepoStub) SoftDelete(context.Context, uuid.UUID) error { return nil }
 func (r *artworkRepoStub) UpdateArtworkStatus(context.Context, uuid.UUID, string, string, string) error {
 	return nil

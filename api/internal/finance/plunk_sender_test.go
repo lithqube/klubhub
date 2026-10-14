@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 // TestPlunkSender_SendsCorrectRequest verifies the JSON payload Plunk receives
 // matches Plunk's REST API contract:
 //
-//	POST {base}/api/v1/{project}/emails
+//	POST {base}/v1/send
 //	Authorization: Bearer ...
 //	Content-Type: application/json
 func TestPlunkSender_SendsCorrectRequest(t *testing.T) {
@@ -37,7 +38,7 @@ func TestPlunkSender_SendsCorrectRequest(t *testing.T) {
 		bodyBytes, _ := io.ReadAll(r.Body)
 		json.Unmarshal(bodyBytes, &captured.Body)
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(plunkResponse{Success: true, EmailID: "test-id"})
+		w.Write([]byte(strings.ReplaceAll(runtimePlunkAck, "to@example.com", "client@example.com")))
 	}))
 	defer server.Close()
 
@@ -54,10 +55,10 @@ func TestPlunkSender_SendsCorrectRequest(t *testing.T) {
 		FromEmail: "noreply@klubhub.example",
 		FromName:  "KlubHub DJ",
 		ToEmail:   "client@example.com",
-		CCEmails:  []string{"cc1@example.com"},
-		Subject:   "Invoice INV-0001-EUR",
-		Body:      "Hello, your invoice is attached.",
-		BodyHTML:  "<p>Hello, your invoice is attached.</p>",
+
+		Subject:  "Invoice INV-0001-EUR",
+		Body:     "Hello, your invoice is attached.",
+		BodyHTML: "<p>Hello, your invoice is attached.</p>",
 	}
 
 	if err := sender.Send(msg); err != nil {
@@ -67,7 +68,7 @@ func TestPlunkSender_SendsCorrectRequest(t *testing.T) {
 	if captured.Method != http.MethodPost {
 		t.Errorf("method: %s", captured.Method)
 	}
-	if captured.Path != "/api/v1/proj-abc/emails" {
+	if captured.Path != "/v1/send" {
 		t.Errorf("path: %s", captured.Path)
 	}
 	if captured.Auth != "Bearer secret-key" {
@@ -85,16 +86,16 @@ func TestPlunkSender_SendsCorrectRequest(t *testing.T) {
 	if len(captured.Body.To) != 1 || captured.Body.To[0] != "client@example.com" {
 		t.Errorf("to: %v", captured.Body.To)
 	}
-	if len(captured.Body.CC) != 1 || captured.Body.CC[0] != "cc1@example.com" {
+	if len(captured.Body.CC) != 0 {
 		t.Errorf("cc: %v", captured.Body.CC)
 	}
 	if captured.Body.Subject != "Invoice INV-0001-EUR" {
 		t.Errorf("subject: %s", captured.Body.Subject)
 	}
-	if captured.Body.Body != "Hello, your invoice is attached." {
+	if captured.Body.Body != "<p>Hello, your invoice is attached.</p>" {
 		t.Errorf("body: %s", captured.Body.Body)
 	}
-	if captured.Body.BodyHTML != "<p>Hello, your invoice is attached.</p>" {
+	if captured.Body.BodyHTML != "" {
 		t.Errorf("bodyHtml: %s", captured.Body.BodyHTML)
 	}
 }
@@ -107,7 +108,7 @@ func TestPlunkSender_UsesConfigFromWhenMessageEmpty(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		json.Unmarshal(body, &capturedBody)
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(plunkResponse{Success: true})
+		w.Write([]byte(strings.ReplaceAll(runtimePlunkAck, "to@example.com", "x@y.com")))
 	}))
 	defer server.Close()
 
@@ -183,7 +184,7 @@ func TestPlunkSender_RetriesWithIdempotency(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idemKeys = append(idemKeys, r.Header.Get("Idempotency-Key"))
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(plunkResponse{Success: true})
+		w.Write([]byte(strings.ReplaceAll(runtimePlunkAck, "to@example.com", "x@y.com")))
 	}))
 	defer server.Close()
 
@@ -213,7 +214,7 @@ func TestPlunkSender_RetriesWithIdempotency(t *testing.T) {
 func TestEmailService_PlunkWiring(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(plunkResponse{Success: true})
+		w.Write([]byte(strings.ReplaceAll(runtimePlunkAck, "to@example.com", "client@example.com")))
 	}))
 	defer server.Close()
 
@@ -258,3 +259,26 @@ func TestEmailSender_InterfaceMatrix(t *testing.T) {
 var _ = bytes.NewReader
 var _ = time.Now
 var _ = errors.New
+
+// Redirects must never be followed: 307/308 would replay the POST body and
+// Idempotency-Key to another location.
+func TestPlunkSender_DoesNotFollowRedirects(t *testing.T) {
+	var targetHits int
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetHits++
+		w.Write([]byte(runtimePlunkAck))
+	}))
+	defer target.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/v1/send", http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+	sender := NewPlunkSender(PlunkConfig{BaseURL: server.URL, FromEmail: "noreply@klubhub.example"})
+	err := sender.Send(&EmailMessage{ID: uuid.New(), ToEmail: "to@example.com", Subject: "x", Body: "y"})
+	if err == nil {
+		t.Fatal("redirect response must be treated as failure")
+	}
+	if targetHits != 0 {
+		t.Fatalf("redirect was followed (%d hits)", targetHits)
+	}
+}

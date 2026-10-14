@@ -5,13 +5,11 @@ import SocialQueueGrid from '../SocialQueueGrid.vue'
 import type { ScheduledPost } from '../../../types/social'
 
 const mockRetryPost = vi.fn().mockResolvedValue(undefined)
-const mockDownloadImage = vi.fn().mockResolvedValue(undefined)
 const mockOpenComposePanel = vi.fn()
 
 vi.mock('~/stores/social', () => ({
   useSocialStore: vi.fn(() => ({
     retryPost: mockRetryPost,
-    downloadImage: mockDownloadImage,
     openComposePanel: mockOpenComposePanel,
   })),
 }))
@@ -23,7 +21,7 @@ function makePost(overrides: Partial<ScheduledPost> = {}): ScheduledPost {
     status: 'scheduled',
     postType: 'feed',
     caption: 'Test caption for this post',
-    imageMinioPath: 'tracklists/img.png',
+    imageStorageKey: 'tracklists/img.png',
     scheduledAtUtc: '2026-10-24T21:45:00Z',
     timezoneName: 'Europe/Berlin',
     retryCount: 0,
@@ -103,6 +101,15 @@ describe('SocialQueueGrid', () => {
   })
 
   describe('SocialPostCardFailed actions', () => {
+    it('offers only supported retry action, not a broken download click path', async () => {
+      const wrapper = mount(SocialQueueGrid, { props: { posts: [makePost({ status: 'failed' })] } })
+      const card = wrapper.get('[data-testid="failed-card"]')
+      expect(card.find('[data-testid="download-btn"]').exists()).toBe(false)
+      expect(card.text()).not.toContain('DOWNLOAD IMAGE')
+      expect(card.findAll('button')).toHaveLength(1)
+      await card.get('button').trigger('click')
+      expect(mockRetryPost).toHaveBeenCalledWith('post-1')
+    })
     it('calls store.retryPost(id) when RETRY SYNC is clicked', async () => {
       const posts = [makePost({ id: 'post-1', status: 'failed', lastError: 'Error' })]
       const wrapper = mount(SocialQueueGrid, { props: { posts } })
@@ -112,14 +119,6 @@ describe('SocialQueueGrid', () => {
       expect(mockRetryPost).toHaveBeenCalledWith('post-1')
     })
 
-    it('calls store.downloadImage(id) when DOWNLOAD IMAGE is clicked', async () => {
-      const posts = [makePost({ id: 'post-1', status: 'failed', lastError: 'Error' })]
-      const wrapper = mount(SocialQueueGrid, { props: { posts } })
-      const downloadBtn = wrapper.find('[data-testid="download-btn"]')
-      expect(downloadBtn.exists()).toBe(true)
-      await downloadBtn.trigger('click')
-      expect(mockDownloadImage).toHaveBeenCalledWith('post-1')
-    })
   })
 
   describe('failed card content', () => {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -48,15 +49,17 @@ func (r *Repository) Create(ctx context.Context, tl *Tracklist, tracks []Track) 
 				INSERT INTO tracks (
 					id, tracklist_id, position, title, artist, album, genre, bpm, rating, 
 					duration_secs, musical_key, date_added, artwork_status, artwork_url, 
-					artwork_source, created_at, updated_at, deleted_at
+					artwork_source, created_at, updated_at, deleted_at,
+					hidden_gem, unreleased, media
 				) VALUES (
-					$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+					$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
 				)`
 			for _, track := range tracks {
 				_, err := tx.Exec(ctx, trackQuery,
 					track.ID, track.TracklistID, track.Position, track.Title, track.Artist, track.Album, track.Genre, track.BPM, track.Rating,
 					track.DurationSeconds, track.MusicalKey, track.DateAdded, track.ArtworkStatus, track.ArtworkURL, track.ArtworkSource,
 					track.CreatedAt, track.UpdatedAt, track.DeletedAt,
+					track.HiddenGem, track.Unreleased, track.Media,
 				)
 				if err != nil {
 					return err
@@ -96,7 +99,8 @@ func (r *Repository) Get(ctx context.Context, id uuid.UUID) (*Tracklist, []Track
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, tracklist_id, position, title, artist, album, genre, bpm, rating, 
 		       duration_secs, musical_key, date_added, artwork_status, artwork_url, 
-		       artwork_source, created_at, updated_at, deleted_at
+		       artwork_source, created_at, updated_at, deleted_at,
+		       hidden_gem, unreleased, media
 		FROM tracks
 		WHERE tracklist_id = $1 AND deleted_at IS NULL
 		ORDER BY position`,
@@ -113,6 +117,7 @@ func (r *Repository) Get(ctx context.Context, id uuid.UUID) (*Tracklist, []Track
 			&t.ID, &t.TracklistID, &t.Position, &t.Title, &t.Artist, &t.Album, &t.Genre, &t.BPM, &t.Rating,
 			&t.DurationSeconds, &t.MusicalKey, &t.DateAdded, &t.ArtworkStatus, &t.ArtworkURL, &t.ArtworkSource,
 			&t.CreatedAt, &t.UpdatedAt, &t.DeletedAt,
+			&t.HiddenGem, &t.Unreleased, &t.Media,
 		)
 		if err != nil {
 			return nil, nil, err
@@ -124,6 +129,57 @@ func (r *Repository) Get(ctx context.Context, id uuid.UUID) (*Tracklist, []Track
 	}
 
 	return &tl, tracks, nil
+}
+
+// UpdateTitle renames a live tracklist. ErrNotFound if it does not exist or is deleted.
+func (r *Repository) UpdateTitle(ctx context.Context, id uuid.UUID, title string) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE tracklists SET title = $2, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL`,
+		id, title,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// LinkedGigs lists the live gigs a tracklist is linked to, newest first.
+// ErrNotFound if the tracklist does not exist. The link itself is managed by
+// the gig endpoints (POST/DELETE /gigs/{id}/tracklists/{tracklistId}).
+func (r *Repository) LinkedGigs(ctx context.Context, id uuid.UUID) ([]LinkedGig, error) {
+	exists, err := r.Exists(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrNotFound
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT g.id, g.date, g.venue, g.city, g.event_name
+		FROM gigs g
+		JOIN tracklist_gigs tg ON tg.gig_id = g.id
+		WHERE tg.tracklist_id = $1 AND g.deleted_at IS NULL
+		ORDER BY g.date DESC, g.id`,
+		id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	gigs := make([]LinkedGig, 0)
+	for rows.Next() {
+		var g LinkedGig
+		if err := rows.Scan(&g.ID, &g.Date, &g.Venue, &g.City, &g.EventName); err != nil {
+			return nil, err
+		}
+		gigs = append(gigs, g)
+	}
+	return gigs, rows.Err()
 }
 
 // Exists checks whether a tracklist exists (not soft-deleted).
@@ -220,6 +276,21 @@ func (r *Repository) UpdateTrack(ctx context.Context, tracklistID, trackID uuid.
 		args = append(args, *req.DateAdded)
 		argID++
 	}
+	if req.HiddenGem != nil {
+		setClauses = append(setClauses, "hidden_gem = $"+strconv.Itoa(argID))
+		args = append(args, *req.HiddenGem)
+		argID++
+	}
+	if req.Unreleased != nil {
+		setClauses = append(setClauses, "unreleased = $"+strconv.Itoa(argID))
+		args = append(args, *req.Unreleased)
+		argID++
+	}
+	if req.Media != nil {
+		setClauses = append(setClauses, "media = $"+strconv.Itoa(argID))
+		args = append(args, *req.Media)
+		argID++
+	}
 
 	if len(setClauses) == 0 {
 		return nil // Nothing to update
@@ -244,6 +315,119 @@ func (r *Repository) UpdateTrack(ctx context.Context, tracklistID, trackID uuid.
 	}
 
 	return nil
+}
+
+// lockTracklist takes the tracklist row lock (serialising adds and reorders on
+// one tracklist) and returns ErrNotFound if it does not exist or is deleted.
+func lockTracklist(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	var locked uuid.UUID
+	err := tx.QueryRow(ctx, `
+		SELECT id FROM tracklists WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, id).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
+}
+
+// AddTrack appends a manually entered track after the last one. req must
+// already be normalised. Soft-deleted tracks keep their position, so the next
+// position is taken over all rows.
+func (r *Repository) AddTrack(ctx context.Context, tracklistID uuid.UUID, req CreateTrackRequest) (*Track, error) {
+	now := time.Now().UTC()
+	t := &Track{
+		ID: uuid.New(), TracklistID: tracklistID, Title: req.Title, Artist: req.Artist,
+		MusicalKey: req.MusicalKey, DateAdded: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC),
+		// A hand-typed track has nothing to look up, so it skips the artwork fetch.
+		ArtworkStatus: ArtworkPlaceholder,
+		HiddenGem:     req.HiddenGem, Unreleased: req.Unreleased, Media: req.Media,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if req.BPM != nil {
+		t.BPM = *req.BPM
+	}
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := lockTracklist(ctx, tx, tracklistID); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `
+			SELECT COALESCE(MAX(position), 0) + 1 FROM tracks WHERE tracklist_id = $1`,
+			tracklistID).Scan(&t.Position); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `
+			INSERT INTO tracks (
+				id, tracklist_id, position, title, artist, album, genre, bpm, rating,
+				duration_secs, musical_key, date_added, artwork_status, artwork_url,
+				artwork_source, created_at, updated_at, hidden_gem, unreleased, media
+			) VALUES ($1, $2, $3, $4, $5, '', '', $6, 0, 0, $7, $8, $9, '', '', $10, $10, $11, $12, $13)`,
+			t.ID, tracklistID, t.Position, t.Title, t.Artist, t.BPM, t.MusicalKey, t.DateAdded,
+			t.ArtworkStatus, now, t.HiddenGem, t.Unreleased, t.Media,
+		)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// ReorderTracks sets the order of a tracklist's live tracks to ids, which must
+// be exactly the live track ids (ErrInvalidTrack otherwise). Live tracks end up
+// at 1..n; soft-deleted rows are renumbered after them so they never collide.
+func (r *Repository) ReorderTracks(ctx context.Context, tracklistID uuid.UUID, ids []uuid.UUID) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := lockTracklist(ctx, tx, tracklistID); err != nil {
+			return err
+		}
+		rows, err := tx.Query(ctx, `
+			SELECT id FROM tracks WHERE tracklist_id = $1 AND deleted_at IS NULL`, tracklistID)
+		if err != nil {
+			return err
+		}
+		live := map[uuid.UUID]bool{}
+		for rows.Next() {
+			var id uuid.UUID
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			live[id] = true
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		seen := make(map[uuid.UUID]bool, len(ids))
+		strs := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if !live[id] || seen[id] {
+				return ErrInvalidTrack
+			}
+			seen[id] = true
+			strs = append(strs, id.String())
+		}
+		if len(ids) != len(live) {
+			return ErrInvalidTrack
+		}
+
+		// Rows trade places mid-update; check uniqueness once, at commit.
+		if _, err := tx.Exec(ctx, `SET CONSTRAINTS tracks_tracklist_position_key DEFERRED`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE tracks t SET position = v.pos::int, updated_at = NOW()
+			FROM unnest($2::uuid[]) WITH ORDINALITY AS v(id, pos)
+			WHERE t.id = v.id AND t.tracklist_id = $1`, tracklistID, strs); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `
+			UPDATE tracks t SET position = $2 + d.rn::int
+			FROM (SELECT id, row_number() OVER (ORDER BY position, id) AS rn
+			      FROM tracks WHERE tracklist_id = $1 AND deleted_at IS NOT NULL) d
+			WHERE t.id = d.id`, tracklistID, len(ids))
+		return err
+	})
 }
 
 // SoftDelete sets deleted_at on tracklist and all child tracks in a transaction

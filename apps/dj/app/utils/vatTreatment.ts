@@ -110,20 +110,30 @@ export function isVatTreatment(v: unknown): v is VatTreatment {
 
 /**
  * The tax fields after switching treatment: fixed-rate treatments force the
- * rate to 0, and the note moves to the new default unless the user had
- * written their own wording.
+ * rate to 0, and the note moves to the new treatment's wording unless the user
+ * had written their own.
+ *
+ * `notes` is the wording the server returns for the supplier's country
+ * (GET /invoices/tax-notes, e.g. the German § 19 UStG text); without it the
+ * built-in generic wording applies. A note counts as "not the user's own" when
+ * it equals ANY known default (built-in or the country's, for any treatment),
+ * so country wording that came from the server when the draft was created is
+ * replaced too instead of lingering under a treatment it does not belong to.
  */
 export function applyTreatmentChange(
   current: { vat_treatment: VatTreatment; tax_rate_bps: number; tax_note: string },
   next: VatTreatment,
+  notes: Partial<Record<VatTreatment, string>> | null = null,
 ): { vat_treatment: VatTreatment; tax_rate_bps: number; tax_note: string } {
-  const prevMeta = vatTreatmentMeta(current.vat_treatment)
   const nextMeta = vatTreatmentMeta(next)
-  const noteIsDefault = current.tax_note.trim() === '' || current.tax_note === prevMeta.defaultNote
+  const knownDefaults = new Set<string>(
+    [...Object.values(VAT_TREATMENTS).map((m) => m.defaultNote), ...Object.values(notes ?? {})].filter(Boolean),
+  )
+  const noteIsDefault = current.tax_note.trim() === '' || knownDefaults.has(current.tax_note)
   return {
     vat_treatment: next,
     tax_rate_bps: nextMeta.rateEditable ? current.tax_rate_bps : 0,
-    tax_note: noteIsDefault ? nextMeta.defaultNote : current.tax_note,
+    tax_note: noteIsDefault ? (notes?.[next] ?? nextMeta.defaultNote) : current.tax_note,
   }
 }
 

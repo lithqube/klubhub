@@ -52,7 +52,9 @@ const invoiceSelect = `
 	SELECT i.id, i.kind, i.gig_id, i.credits_invoice_id, i.replaced_by_invoice_id,
 	       i.invoice_number, i.number_prefix, i.number_seq, i.currency, i.status,
 	       to_char(i.supply_date, 'YYYY-MM-DD'), i.issued_at, i.due_at, i.paid_at,
-	       i.payment_ref, i.internal_notes, i.customer, i.billing_profile,
+	       i.payment_ref, i.internal_notes,
+	       i.buyer_reference, i.purchase_order_ref, i.contract_ref, i.payment_terms,
+	       i.customer, i.billing_profile,
 	       i.vat_treatment, i.tax_rate_bps, i.tax_note,
 	       i.subtotal_minor, i.tax_minor, i.total_minor,
 	       i.withholding_rate_bps, i.withholding_minor, i.net_payable_minor, i.tax_breakdown,
@@ -65,7 +67,9 @@ func (inv *Invoice) scanTargets() []any {
 		&inv.ID, &inv.Kind, &inv.GigID, &inv.CreditsInvoiceID, &inv.ReplacedByInvoiceID,
 		&inv.InvoiceNumber, &inv.NumberPrefix, &inv.NumberSeq, &inv.Currency, &inv.Status,
 		&inv.SupplyDate, &inv.IssuedAt, &inv.DueAt, &inv.PaidAt,
-		&inv.PaymentRef, &inv.InternalNotes, &inv.Customer, &inv.BillingProfile,
+		&inv.PaymentRef, &inv.InternalNotes,
+		&inv.BuyerReference, &inv.PurchaseOrderRef, &inv.ContractRef, &inv.PaymentTerms,
+		&inv.Customer, &inv.BillingProfile,
 		&inv.VATTreatment, &inv.TaxRateBps, &inv.TaxNote,
 		&inv.SubtotalMinor, &inv.TaxMinor, &inv.TotalMinor,
 		&inv.WithholdingRateBps, &inv.WithholdingMinor, &inv.NetPayableMinor, &inv.TaxBreakdown,
@@ -131,9 +135,13 @@ func (r *InvoiceRepository) CreateDraft(ctx context.Context, in DraftInput) (*In
 			if i < len(t.LineTaxBps) {
 				rate = t.LineTaxBps[i]
 			}
+			unit := l.UnitCode
+			if unit == "" {
+				unit = DefaultUnitCode
+			}
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, tax_bps)
-				VALUES ($1, $2, $3, $4, $5, $6)`, id, i, l.Description, l.Quantity, l.UnitMinor, rate); err != nil {
+				INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, unit_code, tax_bps)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`, id, i, l.Description, l.Quantity, l.UnitMinor, unit, rate); err != nil {
 				return fmt.Errorf("insert invoice line: %w", err)
 			}
 		}
@@ -193,7 +201,7 @@ func (r *InvoiceRepository) GetByID(ctx context.Context, id uuid.UUID) (*Invoice
 // getLines loads lines for an invoice ordered by sort_order.
 func getLines(ctx context.Context, q dbtx, invoiceID uuid.UUID) ([]*InvoiceLine, error) {
 	rows, err := q.Query(ctx, `
-		SELECT id, invoice_id, sort_order, description, quantity, unit_minor,
+		SELECT id, invoice_id, sort_order, description, quantity, unit_minor, unit_code,
 		       tax_bps, line_total_minor, created_at
 		FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort_order, id`, invoiceID)
 	if err != nil {
@@ -205,7 +213,7 @@ func getLines(ctx context.Context, q dbtx, invoiceID uuid.UUID) ([]*InvoiceLine,
 	for rows.Next() {
 		var l InvoiceLine
 		if err := rows.Scan(&l.ID, &l.InvoiceID, &l.SortOrder, &l.Description, &l.Quantity,
-			&l.UnitMinor, &l.TaxBps, &l.LineTotalMinor, &l.CreatedAt); err != nil {
+			&l.UnitMinor, &l.UnitCode, &l.TaxBps, &l.LineTotalMinor, &l.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan line: %w", err)
 		}
 		lines = append(lines, &l)
@@ -307,18 +315,42 @@ func (r *InvoiceRepository) UpdateDraft(ctx context.Context, id uuid.UUID, req U
 		if !li.isDraftInvoice() {
 			return ErrInvoiceBadState
 		}
-		lines, err := getLines(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		taxLines := make([]tax.Line, len(lines))
-		for i, l := range lines {
-			taxLines[i] = tax.Line{NetMinor: l.LineTotalMinor, TaxBps: l.TaxBps}
+		// Replacement lines (when sent) are the source of truth for the
+		// totals; otherwise the stored lines are re-taxed in place.
+		var existing []*InvoiceLine
+		var taxLines []tax.Line
+		if req.Lines != nil {
+			taxLines = make([]tax.Line, len(req.Lines))
+			for i, l := range req.Lines {
+				taxLines[i] = tax.Line{NetMinor: int64(l.Quantity) * l.UnitMinor}
+			}
+		} else {
+			if existing, err = getLines(ctx, tx, id); err != nil {
+				return err
+			}
+			taxLines = make([]tax.Line, len(existing))
+			for i, l := range existing {
+				taxLines[i] = tax.Line{NetMinor: l.LineTotalMinor, TaxBps: l.TaxBps}
+			}
 		}
 		t := tax.ComputeTotals(taxLines, req.TaxRateBps, req.WithholdingRateBps)
-		for i, l := range lines {
-			if _, err := tx.Exec(ctx, `UPDATE invoice_lines SET tax_bps = $2 WHERE id = $1`, l.ID, t.LineTaxBps[i]); err != nil {
-				return fmt.Errorf("update line tax: %w", err)
+		if req.Lines != nil {
+			if _, err := tx.Exec(ctx, `DELETE FROM invoice_lines WHERE invoice_id = $1`, id); err != nil {
+				return fmt.Errorf("replace lines: %w", err)
+			}
+			for i, l := range req.Lines {
+				if _, err := tx.Exec(ctx, `
+					INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, unit_code, tax_bps)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+					id, i, l.Description, l.Quantity, l.UnitMinor, l.UnitCode, t.LineTaxBps[i]); err != nil {
+					return fmt.Errorf("insert replacement line: %w", err)
+				}
+			}
+		} else {
+			for i, l := range existing {
+				if _, err := tx.Exec(ctx, `UPDATE invoice_lines SET tax_bps = $2 WHERE id = $1`, l.ID, t.LineTaxBps[i]); err != nil {
+					return fmt.Errorf("update line tax: %w", err)
+				}
 			}
 		}
 		if _, err := tx.Exec(ctx, `
@@ -339,11 +371,16 @@ func (r *InvoiceRepository) UpdateDraft(ctx context.Context, id uuid.UUID, req U
 				withholding_minor    = $15,
 				net_payable_minor    = $16,
 				tax_breakdown        = $17,
+				buyer_reference      = $18,
+				purchase_order_ref   = $19,
+				contract_ref         = $20,
+				payment_terms        = $21,
 				updated_at           = now()
 			WHERE id = $1`,
 			id, jsonb(req.Customer), req.Customer.ContactID, string(req.VATTreatment), req.TaxRateBps, req.TaxNote,
 			req.WithholdingRateBps, req.SupplyDate, req.DueAt.ptr(), req.NumberPrefix, req.InternalNotes,
-			t.SubtotalMinor, t.TaxMinor, t.TotalMinor, t.WithholdingMinor, t.NetPayableMinor, jsonb(t.Breakdown)); err != nil {
+			t.SubtotalMinor, t.TaxMinor, t.TotalMinor, t.WithholdingMinor, t.NetPayableMinor, jsonb(t.Breakdown),
+			req.BuyerReference, req.PurchaseOrderRef, req.ContractRef, req.PaymentTerms); err != nil {
 			return fmt.Errorf("update draft: %w", err)
 		}
 		inv, err = fetchInvoice(ctx, tx, id)
@@ -458,8 +495,8 @@ func (r *InvoiceRepository) transition(ctx context.Context, id uuid.UUID, token 
 // copyLines duplicates an invoice's lines onto another invoice.
 func copyLines(ctx context.Context, tx pgx.Tx, from, to uuid.UUID) error {
 	_, err := tx.Exec(ctx, `
-		INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, tax_bps)
-		SELECT $1, sort_order, description, quantity, unit_minor, tax_bps
+		INSERT INTO invoice_lines (invoice_id, sort_order, description, quantity, unit_minor, unit_code, tax_bps)
+		SELECT $1, sort_order, description, quantity, unit_minor, unit_code, tax_bps
 		FROM invoice_lines WHERE invoice_id = $2`, to, from)
 	if err != nil {
 		return fmt.Errorf("copy lines: %w", err)

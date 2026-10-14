@@ -43,6 +43,23 @@ func (r *NoteRegistry) Note(country string, t Treatment) string {
 	return r.byTreatment[t]
 }
 
+// notedTreatments are the treatments that can carry a legal note; the others
+// (domestic VAT, US sales tax, none) print none.
+var notedTreatments = []Treatment{ReverseCharge, Exempt, OutsideScope}
+
+// NotesFor returns the legal wording a supplier in country prints for each
+// treatment that has one, so a client can swap the note when the user changes
+// the treatment without carrying its own copy of the text.
+func NotesFor(country string) map[Treatment]string {
+	out := make(map[Treatment]string, len(notedTreatments))
+	for _, t := range notedTreatments {
+		if n := Notes.Note(country, t); n != "" {
+			out[t] = n
+		}
+	}
+	return out
+}
+
 // Notes is the process-wide registry used by Suggest. Add country-specific
 // notes here (docs/INVOICING.md §6), e.g. in an init():
 //

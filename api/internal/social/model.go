@@ -41,22 +41,27 @@ type SocialAccount struct {
 }
 
 // ScheduledPost mirrors the scheduled_posts table row.
+//
+// JSON tags are camelCase to match the v1 frontend contract. The
+// DB column names stay snake_case (see repository.go) and are not
+// affected by this struct's tags.
 type ScheduledPost struct {
 	ID        uuid.UUID  `json:"id"`
-	AccountID uuid.UUID  `json:"account_id"`
+	AccountID uuid.UUID  `json:"accountId"`
 	Status    PostStatus `json:"status"`
-	PostType  PostType   `json:"post_type"`
+	PostType  PostType   `json:"postType"`
 	Caption   string     `json:"caption"`
-	// ImageMinioPath is a legacy persisted/API field name containing a
-	// Garage object key. Keep it for v1 compatibility.
-	ImageMinioPath string     `json:"image_minio_path"`
-	ScheduledAtUTC time.Time  `json:"scheduled_at_utc"`
-	TimezoneName   string     `json:"timezone_name"`
-	RetryCount     int        `json:"retry_count"`
-	NextRetryAt    *time.Time `json:"next_retry_at,omitempty"`
-	LastError      *string    `json:"last_error,omitempty"`
-	ContainerID    *string    `json:"container_id,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
+	// ImageStorageKey is the Garage object key for the post's image.
+	// Renamed from the legacy image_minio_path column in migration 024.
+	// JSON tag is camelCase to match the v1 frontend contract.
+	ImageStorageKey string     `json:"imageStorageKey"`
+	ScheduledAtUTC  time.Time  `json:"scheduledAtUtc"`
+	TimezoneName    string     `json:"timezoneName"`
+	RetryCount      int        `json:"retryCount"`
+	NextRetryAt     *time.Time `json:"nextRetryAt"`
+	LastError       *string    `json:"lastError"`
+	ContainerID     *string    `json:"containerId"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+	DeletedAt       *time.Time `json:"deletedAt,omitempty"`
 }

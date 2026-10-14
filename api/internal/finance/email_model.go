@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/mail"
 	"net/smtp"
@@ -82,12 +83,17 @@ type EmailMessage struct {
 	Body          string      `json:"body"             db:"body"`
 	BodyHTML      string      `json:"body_html,omitempty" db:"body_html"`
 	AttachmentIDs []uuid.UUID `json:"attachment_ids"  db:"attachment_ids"`
-	Status        EmailStatus `json:"status"          db:"status"`
-	SentAt        *time.Time  `json:"sent_at,omitempty" db:"sent_at"`
-	LastError     string      `json:"last_error,omitempty" db:"last_error"`
-	Attempts      int         `json:"attempts"        db:"attempts"`
-	CreatedAt     time.Time   `json:"created_at"      db:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"      db:"updated_at"`
+	// ReplyTo is where a reply should go when it is not the sender. Empty: none.
+	ReplyTo string `json:"reply_to,omitempty" db:"reply_to"`
+	// Attachments is the content behind AttachmentIDs, loaded just before
+	// delivery. It is never stored or serialised: the row keeps only the ids.
+	Attachments []EmailAttachment `json:"-" db:"-"`
+	Status      EmailStatus       `json:"status"          db:"status"`
+	SentAt      *time.Time        `json:"sent_at,omitempty" db:"sent_at"`
+	LastError   string            `json:"last_error,omitempty" db:"last_error"`
+	Attempts    int               `json:"attempts"        db:"attempts"`
+	CreatedAt   time.Time         `json:"created_at"      db:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"      db:"updated_at"`
 }
 
 var (
@@ -110,7 +116,26 @@ type CreateEmailRequest struct {
 	Body          string      `json:"body"`
 	BodyHTML      string      `json:"body_html,omitempty"`
 	AttachmentIDs []uuid.UUID `json:"attachment_ids,omitempty"`
+	ReplyTo       string      `json:"reply_to,omitempty"`
 }
+
+// EmailAttachment is one file sent with a message.
+type EmailAttachment struct {
+	Filename string
+	MimeType string
+	Content  []byte
+}
+
+// AttachmentSource is where attachment content comes from. *DocumentService
+// satisfies it.
+type AttachmentSource interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*Document, error)
+	Download(ctx context.Context, id uuid.UUID) (io.ReadCloser, *Document, error)
+}
+
+// maxEmailAttachmentBytes caps what one message carries (the content, before
+// base64 inflates it by a third). Plunk's default limit is 10 MB of base64.
+const maxEmailAttachmentBytes = 7 << 20
 
 // SMTPConfig holds SMTP credentials for delivery.
 type SMTPConfig struct {
@@ -125,13 +150,13 @@ type SMTPConfig struct {
 // email platform built on AWS SES (https://github.com/useplunk/plunk) that we
 // already use for the GitHub page. It exposes a public REST API:
 //
-//	POST {BaseURL}/api/v1/{ProjectID}/emails
+//	POST {BaseURL}/v1/send
 //	Authorization: Bearer {APIKey}
 //	Content-Type: application/json
 //	Body: {"from": {...}, "to": "...", "subject": "...", "body": "...", ...}
 type PlunkConfig struct {
-	BaseURL   string // e.g. "https://app.useplunk.com" or self-hosted equivalent
-	ProjectID string // Plunk project UUID
+	BaseURL   string // Plunk API base, e.g. "https://next-api.useplunk.com" or a self-hosted equivalent
+	ProjectID string // retained for configuration compatibility; project is derived from API key
 	APIKey    string // Bearer token
 	FromEmail string // default sender (override-able per message)
 	FromName  string
@@ -153,6 +178,9 @@ func NewDefaultSMTPSender(cfg SMTPConfig) *DefaultSMTPSender {
 }
 
 func (s *DefaultSMTPSender) Send(msg *EmailMessage) error {
+	if len(msg.AttachmentIDs) > 0 {
+		return fmt.Errorf("%w: attachment_ids are not supported; no email was sent", ErrEmailValidation)
+	}
 	// Defense in depth: ValidateCreateEmailRequest already rejects header
 	// injection (CR/LF/control chars) and validates addresses at the API
 	// boundary, but this sender must not trust that every caller went
@@ -176,6 +204,13 @@ func (s *DefaultSMTPSender) Send(msg *EmailMessage) error {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "From: %s\r\n", from)
 	fmt.Fprintf(&buf, "To: %s\r\n", to)
+	if msg.ReplyTo != "" {
+		replyTo, err := formatAddressList([]string{msg.ReplyTo})
+		if err != nil {
+			return fmt.Errorf("smtp: invalid reply-to address: %w", err)
+		}
+		fmt.Fprintf(&buf, "Reply-To: %s\r\n", replyTo)
+	}
 	if len(msg.CCEmails) > 0 {
 		cc, err := formatAddressList(msg.CCEmails)
 		if err != nil {
@@ -243,8 +278,16 @@ const (
 
 // EmailService coordinates email creation and delivery.
 type EmailService struct {
-	repo   EmailRepositoryIface
-	sender EmailSender
+	repo        EmailRepositoryIface
+	sender      EmailSender
+	attachments AttachmentSource // nil: messages cannot carry attachments
+}
+
+// WithAttachments lets the service send messages that carry stored documents
+// (SendOwned). Without it such messages are refused.
+func (s *EmailService) WithAttachments(src AttachmentSource) *EmailService {
+	s.attachments = src
+	return s
 }
 
 func NewEmailService(repo EmailRepositoryIface, sender EmailSender) *EmailService {
@@ -253,6 +296,28 @@ func NewEmailService(repo EmailRepositoryIface, sender EmailSender) *EmailServic
 
 // Enqueue creates an email in 'queued' status without sending it.
 func (s *EmailService) Enqueue(ctx context.Context, req CreateEmailRequest) (*EmailMessage, error) {
+	return s.create(ctx, req, false)
+}
+
+func (s *EmailService) create(ctx context.Context, req CreateEmailRequest, claimed bool) (*EmailMessage, error) {
+	return s.createMessage(ctx, req, claimed, false)
+}
+
+// createMessage validates and stores a message. trusted is for server-built
+// requests only: it allows AttachmentIDs, which a client-supplied request
+// never may (see ValidateCreateEmailRequest).
+func (s *EmailService) createMessage(ctx context.Context, req CreateEmailRequest, claimed, trusted bool) (*EmailMessage, error) {
+	attach := req.AttachmentIDs
+	if trusted {
+		req.AttachmentIDs = nil // checked by SendOwned; the generic rules would refuse them
+	}
+	if validator, ok := s.sender.(interface {
+		ValidateRequest(CreateEmailRequest) error
+	}); ok {
+		if err := validator.ValidateRequest(req); err != nil {
+			return nil, err
+		}
+	}
 	if err := ValidateCreateEmailRequest(req); err != nil {
 		return nil, err
 	}
@@ -269,21 +334,98 @@ func (s *EmailService) Enqueue(ctx context.Context, req CreateEmailRequest) (*Em
 		Subject:       req.Subject,
 		Body:          req.Body,
 		BodyHTML:      req.BodyHTML,
-		AttachmentIDs: req.AttachmentIDs,
+		AttachmentIDs: attach,
+		ReplyTo:       req.ReplyTo,
 		Status:        EmailStatusQueued,
 		CreatedAt:     time.Now().UTC(),
 		UpdatedAt:     time.Now().UTC(),
+	}
+	if claimed {
+		msg.Status = EmailStatusSending
+		msg.Attempts = 1
 	}
 	return s.repo.Create(ctx, msg)
 }
 
 // Send enqueues + immediately delivers an email.
 func (s *EmailService) Send(ctx context.Context, req CreateEmailRequest) (*EmailMessage, error) {
-	msg, err := s.Enqueue(ctx, req)
+	// Insert an already claimed initial attempt: never expose this row as queued.
+	msg, err := s.create(ctx, req, true)
 	if err != nil {
 		return nil, err
 	}
-	return s.deliver(ctx, msg)
+	return s.finalizeDelivery(ctx, msg)
+}
+
+// SendOwned sends a message built by the server that carries stored
+// documents. Every attachment must belong to the entity the message is about
+// (OwnerType/OwnerID), so a message can never carry another entity's files.
+// The ids are stored with the message and the content is loaded at delivery,
+// so a failed send is retried with the same files.
+func (s *EmailService) SendOwned(ctx context.Context, req CreateEmailRequest) (*EmailMessage, error) {
+	if len(req.AttachmentIDs) > 0 {
+		if s.attachments == nil {
+			return nil, fmt.Errorf("%w: attachments are not available; no email was sent", ErrEmailValidation)
+		}
+		if req.OwnerType == "" || req.OwnerID == nil {
+			return nil, fmt.Errorf("%w: a message with attachments needs the owner they belong to", ErrEmailValidation)
+		}
+		for _, id := range req.AttachmentIDs {
+			doc, err := s.attachments.GetByID(ctx, id)
+			if err != nil {
+				return nil, fmt.Errorf("%w: attachment %s: %v", ErrEmailValidation, id, err)
+			}
+			if err := checkAttachmentOwner(doc, req.OwnerType, *req.OwnerID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	msg, err := s.createMessage(ctx, req, true, true)
+	if err != nil {
+		return nil, err
+	}
+	return s.finalizeDelivery(ctx, msg)
+}
+
+func checkAttachmentOwner(doc *Document, ownerType string, ownerID uuid.UUID) error {
+	if string(doc.OwnerType) != ownerType || doc.OwnerID != ownerID {
+		return fmt.Errorf("%w: attachment %s does not belong to this %s", ErrEmailValidation, doc.ID, ownerType)
+	}
+	return nil
+}
+
+// loadAttachments fills msg.Attachments from the stored documents, checking
+// ownership and size again at delivery time.
+func (s *EmailService) loadAttachments(ctx context.Context, msg *EmailMessage) error {
+	if len(msg.AttachmentIDs) == 0 || len(msg.Attachments) == len(msg.AttachmentIDs) {
+		return nil
+	}
+	if s.attachments == nil || msg.OwnerID == nil {
+		return fmt.Errorf("%w: attachments cannot be loaded; no email was sent", ErrEmailValidation)
+	}
+	var out []EmailAttachment
+	total := 0
+	for _, id := range msg.AttachmentIDs {
+		rc, doc, err := s.attachments.Download(ctx, id)
+		if err != nil {
+			return fmt.Errorf("load attachment %s: %w", id, err)
+		}
+		if err := checkAttachmentOwner(doc, msg.OwnerType, *msg.OwnerID); err != nil {
+			_ = rc.Close()
+			return err
+		}
+		content, err := io.ReadAll(io.LimitReader(rc, maxEmailAttachmentBytes+1))
+		_ = rc.Close()
+		if err != nil {
+			return fmt.Errorf("read attachment %s: %w", id, err)
+		}
+		if total += len(content); total > maxEmailAttachmentBytes {
+			return fmt.Errorf("%w: attachments exceed the %d MB limit", ErrEmailValidation, maxEmailAttachmentBytes>>20)
+		}
+		out = append(out, EmailAttachment{Filename: doc.Filename, MimeType: doc.MimeType, Content: content})
+	}
+	msg.Attachments = out
+	return nil
 }
 
 // RetryFailed attempts redelivery of failed messages up to limit.
@@ -296,6 +438,12 @@ func (s *EmailService) Send(ctx context.Context, req CreateEmailRequest) (*Email
 // emailStaleSendingTimeout (e.g. because a worker crashed mid-delivery)
 // are requeued to 'failed' first so they become claimable again.
 func (s *EmailService) RetryFailed(ctx context.Context, limit int) (int, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	if limit > 16 {
+		limit = 16
+	}
 	if _, err := s.repo.RequeueStale(ctx, emailStaleSendingTimeout); err != nil {
 		return 0, err
 	}
@@ -304,38 +452,55 @@ func (s *EmailService) RetryFailed(ctx context.Context, limit int) (int, error) 
 		return 0, err
 	}
 	delivered := 0
+	var failures error
 	for _, msg := range msgs {
-		if _, err := s.finalizeDelivery(ctx, msg); err == nil {
+		out, err := s.finalizeDelivery(ctx, msg)
+		if err != nil {
+			failures = errors.Join(failures, err)
+		} else if out.Status == EmailStatusSent {
 			delivered++
 		}
 	}
-	return delivered, nil
+	return delivered, failures
 }
 
-// deliver marks msg 'sending' (incrementing attempts) and then finalizes
-// delivery. Used by Send(), where the message was just enqueued by this
-// same request and is not visible to any concurrent claimer yet.
-func (s *EmailService) deliver(ctx context.Context, msg *EmailMessage) (*EmailMessage, error) {
-	msg.Status = EmailStatusSending
-	msg.Attempts++
-	if _, err := s.repo.UpdateStatus(ctx, msg.ID, msg.Status, "", nil); err != nil {
-		return nil, err
-	}
-	return s.finalizeDelivery(ctx, msg)
-}
-
-// finalizeDelivery attempts delivery of a message that has already been
-// atomically transitioned to 'sending' (either by deliver() or by
+// finalizeDelivery attempts delivery of a message durably claimed as
+// sending (either by initial insertion or by
 // ClaimFailedForRetry) and records the final status.
 func (s *EmailService) finalizeDelivery(ctx context.Context, msg *EmailMessage) (*EmailMessage, error) {
-	err := s.sender.Send(msg)
+	deliveryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	err := s.loadAttachments(deliveryCtx, msg)
+	if err != nil {
+		// Nothing is sent without its attachments; the row stays retryable.
+	} else if sender, ok := s.sender.(interface {
+		SendContext(context.Context, *EmailMessage) error
+	}); ok {
+		err = sender.SendContext(deliveryCtx, msg)
+	} else {
+		// Legacy synchronous adapters are only suitable for bounded test/local senders.
+		err = s.sender.Send(msg)
+	}
+	// Finalize even if the caller disconnected or shutdown cancelled delivery.
+	// A failed DB write leaves the claimed row recoverable with the SAME ID.
+	persistCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer stop()
+	claim := *msg
+	finish := func(status EmailStatus, lastError string, sentAt *time.Time) (*EmailMessage, error) {
+		if repo, ok := s.repo.(interface {
+			FinishAttempt(context.Context, *EmailMessage, EmailStatus, string, *time.Time) (*EmailMessage, error)
+		}); ok {
+			return repo.FinishAttempt(persistCtx, &claim, status, lastError, sentAt)
+		}
+		return s.repo.UpdateStatus(persistCtx, msg.ID, status, lastError, sentAt)
+	}
 	now := time.Now().UTC()
 	if err != nil {
 		// Mark failed
 		msg.Status = EmailStatusFailed
 		msg.LastError = err.Error()
 		msg.UpdatedAt = now
-		return s.repo.UpdateStatus(ctx, msg.ID, EmailStatusFailed, err.Error(), nil)
+		return finish(EmailStatusFailed, err.Error(), nil)
 	}
 
 	// Mark sent
@@ -343,7 +508,60 @@ func (s *EmailService) finalizeDelivery(ctx context.Context, msg *EmailMessage) 
 	msg.SentAt = &now
 	msg.LastError = ""
 	msg.UpdatedAt = now
-	return s.repo.UpdateStatus(ctx, msg.ID, EmailStatusSent, "", &now)
+	return finish(EmailStatusSent, "", &now)
+}
+
+// StartWorker runs one bounded delivery at a time, including an immediate
+// startup recovery pass. The caller MUST cancel ctx and wait for done before
+// closing the database. Production transports must implement SendContext.
+func (s *EmailService) StartWorker(ctx context.Context, interval time.Duration, onError func(error)) <-chan struct{} {
+	done := make(chan struct{})
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	go func() {
+		defer close(done)
+		if _, ok := s.sender.(interface {
+			SendContext(context.Context, *EmailMessage) error
+		}); !ok {
+			if onError != nil {
+				onError(errors.New("email worker requires a cancellable sender"))
+			}
+			return
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			err := s.workerTick(ctx)
+			if err != nil && ctx.Err() == nil && onError != nil {
+				onError(err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return done
+}
+
+// workerTick runs one bounded retry pass. A panic in the repository or
+// sender is converted to an error so it cannot crash the API process (chi's
+// Recoverer does not cover this goroutine).
+func (s *EmailService) workerTick(ctx context.Context) (err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("email worker panic: %v", rec)
+		}
+	}()
+	passCtx, stop := context.WithTimeout(ctx, 40*time.Second)
+	defer stop()
+	_, err = s.RetryFailed(passCtx, 1)
+	return err
 }
 
 func (s *EmailService) GetByID(ctx context.Context, id uuid.UUID) (*EmailMessage, error) {
@@ -362,6 +580,9 @@ func (s *EmailService) ListByOwner(ctx context.Context, ownerType string, ownerI
 // parsed with net/mail.ParseAddress so a value like
 // "victim@x.com\r\nBcc: attacker@evil.com" can never reach a sender.
 func ValidateCreateEmailRequest(req CreateEmailRequest) error {
+	if len(req.AttachmentIDs) > 0 {
+		return fmt.Errorf("%w: attachment_ids are not supported; no email was sent", ErrEmailValidation)
+	}
 	if !req.Kind.IsValid() {
 		return fmt.Errorf("%w: kind must be one of invoice/agreement", ErrEmailValidation)
 	}
@@ -387,6 +608,11 @@ func ValidateCreateEmailRequest(req CreateEmailRequest) error {
 	}
 	for _, bcc := range req.BCCEmails {
 		if err := validateAddress("bcc_emails", bcc); err != nil {
+			return err
+		}
+	}
+	if req.ReplyTo != "" {
+		if err := validateAddress("reply_to", req.ReplyTo); err != nil {
 			return err
 		}
 	}
@@ -470,10 +696,10 @@ var _ EmailRepositoryIface = (*EmailRepository)(nil)
 func (r *EmailRepository) Create(ctx context.Context, msg *EmailMessage) (*EmailMessage, error) {
 	const sql = `
 		INSERT INTO email_messages (kind, owner_type, owner_id, from_email, from_name,
-			to_email, cc_emails, bcc_emails, subject, body, body_html, attachment_ids, status, attempts)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			to_email, cc_emails, bcc_emails, subject, body, body_html, attachment_ids, status, attempts, reply_to)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
 	ownerType := ""
@@ -496,11 +722,11 @@ func (r *EmailRepository) Create(ctx context.Context, msg *EmailMessage) (*Email
 	err := r.db.QueryRow(ctx, sql,
 		msg.Kind, ownerType, msg.OwnerID, msg.FromEmail, msg.FromName,
 		msg.ToEmail, cc, bcc, msg.Subject, msg.Body, msg.BodyHTML, attachments,
-		msg.Status, msg.Attempts,
+		msg.Status, msg.Attempts, msg.ReplyTo,
 	).Scan(
 		&out.ID, &out.Kind, &out.OwnerType, &out.OwnerID, &out.FromEmail, &out.FromName,
 		&out.ToEmail, &out.CCEmails, &out.BCCEmails, &out.Subject, &out.Body,
-		&out.BodyHTML, &out.AttachmentIDs, &out.Status, &out.SentAt, &out.LastError,
+		&out.BodyHTML, &out.AttachmentIDs, &out.ReplyTo, &out.Status, &out.SentAt, &out.LastError,
 		&out.Attempts, &out.CreatedAt, &out.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert email: %w", err)
@@ -511,7 +737,7 @@ func (r *EmailRepository) Create(ctx context.Context, msg *EmailMessage) (*Email
 func (r *EmailRepository) GetByID(ctx context.Context, id uuid.UUID) (*EmailMessage, error) {
 	const sql = `
 		SELECT id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 		FROM email_messages WHERE id = $1
 	`
@@ -519,7 +745,7 @@ func (r *EmailRepository) GetByID(ctx context.Context, id uuid.UUID) (*EmailMess
 	err := r.db.QueryRow(ctx, sql, id).Scan(
 		&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 		&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-		&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+		&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 		&m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -533,7 +759,7 @@ func (r *EmailRepository) GetByID(ctx context.Context, id uuid.UUID) (*EmailMess
 func (r *EmailRepository) ListByOwner(ctx context.Context, ownerType string, ownerID uuid.UUID) ([]*EmailMessage, error) {
 	const sql = `
 		SELECT id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 		FROM email_messages WHERE owner_type = $1 AND owner_id = $2 ORDER BY created_at DESC
 	`
@@ -548,7 +774,7 @@ func (r *EmailRepository) ListByOwner(ctx context.Context, ownerType string, own
 		var m EmailMessage
 		if err := rows.Scan(&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 			&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-			&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+			&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan email: %w", err)
 		}
@@ -558,19 +784,28 @@ func (r *EmailRepository) ListByOwner(ctx context.Context, ownerType string, own
 }
 
 func (r *EmailRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status EmailStatus, lastError string, sentAt *time.Time) (*EmailMessage, error) {
+	return r.updateStatus(ctx, id, status, lastError, sentAt, 0, time.Time{})
+}
+
+// FinishAttempt fences late completions from a superseded claim.
+func (r *EmailRepository) FinishAttempt(ctx context.Context, claim *EmailMessage, status EmailStatus, lastError string, sentAt *time.Time) (*EmailMessage, error) {
+	return r.updateStatus(ctx, claim.ID, status, lastError, sentAt, claim.Attempts, claim.UpdatedAt)
+}
+
+func (r *EmailRepository) updateStatus(ctx context.Context, id uuid.UUID, status EmailStatus, lastError string, sentAt *time.Time, attempts int, claimedAt time.Time) (*EmailMessage, error) {
 	const sql = `
 		UPDATE email_messages
 		SET status = $1, last_error = $2, sent_at = $3, updated_at = now()
-		WHERE id = $4
+		WHERE id = $4 AND ($5 = 0 OR (status = 'sending' AND attempts = $5 AND updated_at = $6))
 		RETURNING id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
 	var m EmailMessage
-	err := r.db.QueryRow(ctx, sql, status, lastError, sentAt, id).Scan(
+	err := r.db.QueryRow(ctx, sql, status, lastError, sentAt, id, attempts, claimedAt).Scan(
 		&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 		&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-		&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+		&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 		&m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -584,7 +819,7 @@ func (r *EmailRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status
 func (r *EmailRepository) ListByStatus(ctx context.Context, status EmailStatus, limit int) ([]*EmailMessage, error) {
 	const sql = `
 		SELECT id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 		FROM email_messages WHERE status = $1 ORDER BY created_at ASC LIMIT $2
 	`
@@ -599,7 +834,7 @@ func (r *EmailRepository) ListByStatus(ctx context.Context, status EmailStatus, 
 		var m EmailMessage
 		if err := rows.Scan(&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 			&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-			&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+			&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan email: %w", err)
 		}
@@ -608,7 +843,7 @@ func (r *EmailRepository) ListByStatus(ctx context.Context, status EmailStatus, 
 	return out, rows.Err()
 }
 
-// ClaimFailedForRetry atomically claims up to limit 'failed' rows for
+// ClaimFailedForRetry atomically claims queued and eligible failed rows for
 // redelivery: it selects eligible rows (attempts < maxAttempts, and at
 // least attempts*backoffBaseSeconds elapsed since updated_at) with
 // SELECT ... FOR UPDATE SKIP LOCKED, and in the same statement flips them
@@ -621,15 +856,18 @@ func (r *EmailRepository) ClaimFailedForRetry(ctx context.Context, limit, maxAtt
 		SET status = 'sending', attempts = attempts + 1, updated_at = now()
 		WHERE id IN (
 			SELECT id FROM email_messages
-			WHERE status = 'failed'
+			WHERE (status = 'queued' OR (status = 'failed'
+				AND updated_at < now() - make_interval(secs => (attempts * $2)::double precision)))
 				AND attempts < $1
-				AND updated_at < now() - make_interval(secs => (attempts * $2)::double precision)
-			ORDER BY created_at ASC
+            -- Plunk's default key retention is 24h. Never blindly replay
+            -- an ambiguous attempted delivery after its key may expire.
+            AND (attempts = 0 OR created_at > now() - interval '23 hours')
+            ORDER BY created_at ASC
 			LIMIT $3
 			FOR UPDATE SKIP LOCKED
 		)
 		RETURNING id, kind, owner_type, owner_id, from_email, from_name, to_email,
-			cc_emails, bcc_emails, subject, body, body_html, attachment_ids,
+			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
 	rows, err := r.db.Query(ctx, sql, maxAttempts, backoffBaseSeconds, limit)
@@ -643,7 +881,7 @@ func (r *EmailRepository) ClaimFailedForRetry(ctx context.Context, limit, maxAtt
 		var m EmailMessage
 		if err := rows.Scan(&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 			&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
-			&m.AttachmentIDs, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
+			&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
 			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan claimed email: %w", err)
 		}

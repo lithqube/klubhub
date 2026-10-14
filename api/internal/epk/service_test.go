@@ -232,7 +232,7 @@ func TestService_GeneratePDF_OK(t *testing.T) {
 func TestService_ListExports_OK(t *testing.T) {
 	repo := &mockRepo{
 		exports: []epk.EPKExport{
-			{ID: uuid.New(), MinioPath: "epk/exports/1.pdf", CreatedAt: time.Now()},
+			{ID: uuid.New(), GarageObjectKey: "epk/exports/1.pdf", CreatedAt: time.Now()},
 		},
 	}
 	svc := newTestService(repo, &mockStorage{}, &mockSettingsSvc{})
@@ -243,13 +243,13 @@ func TestService_ListExports_OK(t *testing.T) {
 	assert.Len(t, exports, 1)
 }
 
-// TestService_DeleteExport_OK verifies DeleteExport removes the MinIO object and DB row.
+// TestService_DeleteExport_OK verifies DeleteExport removes the Garage object and DB row.
 func TestService_DeleteExport_OK(t *testing.T) {
 	exportID := uuid.New()
-	minioPath := "epk/exports/todelete.pdf"
+	objectKey := "epk/exports/todelete.pdf"
 	repo := &mockRepo{
 		exports: []epk.EPKExport{
-			{ID: exportID, MinioPath: minioPath, CreatedAt: time.Now()},
+			{ID: exportID, GarageObjectKey: objectKey, CreatedAt: time.Now()},
 		},
 	}
 	stor := &mockStorage{}

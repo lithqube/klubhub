@@ -520,7 +520,9 @@ func TestIntegration_WithholdingPaymentsAndGigStatus(t *testing.T) {
 		t.Fatalf("CHF summary = %+v", s)
 	}
 
-	// Credit notes are never payable, and the credited original stops taking money.
+	// Credit notes are never payable, and the credited original only
+	// accepts bounded refunds (BE-04): new deposits/payments are
+	// rejected with ErrPaymentKindNotAllowed; refunds succeed.
 	res, err := svc.CreditNote(ctx, issued.ID, CreditNoteRequest{Reason: "refund in full", UpdatedAt: got.UpdatedAt})
 	if err != nil {
 		t.Fatalf("CreditNote: %v", err)
@@ -528,8 +530,14 @@ func TestIntegration_WithholdingPaymentsAndGigStatus(t *testing.T) {
 	if _, err := paySvc.Create(ctx, res.CreditNote.ID, CreatePaymentRequest{Currency: "CHF", AmountMinor: 100, Kind: PaymentKindPayment}); !errors.Is(err, ErrPaymentInvoiceState) {
 		t.Fatalf("payment on credit note: %v", err)
 	}
-	if _, err := pay(100, PaymentKindPayment); !errors.Is(err, ErrPaymentInvoiceState) {
-		t.Fatalf("payment on credited invoice: %v", err)
+	if _, err := pay(100, PaymentKindPayment); !errors.Is(err, ErrPaymentKindNotAllowed) {
+		t.Fatalf("payment on credited invoice: want ErrPaymentKindNotAllowed, got %v", err)
+	}
+	if _, err := pay(100, PaymentKindDeposit); !errors.Is(err, ErrPaymentKindNotAllowed) {
+		t.Fatalf("deposit on credited invoice: want ErrPaymentKindNotAllowed, got %v", err)
+	}
+	if _, err := pay(10000, PaymentKindRefund); err != nil {
+		t.Fatalf("refund on credited invoice: %v", err)
 	}
 }
 

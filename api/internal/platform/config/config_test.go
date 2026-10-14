@@ -204,7 +204,8 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("ICAL_SECRET", "test-ical-secret")
 }
 
-func TestConfigFeaturesDefaultOff(t *testing.T) {
+// RA import is part of the open-source build: on unless someone turns it off.
+func TestConfigFeatureRAImportDefaultsOn(t *testing.T) {
 	setRequiredEnv(t)
 	os.Unsetenv("FEATURE_RA_IMPORT")
 
@@ -212,13 +213,24 @@ func TestConfigFeaturesDefaultOff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if cfg.Features.RAImport {
-		t.Error("expected Features.RAImport to default to false")
+	if !cfg.Features.RAImport {
+		t.Error("expected Features.RAImport to default to true")
 	}
-	for name, on := range cfg.Features.Enabled() {
-		if on {
-			t.Errorf("expected edition feature %q to be off by default", name)
-		}
+	if !cfg.Features.Enabled()["ra_import"] {
+		t.Error("expected Enabled()[\"ra_import\"] to default to true")
+	}
+}
+
+func TestConfigFeatureRAImportCanBeTurnedOff(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("FEATURE_RA_IMPORT", "false")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if cfg.Features.RAImport || cfg.Features.Enabled()["ra_import"] {
+		t.Error("expected FEATURE_RA_IMPORT=false to turn RA import off")
 	}
 }
 

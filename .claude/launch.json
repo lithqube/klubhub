@@ -30,6 +30,15 @@
       "port": 4400
     },
     {
+      "name": "Nuxt Frontend (promoter, real backend)",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd apps/promoter && NUXT_PUBLIC_API_BASE=http://127.0.0.1:8081 pnpm exec nuxt dev"
+      ],
+      "port": 4400
+    },
+    {
       "name": "KlubHub Site (static)",
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [

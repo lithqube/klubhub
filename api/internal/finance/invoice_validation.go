@@ -126,13 +126,96 @@ func validateTaxFields(t tax.Treatment, rateBps, withholdingBps int64, note stri
 	return errs
 }
 
+// Invoice line limits. The cap keeps quantity × unit and the sum of every
+// line far below int64 range, so totals can never overflow.
+const (
+	MaxInvoiceLines       = 100
+	MaxLineDescription    = 500
+	MaxLineQuantity       = 1_000_000
+	MaxLineTotalMinor     = int64(10_000_000_000_000) // 1e13 minor units
+	maxReferenceLength    = 100
+	maxPaymentTermsLength = 500
+)
+
+// DefaultUnitCode is UN/ECE Recommendation 20 "C62": one (piece).
+const DefaultUnitCode = "C62"
+
+// invoiceUnitCodes is the curated set of UN/ECE Rec. 20 units offered for
+// line items (BT-130): piece, hour, day, lump sum, kilometre.
+var invoiceUnitCodes = map[string]struct{}{"C62": {}, "HUR": {}, "DAY": {}, "LS": {}, "KMT": {}}
+
+// normalizeLines trims and defaults replacement lines in place and reports
+// every problem with the field path of the offending line.
+func normalizeLines(lines []InvoiceLineInput) InvoiceValidationErrors {
+	var errs InvoiceValidationErrors
+	if len(lines) == 0 {
+		return InvoiceValidationErrors{{"lines", "an invoice needs at least one line"}}
+	}
+	if len(lines) > MaxInvoiceLines {
+		return InvoiceValidationErrors{{"lines", fmt.Sprintf("at most %d lines are allowed", MaxInvoiceLines)}}
+	}
+	for i := range lines {
+		l := &lines[i]
+		path := fmt.Sprintf("lines[%d].", i)
+		l.Description = strings.TrimSpace(l.Description)
+		l.UnitCode = strings.ToUpper(strings.TrimSpace(l.UnitCode))
+		if l.UnitCode == "" {
+			l.UnitCode = DefaultUnitCode
+		}
+		switch n := utf8.RuneCountInString(l.Description); {
+		case n == 0:
+			errs = append(errs, InvoiceFieldError{path + "description", "required"})
+		case n > MaxLineDescription:
+			errs = append(errs, InvoiceFieldError{path + "description", fmt.Sprintf("exceeds %d characters", MaxLineDescription)})
+		}
+		if l.Quantity < 1 || l.Quantity > MaxLineQuantity {
+			errs = append(errs, InvoiceFieldError{path + "quantity", fmt.Sprintf("must be between 1 and %d", MaxLineQuantity)})
+		}
+		switch {
+		case l.UnitMinor < 0:
+			errs = append(errs, InvoiceFieldError{path + "unit_minor", "must not be negative"})
+		case l.Quantity >= 1 && l.UnitMinor > 0 && int64(l.Quantity) > MaxLineTotalMinor/l.UnitMinor:
+			errs = append(errs, InvoiceFieldError{path + "unit_minor", "line total exceeds the maximum amount"})
+		}
+		if _, ok := invoiceUnitCodes[l.UnitCode]; !ok {
+			errs = append(errs, InvoiceFieldError{path + "unit_code", "must be one of C62, HUR, DAY, LS, KMT"})
+		}
+	}
+	return errs
+}
+
+// validateReferences checks the EN 16931 reference and terms fields.
+func validateReferences(buyerRef, poRef, contractRef, terms string) InvoiceValidationErrors {
+	var errs InvoiceValidationErrors
+	for _, f := range []struct {
+		field, value string
+		max          int
+	}{
+		{"buyer_reference", buyerRef, maxReferenceLength}, {"purchase_order_ref", poRef, maxReferenceLength},
+		{"contract_ref", contractRef, maxReferenceLength}, {"payment_terms", terms, maxPaymentTermsLength},
+	} {
+		if utf8.RuneCountInString(f.value) > f.max {
+			errs = append(errs, InvoiceFieldError{f.field, fmt.Sprintf("exceeds %d characters", f.max)})
+		}
+	}
+	return errs
+}
+
 // normalizeUpdate normalizes and validates a PUT body in place.
 func normalizeUpdate(req *UpdateInvoiceRequest) error {
 	normalizeParty(&req.Customer)
 	req.NumberPrefix = normalizePrefix(req.NumberPrefix)
 	req.SupplyDate = normalizeDate(req.SupplyDate)
 	req.TaxNote = strings.TrimSpace(req.TaxNote)
+	req.BuyerReference = strings.TrimSpace(req.BuyerReference)
+	req.PurchaseOrderRef = strings.TrimSpace(req.PurchaseOrderRef)
+	req.ContractRef = strings.TrimSpace(req.ContractRef)
+	req.PaymentTerms = strings.TrimSpace(req.PaymentTerms)
 	var errs InvoiceValidationErrors
+	errs = append(errs, validateReferences(req.BuyerReference, req.PurchaseOrderRef, req.ContractRef, req.PaymentTerms)...)
+	if req.Lines != nil {
+		errs = append(errs, normalizeLines(req.Lines)...)
+	}
 	errs = append(errs, validateParty("customer.", req.Customer)...)
 	errs = append(errs, validateTaxFields(req.VATTreatment, req.TaxRateBps, req.WithholdingRateBps, req.TaxNote)...)
 	errs = append(errs, validatePrefix(req.NumberPrefix)...)

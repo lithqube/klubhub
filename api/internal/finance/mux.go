@@ -23,6 +23,22 @@ type Mux struct {
 	agreementsInstance http.Handler
 	emails             http.Handler
 	entries            http.Handler
+	attachments        http.Handler
+}
+
+// WithDocuments mounts the read-only document handler. Like attachments it
+// needs object storage, so it is a separate step and answers 503 without it.
+func (m *Mux) WithDocuments(h http.Handler) *Mux {
+	m.documents = h
+	return m
+}
+
+// WithAttachments mounts the receipt handler for /entries/{id}/attachments.
+// It is a separate step (not a NewMux argument) because it needs object
+// storage: without it those routes answer 503 and everything else is unchanged.
+func (m *Mux) WithAttachments(h http.Handler) *Mux {
+	m.attachments = h
+	return m
 }
 
 // NewMux composes the finance routes. Any handler may be nil — that
@@ -88,6 +104,11 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "emails":
 		m.dispatch(w, r, m.emails)
 	case "entries", "summary", "profit-loss", "reconciliations":
+		// /entries/{id}/attachments[/{aid}] belongs to the receipt handler.
+		if parts[0] == "entries" && len(parts) >= 3 && parts[2] == "attachments" {
+			m.dispatch(w, r, m.attachments)
+			return
+		}
 		m.dispatch(w, r, m.entries)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "unknown finance resource: "+parts[0])

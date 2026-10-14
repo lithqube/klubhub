@@ -1,6 +1,6 @@
 # KlubHub website and GitHub Pages
 
-The public umbrella site lives at **https://klubhub.io/**. KlubHub DJ is the first product; KlubHub Promoter and KlubHub Label are coming soon. Most DJ features will be open source, with some future SaaS offerings. No SaaS availability, pricing, or feature boundary is promised by this page.
+The public umbrella site lives at **https://klubhub.io/**. KlubHub DJ is the first product; KlubHub Promoter and KlubHub Label are coming soon. Everything in KlubHub DJ today is open source (MIT). The page states the business model in one rule: your own data, and anything the law asks of you (such as e-invoicing), is free; what costs real money to run (servers, shared accounts, platform approvals) is where hosted editions come in. It names the planned hosted editions (KlubHub Cloud and KlubHub Promoter Cloud) and the kinds of features they add. **It promises no prices, plan names with prices, billing periods, availability dates or trials**, and a test (`promises no prices`) fails the build if it does. The prices in `.planning/research/EDITION-STRATEGY.md` are hypotheses that no customer has been asked about.
 
 ## Structure and local checks
 
@@ -59,7 +59,7 @@ GitHub Pages hosts the informational site and the static, browser-only demo at `
 
 ## Updating the site
 
-Edit the HTML copy and CSS in `apps/site/public/`. Keep upcoming products and SaaS clearly marked until they actually launch. Update feature status against the application README/roadmap. Application token/font changes trigger a rebuild automatically. Keep `DESIGN.md` and the application stylesheet as visual references; the build reads the stylesheet, not the design document.
+Edit the HTML copy and CSS in `apps/site/public/`. Keep upcoming products and hosted editions clearly marked until they actually launch, and keep the copy consistent with `.planning/research/EDITION-STRATEGY.md` and `docs/EDITIONS.md`. Do not market the Resident Advisor import (its terms of use have not been checked); `site.test.mjs` enforces that. Update feature status against the application README/roadmap. Application token/font changes trigger a rebuild automatically. Keep `DESIGN.md` and the application stylesheet as visual references; the build reads the stylesheet, not the design document.
 
 No application routes, API URLs, OAuth callbacks, repository license, or production service configuration are changed by this setup.
 

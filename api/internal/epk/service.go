@@ -352,18 +352,18 @@ func (s *Service) DeleteExport(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("list exports for delete: %w", err)
 	}
 
-	var minioPath string
+	var objectKey string
 	for _, e := range exports {
 		if e.ID == id {
-			minioPath = e.MinioPath
+			objectKey = e.GarageObjectKey
 			break
 		}
 	}
-	if minioPath == "" {
+	if objectKey == "" {
 		return ErrNotFound
 	}
 
-	if err := s.storage.DeleteObject(ctx, storageBucket, minioPath); err != nil {
+	if err := s.storage.DeleteObject(ctx, storageBucket, objectKey); err != nil {
 		return fmt.Errorf("delete export from storage: %w", err)
 	}
 

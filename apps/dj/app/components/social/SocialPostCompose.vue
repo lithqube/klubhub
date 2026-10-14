@@ -28,11 +28,22 @@ const {
   resetForm,
 } = useSocialPostForm()
 
+const metadataLocked = computed(() => !!store.pendingComposeUpload?.postId || store.composeSubmitting)
+watch(() => store.pendingComposeUpload, (pending) => {
+  if (!pending) return
+  postType.value = pending.postType
+  caption.value = pending.caption
+  scheduledAt.value = pending.scheduledAt
+  timezoneName.value = pending.timezoneName
+  imageId.value = pending.imageId ?? null
+  imageFile.value = pending.imageFile
+}, { immediate: true })
+
 // Watch for prefilled image id: when it changes to non-null, auto-gen caption
 watch(
   () => props.prefilledImageId,
   (newVal) => {
-    if (newVal) {
+    if (newVal && !store.pendingComposeUpload) {
       imageId.value = newVal
       const tl = tracklistStore.tracklist
       if (tl) {
@@ -51,22 +62,19 @@ watch(
 
 const isSubmitDisabled = computed(() => {
   const hasImage = !!(imageId.value || imageFile.value)
-  return !caption.value || !scheduledAt.value || !hasImage || isOverLimit.value
+  return store.composeSubmitting || !caption.value || !scheduledAt.value || !hasImage || isOverLimit.value
 })
 
 async function handleSubmit() {
   if (isSubmitDisabled.value) return
-  await store.createPost({
+  const submitted = await store.submitCompose({
     postType: postType.value,
     caption: caption.value,
     scheduledAt: scheduledAt.value,
     timezoneName: timezoneName.value,
     imageId: imageId.value ?? undefined,
-    imageFile: imageFile.value ?? undefined,
-  })
-  store.closeComposePanel()
-  resetForm()
-  await store.loadPosts()
+  }, imageFile.value)
+  if (submitted) resetForm()
 }
 
 function handleFileChange(event: Event) {
@@ -107,6 +115,7 @@ function removeImage() {
       <button
         class="relative w-8 h-[18px] rounded-none border transition-colors flex-shrink-0"
         :class="postType === 'story' ? 'bg-primary/20 border-primary' : 'bg-surface-container-high border-primary/20'"
+        :disabled="metadataLocked"
         role="switch"
         :aria-checked="postType === 'story'"
         @click="postType = postType === 'feed' ? 'story' : 'feed'"
@@ -129,6 +138,7 @@ function removeImage() {
       </label>
       <textarea
         v-model="caption"
+        :disabled="metadataLocked"
         rows="4"
         class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-3 py-2 font-data text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
         :class="isOverLimit ? 'ring-1 ring-error text-error' : ''"
@@ -164,6 +174,7 @@ function removeImage() {
         </span>
         <button
           class="font-terminal tracking-terminal text-xs text-tertiary hover:text-on-surface transition-colors"
+          :disabled="store.composeSubmitting"
           @click="removeImage()"
         >
           ×
@@ -178,6 +189,7 @@ function removeImage() {
         <span class="font-data text-xs text-on-surface flex-1 truncate">{{ imageFile.name }}</span>
         <button
           class="font-terminal tracking-terminal text-xs text-tertiary hover:text-on-surface transition-colors"
+          :disabled="store.composeSubmitting"
           @click="removeImage()"
         >
           ×
@@ -188,6 +200,7 @@ function removeImage() {
       <div v-else>
         <label class="block cursor-pointer">
           <input
+            :disabled="store.composeSubmitting"
             type="file"
             accept="image/*"
             class="sr-only"
@@ -208,6 +221,7 @@ function removeImage() {
         </label>
         <input
           v-model="scheduledAt"
+          :disabled="metadataLocked"
           type="datetime-local"
           class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-3 py-2 font-data text-sm text-on-surface focus:outline-none focus:border-primary transition-colors"
         >
@@ -221,6 +235,7 @@ function removeImage() {
         <div class="relative">
           <input
             v-model="timezoneSearch"
+            :disabled="metadataLocked"
             type="text"
             :placeholder="timezoneName"
             class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-3 py-2 font-data text-xs text-on-surface focus:outline-none focus:border-primary transition-colors"
@@ -232,6 +247,7 @@ function removeImage() {
             <button
               v-for="tz in timezoneOptions.slice(0, 20)"
               :key="tz"
+              :disabled="metadataLocked"
               class="block w-full text-left px-3 py-1.5 font-data text-xs text-on-surface hover:bg-primary/[0.08] transition-colors"
               @click="() => { timezoneName = tz; timezoneSearch = '' }"
             >
@@ -245,6 +261,10 @@ function removeImage() {
       </div>
     </div>
 
+    <p v-if="store.pendingComposeUpload?.error" role="alert" class="font-data text-xs text-error">
+      {{ store.pendingComposeUpload.error }}
+    </p>
+
     <!-- Submit -->
     <div class="flex justify-end">
       <button
@@ -253,7 +273,7 @@ function removeImage() {
         :disabled="isSubmitDisabled || undefined"
         @click="handleSubmit"
       >
-        + SCHEDULE POST
+        {{ store.composeSubmitting ? 'SUBMITTING…' : store.pendingComposeUpload?.postId ? 'RETRY IMAGE UPLOAD' : '+ SCHEDULE POST' }}
       </button>
     </div>
 

@@ -375,7 +375,7 @@ func TestRAImportHandler_HandleImportFromRA_EmptyArtistSlug(t *testing.T) {
 }
 
 // mockGigServiceForTest implements gig.ServiceIface for testing
-type mockGigServiceForTest struct{}
+type mockGigServiceForTest struct{ stubServiceIface }
 
 func (m *mockGigServiceForTest) CreateGig(ctx context.Context, req *GigCreate) (*Gig, error) {
 	id := uuid.New()

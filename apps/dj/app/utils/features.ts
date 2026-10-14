@@ -22,7 +22,7 @@ export type Edition = 'open-source' | 'licensed' | 'saas'
 
 export interface FeatureDefinition {
   /** Lowest edition the feature ships in ('licensed' also covers SaaS). */
-  edition: Exclude<Edition, 'open-source'>
+  edition: Edition
   /** Human-readable summary for docs and admin tooling (never shown to DJs when off). */
   description: string
   /** API env var that must also be true for the backend routes to exist. */
@@ -33,7 +33,7 @@ export interface FeatureDefinition {
 
 export const FEATURES = {
   raImport: {
-    edition: 'licensed',
+    edition: 'open-source',
     description: 'Resident Advisor integration: import artist bio/links into the EPK and upcoming events into the gig tracker.',
     apiEnv: 'FEATURE_RA_IMPORT',
     appEnv: 'NUXT_PUBLIC_FEATURES_RA_IMPORT',

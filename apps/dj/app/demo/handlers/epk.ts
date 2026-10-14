@@ -101,7 +101,7 @@ export function registerEpk(r: DemoRouter): void {
   r.on('POST', '/api/v1/epk/export', (_req, c) => {
     const createdAt = c.now().toISOString()
     const id = uuid()
-    c.state.exports.unshift({ id, minioPath: `demo/epk/exports/${id}.pdf`, createdAt })
+    c.state.exports.unshift({ id, garageObjectKey: `demo/epk/exports/${id}.pdf`, createdAt })
     c.state.exports = c.state.exports.slice(0, 10)
     return json({ id, downloadUrl: c.objectUrl(exportPdf(c)), createdAt }, 201)
   })

@@ -6,32 +6,52 @@
 import { onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import InvoiceList from '../components/finance/InvoiceList.vue'
+import InvoiceCreateForm from '../components/finance/InvoiceCreateForm.vue'
 import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
+import BillingProfileForm from '../components/finance/BillingProfileForm.vue'
 import EarningsWorkspace from '../components/finance/EarningsWorkspace.vue'
-import EntryList from '../components/finance/EntryList.vue'
 import EntrySummary from '../components/finance/EntrySummary.vue'
 import EntryProfitLoss from '../components/finance/EntryProfitLoss.vue'
 import EntryReconciliationDialog from '../components/finance/EntryReconciliationDialog.vue'
 import EntryReconciliationPanel from '../components/finance/EntryReconciliationPanel.vue'
 import { useInvoiceStore } from '../stores/invoice'
 import { useEarningsStore } from '../stores/earnings'
-import type { Entry, EntryReconciliation } from '../types/finance'
+import type { Entry, EntryReconciliation, Invoice } from '../types/finance'
+import { useToast } from '#kui/components/ui/toast/use-toast'
 
 useHead({ title: 'Finance — KlubHub DJ' })
 
 const invoiceStore = useInvoiceStore()
 const earningsStore = useEarningsStore()
-const { disabled: invoiceDisabled } = storeToRefs(invoiceStore)
-const { listLoaded: entriesLoaded } = storeToRefs(earningsStore)
+const { disabled: invoiceDisabled, createOpen: invoiceCreateOpen, createPresetGigId, createSeq: invoiceCreateSeq } = storeToRefs(invoiceStore)
+const { toast } = useToast()
+
+function onInvoiceCreated(inv: Invoice): void {
+  toast({ title: 'Draft created', description: 'Review the customer and tax, then issue it. Nothing was sent.' })
+  // Open the sheet after the form has unmounted so focus lands in the sheet.
+  setTimeout(() => { void invoiceStore.openDetail(inv.id) }, 80)
+}
+const { listLoaded: entriesLoaded, createOpen, createKind, editId } = storeToRefs(earningsStore)
 
 const voidingEntry = ref<Entry | null>(null)
 const deletingEntry = ref<Entry | null>(null)
+const mutationBusy = ref(false)
+const mutationError = ref('')
+let refreshedRevision = earningsStore.mutationRevision
+function onConfirmedMutation(): void {
+  if (earningsStore.mutationRevision === refreshedRevision) return
+  refreshedRevision = earningsStore.mutationRevision
+  refreshAggregates()
+}
+watch(() => earningsStore.mutationRevision, onConfirmedMutation)
+function refreshAggregates(): void {
+  void earningsStore.refreshSummary()
+  void earningsStore.refreshProfitLoss()
+}
+const billingOpen = ref(false)
 const reconDialogOpen = ref(false)
 const reconDialogGigId = ref<string | null>(null)
 
-function onEdit(entry: Entry): void {
-  earningsStore.openEdit(entry.id)
-}
 function onVoid(entry: Entry): void {
   voidingEntry.value = entry
 }
@@ -39,26 +59,25 @@ function onDelete(entry: Entry): void {
   deletingEntry.value = entry
 }
 
-async function confirmVoid(): Promise<void> {
-  if (!voidingEntry.value) return
-  const e = voidingEntry.value
-  voidingEntry.value = null
+async function confirmMutation(action: 'void' | 'delete'): Promise<void> {
+  const target = action === 'void' ? voidingEntry : deletingEntry
+  if (!target.value || mutationBusy.value) return
+  const e = { ...target.value }
+  mutationBusy.value = true
+  mutationError.value = ''
   try {
-    await earningsStore.voidEntry(e.id)
-  } catch {
-    // Already surfaced via the store's banner / inline error.
+    if (action === 'void') await earningsStore.voidEntry(e.id, { updated_at: e.updated_at })
+    else await earningsStore.deleteEntry(e.id, { updated_at: e.updated_at })
+    target.value = null
+    onConfirmedMutation()
+  } catch (error) {
+    mutationError.value = error instanceof Error ? error.message : 'Could not change the entry.'
+  } finally {
+    mutationBusy.value = false
   }
 }
-async function confirmDelete(): Promise<void> {
-  if (!deletingEntry.value) return
-  const e = deletingEntry.value
-  deletingEntry.value = null
-  try {
-    await earningsStore.deleteEntry(e.id)
-  } catch {
-    // Same.
-  }
-}
+function confirmVoid(): Promise<void> { return confirmMutation('void') }
+function confirmDelete(): Promise<void> { return confirmMutation('delete') }
 
 function onReconciliationResolved(_rec: EntryReconciliation | { id: string; resolution: string }): void {
   // Refresh summary + P&L so the page reflects the resolution immediately.
@@ -101,19 +120,46 @@ watch(entriesLoaded, (loaded) => {
     <div class="page-body">
       <!-- Invoices: real data in every mode (Go API, or the in-memory mocks in dev) -->
       <section aria-labelledby="finance-invoices-title">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
-          <h2 id="finance-invoices-title" class="section-lbl" style="margin:0;font-weight:600;">INVOICES</h2>
+        <div class="finance-section-head" style="margin-bottom:8px;">
+          <h2 id="finance-invoices-title" class="section-lbl" style="margin:0;">INVOICES</h2>
           <button
             type="button"
             class="btn-hud btn-hud-cta btn-hud-xs new-invoice-btn"
             style="padding:0 10px;"
             :disabled="invoiceDisabled"
+            :aria-expanded="invoiceCreateOpen"
             @click="invoiceStore.openCreate()"
           >
             + NEW INVOICE
           </button>
         </div>
+        <InvoiceCreateForm
+          v-if="invoiceCreateOpen && !invoiceDisabled"
+          :preset-gig-id="createPresetGigId"
+          :focus-seq="invoiceCreateSeq"
+          @close="invoiceStore.setCreateOpen(false)"
+          @created="onInvoiceCreated"
+        />
         <InvoiceList />
+      </section>
+
+      <!-- Supplier identity for invoices: tax number, IBAN and BIC for e-invoices. -->
+      <section aria-labelledby="finance-billing-title" class="finance-section">
+        <div class="finance-section-head">
+          <h2 id="finance-billing-title" class="section-lbl" style="margin:0;font-weight:600;">BILLING PROFILE</h2>
+          <button
+            type="button"
+            class="btn-hud btn-hud-ghost btn-hud-xs"
+            :aria-expanded="billingOpen"
+            aria-controls="finance-billing-body"
+            @click="billingOpen = !billingOpen"
+          >
+            {{ billingOpen ? 'HIDE PROFILE' : 'OPEN PROFILE' }}
+          </button>
+        </div>
+        <div v-if="billingOpen" id="finance-billing-body">
+          <BillingProfileForm />
+        </div>
       </section>
 
       <!-- Earnings reconciliation prompts (FIN-04 / FIN-05). One dialog shared by every prompt. -->
@@ -127,16 +173,20 @@ watch(entriesLoaded, (loaded) => {
             <button
               type="button"
               class="btn-hud btn-hud-cta btn-hud-xs"
+              data-new-entry="income"
+              :aria-expanded="createOpen && !editId && createKind === 'income'"
               @click="earningsStore.openCreate('income')"
             >+ NEW INCOME</button>
             <button
               type="button"
               class="btn-hud btn-hud-cta btn-hud-xs"
+              data-new-entry="expense"
+              :aria-expanded="createOpen && !editId && createKind === 'expense'"
               @click="earningsStore.openCreate('expense')"
             >+ NEW EXPENSE</button>
           </div>
         </div>
-        <EntryList @edit="onEdit" @void="onVoid" @delete="onDelete" />
+        <EarningsWorkspace @saved="onConfirmedMutation" @void="onVoid" @delete="onDelete" />
       </section>
 
       <!-- Monthly / yearly summary (FIN-06) and profit / loss (FIN-07) panes. -->
@@ -151,15 +201,15 @@ watch(entriesLoaded, (loaded) => {
         </section>
       </div>
 
+      <p v-if="mutationError" role="alert" class="finance-notice">{{ mutationError }}</p>
       <p class="finance-notice" role="note">
-        FIN-10 — No tax or VAT is computed anywhere on this page. Multi-currency totals are
+        FIN-10 — No tax or VAT is computed on ledger entries; invoices calculate tax/VAT separately. Multi-currency totals are
         grouped by code and never converted (FIN-09). Auto-generated income tied to a paid gig
         (FIN-03) is read-only; void it instead of editing it.
       </p>
     </div>
 
     <InvoiceWorkspace />
-    <EarningsWorkspace />
 
     <!-- Void confirm — manual income/expense only. -->
     <Teleport to="body">
@@ -178,7 +228,7 @@ watch(entriesLoaded, (loaded) => {
           </p>
           <div class="finance-confirm-actions">
             <button type="button" class="btn-hud" @click="voidingEntry = null">CANCEL</button>
-            <button type="button" class="btn-hud btn-hud-violet" @click="confirmVoid">CONFIRM VOID</button>
+            <button type="button" class="btn-hud btn-hud-violet" :disabled="mutationBusy" @click="confirmVoid">CONFIRM VOID</button>
           </div>
         </div>
       </div>
@@ -196,7 +246,7 @@ watch(entriesLoaded, (loaded) => {
           <p class="finance-confirm-body">This permanently removes the entry. Auto-generated entries cannot be deleted.</p>
           <div class="finance-confirm-actions">
             <button type="button" class="btn-hud" @click="deletingEntry = null">CANCEL</button>
-            <button type="button" class="btn-hud btn-hud-error" @click="confirmDelete">DELETE</button>
+            <button type="button" class="btn-hud btn-hud-error" :disabled="mutationBusy" @click="confirmDelete">DELETE</button>
           </div>
         </div>
       </div>
@@ -214,14 +264,17 @@ watch(entriesLoaded, (loaded) => {
 
 <style scoped>
 .finance-page { gap: 12px; }
-.finance-section { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+/* Rhythm: 8px inside a section, a dashed rule + 18px release between sections. */
+.finance-section { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px dashed color-mix(in srgb, var(--color-on-surface) 14%, transparent); }
 .finance-section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .finance-cta-group { display: inline-flex; gap: 6px; }
-.finance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.finance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px dashed color-mix(in srgb, var(--color-on-surface) 14%, transparent); }
 .finance-cell { display: flex; flex-direction: column; gap: 6px; }
-.finance-cell-title { margin: 0; font-weight: 600; }
+.finance-cell-title { margin: 0; font-weight: 700; }
+/* Section titles are headings, not captions: one step up from the tertiary readouts under them. */
+.finance-page h2.section-lbl { color: var(--color-on-surface); font-weight: 700; letter-spacing: .08em; }
 .finance-notice { margin: 16px 0 0; padding: 10px 14px; font-family: var(--font-terminal); font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--color-tertiary); background: color-mix(in srgb, var(--color-tertiary) 8%, transparent); border-left: 3px solid var(--color-tertiary); }
-.finance-confirm-overlay { position: fixed; inset: 0; z-index: 250; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.85); }
+.finance-confirm-overlay { position: fixed; inset: 0; z-index: 250; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.8); }
 .finance-confirm { padding: 24px; max-width: 360px; text-align: center; background: var(--color-surface-container); display: flex; flex-direction: column; gap: 12px; }
 .finance-confirm-title { font-family: var(--font-command); font-size: 13px; font-weight: 700; margin: 0; letter-spacing: -.02em; text-transform: uppercase; }
 .finance-confirm-body { margin: 0; font-size: 12px; color: var(--color-on-surface-variant); }

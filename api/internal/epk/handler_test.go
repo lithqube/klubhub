@@ -230,9 +230,10 @@ func TestHandler_PostExport_201(t *testing.T) {
 
 // TestHandler_GetExports_200 verifies GET /exports returns 200 with list.
 func TestHandler_GetExports_200(t *testing.T) {
+	exportID := uuid.New()
 	svc := &mockService{
 		listExportsResult: []epk.EPKExport{
-			{ID: uuid.New(), MinioPath: "epk/exports/1.pdf", CreatedAt: time.Now()},
+			{ID: exportID, GarageObjectKey: "epk/exports/1.pdf", CreatedAt: time.Now()},
 		},
 	}
 	router := newHandlerRoutes(svc)
@@ -247,7 +248,17 @@ func TestHandler_GetExports_200(t *testing.T) {
 	require.Contains(t, body, "data")
 	resp, ok := body["data"].([]interface{})
 	require.True(t, ok)
-	assert.Len(t, resp, 1)
+	require.Len(t, resp, 1)
+	row, ok := resp[0].(map[string]interface{})
+	require.True(t, ok)
+	// Canonical wire key must be garageObjectKey (mirrors scheduled_posts
+	// migration 024 → imageStorageKey). Legacy minioPath must NOT be
+	// emitted: doing so would lock the FE to a schema we're deprecating.
+	assert.Equal(t, "epk/exports/1.pdf", row["garageObjectKey"],
+		"wire key must be garageObjectKey after minio_path→garage_object_key rename")
+	assert.Equal(t, exportID.String(), row["id"])
+	_, hasLegacy := row["minioPath"]
+	assert.False(t, hasLegacy, "legacy minioPath key must not appear in response body")
 }
 
 // TestHandler_DeleteExport_204 verifies DELETE /exports/{id} returns 204.
@@ -256,7 +267,7 @@ func TestHandler_DeleteExport_204(t *testing.T) {
 	// Provide the export in list so handler can find it
 	svc := &mockService{
 		listExportsResult: []epk.EPKExport{
-			{ID: exportID, MinioPath: "epk/exports/1.pdf", CreatedAt: time.Now()},
+			{ID: exportID, GarageObjectKey: "epk/exports/1.pdf", CreatedAt: time.Now()},
 		},
 	}
 	r := chi.NewRouter()

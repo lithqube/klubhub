@@ -7,7 +7,7 @@ export default defineEventHandler(async () => {
       status: 'scheduled',
       postType: 'feed',
       caption: '',
-      imageMinioPath: '',
+      imageStorageKey: '',
       scheduledAtUtc: new Date(Date.now() + 86400000).toISOString(),
       timezoneName: 'Europe/Berlin',
       retryCount: 0,

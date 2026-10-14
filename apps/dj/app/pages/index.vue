@@ -1,68 +1,64 @@
 <script setup lang="ts">
 import { Send, Layers, TrendingUp, Zap, CalendarPlus, Plus } from 'lucide-vue-next'
-import { storeToRefs } from 'pinia'
-import { useGigStore } from '~/stores/gig'
-import { useSocialStore } from '~/stores/social'
-import { useTracklistStore } from '~/stores/tracklist'
+import { computed } from 'vue'
+import { useDashboard } from '../composables/useDashboard'
 
 useHead({ title: 'Dashboard — KlubHub DJ' })
 
-const gigStore = useGigStore()
-const socialStore = useSocialStore()
-const tracklistStore = useTracklistStore()
-
-const { gigs, upcomingGigs, ytdEarned, avgFee } = storeToRefs(gigStore)
-const { posts: socialPosts } = storeToRefs(socialStore)
-const { pastTracklists } = storeToRefs(tracklistStore)
-
-// Load data on mount
-onMounted(async () => {
-  await Promise.all([
-    gigStore.fetchGigs(),
-    socialStore.loadPosts(),
-    tracklistStore.loadPastTracklists(),
-  ])
+const { gigs, posts: socialPosts, pastTracklists, loading, gigError, socialError, tracklistError, demoData, financeUnavailable, pendingUnavailable, finance } = useDashboard()
+// Gig dates are calendar days, not scheduled UTC instants. Keep today's gig
+// visible all day and do not shift a date-only value across timezones.
+const upcomingGigs = computed(() => {
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return gigs.value.filter(g => !g.deleted_at && ['confirmed', 'advanced', 'played'].includes(g.status) && g.date.slice(0, 10) >= today)
+    .sort((a, b) => a.date.localeCompare(b.date))
 })
 
-// Helpers for status badge classes
+// Social statuses are distinct from gig booking statuses.
 function statusBadgeClass(status: string): string {
   switch (status) {
-    case 'confirmed': return 'badge-ready'
-    case 'advanced': return 'badge-ready'
-    case 'played': return 'badge-ready'
-    case 'inquiry': return 'badge-draft'
-    case 'cancelled': return 'badge-archived'
+    case 'scheduled':
+    case 'publishing': return 'badge-ready'
+    case 'published': return 'badge-archived'
+    case 'failed':
+    case 'permanently_failed': return 'badge-failed'
     default: return 'badge-draft'
   }
 }
 
 function statusAccentClass(status: string): string {
   switch (status) {
-    case 'confirmed': return 'accent-bar-ready'
-    case 'advanced': return 'accent-bar-ready'
-    case 'played': return 'accent-bar-ready'
-    case 'inquiry': return 'accent-bar-draft'
-    case 'cancelled': return 'accent-bar-archived'
+    case 'scheduled':
+    case 'publishing': return 'accent-bar-ready'
+    case 'published': return 'accent-bar-archived'
+    case 'failed':
+    case 'permanently_failed': return 'accent-bar-failed'
     default: return 'accent-bar-draft'
   }
 }
 
 function formatDateTime(dateStr: string): string {
+  if (!dateStr) return 'NOT SCHEDULED'
   const date = new Date(dateStr)
+  if (!Number.isFinite(date.getTime())) return 'DATE UNAVAILABLE'
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).toUpperCase().replace(',', ' ·')
 }
 
-function formatCurrency(amount: number, currency = 'EUR'): string {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(amount)
+function formatGigDate(dateStr: string): string {
+  return new Date(`${dateStr.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).toUpperCase()
 }
 
-// Computed: upcoming gig (first confirmed/advanced/played gig in the future)
-const upcomingGig = computed(() => {
-  const now = new Date()
-  return upcomingGigs.value
-    .filter(g => new Date(g.date) >= now)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null
-})
+function formatCurrency(amount: number, currency: string): string {
+  if (amount == null || String(amount).trim() === '' || !Number.isFinite(Number(amount)) || !currency) return 'FEE UNAVAILABLE'
+  try {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(Number(amount))
+  } catch {
+    return 'FEE UNAVAILABLE'
+  }
+}
+
+const upcomingGig = computed(() => upcomingGigs.value[0] ?? null)
 
 // Computed: social queue (top 3 posts)
 const socialQueue = computed(() => {
@@ -70,37 +66,15 @@ const socialQueue = computed(() => {
     ...post,
     badgeClass: statusBadgeClass(post.status),
     accentClass: statusAccentClass(post.status),
+    failed: ['failed', 'permanently_failed'].includes(post.status),
+    platform: post.postType === 'story' ? 'INSTAGRAM STORY' : 'INSTAGRAM FEED',
     time: formatDateTime(post.scheduledAtUtc),
   }))
 })
 
 // Computed: recent tracklists (top 3 by createdAt desc)
 const recentTracklists = computed(() => {
-  return pastTracklists.value.slice(0, 3).map(tl => ({
-    ...tl,
-    badgeClass: statusBadgeClass(tl.status || 'ready'),
-    accentClass: statusAccentClass(tl.status || 'ready'),
-    badgeLabel: (tl.status || 'READY').toUpperCase().slice(0, 3),
-  }))
-})
-
-// Computed: finance data from played gigs
-const finance = computed(() => {
-  const played = gigs.value.filter(g => g.status === 'played')
-  const currentYear = new Date().getFullYear()
-  const thisMonth = played.filter(g => {
-    const d = new Date(g.date)
-    return d.getFullYear() === currentYear && d.getMonth() === new Date().getMonth()
-  })
-  const mtd = thisMonth.reduce((sum, g) => sum + (g.fee_amount || 0), 0)
-  const pending = upcomingGigs.value.reduce((sum, g) => sum + (g.fee_amount || 0), 0)
-  const ytd = ytdEarned.value
-  return {
-    mtd,
-    pending,
-    ytd,
-    avgFee: avgFee.value,
-  }
+  return [...pastTracklists.value].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3)
 })
 </script>
 
@@ -117,10 +91,12 @@ const finance = computed(() => {
     <!-- Scrollable body -->
     <div class="page-body">
       <!-- ── Hero: Upcoming gig card ── -->
-      <div v-if="upcomingGig" class="glass hud-card glow-card accent-bar-ready" style="display:flex;overflow:hidden;" aria-label="Upcoming gig">
+      <div v-if="loading || gigError" class="glass hud-card" style="padding:32px 24px;text-align:center;" role="status">{{ loading ? 'LOADING GIGS…' : 'GIGS UNAVAILABLE' }}</div>
+      <div v-else-if="upcomingGig" class="glass hud-card glow-card accent-bar-ready" style="display:flex;overflow:hidden;" aria-label="Upcoming gig">
         <div style="flex:1;padding:16px 18px;min-width:0;">
           <!-- Badges -->
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <span v-if="demoData" class="badge-hud badge-draft" data-demo-label>DEMO DATA</span>
             <span class="badge-hud badge-ready" style="border-color:color-mix(in srgb, var(--color-primary) 50%, transparent);box-shadow:0 0 12px rgba(150,248,255,.1);">
               <Zap style="width:8px;height:8px;" aria-hidden="true" />
               UPCOMING
@@ -143,7 +119,7 @@ const finance = computed(() => {
           <div style="display:flex;flex-wrap:wrap;gap:16px;">
             <div style="display:flex;gap:6px;align-items:center;">
               <span class="section-lbl">DATE</span>
-              <span style="font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-on-surface);">{{ formatDateTime(upcomingGig.date) }}</span>
+              <span style="font-family:var(--font-terminal);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-on-surface);">{{ formatGigDate(upcomingGig.date) }}</span>
             </div>
             <div style="display:flex;gap:6px;align-items:center;">
               <span class="section-lbl">FEE</span>
@@ -183,16 +159,18 @@ const finance = computed(() => {
       <!-- Empty state: no upcoming gigs -->
       <div
         v-else
+        aria-label="Upcoming gig"
         class="glass hud-card"
         style="padding:32px 24px 28px;text-align:center;border:1px dashed color-mix(in srgb, var(--color-primary) 20%, transparent);"
       >
         <!-- Icon well: quiet on purpose, so the button is the one thing to find -->
+        <div v-if="demoData" class="section-lbl" data-demo-label>DEMO DATA</div>
         <div
           style="width:56px;height:56px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;border:1px dashed color-mix(in srgb, var(--color-primary) 30%, transparent);background:color-mix(in srgb, var(--color-primary) 5%, transparent);color:var(--color-tertiary);"
         >
           <CalendarPlus style="width:24px;height:24px;" aria-hidden="true" />
         </div>
-        <div style="font-family:var(--font-command);font-size:20px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase;color:var(--color-on-surface);">NO UPCOMING GIGS</div>
+        <div style="font-family:var(--font-command);font-size:20px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase;color:var(--color-on-surface);">{{ gigs.length ? 'NO UPCOMING GIGS' : 'NO GIGS YET' }}</div>
         <div style="font-family:var(--font-data);font-size:12px;line-height:1.55;color:var(--color-on-surface-variant);max-width:320px;margin:6px auto 0;">Create your first gig to see it here.</div>
         <NuxtLink to="/gigs" class="btn-hud btn-hud-cta luminous-threshold" style="margin-top:20px;padding:0 22px;">
           <Plus style="width:12px;height:12px;flex-shrink:0;" aria-hidden="true" />
@@ -204,12 +182,14 @@ const finance = computed(() => {
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;" class="col-grid">
         <!-- Column 1: Social Queue -->
         <section aria-label="Social queue" style="display:flex;flex-direction:column;gap:7px;">
+          <div v-if="demoData" class="section-lbl" data-demo-label>DEMO DATA</div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
             <div class="section-lbl">SOCIAL QUEUE</div>
             <NuxtLink to="/social" class="quiet" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);cursor:pointer;text-decoration:none;">VIEW ALL →</NuxtLink>
           </div>
 
-          <template v-if="socialQueue.length > 0">
+          <div v-if="loading || socialError" class="glass accent-bar-draft" style="padding:16px;text-align:center;" role="status">{{ loading ? 'LOADING SOCIAL QUEUE…' : 'SOCIAL QUEUE UNAVAILABLE' }}</div>
+          <template v-else-if="socialQueue.length > 0">
             <NuxtLink
               v-for="post in socialQueue"
               :key="post.id"
@@ -226,10 +206,10 @@ const finance = computed(() => {
                 <span class="spost-meta">{{ post.platform }}</span>
               </div>
               <div class="spost-caption">{{ post.caption }}</div>
-              <div class="spost-meta" :style="post.status === 'failed' ? 'color:var(--color-error)' : ''">
-                <svg v-if="post.status !== 'failed'" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <div class="spost-meta" :style="post.failed ? 'color:var(--color-error)' : ''">
+                <svg v-if="!post.failed" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 <svg v-else width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                {{ post.status === 'failed' ? post.lastError : post.time }}
+                {{ post.failed ? (post.lastError || 'PUBLISHING FAILED') : post.time }}
               </div>
             </NuxtLink>
           </template>
@@ -243,28 +223,28 @@ const finance = computed(() => {
 
         <!-- Column 2: Tracklists -->
         <section aria-label="Recent tracklists" style="display:flex;flex-direction:column;gap:7px;">
+          <div v-if="demoData" class="section-lbl" data-demo-label>DEMO DATA</div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
             <div class="section-lbl">TRACKLISTS</div>
             <NuxtLink to="/tracklist" class="quiet" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);cursor:pointer;text-decoration:none;">VIEW ALL →</NuxtLink>
           </div>
 
-          <template v-if="recentTracklists.length > 0">
+          <div v-if="loading || tracklistError" class="glass accent-bar-draft" style="padding:16px;text-align:center;" role="status">{{ loading ? 'LOADING TRACKLISTS…' : 'TRACKLISTS UNAVAILABLE' }}</div>
+          <template v-else-if="recentTracklists.length > 0">
             <NuxtLink
               v-for="tl in recentTracklists"
               :key="tl.id"
               to="/tracklist"
-              class="glass"
-              :class="tl.accentClass"
+              class="glass accent-bar-draft"
               style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;cursor:pointer;transition:all .15s;text-decoration:none;"
             >
               <div>
                 <div style="font-family:var(--font-command);font-size:11px;font-weight:600;color:var(--color-on-surface);text-transform:uppercase;letter-spacing:-.02em;">{{ tl.title }}</div>
                 <div style="display:flex;gap:6px;margin-top:3px;">
-                  <span class="data-frag">{{ tl.tracks }} TRK</span>
-                  <span class="data-frag">{{ tl.bpm }} BPM</span>
+                  <span class="data-frag">{{ formatDateTime(tl.createdAt) }}</span>
                 </div>
               </div>
-              <span class="badge-hud" :class="tl.badgeClass">{{ tl.badgeLabel }}</span>
+              <span class="badge-hud badge-draft">SAVED</span>
             </NuxtLink>
           </template>
 
@@ -285,23 +265,25 @@ const finance = computed(() => {
 
         <!-- Column 3: Finance -->
         <section aria-label="Financial overview" style="display:flex;flex-direction:column;gap:7px;">
+          <div v-if="demoData" class="section-lbl" data-demo-label>DEMO DATA</div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
             <div class="section-lbl">FINANCE</div>
             <NuxtLink to="/finance" class="quiet" style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary);cursor:pointer;text-decoration:none;">VIEW ALL →</NuxtLink>
           </div>
 
+          <div v-if="financeUnavailable" class="glass accent-bar-draft" style="padding:16px;text-align:center;">{{ loading ? 'LOADING EARNINGS…' : 'EARNINGS UNAVAILABLE' }}</div>
+          <template v-else>
           <div class="glass accent-bar-ready" style="padding:12px 14px;">
             <div class="section-lbl" style="margin-bottom:4px;">EARNED THIS MONTH</div>
-            <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-primary);letter-spacing:-.02em;text-shadow:0 0 30px rgba(150,248,255,.2);">{{ formatCurrency(finance.mtd) }}</div>
-            <div v-if="finance.mtd === 0" class="spost-meta" style="margin-top:4px;font-size:10px;">No played gigs this month</div>
+            <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-primary);letter-spacing:-.02em;text-shadow:0 0 30px rgba(150,248,255,.2);">{{ finance.mtd }}</div>
           </div>
 
           <div class="glass accent-bar-draft" style="padding:12px 14px;">
             <div class="section-lbl" style="margin-bottom:4px;">PENDING</div>
-            <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-secondary);letter-spacing:-.02em;">{{ formatCurrency(finance.pending) }}</div>
+            <div style="font-family:var(--font-command);font-size:22px;font-weight:700;color:var(--color-secondary);letter-spacing:-.02em;">{{ pendingUnavailable ? 'PENDING UNAVAILABLE' : finance.pending }}</div>
             <div class="spost-meta" style="margin-top:3px;">
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              From upcoming confirmed gigs
+              Outstanding issued invoices
             </div>
           </div>
 
@@ -310,9 +292,9 @@ const finance = computed(() => {
               <div class="section-lbl">YTD TOTAL</div>
               <TrendingUp style="width:12px;height:12px;color:var(--color-tertiary);opacity:.5;" />
             </div>
-            <div style="font-family:var(--font-command);font-size:18px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;">{{ formatCurrency(finance.ytd) }}</div>
-            <div v-if="finance.ytd === 0" class="spost-meta" style="margin-top:4px;font-size:10px;">No played gigs this year</div>
+            <div style="font-family:var(--font-command);font-size:18px;font-weight:700;color:var(--color-on-surface);letter-spacing:-.02em;">{{ finance.ytd }}</div>
           </div>
+          </template>
         </section>
       </div>
     </div>

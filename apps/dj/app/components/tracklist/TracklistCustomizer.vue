@@ -6,11 +6,8 @@ const {
   bgValue,
   visibleFields,
   maxTracks,
-  trackRangeStart,
-  trackRangeEnd,
   logoPath,
   logoPosition,
-  customPlaceholderPath,
 } = storeToRefs(settingsStore);
 
 const PRESET_OPTIONS = [
@@ -49,22 +46,14 @@ const saveError = ref<string | null>(null);
 const saveSettings = async () => {
   saveError.value = null;
   try {
-    await $fetch('/api/v1/settings', {
-      method: 'put',
-      body: {
-        tracklist_preferences: {
-          preset: preset.value,
-          bg_mode: bgMode.value,
-          visible_fields: visibleFields.value,
-          max_tracks: maxTracks.value,
-          track_range_start: trackRangeStart.value,
-          track_range_end: trackRangeEnd.value,
-          logo_position: logoPosition.value,
-        },
-        custom_placeholder_path: customPlaceholderPath.value,
-        logo_path: logoPath.value,
-        bg_value: bgMode.value === 'solid' ? bgValue.value : null,
-      },
+    // PUT /settings is a guarded full-row replace; the store does the
+    // read-modify-write (with the `updated_at` token) so this never answers 409
+    // and never blanks the profile fields. The API persists the preset (as
+    // `default_template`) and the logo; the other tracklist options stay
+    // session-only until the API has columns for them.
+    await settingsStore.save({
+      default_template: preset.value,
+      ...(logoPath.value ? { logo_path: logoPath.value } : {}),
     });
   } catch (err: unknown) {
     const error = err as { message?: string };

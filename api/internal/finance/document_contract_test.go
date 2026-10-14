@@ -57,7 +57,7 @@ func (f *fakeDocumentRepo) CreateWithDetails(ctx context.Context, req CreateDocu
 	// value, and mark any previous current document as no longer current.
 	nextVersion := 1
 	for _, d := range f.documents {
-		if d.OwnerType == req.OwnerType && d.OwnerID == req.OwnerID {
+		if d.OwnerType == req.OwnerType && d.OwnerID == req.OwnerID && d.Kind == req.kindOrGeneral() {
 			if d.Version >= nextVersion {
 				nextVersion = d.Version + 1
 			}
@@ -70,6 +70,7 @@ func (f *fakeDocumentRepo) CreateWithDetails(ctx context.Context, req CreateDocu
 		ID:             uuid.New(),
 		OwnerType:      req.OwnerType,
 		OwnerID:        req.OwnerID,
+		Kind:           req.kindOrGeneral(),
 		StorageKey:     details.StorageKey,
 		Filename:       req.Filename,
 		MimeType:       req.MimeType,
@@ -87,7 +88,7 @@ func (f *fakeDocumentRepo) CreateWithDetails(ctx context.Context, req CreateDocu
 func (f *fakeDocumentRepo) GetCurrent(ctx context.Context, ownerType DocumentOwnerType, ownerID uuid.UUID) (*Document, error) {
 	var latest *Document
 	for _, d := range f.documents {
-		if d.OwnerType == ownerType && d.OwnerID == ownerID {
+		if d.OwnerType == ownerType && d.OwnerID == ownerID && d.Kind == DocumentKindGeneral {
 			if latest == nil || d.Version > latest.Version {
 				latest = d
 			}

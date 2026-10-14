@@ -70,14 +70,14 @@ func (m *mockRepo) UpsertContent(_ context.Context, req epk.UpsertEPKContentRequ
 	return c, nil
 }
 
-func (m *mockRepo) InsertExport(_ context.Context, minioPath string) (*epk.EPKExport, error) {
+func (m *mockRepo) InsertExport(_ context.Context, garageObjectKey string) (*epk.EPKExport, error) {
 	if m.insertErr != nil {
 		return nil, m.insertErr
 	}
 	e := epk.EPKExport{
-		ID:        uuid.New(),
-		MinioPath: minioPath,
-		CreatedAt: time.Now(),
+		ID:              uuid.New(),
+		GarageObjectKey: garageObjectKey,
+		CreatedAt:       time.Now(),
 	}
 	m.exports = append(m.exports, e)
 	return &e, nil
@@ -205,7 +205,7 @@ func TestRepository_InsertExport_HappyPath(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, path, result.MinioPath)
+	assert.Equal(t, path, result.GarageObjectKey)
 	assert.NotEqual(t, uuid.Nil, result.ID, "expected non-zero UUID")
 	assert.False(t, result.CreatedAt.IsZero(), "expected non-zero created_at")
 }

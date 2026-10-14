@@ -41,6 +41,11 @@ function main() {
   const nuxtCache = join(repoRoot, 'node_modules', '.cache', 'nuxt')
   const output = join(appRoot, '.output')
 
+  if (process.env.NUXT_DEMO === '1' || process.env.NUXT_DEMO === 'true') {
+    console.error('The production target excludes browser fixtures. Use scripts/build-demo.mjs for the dedicated demo target.')
+    process.exit(1)
+  }
+
   if (!process.env.NUXT_PUBLIC_API_BASE) {
     console.error(
       'Refusing production build without NUXT_PUBLIC_API_BASE. ' +
@@ -142,7 +147,7 @@ function main() {
     console.warn('[plan-d] Mocks staged outside server/ before Nuxt startup')
     const result = spawnSync('pnpm', ['exec', 'nuxt', 'build'], {
       cwd: appRoot,
-      env: { ...process.env, NODE_ENV: 'production' },
+      env: { ...process.env, NODE_ENV: 'production', NUXT_DEPLOYMENT_STAGE: 'production', NUXT_DEMO: '0' },
       stdio: 'inherit',
     })
 

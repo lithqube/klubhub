@@ -11,7 +11,7 @@ function makePost(overrides: Partial<ScheduledPost> = {}): ScheduledPost {
     status: 'scheduled',
     postType: 'feed',
     caption: 'Test caption',
-    imageMinioPath: 'path/to/image.jpg',
+    imageStorageKey: 'path/to/image.jpg',
     scheduledAtUtc: '2026-10-05T14:00:00Z',
     timezoneName: 'UTC',
     retryCount: 0,

@@ -3,7 +3,9 @@
 // browser demo; the demo persists it with toJSON()/load().
 
 import type {
+  BillingProfile,
   Entry,
+  EntryAttachment,
   EntryKind,
   EntryReconciliation,
   EntrySource,
@@ -16,7 +18,8 @@ import type {
   ReconciliationReason,
   TaxSuggestion,
 } from '../../app/types/finance'
-import { applyBps, addDays, DEFAULT_SUPPLIER, EU, party, suggest, uuid, type Supplier } from './rules'
+import type { StoredAttachment } from './attachments'
+import { applyBps, addDays, DEFAULT_BILLING_PROFILE, DEFAULT_SUPPLIER, EU, party, suggest, uuid, type Supplier } from './rules'
 
 /** What the finance mock needs to know about a gig to bill it. */
 export interface MockGig {
@@ -38,11 +41,34 @@ export interface FinanceSnapshot {
   entries: StoredEntry[]
   reconciliations: StoredReconciliation[]
   seriesEntries: Record<string, number>
+  /** Absent in snapshots saved before the billing profile endpoint existed. */
+  billingProfile?: BillingProfile
+  /** Receipt files (bytes as base64); absent before receipts existed. */
+  attachments?: PersistedAttachment[]
   clock: number
 }
 
-/** Stored shape omits the server-computed fields to keep load()/JSON clean. */
-export type StoredEntry = Omit<Entry, never>
+/** A receipt as saved in the demo snapshot. */
+export type PersistedAttachment = EntryAttachment & { data: string }
+
+/** localStorage is small: receipts past this many bytes stay session-only. */
+const PERSIST_ATTACHMENT_BUDGET = 1_000_000
+
+function toBase64(bytes: Uint8Array): string {
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(bin)
+}
+
+function fromBase64(data: string): Uint8Array {
+  const bin = atob(data)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+/** Stored shape omits the server-computed fields (attachment_count) to keep load()/JSON clean. */
+export type StoredEntry = Omit<Entry, 'attachment_count'>
 export type StoredReconciliation = Omit<EntryReconciliation, never>
 
 export interface FinanceMockOptions {
@@ -62,7 +88,11 @@ export class FinanceMockDb {
   readonly entries = new Map<string, StoredEntry>()
   readonly reconciliations = new Map<string, StoredReconciliation>()
   readonly seriesEntries = new Map<string, number>()
+  /** Receipt files by entry id, oldest first. Kept with an entry even when it is voided or deleted. */
+  readonly attachments = new Map<string, StoredAttachment[]>()
   readonly supplier: Supplier
+  /** The editable billing profile behind GET/PUT /finance/billing-profile. */
+  billingProfile: BillingProfile = structuredClone(DEFAULT_BILLING_PROFILE)
   private clock: number
   private readonly lookupGig: FinanceMockOptions['lookupGig']
 
@@ -127,7 +157,13 @@ export class FinanceMockDb {
 
   serialize(inv: StoredInvoice): Invoice {
     const { pending_refunds: _unused, ...b } = this.balances(inv)
-    return { ...structuredClone(inv), ...b }
+    const out = { ...structuredClone(inv), ...b }
+    // Stored drafts from before the EN 16931 fields existed read as empty.
+    out.buyer_reference ??= ''
+    out.purchase_order_ref ??= ''
+    out.contract_ref ??= ''
+    out.payment_terms ??= ''
+    return out
   }
 
   allocateNumber(prefix: string, currency: string): { number: string; seq: number } {
@@ -197,6 +233,10 @@ export class FinanceMockDb {
       paid_at: null,
       payment_ref: '',
       internal_notes: '',
+      buyer_reference: '',
+      purchase_order_ref: '',
+      contract_ref: '',
+      payment_terms: '',
       customer: structuredClone(gig.customer),
       billing_profile: null,
       vat_treatment: s.vat_treatment,
@@ -213,7 +253,7 @@ export class FinanceMockDb {
     this.lines.set(inv.id, [{
       id: uuid(), invoice_id: inv.id, sort_order: 0,
       description: `DJ performance — ${gig.label} (${gig.date})`,
-      quantity: 1, unit_minor: gig.fee_minor, tax_bps: inv.tax_rate_bps, line_total_minor: gig.fee_minor, created_at: now,
+      quantity: 1, unit_minor: gig.fee_minor, unit_code: 'C62', tax_bps: inv.tax_rate_bps, line_total_minor: gig.fee_minor, created_at: now,
     }])
     this.recompute(inv)
     return inv
@@ -269,8 +309,53 @@ export class FinanceMockDb {
       entries: [...this.entries.values()],
       reconciliations: [...this.reconciliations.values()],
       seriesEntries: Object.fromEntries(this.seriesEntries),
+      billingProfile: this.billingProfile,
+      attachments: this.persistableAttachments(),
       clock: this.clock,
     })
+  }
+
+  private persistableAttachments(): PersistedAttachment[] {
+    const out: PersistedAttachment[] = []
+    let used = 0
+    for (const list of this.attachments.values()) {
+      for (const { bytes, ...meta } of list) {
+        // A file that does not fit stays session-only; smaller ones after it still fit.
+        if (used + bytes.length > PERSIST_ATTACHMENT_BUDGET) continue
+        used += bytes.length
+        out.push({ ...meta, data: toBase64(bytes) })
+      }
+    }
+    return out
+  }
+
+  // ── Receipts ──
+
+  attachmentsOf(entryId: string): StoredAttachment[] {
+    return this.attachments.get(entryId) ?? []
+  }
+
+  putAttachment(a: StoredAttachment): StoredAttachment {
+    const list = this.attachments.get(a.entry_id) ?? []
+    list.push(a)
+    this.attachments.set(a.entry_id, list)
+    return a
+  }
+
+  dropAttachment(entryId: string, id: string): void {
+    const list = this.attachments.get(entryId)
+    if (list) this.attachments.set(entryId, list.filter((a) => a.id !== id))
+  }
+
+  /** The API shape of an entry: stored fields plus the receipt count. */
+  entryView(e: StoredEntry): Entry {
+    return { ...e, attachment_count: this.attachmentsOf(e.id).length }
+  }
+
+  /** Receipt as a data: URL, for <img>/links in the browser demo (no server to ask). */
+  attachmentDataUrl(entryId: string, id: string): string | null {
+    const a = this.attachmentsOf(entryId).find((x) => x.id === id)
+    return a ? `data:${a.mime_type};base64,${toBase64(a.bytes)}` : null
   }
 
   /** Replaces all state with a snapshot from toJSON(). */
@@ -282,6 +367,8 @@ export class FinanceMockDb {
     this.entries.clear()
     this.reconciliations.clear()
     this.seriesEntries.clear()
+    this.attachments.clear()
+    for (const { data, ...meta } of s.attachments ?? []) this.putAttachment({ ...meta, bytes: fromBase64(data) })
     for (const i of s.invoices ?? []) this.invoices.set(i.id, i)
     for (const [k, v] of Object.entries(s.lines ?? {})) this.lines.set(k, v)
     for (const p of s.payments ?? []) this.payments.set(p.id, p)
@@ -289,6 +376,7 @@ export class FinanceMockDb {
     for (const e of s.entries ?? []) this.entries.set(e.id, e)
     for (const r of s.reconciliations ?? []) this.reconciliations.set(r.id, r)
     for (const [k, v] of Object.entries(s.seriesEntries ?? {})) this.seriesEntries.set(k, v)
+    this.billingProfile = structuredClone(s.billingProfile ?? DEFAULT_BILLING_PROFILE)
     this.clock = Math.max(this.clock, s.clock ?? 0)
   }
 

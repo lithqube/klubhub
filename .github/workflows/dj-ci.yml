@@ -47,10 +47,24 @@ jobs:
             ./internal/gig/... ./internal/epk/... ./internal/finance/... \
             ./internal/social/... ./internal/tracklist/... ./internal/ra/... \
             ./internal/settings/... ./internal/artwork/... ./internal/contact/... \
-            ./internal/venue/... ./cmd/api/...
+            ./internal/venue/... ./internal/einvoice/... ./cmd/api/...
       - name: govulncheck
         working-directory: api
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./cmd/api/...
+
+  # Real generator, PDF/A validator and the official KoSIT validator: every
+  # export scenario must pass the EN 16931 / XRechnung rules, every Factur-X PDF
+  # must be valid PDF/A-3b, and KoSIT (schema + schematron) must accept every
+  # generated XML, including the XML embedded in the PDFs.
+  einvoice-golden:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: api/go.mod, cache-dependency-path: api/go.sum }
+      # pdfdetach extracts the XML embedded in the Factur-X PDFs.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - run: bash scripts/einvoice-golden.sh
 
   frontend:
     runs-on: ubuntu-24.04

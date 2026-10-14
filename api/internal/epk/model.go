@@ -30,10 +30,14 @@ type PressQuote struct {
 // EPKExport records a generated PDF export.
 type EPKExport struct {
 	ID uuid.UUID
-	// MinioPath is a legacy schema/API name. It stores a Garage object key.
-	// Keep it until a versioned API/database migration can rename it safely.
-	MinioPath string
-	CreatedAt time.Time
+	// GarageObjectKey is the Garage (S3-compatible) object key for the
+	// exported PDF. Renamed from the legacy minio_path column in
+	// migration 025. The legacy column is kept in the table for one
+	// release cycle to allow zero-downtime backfill and rollback; the
+	// Go repository/handler now write and read exclusively against
+	// garage_object_key.
+	GarageObjectKey string
+	CreatedAt       time.Time
 }
 
 // UpsertEPKContentRequest carries partial update fields. Nil pointer = no change.

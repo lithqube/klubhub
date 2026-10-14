@@ -95,6 +95,12 @@ type BillingProfile struct {
 	Jurisdiction        string     `json:"jurisdiction"         db:"jurisdiction"`
 	PaymentInstructions string     `json:"payment_instructions" db:"payment_instructions"`
 	DefaultCurrency     string     `json:"default_currency"     db:"default_currency"`
+	// TaxNumber is the national tax number (BT-32, e.g. the German
+	// Steuernummer), separate from the VAT ID in TaxID. IBAN and BIC (BT-84,
+	// BT-86) are the account customers pay into; stored normalised.
+	TaxNumber string `json:"tax_number" db:"tax_number"`
+	IBAN      string `json:"iban"       db:"iban"`
+	BIC       string `json:"bic"        db:"bic"`
 	// VATExemptSmallBusiness: the DJ uses a small-business VAT exemption
 	// (drives the "exempt" treatment suggestion).
 	VATExemptSmallBusiness bool `json:"vat_exempt_small_business" db:"vat_exempt_small_business"`
@@ -125,6 +131,9 @@ type UpdateBillingProfileRequest struct {
 	Jurisdiction           string     `json:"jurisdiction"`
 	PaymentInstructions    string     `json:"payment_instructions"`
 	DefaultCurrency        string     `json:"default_currency"`
+	TaxNumber              string     `json:"tax_number"`
+	IBAN                   string     `json:"iban"`
+	BIC                    string     `json:"bic"`
 	VATExemptSmallBusiness bool       `json:"vat_exempt_small_business"`
 	DefaultVATRateBps      int64      `json:"default_vat_rate_bps"`
 	UpdatedAt              time.Time  `json:"updated_at"`

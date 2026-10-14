@@ -5,11 +5,18 @@ import { computed } from 'vue'
 import type { Invoice, InvoiceLine } from '../../types/finance'
 import { bpsToPercent, formatMinor } from '../../utils/money'
 import { vatTreatmentLabel } from '../../utils/vatTreatment'
+import { unitSuffix } from '../../utils/invoiceLines'
 
 const props = defineProps<{ invoice: Invoice; lines: InvoiceLine[] }>()
 
 const cur = computed(() => props.invoice.currency)
 const fmt = (minor: number) => formatMinor(minor, cur.value)
+/** "Description × 3 hour": quantity shown when it is not a single piece, with the unit when it is not a piece. */
+function lineLabel(l: InvoiceLine): string {
+  const unit = unitSuffix(l.unit_code)
+  if (l.quantity === 1 && !unit) return l.description
+  return `${l.description} × ${l.quantity}${unit ? ` ${unit}` : ''}`
+}
 const isDraft = computed(() => props.invoice.status === 'draft')
 </script>
 
@@ -22,7 +29,7 @@ const isDraft = computed(() => props.invoice.status === 'draft')
 
     <ul v-if="lines.length" class="tot-lines">
       <li v-for="l in lines" :key="l.id" class="tot-row">
-        <span class="tot-desc">{{ l.description }}<template v-if="l.quantity !== 1"> × {{ l.quantity }}</template></span>
+        <span class="tot-desc">{{ lineLabel(l) }}</span>
         <span class="tot-num">{{ fmt(l.line_total_minor) }}</span>
       </li>
     </ul>

@@ -34,6 +34,22 @@ func (s *contractService) UpdateTrack(context.Context, uuid.UUID, uuid.UUID, Upd
 	return nil, nil
 }
 
+func (s *contractService) UpdateTitle(context.Context, uuid.UUID, string) (*Tracklist, error) {
+	return nil, nil
+}
+
+func (s *contractService) LinkedGigs(context.Context, uuid.UUID) ([]LinkedGig, error) {
+	return nil, nil
+}
+
+func (s *contractService) AddTrack(context.Context, uuid.UUID, CreateTrackRequest) (*Track, error) {
+	return nil, nil
+}
+
+func (s *contractService) ReorderTracks(context.Context, uuid.UUID, []uuid.UUID) ([]Track, error) {
+	return nil, nil
+}
+
 func (s *contractService) SoftDelete(context.Context, uuid.UUID) error { return nil }
 
 func (s *contractService) SaveManualArtwork(context.Context, uuid.UUID, uuid.UUID, []byte, string) error {
@@ -138,6 +154,7 @@ func TestDetailContractWrapsCamelCaseTracklistAndTracks(t *testing.T) {
 	wantTrackKeys := []string{
 		"id", "tracklistId", "position", "title", "artist", "album", "genre", "bpm", "rating",
 		"durationSecs", "musicalKey", "dateAdded", "artworkStatus", "artworkUrl", "artworkSource",
+		"hiddenGem", "unreleased", "media",
 	}
 	if len(tracks) != 1 || len(tracks[0]) != len(wantTrackKeys) {
 		t.Fatalf("track keys = %v, want exactly %v", mapKeys(tracks[0]), wantTrackKeys)

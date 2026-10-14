@@ -1,5 +1,5 @@
 // Fictional invoice fixtures for component tests (Club Alpha, example.com).
-import type { Invoice } from '../../../types/finance'
+import type { Entry, EntryAttachment, Invoice } from '../../../types/finance'
 import { emptyParty } from '../../../utils/invoiceDisplay'
 
 export function makeInvoice(overrides: Partial<Invoice> = {}): Invoice {
@@ -20,6 +20,10 @@ export function makeInvoice(overrides: Partial<Invoice> = {}): Invoice {
     paid_at: null,
     payment_ref: '',
     internal_notes: '',
+    buyer_reference: '',
+    purchase_order_ref: '',
+    contract_ref: '',
+    payment_terms: '',
     customer: { ...emptyParty(), legal_name: 'Alpha Events', company: 'Club Alpha', email: 'office@example.com' },
     billing_profile: null,
     vat_treatment: 'domestic',
@@ -39,4 +43,44 @@ export function makeInvoice(overrides: Partial<Invoice> = {}): Invoice {
     created_at: '2026-09-25T10:00:00Z',
     ...overrides,
   }
+}
+
+// ── Receipts on ledger entries ──
+export function makeEntry(over: Partial<Entry> = {}): Entry {
+  return {
+    id: 'e-1', kind: 'expense', amount_minor: 5000, currency: 'EUR', category: 'gear',
+    entry_date: '2026-09-15', description: '', notes: 'New cable', gig_id: null,
+    status: 'active', auto_generated: false, source_kind: 'manual', source_id: null,
+    source_amount_minor: null, source_currency: null, source_description: '',
+    created_at: '2026-09-15T10:00:00Z', updated_at: '2026-09-15T10:00:00Z', deleted_at: null,
+    attachment_count: 0,
+    ...over,
+  }
+}
+
+export function makeAttachment(over: Partial<EntryAttachment> = {}): EntryAttachment {
+  return {
+    id: 'a-1', entry_id: 'e-1', filename: 'receipt.png', mime_type: 'image/png', size_bytes: 2048,
+    checksum_sha256: 'abc', created_at: '2026-09-15T10:05:00Z',
+    ...over,
+  }
+}
+
+/** A File of `size` bytes (the content is irrelevant to the client checks). */
+export function makeFile(name: string, type: string, size = 1024): File {
+  const file = new File([new Uint8Array(Math.min(size, 16))], name, { type })
+  if (size > 16) Object.defineProperty(file, 'size', { value: size })
+  return file
+}
+
+/** The error shape $fetch rejects with for an API error body. */
+export function httpError(status: number, error: string, message: string): Error {
+  return Object.assign(new Error(`HTTP ${status}`), { statusCode: status, data: { error, message } })
+}
+
+export function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
 }

@@ -17,6 +17,10 @@ type tracklistServiceIface interface {
 	GetWithTracks(ctx context.Context, id uuid.UUID) (*Tracklist, []Track, error)
 	List(ctx context.Context) ([]Tracklist, error)
 	UpdateTrack(ctx context.Context, tracklistID, trackID uuid.UUID, req UpdateTrackRequest) (*Track, error)
+	UpdateTitle(ctx context.Context, id uuid.UUID, title string) (*Tracklist, error)
+	LinkedGigs(ctx context.Context, id uuid.UUID) ([]LinkedGig, error)
+	AddTrack(ctx context.Context, tracklistID uuid.UUID, req CreateTrackRequest) (*Track, error)
+	ReorderTracks(ctx context.Context, tracklistID uuid.UUID, ids []uuid.UUID) ([]Track, error)
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	SaveManualArtwork(ctx context.Context, tracklistID, trackID uuid.UUID, imageData []byte, contentType string) error
 	GenerateImage(ctx context.Context, id uuid.UUID, format string) (map[string]string, error)
@@ -38,6 +42,10 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/upload", h.handleUpload)
 	r.Get("/", h.handleList)
 	r.Get("/{id}", h.handleGet)
+	r.Put("/{id}", h.handleUpdateTracklist)
+	r.Get("/{id}/gigs", h.handleLinkedGigs)
+	r.Post("/{id}/tracks", h.handleAddTrack)
+	r.Put("/{id}/tracks/order", h.handleReorderTracks)
 	r.Put("/{id}/tracks/{track_id}", h.handleUpdateTrack)
 	r.Delete("/{id}", h.handleDelete)
 	r.Put("/{id}/tracks/{track_id}/artwork", h.handleTrackArtwork)
@@ -151,6 +159,8 @@ func (h *Handler) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			h.writeError(w, http.StatusNotFound, err.Error())
+		} else if errors.Is(err, ErrInvalidTrack) {
+			h.writeError(w, http.StatusUnprocessableEntity, "invalid track fields")
 		} else if errors.Is(err, ErrConflict) {
 			h.writeError(w, http.StatusConflict, err.Error())
 		} else {
@@ -159,6 +169,114 @@ func (h *Handler) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeJSON(w, http.StatusOK, track)
+}
+
+// handleUpdateTracklist handles PUT /{id}: renames the tracklist and returns it.
+func (h *Handler) handleUpdateTracklist(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+	var req UpdateTracklistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Title == nil {
+		h.writeError(w, http.StatusUnprocessableEntity, "title is required")
+		return
+	}
+	tl, err := h.svc.UpdateTitle(r.Context(), id, *req.Title)
+	switch {
+	case err == nil:
+		h.writeJSON(w, http.StatusOK, tl)
+	case errors.Is(err, ErrInvalidTitle):
+		h.writeError(w, http.StatusUnprocessableEntity, "title must be 1-200 characters")
+	case errors.Is(err, ErrNotFound):
+		h.writeError(w, http.StatusNotFound, err.Error())
+	default:
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+// handleLinkedGigs handles GET /{id}/gigs: the gigs this tracklist is linked to,
+// as a bare array. Linking and unlinking use the gig endpoints.
+func (h *Handler) handleLinkedGigs(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
+		return
+	}
+	gigs, err := h.svc.LinkedGigs(r.Context(), id)
+	switch {
+	case err == nil:
+		if gigs == nil {
+			gigs = []LinkedGig{}
+		}
+		h.writeJSON(w, http.StatusOK, gigs)
+	case errors.Is(err, ErrNotFound):
+		h.writeError(w, http.StatusNotFound, err.Error())
+	default:
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+// handleAddTrack handles POST /{id}/tracks: adds a manually entered track at the end.
+func (h *Handler) handleAddTrack(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	var req CreateTrackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	track, err := h.svc.AddTrack(r.Context(), id, req)
+	switch {
+	case err == nil:
+		h.writeJSON(w, http.StatusCreated, track)
+	case errors.Is(err, ErrInvalidTrack):
+		h.writeError(w, http.StatusUnprocessableEntity, "a track needs a title (up to 200 characters) and a valid media type")
+	case errors.Is(err, ErrNotFound):
+		h.writeError(w, http.StatusNotFound, err.Error())
+	default:
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+// handleReorderTracks handles PUT /{id}/tracks/order: body {"trackIds": [...]}
+// lists every live track once, in the new order. Returns the tracks in order.
+func (h *Handler) handleReorderTracks(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid tracklist id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
+	var req ReorderTracksRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	tracks, err := h.svc.ReorderTracks(r.Context(), id, req.TrackIDs)
+	switch {
+	case err == nil:
+		if tracks == nil {
+			tracks = []Track{}
+		}
+		h.writeJSON(w, http.StatusOK, tracks)
+	case errors.Is(err, ErrInvalidTrack):
+		h.writeError(w, http.StatusUnprocessableEntity, "trackIds must list every track of the tracklist exactly once")
+	case errors.Is(err, ErrNotFound):
+		h.writeError(w, http.StatusNotFound, err.Error())
+	default:
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+	}
 }
 
 // handleDelete handles DELETE /{id}

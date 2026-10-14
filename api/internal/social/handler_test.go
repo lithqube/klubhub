@@ -92,7 +92,12 @@ func (m *handlerMockService) SchedulePost(_ context.Context, req social.CreatePo
 	return p, nil
 }
 
+// lastEditReq is captured by the mock so tests can assert the wire-decoded
+// request (in particular ImageStorageKey) without coupling to the post map.
+var lastEditReq social.EditPostRequest
+
 func (m *handlerMockService) EditPost(_ context.Context, id uuid.UUID, req social.EditPostRequest) (*social.ScheduledPost, error) {
+	lastEditReq = req
 	if m.editErr != nil {
 		return nil, m.editErr
 	}
@@ -125,6 +130,19 @@ func (m *handlerMockService) RetryPost(_ context.Context, id uuid.UUID) error {
 
 func (m *handlerMockService) ValidateImage(data []byte, postType social.PostType) error {
 	return m.validateErr
+}
+
+func (m *handlerMockService) UploadPostImage(_ context.Context, id uuid.UUID, data []byte, _ string) (*social.PostImageResult, error) {
+	if m.validateErr != nil {
+		return nil, m.validateErr
+	}
+	p, ok := m.posts[id]
+	if !ok {
+		return nil, social.ErrNotFound
+	}
+	path := "social/" + id.String() + "/test-uploaded.jpg"
+	p.ImageStorageKey = path
+	return &social.PostImageResult{Path: path}, nil
 }
 
 func newTestRouter(svc *handlerMockService) http.Handler {
@@ -204,6 +222,38 @@ func TestSocialHandler_EditPost_Returns409WhenErrEditBlocked(t *testing.T) {
 	}
 }
 
+// TestSocialHandler_EditPost_DecodesImageIdFromJSON is a regression test for the
+// latent wiring bug: EditPostRequest.ImageStorageKey had no json tag, so the wire
+// key would default to "ImageStorageKey" — silently dropping the FE's
+// "imageId" field. After the fix (json:"imageId") the handler must surface
+// imageId to the service as req.ImageStorageKey.
+func TestSocialHandler_EditPost_DecodesImageIdFromJSON(t *testing.T) {
+	mock := newHandlerMock()
+	postID := uuid.New()
+	mock.posts[postID] = &social.ScheduledPost{
+		ID:     postID,
+		Status: social.PostStatusScheduled,
+	}
+	router := newTestRouter(mock)
+
+	body := `{"imageId":"social/feed/x.jpg","caption":"updated caption"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/social/posts/"+postID.String(), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d. Body: %s", w.Code, w.Body.String())
+	}
+	if lastEditReq.ImageStorageKey != "social/feed/x.jpg" {
+		t.Errorf("expected ImageStorageKey=%q to be decoded from JSON imageId field, got %q (server silently dropped imageId when no json tag was set)",
+			"social/feed/x.jpg", lastEditReq.ImageStorageKey)
+	}
+	if lastEditReq.Caption != "updated caption" {
+		t.Errorf("expected caption to round-trip, got %q", lastEditReq.Caption)
+	}
+}
+
 // TestSocialHandler_RetryPost_Returns200 verifies POST /posts/{id}/retry returns 200.
 func TestSocialHandler_RetryPost_Returns200(t *testing.T) {
 	mock := newHandlerMock()
@@ -245,10 +295,12 @@ func TestSocialHandler_RetryPost_Returns404WhenNotFound(t *testing.T) {
 	}
 }
 
-// TestSocialHandler_CreatePost_Returns422ForImageExceeding8MB verifies image size rejection.
-func TestSocialHandler_CreatePost_Returns422ForImageExceeding8MB(t *testing.T) {
+// TestSocialHandler_UploadPostImage_Returns422ForImageExceeding8MB verifies image size rejection.
+func TestSocialHandler_UploadPostImage_Returns422ForImageExceeding8MB(t *testing.T) {
 	mock := newHandlerMock()
 	mock.validateErr = social.ErrFileTooLarge
+	postID := uuid.New()
+	mock.posts[postID] = &social.ScheduledPost{ID: postID}
 	router := newTestRouter(mock)
 
 	// Build a multipart form with a large fake image file
@@ -262,7 +314,7 @@ func TestSocialHandler_CreatePost_Returns422ForImageExceeding8MB(t *testing.T) {
 	fw.Write(make([]byte, 100))
 	mw.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/social/posts", &bodyBuf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/social/posts/"+postID.String()+"/image", &bodyBuf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -272,10 +324,12 @@ func TestSocialHandler_CreatePost_Returns422ForImageExceeding8MB(t *testing.T) {
 	}
 }
 
-// TestSocialHandler_CreatePost_Returns422ForInvalidMIME verifies MIME type rejection.
-func TestSocialHandler_CreatePost_Returns422ForInvalidMIME(t *testing.T) {
+// TestSocialHandler_UploadPostImage_Returns422ForInvalidMIME verifies MIME type rejection.
+func TestSocialHandler_UploadPostImage_Returns422ForInvalidMIME(t *testing.T) {
 	mock := newHandlerMock()
 	mock.validateErr = social.ErrInvalidMIME
+	postID := uuid.New()
+	mock.posts[postID] = &social.ScheduledPost{ID: postID}
 	router := newTestRouter(mock)
 
 	var bodyBuf bytes.Buffer
@@ -287,7 +341,7 @@ func TestSocialHandler_CreatePost_Returns422ForInvalidMIME(t *testing.T) {
 	fw.Write([]byte("not an image"))
 	mw.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/social/posts", &bodyBuf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/social/posts/"+postID.String()+"/image", &bodyBuf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -297,10 +351,12 @@ func TestSocialHandler_CreatePost_Returns422ForInvalidMIME(t *testing.T) {
 	}
 }
 
-// TestSocialHandler_CreatePost_Returns422ForInvalidAspectRatio verifies aspect ratio rejection.
-func TestSocialHandler_CreatePost_Returns422ForInvalidAspectRatio(t *testing.T) {
+// TestSocialHandler_UploadPostImage_Returns422ForInvalidAspectRatio verifies aspect ratio rejection.
+func TestSocialHandler_UploadPostImage_Returns422ForInvalidAspectRatio(t *testing.T) {
 	mock := newHandlerMock()
 	mock.validateErr = social.ErrInvalidDimensions
+	postID := uuid.New()
+	mock.posts[postID] = &social.ScheduledPost{ID: postID}
 	router := newTestRouter(mock)
 
 	// Create a 320x960 PNG (1:3 ratio - invalid for feed)
@@ -317,7 +373,7 @@ func TestSocialHandler_CreatePost_Returns422ForInvalidAspectRatio(t *testing.T) 
 	fw.Write(imgBuf.Bytes())
 	mw.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/social/posts", &bodyBuf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/social/posts/"+postID.String()+"/image", &bodyBuf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

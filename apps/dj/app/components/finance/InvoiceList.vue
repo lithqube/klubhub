@@ -184,14 +184,14 @@ function rowLabel(inv: Invoice): string {
 .il-rows li { border-bottom: 1px dashed color-mix(in srgb, var(--color-on-surface) 10%, transparent); }
 .il-rows li:last-child { border-bottom: 0; }
 .il-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; background: transparent; border: 0; cursor: pointer; text-align: left; color: inherit; transition: background .15s; }
-.il-row:hover { background: color-mix(in srgb, var(--color-primary) 3%, transparent); }
+.il-row:hover { background: color-mix(in srgb, var(--color-primary) 6%, transparent); }
 .il-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
-.il-num { width: 120px; flex-shrink: 0; font-family: var(--font-terminal); font-size: 8px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--color-tertiary); overflow-wrap: anywhere; }
+.il-num { width: 120px; flex-shrink: 0; font-family: var(--font-terminal); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-on-surface-variant); overflow-wrap: anywhere; }
 .il-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .il-client { font-family: var(--font-command); font-size: 11px; font-weight: 600; letter-spacing: -.02em; text-transform: uppercase; color: var(--color-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .il-meta { font-family: var(--font-terminal); font-size: 8px; letter-spacing: .05em; text-transform: uppercase; color: var(--color-tertiary); margin-top: 2px; }
 .il-money { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
-.il-total { font-family: var(--font-command); font-size: 13px; font-weight: 700; letter-spacing: -.02em; color: var(--color-on-surface); }
+.il-total { font-family: var(--font-command); font-size: 13px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--color-on-surface); }
 .il-neg { color: var(--color-on-surface-variant); }
 .il-badge { flex-shrink: 0; min-width: 64px; justify-content: center; }
 .il-skel { display: flex; gap: 12px; padding: 14px; }

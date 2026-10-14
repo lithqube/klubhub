@@ -24,7 +24,7 @@ func TestWorker_FailPostSanitizesReasonBeforePersisting(t *testing.T) {
 
 	repo := &mockWorkerRepo{
 		duePosts: []ScheduledPost{
-			{ID: postID, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageMinioPath: "img.jpg"},
+			{ID: postID, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageStorageKey: "img.jpg"},
 		},
 		account: &SocialAccount{
 			ID:          accID,
@@ -73,7 +73,7 @@ func TestWorker_FailPost_LogsOriginalDetailSeparately(t *testing.T) {
 
 	repo := &mockWorkerRepo{
 		duePosts: []ScheduledPost{
-			{ID: postID, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageMinioPath: "img.jpg"},
+			{ID: postID, AccountID: accID, Status: PostStatusScheduled, RetryCount: 0, PostType: PostTypeFeed, ImageStorageKey: "img.jpg"},
 		},
 		account: &SocialAccount{
 			ID:          accID,

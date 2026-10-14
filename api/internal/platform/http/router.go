@@ -55,6 +55,7 @@ func NewRouter(
 	venueHandler http.Handler,
 	contactHandler http.Handler,
 	financeHandler http.Handler,
+	riderHandler http.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -65,6 +66,10 @@ func NewRouter(
 	// legitimately need larger bodies (tracklist upload) wrap their
 	// own http.MaxBytesReader before this middleware sees the body.
 	r.Use(MaxBodyBytesMiddleware)
+	if w := CORSOriginWarning(cfg.CORSOrigin); w != "" {
+		log.Warn().Str("cors_origin", cfg.CORSOrigin).Msg(w)
+	}
+	r.Use(UnsafeRequestBoundary(cfg.CORSOrigin))
 
 	healthHandler := NewHealthHandler(pool, store, cfg)
 
@@ -95,6 +100,12 @@ func NewRouter(
 	// finance.Mux parses the full /api/v1/finance/... path itself.
 	if financeHandler != nil {
 		r.Mount("/api/v1/finance", financeHandler)
+	}
+
+	// Rider templates: per-gig rider copies attached to gigs.
+	// riderHandler is rider.Handler.Routes(); chi's Mount strips the prefix.
+	if riderHandler != nil {
+		r.Mount("/api/v1/rider", riderHandler)
 	}
 
 	if cfg.ServeFrontend {

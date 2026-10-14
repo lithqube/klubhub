@@ -2,6 +2,7 @@
 
 import { FinanceMockDb } from '../../../shared/finance-mock/db'
 import { seedFinanceEntries, seedInvoices } from '../../../shared/finance-mock/seed'
+import { RiderMockDb } from '../../../shared/rider-mock/db'
 import type { DemoState } from '../types'
 import { financeLookup } from '../handlers/finance'
 import { seedAccount, seedEpk, seedPosts, seedSettings } from './content'
@@ -29,6 +30,7 @@ export function createSeedState(now: Date): DemoState {
     venues,
     contacts,
     finance: { invoices: [], lines: {}, payments: [], series: {}, entries: [], reconciliations: [], seriesEntries: {}, clock: 0 },
+    rider: new RiderMockDb({ now: () => now, seed: true }).toJSON(),
   }
   const db = new FinanceMockDb({ lookupGig: financeLookup(state), clockStart: now.getTime() - 60 * 86400_000 })
   const gigDate = (id: string) => state.gigs.find((g) => g.id === id)!.date.slice(0, 10)

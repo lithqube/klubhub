@@ -80,7 +80,7 @@ class SetupTests(unittest.TestCase):
                                         check=True, capture_output=True, text=True)
                 configs[mode] = json.loads(result.stdout)
         for config in configs.values():
-            self.assertEqual(set(config["services"]), {"app", "db", "storage"})
+            self.assertEqual(set(config["services"]), {"app", "db", "storage", "einvoice"})
             app = config["services"]["app"]
             self.assertEqual(app["environment"]["BIND_ADDRESS"], "0.0.0.0")
             self.assertEqual(app["ports"][0]["host_ip"], "127.0.0.1")
@@ -94,7 +94,7 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(dev["services"]["app"]["environment"]["NUXT_INTERNAL_URL"], "http://host.docker.internal:4200")
         self.assertNotIn("build", prod["services"]["app"])
         self.assertNotIn("ports", prod["services"]["db"])
-        self.assertEqual(prod["services"]["app"]["image"], "ghcr.io/lithqube/klubhub-dj-api:v1.0.1")
+        self.assertEqual(prod["services"]["app"]["image"], "ghcr.io/lithqube/klubhub-dj-api:v1.2.0")
         self.assertEqual(prod["services"]["app"]["environment"]["SERVE_FRONTEND"], "true")
         admin = [p for p in configs["debug"]["services"]["storage"]["ports"] if p["target"] == 3903]
         self.assertEqual(len(admin), 1)

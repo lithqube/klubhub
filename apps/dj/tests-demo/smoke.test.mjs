@@ -56,6 +56,7 @@ const PAGES = [
   { path: 'social', text: 'sam.example' },
   { path: 'epk', text: 'Sam Example' },
   { path: 'gigs', text: 'Zeta Garden' },
+  { path: 'rider', text: 'Festival heavy' },
   { path: 'finance', text: 'INVOICES' },
 ]
 

@@ -1,7 +1,6 @@
 package finance
 
 import (
-	"bytes"
 	"context"
 	"database/sql/driver"
 	"errors"
@@ -616,22 +615,12 @@ func (s *AgreementInstanceService) Sign(ctx context.Context, id uuid.UUID, req S
 	return s.repo.Sign(ctx, id, req)
 }
 
+// ErrAgreementGenerationUnsupported is deliberate until resolved PDF rendering,
+// durable agreement linkage and document retrieval are implemented together.
+var ErrAgreementGenerationUnsupported = errors.New("agreement PDF generation is not supported; no document was created")
+
 func (s *AgreementInstanceService) GeneratePDF(ctx context.Context, id uuid.UUID) (*Document, error) {
-	inst, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	// For now, just create a document with the markdown content as text
-	// In production, this would render to PDF via a renderer
-	content := []byte("# " + inst.TemplateID.String() + "\n\n" + inst.ContentMD)
-	req := CreateDocumentRequest{
-		OwnerType:  DocumentOwnerAgreement,
-		OwnerID:    inst.ID,
-		Filename:   fmt.Sprintf("agreement-%s.md", inst.ID.String()[:8]),
-		MimeType:   "text/markdown",
-		UploadedBy: "system",
-	}
-	return s.docService.Create(ctx, req, bytes.NewReader(content))
+	return nil, ErrAgreementGenerationUnsupported
 }
 
 // Validation

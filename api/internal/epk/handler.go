@@ -27,8 +27,8 @@ type Handler struct {
 
 // NewHandler creates a Handler backed by the given service.
 //
-// raClient is optional: RA import is a licensed edition feature
-// (FEATURE_RA_IMPORT). Pass nil when the feature is disabled — the
+// raClient is optional: RA import is on by default and can be turned off
+// (FEATURE_RA_IMPORT=false). Pass nil when the feature is disabled — the
 // /import-ra route is then not mounted (404) and the handler never
 // contacts Resident Advisor. No default client is created.
 func NewHandler(svc serviceIface, raClient RAArtistLoader) *Handler {
@@ -287,16 +287,16 @@ func (h *Handler) handleGetExports(w http.ResponseWriter, r *http.Request) {
 	resp := make([]map[string]interface{}, 0, len(exports))
 	for _, e := range exports {
 		resp = append(resp, map[string]interface{}{
-			"id":        e.ID.String(),
-			"minioPath": e.MinioPath,
-			"createdAt": e.CreatedAt.Format(time.RFC3339),
+			"id":              e.ID.String(),
+			"garageObjectKey": e.GarageObjectKey,
+			"createdAt":       e.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": resp})
 }
 
-// handleDeleteExport deletes an export record and MinIO object.
+// handleDeleteExport deletes an export record and Garage object.
 func (h *Handler) handleDeleteExport(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)

@@ -14,10 +14,11 @@ matches your role.
 | [`EDITIONS.md`](./EDITIONS.md) | Open-source, licensed, and SaaS editions; which features are licensed and the flags that switch them on (e.g. Resident Advisor import) |
 | [`container-images.md`](./container-images.md) | GHCR image tags for both products, how to verify a published manifest, and the current default-tag caveats |
 | [`OPERATIONS.md`](./OPERATIONS.md) | Day-to-day operations: health, log shipping, key rotation, restore drills, container resource limits |
-| [`INVOICING.md`](./INVOICING.md) | The invoicing contract: JSON shapes, endpoints, VAT rules, extension points (Phase 5) |
+| [`INVOICING.md`](./INVOICING.md) | The invoicing contract: JSON shapes, endpoints, VAT rules, e-invoice export, document archive, extension points (Phase 5) |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Release history and what's changed since the last tagged release |
 || [`release-notes/v1.0.1.md`](./release-notes/v1.0.1.md) | Runtime, CI, and onboarding hardening (PRs #5, #7, #9, #10, #11, #12); operator follow-up steps for GHCR publish and Plunk workflow rename |
 || [`release-notes/v1.1.0-phase5.md`](./release-notes/v1.1.0-phase5.md) | **Phase 5** — Finance Tracker module: invoices, payments, agreements, PDF rendering, self-hostable Plunk email |
+| [`release-notes/v1.2.0.md`](./release-notes/v1.2.0.md) | **v1.2.0** — e-invoicing (Factur-X / XRechnung), document archive, receipts, Rider Templates, tracklist editor, Host allowlist; upgrade steps |
 | [`../SECURITY.md`](../SECURITY.md) | Threat model, supported versions, vulnerability reporting — including [KlubHub Promoter's security model](../SECURITY.md#klubhub-promoter-security-model) |
 | [`../.env.example`](../.env.example) | Annotated template for the env vars |
 

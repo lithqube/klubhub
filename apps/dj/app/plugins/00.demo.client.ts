@@ -1,7 +1,8 @@
 /**
  * Browser-only demo (docs/DEMO.md). A no-op unless the app was built with
- * NUXT_DEMO=1 (runtimeConfig.public.demo). The backend is loaded lazily, so
- * normal builds never download it.
+ * NUXT_DEMO=1. Nuxt excludes this plugin from registration in every normal
+ * build, so app/demo and its seeds are absent from the dependency graph.
+ * The runtime check only allows a dedicated demo build to disable its API.
  */
 interface DemoApi {
   reset: () => void

@@ -116,7 +116,7 @@ func TestSocialRepository_CreatePost_Roundtrip(t *testing.T) {
 		Status:         social.PostStatusScheduled,
 		PostType:       social.PostTypeFeed,
 		Caption:        "Test caption",
-		ImageMinioPath: "social/test.jpg",
+		ImageStorageKey: "social/test.jpg",
 		ScheduledAtUTC: scheduledAt,
 		TimezoneName:   "Europe/Berlin",
 		RetryCount:     0,
@@ -165,7 +165,7 @@ func TestSocialRepository_DisconnectAccountCascade(t *testing.T) {
 		Status:         social.PostStatusScheduled,
 		PostType:       social.PostTypeFeed,
 		Caption:        "Scheduled post",
-		ImageMinioPath: "social/s.jpg",
+		ImageStorageKey: "social/s.jpg",
 		ScheduledAtUTC: scheduledAt,
 		TimezoneName:   "UTC",
 	})
@@ -179,7 +179,7 @@ func TestSocialRepository_DisconnectAccountCascade(t *testing.T) {
 		Status:         social.PostStatusPublished,
 		PostType:       social.PostTypeFeed,
 		Caption:        "Published post",
-		ImageMinioPath: "social/p.jpg",
+		ImageStorageKey: "social/p.jpg",
 		ScheduledAtUTC: scheduledAt.Add(-24 * time.Hour),
 		TimezoneName:   "UTC",
 	})
@@ -225,7 +225,7 @@ func TestSocialRepository_ListPosts_OrderedByScheduledAtUTCDesc(t *testing.T) {
 			Status:         social.PostStatusScheduled,
 			PostType:       social.PostTypeFeed,
 			Caption:        "post",
-			ImageMinioPath: "social/x.jpg",
+			ImageStorageKey: "social/x.jpg",
 			ScheduledAtUTC: base.Add(offset),
 			TimezoneName:   "UTC",
 			RetryCount:     i,
@@ -261,7 +261,7 @@ func TestSocialRepository_UpdatePostStatus_Idempotent(t *testing.T) {
 		Status:         social.PostStatusPublished,
 		PostType:       social.PostTypeFeed,
 		Caption:        "Published",
-		ImageMinioPath: "social/x.jpg",
+		ImageStorageKey: "social/x.jpg",
 		ScheduledAtUTC: time.Now().Add(-1 * time.Hour).UTC(),
 		TimezoneName:   "UTC",
 	})
@@ -286,7 +286,7 @@ func TestSocialRepository_ResetPostForRetry(t *testing.T) {
 		Status:         social.PostStatusFailed,
 		PostType:       social.PostTypeFeed,
 		Caption:        "Retrying",
-		ImageMinioPath: "social/x.jpg",
+		ImageStorageKey: "social/x.jpg",
 		ScheduledAtUTC: time.Now().Add(1 * time.Hour).UTC(),
 		TimezoneName:   "UTC",
 	})

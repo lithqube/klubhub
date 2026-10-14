@@ -37,11 +37,23 @@ func (t DocumentOwnerType) IsValid() bool {
 	return ok
 }
 
+// DocumentKind says what a stored document is. Versions and "current" are kept
+// per owner and kind, so an invoice's PDF, XML and report do not replace each other.
+type DocumentKind string
+
+const (
+	DocumentKindGeneral          DocumentKind = "general"
+	DocumentKindInvoicePDF       DocumentKind = "invoice_pdf"
+	DocumentKindEInvoiceXML      DocumentKind = "einvoice_xml"
+	DocumentKindValidationReport DocumentKind = "validation_report"
+)
+
 // Document represents a stored file (PDF, image, etc.) in Garage S3.
 type Document struct {
 	ID             uuid.UUID         `json:"id"                db:"id"`
 	OwnerType      DocumentOwnerType `json:"owner_type"        db:"owner_type"`
 	OwnerID        uuid.UUID         `json:"owner_id"          db:"owner_id"`
+	Kind           DocumentKind      `json:"kind"              db:"kind"`
 	StorageKey     string            `json:"storage_key"       db:"storage_key"`
 	Filename       string            `json:"filename"          db:"filename"`
 	MimeType       string            `json:"mime_type"         db:"mime_type"`
@@ -63,9 +75,17 @@ var (
 type CreateDocumentRequest struct {
 	OwnerType  DocumentOwnerType `json:"owner_type"`
 	OwnerID    uuid.UUID         `json:"owner_id"`
+	Kind       DocumentKind      `json:"kind,omitempty"` // empty means general
 	Filename   string            `json:"filename"`
 	MimeType   string            `json:"mime_type"`
 	UploadedBy string            `json:"uploaded_by,omitempty"`
+}
+
+func (r CreateDocumentRequest) kindOrGeneral() DocumentKind {
+	if r.Kind == "" {
+		return DocumentKindGeneral
+	}
+	return r.Kind
 }
 
 // CreateDocumentDetails carries computed fields from the service to the repo.
@@ -213,6 +233,11 @@ func ValidateCreateDocumentRequest(req CreateDocumentRequest) error {
 	}
 	if req.OwnerID == uuid.Nil {
 		return fmt.Errorf("%w: owner_id is required", ErrDocumentValidation)
+	}
+	switch req.kindOrGeneral() {
+	case DocumentKindGeneral, DocumentKindInvoicePDF, DocumentKindEInvoiceXML, DocumentKindValidationReport:
+	default:
+		return fmt.Errorf("%w: unknown kind %q", ErrDocumentValidation, req.Kind)
 	}
 	if req.Filename == "" {
 		return fmt.Errorf("%w: filename is required", ErrDocumentValidation)

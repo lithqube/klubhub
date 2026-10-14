@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/klubhub/dj/api/internal/tracklist"
 )
 
 // Plan B.5 regression tests for the calendar/PDF bearer-protection fix.
@@ -21,6 +22,16 @@ const testICalSecret = "this-is-a-32-byte-test-secret-1234" // gitleaks:allow â€
 // stubServiceIface is a no-op implementation used by the B.5 auth tests,
 // which never invoke service methods.
 type stubServiceIface struct{}
+
+func (stubServiceIface) GetGigWithRelations(context.Context, uuid.UUID) (*GigWithRelations, error) {
+	return nil, nil
+}
+func (stubServiceIface) ListGigsWithRelations(context.Context, GigFilter) ([]*GigWithRelations, error) {
+	return nil, nil
+}
+func (stubServiceIface) Tracklists(context.Context, uuid.UUID) ([]*tracklist.Tracklist, error) {
+	return nil, nil
+}
 
 func (stubServiceIface) CreateGig(context.Context, *GigCreate) (*Gig, error) {
 	return nil, nil
@@ -70,7 +81,7 @@ func newHandlerWithSecret(t *testing.T) *Handler {
 			t.Fatalf("NewHandler panicked with a valid secret: %v", r)
 		}
 	}()
-	return NewHandler(svc, testICalSecret)
+	return NewHandler(svc, testICalSecret, nil)
 }
 
 func TestValidateICalSecret_RejectsLiteralPlaceholder(t *testing.T) {
@@ -107,7 +118,7 @@ func TestNewHandler_PanicsOnEmptySecret(t *testing.T) {
 			t.Fatal("NewHandler(\"\") did not panic; misconfiguration must fail loud")
 		}
 	}()
-	NewHandler(nil, "")
+	NewHandler(nil, "", nil)
 }
 
 func TestHandler_RejectsCalendarWithoutBearer(t *testing.T) {

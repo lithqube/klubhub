@@ -29,6 +29,10 @@ function makeInvoice(overrides: Partial<Invoice> = {}): Invoice {
     paid_at: null,
     payment_ref: '',
     internal_notes: '',
+    buyer_reference: '',
+    purchase_order_ref: '',
+    contract_ref: '',
+    payment_terms: '',
     customer: { ...emptyParty(), legal_name: 'Club Alpha' },
     billing_profile: null,
     vat_treatment: 'domestic',
@@ -149,7 +153,7 @@ describe('useInvoiceStore', () => {
     expect(store.payments).toHaveLength(1)
   })
 
-  it('updateInvoice sends the updated_at token from the server copy', async () => {
+  it('updateInvoice sends the caller-supplied updated_at (does not borrow from the cache)', async () => {
     const store = useInvoiceStore()
     store.current = makeInvoice()
     fetchMock
@@ -157,6 +161,7 @@ describe('useInvoiceStore', () => {
       .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
     const inv = store.current!
     await store.updateInvoice('inv-1', {
+      updated_at: inv.updated_at,
       customer: inv.customer,
       vat_treatment: 'domestic',
       tax_rate_bps: 1900,
@@ -166,6 +171,10 @@ describe('useInvoiceStore', () => {
       due_at: inv.due_at,
       number_prefix: 'INV',
       internal_notes: '',
+      buyer_reference: '',
+      purchase_order_ref: '',
+      contract_ref: '',
+      payment_terms: '',
     })
     const [url, opts] = fetchMock.mock.calls[0]!
     expect(url).toBe('/api/v1/finance/invoices/inv-1')
@@ -182,11 +191,63 @@ describe('useInvoiceStore', () => {
       .mockRejectedValueOnce(httpError(409, { error: 'conflict', message: 'stale' }))
       .mockResolvedValueOnce({ data: makeInvoice({ updated_at: '2026-09-25T12:00:00Z' }), lines: [] })
       .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
-    await expect(store.issueInvoice('inv-1')).rejects.toMatchObject({ code: 'conflict' })
+    await expect(store.issueInvoice('inv-1', '2026-09-25T10:00:00Z')).rejects.toMatchObject({ code: 'conflict' })
     expect(store.notice).toBe(CONFLICT_NOTICE)
     expect(store.current?.updated_at).toBe('2026-09-25T12:00:00Z')
     // one failed POST, one GET, one issue-check — never a second POST
     expect(fetchMock.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(1)
+  })
+
+  it('transition (issue/cancel/pay) sends the caller-supplied updated_at, not the cache-borrowed token', async () => {
+    const store = useInvoiceStore()
+    store.current = makeInvoice()
+    // First transition (issue) — one POST + the trailing fetchInvoice + one
+    // issue-check (since the response keeps status='draft' but a POST returns
+    // a row we control).
+    fetchMock
+      .mockResolvedValueOnce({ data: makeInvoice({ updated_at: '2026-09-25T13:00:00Z' }), lines: [] })
+      .mockResolvedValueOnce({ data: makeInvoice({ updated_at: '2026-09-25T13:00:00Z' }), lines: [] })
+      .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
+    await store.issueInvoice('inv-1', '2026-09-25T10:00:00Z')
+    const issuePost = fetchMock.mock.calls.find(([, opts]) => opts?.method === 'POST')
+    expect(issuePost?.[1].body.updated_at).toBe('2026-09-25T10:00:00Z')
+    // Cache is now updated to T2 (13:00:00). A subsequent transition must
+    // still pass the caller's original snapshot, not T2.
+    fetchMock.mockResolvedValueOnce({ data: makeInvoice({ status: 'paid' }), lines: [] })
+    await store.markPaid('inv-1', { updated_at: '2026-09-25T10:00:00Z', payment_ref: 'wire' })
+    const payPostCalls = fetchMock.mock.calls.filter(([, opts]) => opts?.method === 'POST')
+    expect(payPostCalls).toHaveLength(2)
+    expect(payPostCalls[1]?.[1].body.updated_at).toBe('2026-09-25T10:00:00Z')
+  })
+
+  it('issueCreditNote and correctInvoice send the caller-supplied updated_at', async () => {
+    const store = useInvoiceStore()
+    store.current = makeInvoice({ status: 'issued' })
+    // issueCreditNote: one POST + trailing fetchInvoice for id=1 (line + issue-check).
+    fetchMock
+      .mockResolvedValueOnce({
+        data: { credit_note: makeInvoice({ id: 'cn', kind: 'credit_note' }), original: store.current },
+      })
+      .mockResolvedValueOnce({ data: store.current, lines: [] })
+      .mockResolvedValueOnce({ data: [] })
+    await store.issueCreditNote('inv-1', 'refund', '2026-09-25T10:00:00Z')
+    const creditPost = fetchMock.mock.calls.find(([, opts]) => opts?.method === 'POST')
+    expect(creditPost?.[1].body).toEqual({ reason: 'refund', updated_at: '2026-09-25T10:00:00Z' })
+
+    // correctInvoice: one POST + trailing fetchInvoice for the replacement.
+    fetchMock
+      .mockResolvedValueOnce({
+        data: {
+          original: makeInvoice({ status: 'corrected', replaced_by_invoice_id: 'repl' }),
+          credit_note: makeInvoice({ id: 'cn2', kind: 'credit_note' }),
+          replacement: makeInvoice({ id: 'repl', status: 'draft' }),
+        },
+      })
+      .mockResolvedValueOnce({ data: makeInvoice({ id: 'repl', status: 'draft' }), lines: [] })
+      .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
+    await store.correctInvoice('inv-1', 'wrong', '2026-09-25T10:00:00Z')
+    const postCalls = fetchMock.mock.calls.filter(([, opts]) => opts?.method === 'POST')
+    expect(postCalls[1]?.[1].body).toEqual({ reason: 'wrong', updated_at: '2026-09-25T10:00:00Z' })
   })
 
   it('on 409 bad_state sets the bad-state banner', async () => {
@@ -238,7 +299,7 @@ describe('useInvoiceStore', () => {
       })
       .mockResolvedValueOnce({ data: replacement, lines: [] })
       .mockResolvedValueOnce({ data: { ready: true, problems: [] } })
-    const res = await store.correctInvoice('inv-1', 'wrong address')
+    const res = await store.correctInvoice('inv-1', 'wrong address', '2026-09-25T10:00:00Z')
     expect(res.replacement.id).toBe('repl')
     expect(store.current?.id).toBe('repl')
     expect(fetchMock.mock.calls[0]![1].body).toEqual({ reason: 'wrong address', updated_at: '2026-09-25T10:00:00Z' })
@@ -284,6 +345,41 @@ describe('useInvoiceStore', () => {
     expect(s.vat_treatment).toBe('reverse_charge')
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/finance/invoices/tax-suggestion', {
       params: { customer_country: 'FR', customer_vat_id: 'FR123', customer_is_business: 'true' },
+    })
+  })
+
+  describe('fetchTaxNotes', () => {
+    const NOTES = { exempt: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. / VAT not charged.', reverse_charge: 'Steuerschuldnerschaft des Leistungsempfängers' }
+
+    it('loads the supplier country\'s wording once and caches it', async () => {
+      const store = useInvoiceStore()
+      expect(store.taxNotes).toBeNull()
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await store.fetchTaxNotes()
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/finance/invoices/tax-notes', {})
+      expect(store.taxNotes).toEqual(NOTES)
+
+      await store.fetchTaxNotes()
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('shares one request between concurrent callers', async () => {
+      const store = useInvoiceStore()
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await Promise.all([store.fetchTaxNotes(), store.fetchTaxNotes(), store.fetchTaxNotes()])
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('stays quiet on failure (the built-in defaults apply) and tries again next time', async () => {
+      const store = useInvoiceStore()
+      fetchMock.mockRejectedValueOnce(new Error('offline'))
+      await expect(store.fetchTaxNotes()).resolves.toBeUndefined()
+      expect(store.taxNotes).toBeNull()
+      expect(store.listError).toBeNull()
+
+      fetchMock.mockResolvedValueOnce({ data: { country: 'DE', notes: NOTES } })
+      await store.fetchTaxNotes()
+      expect(store.taxNotes).toEqual(NOTES)
     })
   })
 

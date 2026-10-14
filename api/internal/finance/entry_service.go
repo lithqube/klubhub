@@ -64,6 +64,9 @@ func (s *EntryService) List(ctx context.Context, filter EntryFilter) ([]*Entry, 
 	if filter.GigID != nil && *filter.GigID == uuid.Nil {
 		return nil, EntryValidationErrors{{"gig_id", "must not be nil UUID"}}
 	}
+	if !filter.Receipt.IsValid() {
+		return nil, EntryValidationErrors{{"receipt", "must be missing or present"}}
+	}
 	if filter.From != "" || filter.To != "" {
 		if err := (DateRange{From: filter.From, To: filter.To}).Validate(); err != nil {
 			return nil, err

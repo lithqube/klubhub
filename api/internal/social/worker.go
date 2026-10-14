@@ -184,7 +184,7 @@ func (w *Worker) processPost(ctx context.Context, post ScheduledPost) error {
 	}
 
 	// 7. Generate a presigned URL for the image (30-minute expiry).
-	presignedURL, err := w.storage.PresignedGetObject(ctx, w.storage.Bucket(), post.ImageMinioPath, 30*time.Minute, nil)
+	presignedURL, err := w.storage.PresignedGetObject(ctx, w.storage.Bucket(), post.ImageStorageKey, 30*time.Minute, nil)
 	if err != nil {
 		return w.failPost(ctx, post, err)
 	}
