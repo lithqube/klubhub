@@ -113,6 +113,11 @@ test('lists the shipped KlubHub DJ modules and the editions', async () => {
   assert.match(html, /your own data, and anything the law asks of you[^.]*is free/);
   // Resident Advisor integration is intentionally not marketed for now.
   assert.doesNotMatch(html, /Resident Advisor|\bRA\b|ra\.co/);
+  // The e-invoice claim is scoped: the EU standard is named, and the US is
+  // covered for invoicing only, never claimed as an e-invoice format.
+  assert.match(html, /EN 16931/);
+  assert.match(html, /Invoicing also covers the US/);
+  assert.doesNotMatch(html, /US e-invoice|USA e-invoice|United States e-invoice/i);
 });
 
 // Prices in the business plan are hypotheses that no customer has been asked

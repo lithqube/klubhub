@@ -1,0 +1,29 @@
+meta {
+  name: Get tracklist with tracks
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/tracklists/{{uploadedTracklistId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.tracklist.id !== bru.getVar("uploadedTracklistId")) {
+    throw new Error("tracklist id mismatch");
+  }
+  if (!Array.isArray(body.tracks) || body.tracks.length === 0) {
+    throw new Error("tracklist has no tracks");
+  }
+}

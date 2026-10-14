@@ -1,0 +1,28 @@
+meta {
+  name: Upload Rekordbox tracklist
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/tracklists/upload
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  file: @file(fixtures/rekordbox_sample.txt)
+}
+
+assert {
+  res.status: eq 201
+  res.body.tracklist.id: isNotEmpty
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (!Array.isArray(body.tracks) || body.tracks.length === 0) {
+    throw new Error("upload returned no tracks");
+  }
+  bru.setVar("uploadedTracklistId", body.tracklist.id);
+}

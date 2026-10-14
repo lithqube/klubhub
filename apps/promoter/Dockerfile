@@ -40,7 +40,11 @@ FROM node:22-bookworm-slim AS runtime
 # outside the supervised process tree).
 ENV NODE_ENV=production \
     PROMOTER_PORT=8080
+# perl-base ships in the node base image with fixable CVEs (e.g.
+# CVE-2026-13221); upgrade it from bookworm-security so the Trivy gate
+# (fixable HIGH/CRITICAL) passes.
 RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certificates \
+    && apt-get install -y --no-install-recommends --only-upgrade perl-base \
     && rm -rf /var/lib/apt/lists/*
 # The runtime only execs node and /promoter. Drop the base image's bundled
 # npm and corepack: unused here, and their dependencies carry fixable CVEs

@@ -1,0 +1,32 @@
+meta {
+  name: Get gig detail with linked venue and contact
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/v1/gigs/{{createdGigId}}/detail
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.event_name: eq Bruno Party
+}
+
+script:post-response {
+  const data = res.getBody().data;
+  const venueId = bru.getEnvVar("venueId");
+  const contactId = bru.getEnvVar("contactId");
+  if (!data.venues || !data.venues.some((v) => v.venue.id === venueId)) {
+    throw new Error("gig detail is missing the linked venue");
+  }
+  if (!data.contacts || !data.contacts.some((c) => c.contact.id === contactId)) {
+    throw new Error("gig detail is missing the linked contact");
+  }
+}

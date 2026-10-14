@@ -24,6 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export (RIDER-01..05; shipped in v1.2.0)
 - [ ] **Phase 4.8: Bandsintown Sync** - INSERTED (optional) — Outbound event push to Bandsintown on gig confirmed
 - [x] **Phase 5: Finance Tracker** - Income & expense ledger, multi-currency summaries, gig-linked auto-income, in-app FIN-04/05 reconciliation prompts, plus invoices/payments, versioned PDFs, event agreements and explicit email sends
+- [ ] **Phase 5.5: US Invoicing & Tax Compliance** - INSERTED — US-compatible e-invoicing (UBL) and payee tax forms: W-9, 1099-NEC, W-8BEN withholding, 1042-S; scope in `.claude/plans/e-invoicing.plan.md` §7
 - [ ] **Phase 6: Release Planner** - Release CRUD with status workflow, deadline tracking, promo checklist with customizable default template
 - [ ] **Phase 7: Tour Manager** - Named tour groups of linked gigs, per-stop logistics, tour budget aggregate (OSS; collaboration is SaaS v2)
 - [ ] **Phase 8: Unified Dashboard** - Aggregated view of all modules: upcoming gigs, scheduled posts, recent tracklists, finance summary, release deadlines, career analytics
@@ -225,6 +226,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 > Added scope: structured billing identity, draft/atomic invoice issuance, deposits and payments, immutable Garage PDF exports, versioned agreements, and explicit SMTP outbox sends. No real mail is authorized for tests. FIN-10 excludes tax/VAT calculation; the invoicing UI issues real invoices in every mode (Go API in production, in-memory mocks in dev). The Earnings panel is fully wired: the ledger, multi-currency summaries, P&L, gig-linked auto-income, and FIN-04/05 reconciliation prompts are live in both the Nuxt app and the demo.
 
+### Phase 5.5: US Invoicing & Tax Compliance (INSERTED)
+
+**Goal**: US-compatible invoicing and e-invoicing: UBL export for US buyers, state sales-tax handling, and payee tax forms (W-9 collection, 1099-NEC reporting, W-8BEN withholding with 1042-S).
+
+**Depends on**: Phase 5
+**Requirements**: TBD
+**Status**: Not started — DOCUMENTED FOR LATER
+**Plans**: `.claude/plans/e-invoicing.plan.md` §7
+
 ### Phase 6: Release Planner
 
 **Goal**: Users can plan and track music releases with status workflows, deadlines, and customizable promo checklists
@@ -270,7 +280,7 @@ After v1.0.0 release, SaaS migration work begins in a separate repository (`klub
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 → 4 → 4.5 → 4.8 → 4.9 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 → 4 → 4.5 → 4.8 → 4.9 → 5 → 5.5 → 6 → 7 → 8 → 9
 
 | Phase                            | Plans Complete | Status       | Completed  |
 | -------------------------------- | -------------- | ------------ | ---------- |
@@ -286,6 +296,7 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 || 4.8. Spotify Integration (INSERTED) | 0/TBD       | Future       | —          |
 || 4.9. RA Integration (INSERTED)    | 3/3            | ✅ Complete  | 2026-09-20 |
 | 5. Finance Tracker               | v1.1.0 invoicing + earnings ledger + v1.2.0 e-invoicing, archive, receipts | ✅ Complete  | 2026-10-03 |
+| 5.5. US Invoicing & Tax Compliance | 0/TBD          | Future       | —          |
 | 6. Release Planner               | 0/TBD          | Future       | —          |
 | 7. Tour Manager                  | 0/TBD          | Future       | —          |
 | 8. Unified Dashboard             | 0/TBD          | Future       | —          |

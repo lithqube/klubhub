@@ -1,6 +1,6 @@
 # KlubHub DJ — Operations
 
-Use [Setup and Self-Hosting](./SELF-HOSTING.md) for first startup and upgrades. The examples below target production with `docker-compose.prod.yml` alone. For development, select `docker-compose.yml` instead. Preserve the same project name, private-state paths, image tag, and environment overrides used at setup.
+Use [Setup and Self-Hosting](./SELF-HOSTING.md) for first startup. Updating an existing install is covered in [Updating](#updating) below. The examples below target production with `docker-compose.prod.yml` alone. For development, select `docker-compose.yml` instead. Preserve the same project name, private-state paths, image tag, and environment overrides used at setup.
 
 ## Health and logs
 
@@ -49,6 +49,38 @@ Verify that the archive exists and contains the expected database dump and objec
 **Restore is destructive:** it drops and recreates the target database and copies stored objects. Stop writers and verify the target project, credentials, volumes, and archive before invoking it. Validation does not make a later failure safe or guarantee that the original database survives. Use an exact archive path, not a wildcard that might select multiple backups.
 
 Follow the script's help for restore syntax, and run it first against isolated disposable volumes with noncolliding host ports. Verify records, object downloads, and rendering afterward. Document the actual result; do not label an unexecuted drill as successful.
+
+## Updating
+
+Updates go through the installer, never through a second stack or a manual image swap. From the install directory (default `~/klubhub`):
+
+```bash
+./klubhub update              # newest commit on the saved ref (usually main)
+./klubhub update --release    # newest v* release tag
+./klubhub update <ref>        # a specific branch, tag or commit
+```
+
+What an update does, in order:
+
+1. **Backs up first.** Databases (logical `pg_dump` while the stack is up, raw volume copy when it is stopped), Garage storage and the secrets/settings files are copied to `.local/backups/<timestamp>/`. A failed dump aborts the update — it never updates without a backup.
+2. **Rolls the containers** to the newest published image for the selected ref and waits for both health endpoints.
+3. **Records the previous version** (ref, commit, image tags) in `.local/installer.env` as `KLUBHUB_PREV_*`.
+4. **Prunes dangling images.** Previous release tags are kept, so rollback stays possible.
+
+If a service does not become healthy after the update, the installer prints the rollback instructions and exits non-zero. Roll back one step with:
+
+```bash
+./klubhub rollback            # reinstalls the previous ref, commit and image tags
+```
+
+Database migrations may make an image-only rollback unsafe: if the update ran migrations, also restore the matching backup from `.local/backups/` (see [Backup and restore](#backup-and-restore)). `./klubhub backup` takes a manual snapshot at any time; `./klubhub backup-info` lists what else to keep offline.
+
+Guidelines:
+
+- Check free disk space before updating: the backup plus the new images need room (see [Persistent storage and resource monitoring](#persistent-storage-and-resource-monitoring)).
+- Verify health after the update (see [Health and logs](#health-and-logs)); a green `/api/v1/health` is necessary, not sufficient — exercise an upload and a stored-image download.
+- Keep the pre-update backup until the new version is confirmed good; delete old backups only after that.
+- Never `docker compose down -v` as part of an update (see [Stop and start](#stop-and-start)).
 
 ## Secret rotation
 
@@ -101,6 +133,6 @@ docker compose --env-file /dev/null -f docker-compose.prod.yml stop
 docker compose --env-file /dev/null -f docker-compose.prod.yml start
 ```
 
-Use setup again when you need to reconcile the selected stack, retaining the same configuration and tag. Follow the setup guide for upgrades rather than starting a second API instance to trigger migrations.
+Use setup again when you need to reconcile the selected stack, retaining the same configuration and tag. Follow the setup guide for upgrades rather than starting a second API instance to trigger migrations. For updates through the installer (`./klubhub update`), see [Updating](#updating).
 
 `docker compose down` normally keeps named volumes. **`docker compose down -v` deletes persistent data and is only appropriate for explicitly disposable environments.** It is not a repair command. Do not delete old deployment volumes until a migration and recovery path have been verified.

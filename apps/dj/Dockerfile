@@ -43,7 +43,11 @@ ENV NODE_ENV=production \
     BIND_ADDRESS=0.0.0.0 \
     PORT=8080
 COPY --from=frontend-builder /opt/playwright-core /tmp/playwright-core
+# perl-base ships in the node base image with fixable CVEs (e.g.
+# CVE-2026-13221); upgrade it from bookworm-security so the Trivy gate
+# (fixable HIGH/CRITICAL) passes.
 RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certificates fonts-noto fonts-noto-cjk \
+    && apt-get install -y --no-install-recommends --only-upgrade perl-base \
     && node /tmp/playwright-core/cli.js install --with-deps chromium \
     && chmod -R a+rX /opt/ms-playwright \
     && rm -rf /tmp/playwright-core /var/lib/apt/lists/*

@@ -1,0 +1,46 @@
+meta {
+  name: Create gig
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/gigs
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "date": "2026-11-15T22:00:00Z",
+    "venue": "Bruno Arena",
+    "city": "Berlin",
+    "country": "DE",
+    "event_name": "Bruno Party",
+    "promoter_name": "Bruno Promoter",
+    "promoter_email": "promoter@bruno.example.org",
+    "promoter_phone": "+49 30 555",
+    "fee_amount": 750.0,
+    "fee_currency": "EUR",
+    "set_length_minutes": 90,
+    "notes": "created by the Bruno collection"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.data.event_name: eq Bruno Party
+  res.body.data.status: eq inquiry
+  res.body.data.payment_status: eq unpaid
+  res.body.data.id: isNotEmpty
+}
+
+script:post-response {
+  bru.setVar("createdGigId", res.getBody().data.id);
+  bru.setVar("createdGigUpdatedAt", res.getBody().data.updated_at);
+}

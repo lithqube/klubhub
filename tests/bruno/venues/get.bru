@@ -1,0 +1,21 @@
+meta {
+  name: Get venue by id
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/venues/{{createdVenueId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+  res.body.name: eq Bruno Club
+  res.body.capacity: eq 500
+}

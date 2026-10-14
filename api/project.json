@@ -19,6 +19,14 @@
         "command": "bash scripts/test-promoter-api.sh",
         "cwd": "."
       }
+    },
+    "test-dj-api": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "bash scripts/test-dj-api.sh",
+        "cwd": "."
+      }
     }
   }
 }

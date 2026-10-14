@@ -85,7 +85,7 @@ curl -fsSL https://klubhub.io/install.sh | bash
 
 The same file is served from GitHub (`https://raw.githubusercontent.com/lithqube/klubhub/main/scripts/install.sh`) and published as a [gist](https://gist.github.com/lithqube/3a73d34d4dbdcbb602359362eff31e47): `curl -fsSL https://gist.githubusercontent.com/lithqube/3a73d34d4dbdcbb602359362eff31e47/raw/klubhub-install.sh | bash`.
 
-It checks the machine, fetches the scripts and matching images, creates every secret, starts the stack and prints the URLs, and for Promoter creates your organisation with a one-time owner link. Re-run it (or `~/klubhub/klubhub update`) to update; secrets and data are kept. Options such as `--promoter --yes`, `--bind`, ports and public URLs: [one-line install](./docs/SELF-HOSTING.md#one-line-install).
+It checks the machine, fetches the scripts and matching images, creates every secret, starts the stack and prints the URLs, and for Promoter creates your organisation with a one-time owner link. Re-run it (or `~/klubhub/klubhub update`) to update: it backs up your data first, and `~/klubhub/klubhub rollback` restores the previous version. Secrets and data are kept. Options such as `--promoter --yes`, `--bind`, ports and public URLs: [one-line install](./docs/SELF-HOSTING.md#one-line-install).
 
 | Mode | Command | What runs |
 |---|---|---|
@@ -270,6 +270,7 @@ At a glance:
 
 - **Now:** v1.2.0 — Phase 4.5 Rider Templates and Phase 5 Finance are complete: invoicing, payments, agreements, the expense ledger with receipts, and EN 16931 e-invoicing (Factur-X / XRechnung) with an archive of issued documents and send-by-email; the tracklist editor and a real-data dashboard also landed
 - **Next:** Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard)
+- **Later:** US market — US-compatible e-invoicing (UBL) and payee tax forms (W-9, 1099-NEC, W-8BEN withholding, 1042-S); scope in [the invoicing doc](./docs/INVOICING.md)
 
 Per-phase status is tracked in [`CHANGELOG.md`](./CHANGELOG.md) and the
 roadmap doc. Releases follow [semver](https://semver.org) once v1.0.0 ships.

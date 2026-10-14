@@ -1,0 +1,19 @@
+meta {
+  name: Deleted contact returns 404
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/contacts/{{createdContactId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 404
+}

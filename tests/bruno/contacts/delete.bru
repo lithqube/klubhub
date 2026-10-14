@@ -1,0 +1,15 @@
+meta {
+  name: Delete contact
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/contacts/{{createdContactId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 204
+}

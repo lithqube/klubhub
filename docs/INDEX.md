@@ -13,7 +13,7 @@ matches your role.
 | [`CONFIGURATION.md`](./CONFIGURATION.md) | Every env var, type, default, and example. Required vs. optional. |
 | [`EDITIONS.md`](./EDITIONS.md) | Open-source, licensed, and SaaS editions; which features are licensed and the flags that switch them on (e.g. Resident Advisor import) |
 | [`container-images.md`](./container-images.md) | GHCR image tags for both products, how to verify a published manifest, and the current default-tag caveats |
-| [`OPERATIONS.md`](./OPERATIONS.md) | Day-to-day operations: health, log shipping, key rotation, restore drills, container resource limits |
+| [`OPERATIONS.md`](./OPERATIONS.md) | Day-to-day operations: health, log shipping, updating, key rotation, restore drills, container resource limits |
 | [`INVOICING.md`](./INVOICING.md) | The invoicing contract: JSON shapes, endpoints, VAT rules, e-invoice export, document archive, extension points (Phase 5) |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Release history and what's changed since the last tagged release |
 || [`release-notes/v1.0.1.md`](./release-notes/v1.0.1.md) | Runtime, CI, and onboarding hardening (PRs #5, #7, #9, #10, #11, #12); operator follow-up steps for GHCR publish and Plunk workflow rename |

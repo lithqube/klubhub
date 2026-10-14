@@ -1,0 +1,27 @@
+meta {
+  name: Link contact to gig
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{baseUrl}}/api/v1/gigs/{{createdGigId}}/link-contact
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "contact_id": "{{contactId}}",
+    "role": "promoter"
+  }
+}
+
+assert {
+  res.status: eq 204
+}

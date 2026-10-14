@@ -1,0 +1,19 @@
+meta {
+  name: Deleted tracklist returns 404
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/tracklists/{{uploadedTracklistId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 404
+}

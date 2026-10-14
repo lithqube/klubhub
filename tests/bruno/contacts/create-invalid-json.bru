@@ -1,0 +1,23 @@
+meta {
+  name: Create contact rejects invalid JSON
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/contacts
+  body: text
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:text {
+  {not valid json
+}
+
+assert {
+  res.status: eq 400
+}

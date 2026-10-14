@@ -1,0 +1,19 @@
+meta {
+  name: Unknown tracklist returns 404
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/tracklists/11111111-1111-1111-1111-111111111111
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 404
+}

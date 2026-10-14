@@ -1,0 +1,15 @@
+meta {
+  name: Delete gig
+  type: http
+  seq: 21
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/gigs/{{createdGigId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 204
+}

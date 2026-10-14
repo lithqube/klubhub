@@ -1,0 +1,37 @@
+meta {
+  name: Create contact
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/contacts
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bruno Contact",
+    "email": "bruno@example.org",
+    "phone": "+49 30 999",
+    "type": "promoter",
+    "notes": "created by the Bruno collection"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.name: eq Bruno Contact
+  res.body.type: eq promoter
+  res.body.id: isNotEmpty
+}
+
+script:post-response {
+  bru.setVar("createdContactId", res.getBody().id);
+}

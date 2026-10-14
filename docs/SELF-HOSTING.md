@@ -50,6 +50,9 @@ Every option can also be given as `KLUBHUB_<OPTION>` in the environment. Setting
 ~/klubhub/klubhub config            # saved settings (secrets masked)
 ~/klubhub/klubhub set dj LOG_LEVEL=debug   # change a setting and apply it
 ~/klubhub/klubhub update            # newest main (or: update <ref>)
+~/klubhub/klubhub update --release  # newest v* release tag
+~/klubhub/klubhub backup            # snapshot data + secrets to .local/backups/
+~/klubhub/klubhub rollback          # restore the previous version (one step back)
 ~/klubhub/klubhub backup-info       # what to back up
 ```
 
@@ -216,7 +219,7 @@ Development and production use different Compose project names and project-scope
 4. Check the resolved volume mounts and project name before starting the replacement. Never run two database containers against the same PostgreSQL volume.
 5. Select a published compatible image, then start the chosen deployment. Verify health, existing records, stored objects, and rendering before removing any old resources.
 
-For later upgrades within the same project, back up first, select the new `IMAGE_TAG`, and rerun production setup with the same configuration overrides. Database migrations may make an image-only rollback unsafe; retain a compatible data backup and previous configuration.
+For later upgrades within the same project, `./klubhub update` (or `update --release` to pin to the newest `v*` tag) backs up the databases, Garage storage and secrets to `.local/backups/<timestamp>/` first, then rolls the containers to the new images and records the previous version. If a service does not become healthy after the update, the installer says so and points at `./klubhub rollback`, which restores the previous image tags and commit (one step back). Database migrations may make an image-only rollback unsafe; in that case also restore the matching backup from `.local/backups/`. Run `./klubhub backup` any time for a manual snapshot, and keep an offline copy of the secrets folders as `backup-info` describes. For the day-to-day update procedure and guidelines, see [Operations](./OPERATIONS.md#updating).
 
 `docker compose down` normally preserves named volumes. **`down -v` deletes them. Use it only for disposable data, never as an upgrade or routine troubleshooting step.** Do not remove the old project or its volumes until migration is verified.
 

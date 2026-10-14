@@ -1,0 +1,15 @@
+meta {
+  name: Delete venue
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/venues/{{createdVenueId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 204
+}

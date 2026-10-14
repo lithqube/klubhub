@@ -110,4 +110,138 @@ describe('useGuestStore', () => {
     expect((real.body as FormData).get('mapping')).toBeNull() // only generic sends a mapping
     expect(s.tickets).toEqual([ticket])
   })
+
+  it('defaults the import file name to export.csv', async () => {
+    fetchMock.mockResolvedValue({ dry_run: true, counts: {} })
+    const s = useGuestStore()
+    s.eventId = 'e1'
+    await s.importAttendees({ preset: 'dice', file: new Blob(['x']) })
+    const form = fetchMock.mock.calls[0]![1].body as FormData
+    expect((form.get('file') as File).name).toBe('export.csv')
+  })
+
+  it('records an ApiError when load fails', async () => {
+    fetchMock.mockRejectedValue({ statusCode: 403, data: { error: 'forbidden' } })
+    const s = useGuestStore()
+    await s.load('e1')
+    expect(s.error).toMatchObject({ error: 'forbidden', status: 403 })
+    expect(s.loading).toBe(false)
+    expect(s.eventId).toBe('e1')
+  })
+
+  it('refreshGuests is a no-op without an event', async () => {
+    const s = useGuestStore()
+    await s.refreshGuests()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refreshLists is a no-op without an event', async () => {
+    const s = useGuestStore()
+    await s.refreshLists()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refreshGuests applies the filter query and tolerates missing tickets', async () => {
+    fetchMock.mockResolvedValue({ guests: [], counts: { all: 0 } })
+    const s = useGuestStore()
+    s.eventId = 'e1'
+    s.tickets = [{ id: 'stale' } as never]
+    await s.refreshGuests({ status: 'going' })
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/events/e1/guests', { query: { status: 'going' } })
+    expect(s.tickets).toEqual([])
+  })
+
+  it('creates a list and appends it', async () => {
+    fetchMock.mockResolvedValue({ id: 'l9', name: 'Press' })
+    const s = useGuestStore()
+    s.eventId = 'e1'
+    const l = await s.createList({ name: 'Press' } as never)
+    const [url, opts] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/api/v1/events/e1/lists')
+    expect(opts.method).toBe('POST')
+    expect(opts.headers['X-KlubHub-CSRF']).toBe('1')
+    expect(s.lists).toEqual([l])
+  })
+
+  it('updates a list in place and refreshes guests', async () => {
+    fetchMock.mockImplementation((url: string, opts?: { method?: string }) =>
+      Promise.resolve(opts?.method === 'PUT' ? { id: 'l1', name: 'VIP' } : page))
+    const s = useGuestStore()
+    s.eventId = 'e1'
+    s.lists = [{ id: 'l1', name: 'Guest' } as never, { id: 'l2', name: 'Press' } as never]
+    const l = await s.updateList('l1', { name: 'VIP' } as never)
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/events/e1/lists/l1')
+    expect(l.name).toBe('VIP')
+    expect(s.lists.map(x => x.name)).toEqual(['VIP', 'Press'])
+    expect(fetchMock).toHaveBeenCalledTimes(2) // PUT + refreshGuests
+  })
+
+  it('manages allocations with CSRF and refreshes lists', async () => {
+    fetchMock.mockImplementation((url: string, opts?: { method?: string }) =>
+      Promise.resolve(opts?.method ? { id: 'a1', quota: 10 } : [{ id: 'l1' }]))
+    const s = useGuestStore()
+    s.eventId = 'e1'
+    await s.createAllocation('l1', { quota: 10 } as never)
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/events/e1/lists/l1/allocations')
+    expect(fetchMock.mock.calls[0]![1].method).toBe('POST')
+    await s.updateAllocation('l1', 'a1', { quota: 20 } as never)
+    expect(fetchMock.mock.calls[2]![0]).toBe('/api/v1/events/e1/lists/l1/allocations/a1')
+    expect(fetchMock.mock.calls[2]![1].method).toBe('PUT')
+    await s.revokeAllocation('l1', 'a1')
+    expect(fetchMock.mock.calls[4]![0]).toBe('/api/v1/events/e1/lists/l1/allocations/a1')
+    expect(fetchMock.mock.calls[4]![1].method).toBe('DELETE')
+    for (const call of fetchMock.mock.calls) {
+      if (call[1]?.method) expect(call[1].headers['X-KlubHub-CSRF']).toBe('1')
+    }
+  })
+
+  it('updates and deletes a guest, refreshing both views', async () => {
+    fetchMock.mockImplementation((url: string, opts?: { method?: string }) =>
+      Promise.resolve(opts?.method === 'PUT' ? { id: 'g1', name: 'Renamed' } : url.endsWith('/lists') ? [] : page))
+    const s = useGuestStore()
+    s.eventId = 'e1'
+    const g = await s.updateGuest('g1', { name: 'Renamed' } as never)
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/events/e1/guests/g1')
+    expect(g.name).toBe('Renamed')
+    fetchMock.mockClear()
+    fetchMock.mockImplementation((url: string) => Promise.resolve(url.endsWith('/lists') ? [] : page))
+    await s.deleteGuest('g1')
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/events/e1/guests/g1')
+    expect(fetchMock.mock.calls[0]![1].method).toBe('DELETE')
+    expect(fetchMock).toHaveBeenCalledTimes(3) // DELETE + refresh (guests + lists)
+  })
+
+  it('fetches standing lists and deletes one', async () => {
+    fetchMock.mockResolvedValue([{ id: 's1' }, { id: 's2' }])
+    const s = useGuestStore()
+    await s.fetchStanding()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/standing-lists', {})
+    expect(s.standing).toHaveLength(2)
+    fetchMock.mockResolvedValue(undefined)
+    await s.deleteStanding('s1')
+    expect(fetchMock.mock.calls[1]![0]).toBe('/api/v1/standing-lists/s1')
+    expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE')
+    expect(s.standing.map(x => x.id)).toEqual(['s2'])
+  })
+
+  it('fetchOverview loads rows and records failures', async () => {
+    fetchMock.mockResolvedValue([{ event_id: 'e1', going: 3 }])
+    const s = useGuestStore()
+    await s.fetchOverview()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/guests/overview', {})
+    expect(s.overview).toEqual([{ event_id: 'e1', going: 3 }])
+    expect(s.loading).toBe(false)
+
+    fetchMock.mockRejectedValue({ statusCode: 500, data: { error: 'boom' } })
+    await s.fetchOverview()
+    expect(s.error).toMatchObject({ error: 'boom', status: 500 })
+    expect(s.loading).toBe(false)
+  })
+
+  it('wraps action failures in an ApiError', async () => {
+    fetchMock.mockRejectedValue({ statusCode: 422, data: { error: 'invalid', field: 'name' } })
+    const s = useGuestStore()
+    s.eventId = 'e1'
+    await expect(s.createList({} as never)).rejects.toMatchObject({ error: 'invalid', field: 'name', status: 422 })
+  })
 })

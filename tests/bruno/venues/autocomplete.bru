@@ -1,0 +1,27 @@
+meta {
+  name: Venue autocomplete matches by name
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/venues/autocomplete?q=Bruno
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (!Array.isArray(body) || !body.some((v) => v.name === "Bruno Club 2")) {
+    throw new Error("autocomplete did not return the updated venue");
+  }
+}

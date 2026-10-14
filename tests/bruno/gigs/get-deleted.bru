@@ -1,0 +1,19 @@
+meta {
+  name: Deleted gig returns 404
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/api/v1/gigs/{{createdGigId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 404
+}

@@ -1,6 +1,6 @@
 module github.com/klubhub/dj/api
 
-go 1.26.6
+go 1.26.9
 
 require (
 	codeberg.org/go-pdf/fpdf v0.11.1
@@ -17,6 +17,7 @@ require (
 	github.com/pressly/goose/v3 v3.27.0
 	github.com/rs/zerolog v1.34.0
 	github.com/shopspring/decimal v1.4.0
+	github.com/speedata/einvoice v0.0.22
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.41.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.41.0
@@ -92,7 +93,6 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.2 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/speedata/cxpath v0.0.13 // indirect
-	github.com/speedata/einvoice v0.0.22 // indirect
 	github.com/speedata/goxml v1.0.11 // indirect
 	github.com/speedata/goxpath v1.0.19 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.3 // indirect
@@ -112,7 +112,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect

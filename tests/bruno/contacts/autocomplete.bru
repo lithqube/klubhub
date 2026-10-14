@@ -1,0 +1,27 @@
+meta {
+  name: Contact autocomplete matches by name
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/contacts/autocomplete?q=Bruno
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (!Array.isArray(body) || !body.some((c) => c.name === "Bruno Contact 2")) {
+    throw new Error("autocomplete did not return the updated contact");
+  }
+}

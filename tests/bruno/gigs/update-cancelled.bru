@@ -1,0 +1,32 @@
+meta {
+  name: Update gig status to cancelled
+  type: http
+  seq: 16
+}
+
+put {
+  url: {{baseUrl}}/api/v1/gigs/{{createdGigId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "status": "cancelled",
+    "updated_at": "{{createdGigUpdatedAt}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.status: eq cancelled
+}
+
+script:post-response {
+  bru.setVar("createdGigUpdatedAt", res.getBody().data.updated_at);
+}

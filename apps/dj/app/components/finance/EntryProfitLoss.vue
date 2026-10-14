@@ -43,6 +43,10 @@ const subtitle = computed(() => {
 })
 
 async function refresh(): Promise<void> {
+  // During SSR/prerender there is no API: skip the fetch so a failed request
+  // cannot store a FinanceApiError (Error subclass) in Pinia state and break
+  // Nuxt's payload serialization. The client fires the watcher on hydration.
+  if (import.meta.server) return
   if (mode.value === 'gig') {
     const id = props.gigId ?? props.gig?.id
     if (id) await store.refreshProfitLoss({ scope: 'gig', gig_id: id })
