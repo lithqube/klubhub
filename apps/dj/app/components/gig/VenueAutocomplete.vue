@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { useVenueStore } from '../../stores/venue'
 import { onClickOutside } from '@vueuse/core'
 import type { Venue } from '../../types/gig'

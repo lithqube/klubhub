@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { useContactStore } from '../../stores/contact'
 import { onClickOutside } from '@vueuse/core'
 import type { Contact } from '../../types/gig'
