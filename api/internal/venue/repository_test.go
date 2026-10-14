@@ -223,6 +223,10 @@ func TestRepositoryUpdate_PartialUpdateLeavesOtherFields(t *testing.T) {
 		t.Fatalf("Create failed: %v", err)
 	}
 
+	// Update sets updated_at = NOW(); let the clock advance past the create
+	// timestamp so the strict comparison below is meaningful.
+	time.Sleep(50 * time.Millisecond)
+
 	updated, err := repo.Update(ctx, created.ID, &venue.VenueUpdate{Name: strPtr("Funkhaus 2")})
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
@@ -239,8 +243,8 @@ func TestRepositoryUpdate_PartialUpdateLeavesOtherFields(t *testing.T) {
 	if updated.Notes != "original notes" {
 		t.Errorf("notes = %q, want unchanged", updated.Notes)
 	}
-	if !updated.UpdatedAt.After(created.UpdatedAt) && !updated.UpdatedAt.Equal(created.UpdatedAt) {
-		t.Errorf("updated_at = %v, want >= created %v", updated.UpdatedAt, created.UpdatedAt)
+	if !updated.UpdatedAt.After(created.UpdatedAt) {
+		t.Errorf("updated_at = %v, want after created %v", updated.UpdatedAt, created.UpdatedAt)
 	}
 }
 

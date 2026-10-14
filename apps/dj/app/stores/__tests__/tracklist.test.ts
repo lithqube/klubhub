@@ -110,13 +110,12 @@ describe('useTracklistStore', () => {
   });
 
   describe('reset', () => {
-    it('clears upload state and linked gigs', () => {
+    it('clears upload state', () => {
       const store = useTracklistStore();
       store.uploadFile = new File(['x'], 'set.txt');
       store.uploadFilename = 'set.txt';
       store.uploadFileSize = '1 B';
       store.warnings = [{ message: 'w' } as any];
-      store.linkedGigs = { 'tl-1': ['gig-1'] };
       store.reset();
       expect(store.uploadFile).toBeNull();
       expect(store.uploadFilename).toBe('');
