@@ -28,11 +28,23 @@ export default defineConfig({
     url: 'http://localhost:4200',
     reuseExistingServer: true,
     cwd: workspaceRoot,
+    // serve-static rebuilds the Nuxt static bundle first, which can take
+    // longer than Playwright's 60s default webServer timeout.
+    timeout: 240_000,
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Set PLAYWRIGHT_CHANNEL=chrome to drive the system Chrome install
+        // on machines without the Playwright browser cache (e.g. macOS
+        // dev boxes): PLAYWRIGHT_CHANNEL=chrome pnpm exec nx run
+        // @dev/dj-e2e:e2e --project=chromium
+        ...(process.env['PLAYWRIGHT_CHANNEL']
+          ? { channel: process.env['PLAYWRIGHT_CHANNEL'] }
+          : {}),
+      },
     },
 
     {
