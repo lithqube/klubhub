@@ -221,7 +221,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: Two-sided booking outreach on a shared email platform — the DJ records open dates/cities, matches them against their own promoter contacts, and sends a personalized booking-request email with the EPK PDF attached (DJ app); the promoter records open slots on their events, matches them against their own talent contacts by city + genre, and sends a personalized booking-offer email (promoter app — the front half of P4 Bookings "Offers").
 
 **Depends on**: Phase 4 (contacts/venues/gigs), Phase 5 (Plunk email infra), Phase 3 (EPK exports); promoter side aligns with promoter plan P4 (`.claude/plans/promoter-app.plan.md`)
-**Requirements**: EMAIL-01..04, AVAIL-01..03, OUTR-01..08 (DJ app); TALENT-01..03, OSLOT-01..02, OFFER-01..07 (promoter app) — indexed in the phase `CONTEXT.md`
+**Requirements**: EMAIL-01..04, AVAIL-01..03, OUTR-01..09 (DJ app); TALENT-01..03, OSLOT-01..02, OFFER-01..10 (promoter app) — indexed in the phase `CONTEXT.md`
 **Status**: Planned
 **Spec**: `.planning/phases/04.10-availability-outreach/04.10-SPEC.md`
 **Plans**: 04.10-01-PLAN.md … 04.10-05-PLAN.md
@@ -229,13 +229,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Key deliverables:**
 - Shared extraction: `api/internal/platform/email` + `api/internal/platform/docstore` moved out of `finance` (behavior-preserving); both binaries import them
 - DJ app: availability slots, city matching, outreach templates, booking requests with EPK PDF attach, suppressions, `/api/v1/outreach`, Outreach page (migrations 033–035)
-- Promoter app: `talent_contacts` (sealed PII + blind index), `event_open_slots`, offer templates, booking offers, suppressions, `/api/v1/bookings/*` behind the existing `booking.*` authz, Plunk config + per-tenant email worker, real Bookings page (migrations 00014–00017)
-- Compliance: B2B legitimate interest + LIA, opt-out footer + suppression lists, accurate sender identity, per-day rate caps, no scraped lists
+- Promoter app: `talent_contacts` (sealed PII + blind index), `event_open_slots`, offer templates, booking offers, suppressions, `/api/v1/bookings/*` behind the new `talent.*` authz actions (owner/admin/booker only — finance excluded) plus `booking.*` for slots/templates, sealed outbox (`email_messages` with `*_enc` columns via a FieldCodec), Plunk config + per-tenant email worker, real Bookings page (migrations 00014–00017)
+- Compliance: B2B legitimate interest + LIA, opt-out footer + suppression lists + one-click "Do not contact" in the sent-log UI, accurate sender identity + ReplyTo to the sender's own mailbox, race-free per-day rate caps, `{{venue}}` location privacy for secret/city_only events, no scraped lists
 
 **Notes:**
 - Wormhole / public-tunnel idea dropped (threat model, sealed PII)
 - Cross-tenant marketplace/directory deferred to Cloud; geo-radius matching deferred until lat/lng exist
-- Open question (SPEC §14 Q1): promoter DJ source = new `talent_contacts` (planned) vs reusing the consent-based audience CRM
+- SPEC v2.1 resolved Q1 (new `talent_contacts` table) and Q3 (new `talent.read`/`talent.write` authz actions); plans reconciled to v2.1
+- Pre-ship gate: confirm Plunk ToS allows B2B outreach; document that the unauthenticated DJ API's outreach sits behind reverse-proxy auth (SECURITY.md/SELF-HOSTING.md)
 
 ### Phase 5: Finance Tracker
 
