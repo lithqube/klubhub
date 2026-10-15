@@ -51,6 +51,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certifi
     && node /tmp/playwright-core/cli.js install --with-deps chromium \
     && chmod -R a+rX /opt/ms-playwright \
     && rm -rf /tmp/playwright-core /var/lib/apt/lists/*
+# The runtime only execs node and /api. Drop the base image's bundled
+# npm and corepack: unused here, and their dependencies carry fixable CVEs
+# (brace-expansion, ip-address, pacote, picomatch, sigstore) that fail
+# the Trivy gate.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 COPY --from=api-builder /out/api /api
 COPY --from=frontend-builder /repo/apps/dj/.output /opt/frontend
 COPY apps/dj/scripts/runtime.mjs /opt/runtime.mjs
