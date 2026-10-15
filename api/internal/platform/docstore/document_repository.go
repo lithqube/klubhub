@@ -1,4 +1,4 @@
-package finance
+package docstore
 
 import (
 	"context"
@@ -7,8 +7,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// pgUniqueViolation is the SQLSTATE Postgres returns for a unique-index
+// collision.
+const pgUniqueViolation = "23505"
+
+// isUniqueViolation reports whether err wraps a Postgres unique violation.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation
+}
 
 // DocumentRepository persists Document rows.
 type DocumentRepository struct {

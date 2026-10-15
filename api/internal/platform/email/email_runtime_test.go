@@ -1,32 +1,103 @@
-package finance
+package email
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"flag"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/testcontainers/testcontainers-go"
+	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/klubhub/dj/api/internal/platform/migrations"
+	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 )
 
-func TestRuntimeAgreementGenerationUnavailable(t *testing.T) {
-	svc := NewAgreementInstanceService(newFakeInstanceRepo(), newFakeTemplateRepo(), nil)
-	_, err := svc.GeneratePDF(context.Background(), uuid.New())
-	if err == nil || !strings.Contains(err.Error(), "not supported") {
-		t.Fatalf("expected explicit unsupported generation, got %v", err)
+// Real-Postgres coverage for the outbox runtime: claim semantics, worker
+// drain, provider acknowledgement handling and crash recovery. The DJ
+// migrations create the email_messages table this package persists to.
+
+var testPool *pgxpool.Pool
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	if os.Getenv("SKIP_INTEGRATION") == "1" || testing.Short() {
+		os.Exit(m.Run())
 	}
-	rec := httptest.NewRecorder()
-	NewAgreementInstanceHandler(svc).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/finance/agreements/instances/"+uuid.NewString(), nil))
-	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "not supported") {
-		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	container, err := tcpostgres.RunContainer(ctx,
+		testcontainers.WithImage("postgres:16-alpine"),
+		tcpostgres.WithDatabase("klubhub_email_test"),
+		tcpostgres.WithUsername("klubhub"),
+		tcpostgres.WithPassword("test"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(60*time.Second),
+		),
+	)
+	if err != nil {
+		println("testcontainers: cannot start postgres, skipping integration:", err.Error())
+		os.Exit(m.Run())
 	}
+
+	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		_ = container.Terminate(ctx)
+		println("testcontainers: connection string:", err.Error())
+		os.Exit(1)
+	}
+	db, err := sql.Open("pgx", connStr)
+	if err != nil {
+		_ = container.Terminate(ctx)
+		println("sql.Open:", err.Error())
+		os.Exit(1)
+	}
+	if err := migrations.RunMigrations(db); err != nil {
+		_ = db.Close()
+		_ = container.Terminate(ctx)
+		println("RunMigrations:", err.Error())
+		os.Exit(1)
+	}
+	_ = db.Close()
+	testPool, err = pgxpool.New(ctx, connStr)
+	if err != nil {
+		_ = container.Terminate(ctx)
+		println("pgxpool.New:", err.Error())
+		os.Exit(1)
+	}
+
+	code := m.Run()
+	testPool.Close()
+	_ = container.Terminate(context.Background())
+	os.Exit(code)
+}
+
+// newTestRepo builds the DJ-side repository: plaintext columns, no tenant
+// scoping (tenantScoped=false).
+func newTestRepo() *EmailRepository {
+	return NewEmailRepository(tenantdb.New(testPool), false)
 }
 
 const runtimePlunkAck = `{"success":true,"data":{"emails":[{"contact":{"email":"to@example.com"},"email":"ac32f08e-c6b9-45d3-9824-a73dff1e3bbf"}],"timestamp":"2025-01-15T10:30:00.000Z"}}`
+
+func runtimeEmailRequest() CreateEmailRequest {
+	return CreateEmailRequest{Kind: testKindInvoiceIssued, FromEmail: "from@example.com", ToEmail: "to@example.com", Subject: "test", Body: "test"}
+}
 
 func TestRuntimePlunkAcknowledgements(t *testing.T) {
 	for _, body := range []string{"", "<html>proxy</html>", `{"success":true`, `{"success":false}`, `{"success":true}`, `{"success":true,"data":{"emails":[]}}`, runtimePlunkAck + "{}", runtimePlunkAck + strings.Repeat(" ", maxPlunkResponseBytes)} {
@@ -72,7 +143,7 @@ func TestRuntimeInitialAttemptCount(t *testing.T) {
 	if testPool == nil {
 		t.Fatal("postgres required")
 	}
-	repo := NewEmailRepository(testPool)
+	repo := newTestRepo()
 	sender := newFakeSMTPSender()
 	sender.Reset(true, errors.New("local failure"))
 	msg, err := NewEmailService(repo, sender).Send(context.Background(), runtimeEmailRequest())
@@ -96,7 +167,7 @@ func TestRuntimeQueuedCrashRecovery(t *testing.T) {
 		t.Fatal("postgres required")
 	}
 	ctx := context.Background()
-	repo := NewEmailRepository(testPool)
+	repo := newTestRepo()
 	svc := NewEmailService(repo, newFakeSMTPSender())
 	msg, err := svc.Enqueue(ctx, runtimeEmailRequest())
 	if err != nil {
@@ -189,7 +260,7 @@ func TestRuntimeWorkerCancelsAndDrains(t *testing.T) {
 	}))
 	defer server.Close()
 	defer close(released)
-	repo := NewEmailRepository(testPool)
+	repo := newTestRepo()
 	svc := NewEmailService(repo, NewPlunkSender(PlunkConfig{BaseURL: server.URL}))
 	msg, err := svc.Enqueue(ctx, runtimeEmailRequest())
 	if err != nil {
@@ -251,7 +322,7 @@ func TestRuntimePostDeliveryPersistenceFailureRecovery(t *testing.T) {
 		t.Fatal("postgres required")
 	}
 	ctx := context.Background()
-	repo := &runtimeFailFinalizationRepo{EmailRepository: NewEmailRepository(testPool), fail: true}
+	repo := &runtimeFailFinalizationRepo{EmailRepository: newTestRepo(), fail: true}
 	var keys []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("Idempotency-Key")
@@ -307,7 +378,7 @@ func TestRuntimeInitialSendIsExclusivelyClaimed(t *testing.T) {
 		t.Fatal("postgres required")
 	}
 	ctx := context.Background()
-	repo := NewEmailRepository(testPool)
+	repo := newTestRepo()
 	entered := make(chan string, 1)
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -361,8 +432,8 @@ func TestRuntimeExpiredProviderKeyRequiresReview(t *testing.T) {
 		t.Fatal("postgres required")
 	}
 	ctx := context.Background()
-	repo := NewEmailRepository(testPool)
-	msg, err := repo.Create(ctx, &EmailMessage{Kind: EmailKindInvoiceIssued, FromEmail: "from@example.com", ToEmail: "to@example.com", Subject: "test", Body: "test", Status: EmailStatusFailed, Attempts: 1})
+	repo := newTestRepo()
+	msg, err := repo.Create(ctx, &EmailMessage{Kind: testKindInvoiceIssued, FromEmail: "from@example.com", ToEmail: "to@example.com", Subject: "test", Body: "test", Status: EmailStatusFailed, Attempts: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,39 +480,6 @@ func TestRuntimePlunkReadFailureAndUndocumentedStatuses(t *testing.T) {
 	}
 }
 
-func TestRuntimeAgreementGenerationDoesNotWriteArtifacts(t *testing.T) {
-	if testing.Short() {
-		t.Skip("real migrated postgres")
-	}
-	if testPool == nil {
-		t.Fatal("postgres required")
-	}
-	ctx := context.Background()
-	var before, after int
-	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM documents`).Scan(&before); err != nil {
-		t.Fatal(err)
-	}
-	// A configured real repository and document service still cannot enable the stub.
-	svc := NewAgreementInstanceService(NewAgreementInstanceRepository(testPool), NewAgreementTemplateRepository(testPool), NewDocumentService(NewDocumentRepository(testPool), nil, "fixture"))
-	for range 3 {
-		rec := httptest.NewRecorder()
-		NewAgreementInstanceHandler(svc).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/finance/agreements/instances/"+uuid.NewString(), nil))
-		if rec.Code != 503 || !strings.Contains(rec.Body.String(), "generation_unsupported") {
-			t.Fatalf("dishonest generation %d %s", rec.Code, rec.Body.String())
-		}
-	}
-	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM documents`).Scan(&after); err != nil {
-		t.Fatal(err)
-	}
-	if before != after {
-		t.Fatalf("orphan artifact created: before=%d after=%d", before, after)
-	}
-}
-
-func runtimeEmailRequest() CreateEmailRequest {
-	return CreateEmailRequest{Kind: EmailKindInvoiceIssued, FromEmail: "from@example.com", ToEmail: "to@example.com", Subject: "test", Body: "test"}
-}
-
 func TestRuntimeAttachmentsRejectedBeforeEnqueue(t *testing.T) {
 	repo := newFakeEmailRepo()
 	sender := newFakeSMTPSender()
@@ -454,12 +492,6 @@ func TestRuntimeAttachmentsRejectedBeforeEnqueue(t *testing.T) {
 	}
 	if len(repo.messages) != 0 || sender.sentCount() != 0 {
 		t.Fatal("unsupported attachment caused side effects")
-	}
-	body := `{"kind":"invoice_issued","from_email":"from@example.com","to_email":"to@example.com","subject":"test","body":"test","attachment_ids":["` + req.AttachmentIDs[0].String() + `"]}`
-	rec := httptest.NewRecorder()
-	NewEmailHandler(svc).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/finance/emails", strings.NewReader(body)))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

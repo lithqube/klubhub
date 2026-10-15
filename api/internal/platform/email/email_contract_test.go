@@ -1,4 +1,4 @@
-package finance
+package email
 
 import (
 	"context"
@@ -11,6 +11,19 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// Test kinds for the open kind registry. platform/email registers no kinds
+// itself; consumers do. These stand in for finance's invoice_*/agreement_*
+// kinds so the moved contract tests exercise the same validation paths.
+const (
+	testKindInvoiceIssued EmailKind = "test_invoice_issued"
+	testKindAgreementSent EmailKind = "test_agreement_sent"
+)
+
+func init() {
+	RegisterKind(testKindInvoiceIssued)
+	RegisterKind(testKindAgreementSent)
+}
 
 // fakeSMTPSender is an in-memory SMTPSender for tests. Safe for concurrent
 // use (RetryFailed's concurrency tests deliver from multiple goroutines).
@@ -213,7 +226,7 @@ func TestEmailService_SendSuccess(t *testing.T) {
 
 	ownerID := uuid.New()
 	req := CreateEmailRequest{
-		Kind:      EmailKindInvoiceIssued,
+		Kind:      testKindInvoiceIssued,
 		OwnerType: "invoice",
 		OwnerID:   &ownerID,
 		FromEmail: "noreply@klubhub.example",
@@ -247,7 +260,7 @@ func TestEmailService_SendFailure(t *testing.T) {
 
 	ownerID := uuid.New()
 	req := CreateEmailRequest{
-		Kind:      EmailKindInvoiceIssued,
+		Kind:      testKindInvoiceIssued,
 		OwnerType: "invoice",
 		OwnerID:   &ownerID,
 		FromEmail: "noreply@klubhub.example",
@@ -275,7 +288,7 @@ func TestEmailService_EnqueueWithoutSending(t *testing.T) {
 
 	ownerID := uuid.New()
 	req := CreateEmailRequest{
-		Kind:      EmailKindAgreementSent,
+		Kind:      testKindAgreementSent,
 		OwnerType: "agreement",
 		OwnerID:   &ownerID,
 		FromEmail: "noreply@klubhub.example",
@@ -305,7 +318,7 @@ func TestEmailService_RetryFailed(t *testing.T) {
 	ownerID := uuid.New()
 	msg := &EmailMessage{
 		ID:        uuid.New(),
-		Kind:      EmailKindInvoiceIssued,
+		Kind:      testKindInvoiceIssued,
 		OwnerType: "invoice",
 		OwnerID:   &ownerID,
 		FromEmail: "noreply@klubhub.example",
@@ -345,7 +358,7 @@ func TestEmailService_RetryFailed_ConcurrentDoesNotDoubleDeliver(t *testing.T) {
 		ownerID := uuid.New()
 		msg := &EmailMessage{
 			ID:        uuid.New(),
-			Kind:      EmailKindInvoiceIssued,
+			Kind:      testKindInvoiceIssued,
 			OwnerType: "invoice",
 			OwnerID:   &ownerID,
 			FromEmail: "noreply@klubhub.example",
@@ -410,7 +423,7 @@ func TestEmailService_RetryFailed_RequeuesStaleSendingRows(t *testing.T) {
 	ownerID := uuid.New()
 	stuck := &EmailMessage{
 		ID:        uuid.New(),
-		Kind:      EmailKindInvoiceIssued,
+		Kind:      testKindInvoiceIssued,
 		OwnerType: "invoice",
 		OwnerID:   &ownerID,
 		FromEmail: "noreply@klubhub.example",
@@ -448,7 +461,7 @@ func TestEmailService_RetryFailed_RequeuesStaleSendingRows(t *testing.T) {
 	recentOwner := uuid.New()
 	recent := &EmailMessage{
 		ID:        uuid.New(),
-		Kind:      EmailKindInvoiceIssued,
+		Kind:      testKindInvoiceIssued,
 		OwnerType: "invoice",
 		OwnerID:   &recentOwner,
 		FromEmail: "noreply@klubhub.example",
@@ -483,7 +496,7 @@ func TestEmailService_RetryFailed_RespectsMaxAttempts(t *testing.T) {
 	ownerID := uuid.New()
 	exhausted := &EmailMessage{
 		ID:        uuid.New(),
-		Kind:      EmailKindInvoiceIssued,
+		Kind:      testKindInvoiceIssued,
 		OwnerType: "invoice",
 		OwnerID:   &ownerID,
 		FromEmail: "noreply@klubhub.example",
@@ -533,7 +546,7 @@ func TestEmailValidation_RejectInvalidEmail(t *testing.T) {
 		{
 			"missing to_email",
 			CreateEmailRequest{
-				Kind:      EmailKindInvoiceIssued,
+				Kind:      testKindInvoiceIssued,
 				FromEmail: "a@b.com",
 				ToEmail:   "",
 				Subject:   "x",
@@ -543,7 +556,7 @@ func TestEmailValidation_RejectInvalidEmail(t *testing.T) {
 		{
 			"missing from_email",
 			CreateEmailRequest{
-				Kind:      EmailKindInvoiceIssued,
+				Kind:      testKindInvoiceIssued,
 				FromEmail: "",
 				ToEmail:   "c@d.com",
 				Subject:   "x",
@@ -553,7 +566,7 @@ func TestEmailValidation_RejectInvalidEmail(t *testing.T) {
 		{
 			"missing subject",
 			CreateEmailRequest{
-				Kind:      EmailKindInvoiceIssued,
+				Kind:      testKindInvoiceIssued,
 				FromEmail: "a@b.com",
 				ToEmail:   "c@d.com",
 				Subject:   "",
@@ -563,7 +576,7 @@ func TestEmailValidation_RejectInvalidEmail(t *testing.T) {
 		{
 			"missing body",
 			CreateEmailRequest{
-				Kind:      EmailKindInvoiceIssued,
+				Kind:      testKindInvoiceIssued,
 				FromEmail: "a@b.com",
 				ToEmail:   "c@d.com",
 				Subject:   "x",
@@ -585,7 +598,7 @@ func TestEmailValidation_RejectInvalidEmail(t *testing.T) {
 
 func TestEmailValidation_AcceptsMinimalValid(t *testing.T) {
 	req := CreateEmailRequest{
-		Kind:      EmailKindInvoiceIssued,
+		Kind:      testKindInvoiceIssued,
 		FromEmail: "a@b.com",
 		ToEmail:   "c@d.com",
 		Subject:   "x",
@@ -604,7 +617,7 @@ func TestEmailValidation_AcceptsMinimalValid(t *testing.T) {
 func TestEmailValidation_RejectsHeaderInjection(t *testing.T) {
 	base := func() CreateEmailRequest {
 		return CreateEmailRequest{
-			Kind:      EmailKindInvoiceIssued,
+			Kind:      testKindInvoiceIssued,
 			FromEmail: "a@b.com",
 			FromName:  "KlubHub",
 			ToEmail:   "c@d.com",
@@ -660,18 +673,27 @@ func TestEmailKind_IsValid(t *testing.T) {
 		kind  EmailKind
 		valid bool
 	}{
-		{EmailKindInvoiceIssued, true},
-		{EmailKindInvoicePaid, true},
-		{EmailKindInvoiceCancelled, true},
-		{EmailKindAgreementSent, true},
-		{EmailKindAgreementSigned, true},
-		{EmailKindAgreementCompleted, true},
+		{testKindInvoiceIssued, true},
+		{testKindAgreementSent, true},
 		{EmailKind("invalid"), false},
+		{EmailKind(""), false},
 	}
 	for _, tt := range tests {
 		if got := tt.kind.IsValid(); got != tt.valid {
 			t.Errorf("%s: got %v, want %v", tt.kind, got, tt.valid)
 		}
+	}
+}
+
+// TestEmailKind_RegistryIsOpen verifies the registry mechanics: an
+// unregistered kind is invalid, and a kind registered later becomes valid.
+func TestEmailKind_RegistryIsOpen(t *testing.T) {
+	if EmailKind("never_registered").IsValid() {
+		t.Error("unregistered kind reported valid")
+	}
+	RegisterKind("test_late_registration")
+	if !EmailKind("test_late_registration").IsValid() {
+		t.Error("registered kind reported invalid")
 	}
 }
 

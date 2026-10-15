@@ -23,10 +23,13 @@ import (
 	"github.com/klubhub/dj/api/internal/gig"
 	"github.com/klubhub/dj/api/internal/platform/config"
 	"github.com/klubhub/dj/api/internal/platform/db"
+	"github.com/klubhub/dj/api/internal/platform/docstore"
+	"github.com/klubhub/dj/api/internal/platform/email"
 	apphttp "github.com/klubhub/dj/api/internal/platform/http"
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/migrations"
 	"github.com/klubhub/dj/api/internal/platform/storage"
+	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/ra"
 	"github.com/klubhub/dj/api/internal/rider"
 	"github.com/klubhub/dj/api/internal/settings"
@@ -460,7 +463,7 @@ func newInvoiceService(cfg *config.Config, pool *pgxpool.Pool, storeClient *stor
 		logger.Info().Msg("e-invoice export disabled: EINVOICE_URL is not set")
 	}
 	if storeClient != nil {
-		invoiceSvc.WithArchive(finance.NewDocumentService(finance.NewDocumentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket))
+		invoiceSvc.WithArchive(docstore.NewDocumentService(docstore.NewDocumentRepository(pool), docstore.NewStorageAdapter(storeClient), cfg.S3Bucket))
 	}
 	return billingSvc, invoiceSvc
 }
@@ -476,7 +479,7 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	// processors could each decide the same gig is "becoming paid"
 	// and double-book the income stream.
 	paymentSvc := finance.NewPaymentService(finance.NewPaymentRepositoryWithTransitionProcessor(pool, transitionProcessor))
-	docSvc := finance.NewDocumentService(finance.NewDocumentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)
+	docSvc := docstore.NewDocumentService(docstore.NewDocumentRepository(pool), docstore.NewStorageAdapter(storeClient), cfg.S3Bucket)
 	tplRepo := finance.NewAgreementTemplateRepository(pool)
 	tplSvc := finance.NewAgreementTemplateService(tplRepo)
 	instSvc := finance.NewAgreementInstanceService(finance.NewAgreementInstanceRepository(pool), tplRepo, docSvc)
@@ -485,20 +488,23 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	invoiceHandler := finance.NewInvoiceHandler(invoiceSvc)
 	var emailHandler nethttp.Handler
 	if cfg.PlunkBaseURL != "" && cfg.PlunkProjectID != "" && cfg.PlunkAPIKey != "" {
-		sender := finance.NewPlunkSender(finance.PlunkConfig{
+		sender := email.NewPlunkSender(email.PlunkConfig{
 			BaseURL:   cfg.PlunkBaseURL,
 			ProjectID: cfg.PlunkProjectID,
 			APIKey:    cfg.PlunkAPIKey,
 			FromEmail: cfg.PlunkFromEmail,
 			FromName:  cfg.PlunkFromName,
 		})
-		emailSvc := finance.NewEmailService(finance.NewEmailRepository(pool), sender)
+		// The DJ side wraps its pool with tenantdb.New and passes
+		// tenantScoped=false: plaintext columns, SQL byte-identical to the
+		// pre-extraction repository.
+		emailSvc := email.NewEmailService(email.NewEmailRepository(tenantdb.New(pool), false), sender)
 		emailHandler = finance.NewEmailHandler(emailSvc)
 		// Invoices go out with their archived PDF and e-invoice attached, which
 		// needs the document store the archive lives in. Set before the worker
 		// starts so retried messages can load their attachments too.
 		if storeClient != nil {
-			emailSvc.WithAttachments(docSvc)
+			emailSvc.WithAttachments(docstore.AttachmentSource{Svc: docSvc})
 			invoiceHandler.WithMailer(finance.NewInvoiceMailer(invoiceSvc, emailSvc, cfg.PlunkFromEmail, cfg.PlunkFromName))
 		}
 		if len(startWorker) > 0 {

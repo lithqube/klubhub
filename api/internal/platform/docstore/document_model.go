@@ -1,4 +1,4 @@
-package finance
+package docstore
 
 import (
 	"bytes"
@@ -46,6 +46,7 @@ const (
 	DocumentKindInvoicePDF       DocumentKind = "invoice_pdf"
 	DocumentKindEInvoiceXML      DocumentKind = "einvoice_xml"
 	DocumentKindValidationReport DocumentKind = "validation_report"
+	DocumentKindEPKPDF           DocumentKind = "epk_pdf"
 )
 
 // Document represents a stored file (PDF, image, etc.) in Garage S3.
@@ -235,7 +236,7 @@ func ValidateCreateDocumentRequest(req CreateDocumentRequest) error {
 		return fmt.Errorf("%w: owner_id is required", ErrDocumentValidation)
 	}
 	switch req.kindOrGeneral() {
-	case DocumentKindGeneral, DocumentKindInvoicePDF, DocumentKindEInvoiceXML, DocumentKindValidationReport:
+	case DocumentKindGeneral, DocumentKindInvoicePDF, DocumentKindEInvoiceXML, DocumentKindValidationReport, DocumentKindEPKPDF:
 	default:
 		return fmt.Errorf("%w: unknown kind %q", ErrDocumentValidation, req.Kind)
 	}

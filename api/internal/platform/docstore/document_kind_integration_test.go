@@ -1,4 +1,4 @@
-package finance
+package docstore
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ func putDoc(t *testing.T, svc *DocumentService, owner uuid.UUID, kind DocumentKi
 }
 
 func TestIntegration_Documents_KindsKeepSeparateVersions(t *testing.T) {
-	requireEntryPG(t)
+	requirePG(t)
 	svc := NewDocumentService(NewDocumentRepository(testPool), newFakeObjectStore(), "b")
 	owner := uuid.New()
 
@@ -51,7 +51,7 @@ func TestIntegration_Documents_KindsKeepSeparateVersions(t *testing.T) {
 }
 
 func TestIntegration_Documents_GeneralKeepsItsOldBehaviour(t *testing.T) {
-	requireEntryPG(t)
+	requirePG(t)
 	svc := NewDocumentService(NewDocumentRepository(testPool), newFakeObjectStore(), "b")
 	owner := uuid.New()
 	putDoc(t, svc, owner, "", "a")
@@ -64,7 +64,7 @@ func TestIntegration_Documents_GeneralKeepsItsOldBehaviour(t *testing.T) {
 }
 
 func TestIntegration_Documents_AreImmutable(t *testing.T) {
-	requireEntryPG(t)
+	requirePG(t)
 	ctx := context.Background()
 	svc := NewDocumentService(NewDocumentRepository(testPool), newFakeObjectStore(), "b")
 	d := putDoc(t, svc, uuid.New(), DocumentKindInvoicePDF, "x")
@@ -90,7 +90,7 @@ func TestIntegration_Documents_AreImmutable(t *testing.T) {
 }
 
 func TestIntegration_Documents_UnknownKindRejected(t *testing.T) {
-	requireEntryPG(t)
+	requirePG(t)
 	svc := NewDocumentService(NewDocumentRepository(testPool), newFakeObjectStore(), "b")
 	_, err := svc.Create(context.Background(), CreateDocumentRequest{
 		OwnerType: DocumentOwnerInvoice, OwnerID: uuid.New(), Kind: "nonsense", Filename: "f", MimeType: "x",

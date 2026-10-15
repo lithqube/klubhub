@@ -1,4 +1,4 @@
-package finance
+package email
 
 import (
 	"context"

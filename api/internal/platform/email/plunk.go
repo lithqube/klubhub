@@ -1,4 +1,4 @@
-package finance
+package email
 
 import (
 	"bytes"
@@ -21,6 +21,22 @@ import (
 // misconfigured self-hosted PLUNK_BASE_URL) could stream an unbounded
 // response and exhaust memory.
 const maxPlunkResponseBytes = 1 << 20 // 1 MiB
+
+// PlunkConfig holds Plunk credentials for delivery. Plunk is the open-source
+// email platform built on AWS SES (https://github.com/useplunk/plunk) that we
+// already use for the GitHub page. It exposes a public REST API:
+//
+//	POST {BaseURL}/v1/send
+//	Authorization: Bearer {APIKey}
+//	Content-Type: application/json
+//	Body: {"from": {...}, "to": "...", "subject": "...", "body": "...", ...}
+type PlunkConfig struct {
+	BaseURL   string // Plunk API base, e.g. "https://next-api.useplunk.com" or a self-hosted equivalent
+	ProjectID string // retained for configuration compatibility; project is derived from API key
+	APIKey    string // Bearer token
+	FromEmail string // default sender (override-able per message)
+	FromName  string
+}
 
 // PlunkSender is the EmailSender implementation that delivers transactional
 // emails through Plunk (https://github.com/useplunk/plunk) — the open-source

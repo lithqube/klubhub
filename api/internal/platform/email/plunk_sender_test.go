@@ -1,4 +1,4 @@
-package finance
+package email
 
 import (
 	"bytes"
@@ -230,7 +230,7 @@ func TestEmailService_PlunkWiring(t *testing.T) {
 
 	ownerID := uuid.New()
 	req := CreateEmailRequest{
-		Kind:      EmailKindInvoiceIssued,
+		Kind:      testKindInvoiceIssued,
 		OwnerType: "invoice",
 		OwnerID:   &ownerID,
 		FromEmail: "noreply@klubhub.example",

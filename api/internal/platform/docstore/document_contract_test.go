@@ -1,4 +1,4 @@
-package finance
+package docstore
 
 import (
 	"bytes"
