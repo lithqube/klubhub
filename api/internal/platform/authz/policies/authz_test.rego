@@ -115,6 +115,39 @@ test_event_purge_is_not_for_planners_or_door if {
 	d.deny_reason == "no_role_grant"
 }
 
+# Talent PII (the promoter's DJ book, SPEC §6.2 v2.1 Q3): owner/admin via
+# known_actions, booker explicitly — NOT finance (holds booking.read for
+# artist_fee but must not read talent PII), NOT marketing, NOT door.
+test_talent_actions_are_for_owner_admin_and_booker if {
+	every role in ["owner", "admin", "booker"] {
+		every action in ["talent.read", "talent.write"] {
+			authz.decision.allow with input as base([role], action)
+		}
+	}
+}
+
+test_talent_actions_are_denied_for_finance_marketing_and_door if {
+	every role in ["finance", "marketing"] {
+		every action in ["talent.read", "talent.write"] {
+			d := authz.decision with input as base([role], action)
+			not d.allow
+			d.deny_reason == "no_role_grant"
+		}
+	}
+	d := authz.decision with input as json.patch(base(["door"], "talent.read"), [
+		{"op": "add", "path": "/principal/event_scope", "value": "e1"},
+		{"op": "add", "path": "/resource/event_id", "value": "e1"},
+	])
+	d.deny_reason == "no_role_grant"
+}
+
+test_finance_reads_bookings_but_not_talent if {
+	authz.decision.allow with input as base(["finance"], "booking.read")
+	d := authz.decision with input as base(["finance"], "talent.read")
+	not d.allow
+	d.deny_reason == "no_role_grant"
+}
+
 # A confirmed retention change that erases ended events at once (P2.5) is
 # authorised again as event.purge on the org: same roles, same step-up.
 org_purge(roles) := json.patch(base(roles, "event.purge"), [{"op": "replace", "path": "/resource/type", "value": "org"}])

@@ -106,10 +106,13 @@ func (r *EmailRepository) createTenantScoped(ctx context.Context, msg *EmailMess
 	if !ok {
 		return nil, tenantdb.ErrNoTenant
 	}
+	// The id is client-supplied (msg.ID): the FieldCodec seals the PII
+	// columns with RowID = msg.ID as AAD, so the stored row must carry the
+	// same id the values were sealed for.
 	const sql = `
-		INSERT INTO email_messages (tenant_id, kind, owner_type, owner_id, from_email, from_name,
+		INSERT INTO email_messages (id, tenant_id, kind, owner_type, owner_id, from_email, from_name,
 			to_email_enc, to_email_bidx, subject_enc, body_enc, body_html_enc, attachment_ids, status, attempts, reply_to_enc)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		RETURNING id, tenant_id, kind, owner_type, owner_id, from_email, from_name,
 			to_email_enc, to_email_bidx, subject_enc, body_enc, body_html_enc, attachment_ids, reply_to_enc,
 			status, sent_at, last_error, attempts, created_at, updated_at
@@ -147,7 +150,7 @@ func (r *EmailRepository) createTenantScoped(ctx context.Context, msg *EmailMess
 			replyToEnc = []byte(msg.ReplyTo)
 		}
 		if err := tx.QueryRow(ctx, sql,
-			tenantID, msg.Kind, ownerType, msg.OwnerID, msg.FromEmail, msg.FromName,
+			msg.ID, tenantID, msg.Kind, ownerType, msg.OwnerID, msg.FromEmail, msg.FromName,
 			toEnc, toBidx, subjectEnc, bodyEnc, bodyHTMLEnc, attachments,
 			msg.Status, msg.Attempts, replyToEnc,
 		).Scan(

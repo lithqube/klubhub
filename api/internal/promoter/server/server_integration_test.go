@@ -25,6 +25,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/envelope"
 	"github.com/klubhub/dj/api/internal/platform/pgtest"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/bookings"
 	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/audience"
@@ -116,6 +117,8 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 		Reports:   report.NewHandler(report.NewService(db, keys, nil)),
 		Retention: retention.NewHandler(retention.NewService(db, nil)),
 		Sealed:    sealed.NewHandler(sealed.NewService(db, keys, nil)),
+		// Emails are nil (Plunk unconfigured): reads work, sends answer 503.
+		Bookings: bookings.NewHandler(bookings.NewService(db, keys, nil, bookings.ServiceConfig{}, nil)),
 	})
 	lastRegistry = reg
 	return mux, svc, func() []error { return authz.VerifyCoverage(context.Background(), mux, reg) }
@@ -163,6 +166,26 @@ func TestEveryRouteHasAPolicyDecision(t *testing.T) {
 		{Method: http.MethodPost, Pattern: "/api/v1/audience/segments", Action: "audience.write"},
 		{Method: http.MethodPut, Pattern: "/api/v1/audience/segments/{segmentID}", Action: "audience.write"},
 		{Method: http.MethodDelete, Pattern: "/api/v1/audience/segments/{segmentID}", Action: "audience.write"},
+		// P4 bookings outreach (04.10): talent.* guards talent PII, booking.* the booking work.
+		{Method: http.MethodGet, Pattern: "/api/v1/bookings/talent", Action: "talent.read"},
+		{Method: http.MethodPost, Pattern: "/api/v1/bookings/talent", Action: "talent.write"},
+		{Method: http.MethodPut, Pattern: "/api/v1/bookings/talent/{contactID}", Action: "talent.write"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/bookings/talent/{contactID}", Action: "talent.write"},
+		{Method: http.MethodPost, Pattern: "/api/v1/bookings/talent/{contactID}/suppress", Action: "talent.write"},
+		{Method: http.MethodGet, Pattern: "/api/v1/bookings/events/{eventID}/slots", Action: "booking.read"},
+		{Method: http.MethodPost, Pattern: "/api/v1/bookings/events/{eventID}/slots", Action: "booking.write"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/bookings/slots/{slotID}", Action: "booking.write"},
+		{Method: http.MethodGet, Pattern: "/api/v1/bookings/slots/{slotID}/matches", Action: "talent.read"},
+		{Method: http.MethodGet, Pattern: "/api/v1/bookings/templates", Action: "booking.read"},
+		{Method: http.MethodPost, Pattern: "/api/v1/bookings/templates", Action: "booking.write"},
+		{Method: http.MethodPut, Pattern: "/api/v1/bookings/templates/{templateID}", Action: "booking.write"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/bookings/templates/{templateID}", Action: "booking.write"},
+		{Method: http.MethodPost, Pattern: "/api/v1/bookings/offers", Action: "talent.write"},
+		{Method: http.MethodGet, Pattern: "/api/v1/bookings/offers", Action: "talent.read"},
+		{Method: http.MethodGet, Pattern: "/api/v1/bookings/offers/{offerID}", Action: "talent.read"},
+		{Method: http.MethodGet, Pattern: "/api/v1/bookings/suppressions", Action: "talent.read"},
+		{Method: http.MethodPost, Pattern: "/api/v1/bookings/suppressions", Action: "talent.write"},
+		{Method: http.MethodDelete, Pattern: "/api/v1/bookings/suppressions/{suppressionID}", Action: "talent.write"},
 	} {
 		got, ok := lastRegistry.Lookup(want.Method, want.Pattern)
 		if !ok || got.Public || got.Action != want.Action {

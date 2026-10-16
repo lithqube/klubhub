@@ -1146,7 +1146,7 @@ function personalRows(eventId: string): number {
 
 /** Anonymise one event in place; returns rows touched per table. */
 function purge(eventId: string, trigger: PurgeRow['trigger'], at = new Date().toISOString()): PurgeRow {
-  const counts = { guests: 0, orders: 0, order_positions: 0, guest_allocations: 0, door_pins: 0 }
+  const counts = { guests: 0, orders: 0, order_positions: 0, guest_allocations: 0, door_pins: 0, outreach_requests: 0 }
   for (const g of guests.filter(x => x.event_id === eventId && !x.purged)) {
     Object.assign(g, { name: '', email: '', phone: '', note: '', purged: true })
     counts.guests++

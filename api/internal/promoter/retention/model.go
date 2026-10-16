@@ -3,8 +3,10 @@
 // 30 days, 1..365), then the event is anonymised in place. Every personal
 // column and blind index of its guests, orders and ticket positions, and
 // its allocations' submitter contacts, become NULL; the rows stay (marked
-// purged_at) so the post-event report keeps its numbers. Door PINs of the
-// event are deleted and its door sessions revoked.
+// purged_at) so the post-event report keeps its numbers. Door PINs and
+// outreach requests of the event are deleted (their personal columns are
+// NOT NULL, so the rows cannot be anonymised in place) and its door
+// sessions revoked.
 //
 // Contract: .claude/plans/promoter-p2-guests-door.plan.md, "P2.5 contract".
 //
@@ -93,14 +95,16 @@ func Ended(startsAt time.Time, endsAt *time.Time, now time.Time) bool {
 	return !now.Before(EndOf(startsAt, endsAt))
 }
 
-// Counts are the rows anonymised per table by one purge (door_pins:
-// deleted). Stored in event_purges.counts and the audit entry.
+// Counts are the rows anonymised per table by one purge (door_pins and
+// outreach_requests: deleted). Stored in event_purges.counts and the audit
+// entry.
 type Counts struct {
 	Guests           int `json:"guests"`
 	Orders           int `json:"orders"`
 	OrderPositions   int `json:"order_positions"`
 	GuestAllocations int `json:"guest_allocations"`
 	DoorPins         int `json:"door_pins"`
+	OutreachRequests int `json:"outreach_requests"`
 }
 
 // Upcoming is an ended or running event not purged yet. Timezone is the

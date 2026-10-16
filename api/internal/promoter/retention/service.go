@@ -390,8 +390,9 @@ func lockEvent(ctx context.Context, tx pgx.Tx, eventID uuid.UUID) (eventRow, boo
 
 // purgeLocked anonymises the locked event: personal columns and blind
 // indexes become NULL (rows stay, with purged_at), allocation contacts are
-// erased, door PINs deleted and door sessions revoked. It records the purge
-// with counts, emits retention.purged (identifiers only) and audits it.
+// erased, door PINs and outreach requests deleted and door sessions
+// revoked. It records the purge with counts, emits retention.purged
+// (identifiers only) and audits it.
 func (s *Service) purgeLocked(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, e eventRow, days int, trigger, actor string, now time.Time) (PurgeResult, error) {
 	res := PurgeResult{TenantID: tenant, EventID: e.ID, PurgedAt: now, Trigger: trigger}
 	steps := []struct {
@@ -409,6 +410,9 @@ func (s *Service) purgeLocked(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, 
 		{&res.Counts.GuestAllocations, `UPDATE guest_allocations SET submitter_contact_enc = NULL
 		  WHERE event_id = $1 AND submitter_contact_enc IS NOT NULL`, []any{e.ID}},
 		{&res.Counts.DoorPins, `DELETE FROM door_pins WHERE event_id = $1`, []any{e.ID}},
+		// The sent log's recipient and rendered offer are sealed NOT NULL,
+		// so the rows are deleted rather than anonymised.
+		{&res.Counts.OutreachRequests, `DELETE FROM outreach_requests WHERE event_id = $1`, []any{e.ID}},
 	}
 	for _, st := range steps {
 		tag, err := tx.Exec(ctx, st.sql, st.args...)
@@ -443,8 +447,8 @@ func (s *Service) purgeLocked(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, 
 	c := res.Counts
 	err = audit.Record(ctx, tx, tenant, audit.Entry{
 		ActorID: actor, Action: "retention.purged", Resource: "event:" + e.ID.String(), Allowed: true,
-		Reason: fmt.Sprintf("%s: %d guests, %d orders, %d order positions, %d allocation contacts, %d door pins",
-			trigger, c.Guests, c.Orders, c.OrderPositions, c.GuestAllocations, c.DoorPins),
+		Reason: fmt.Sprintf("%s: %d guests, %d orders, %d order positions, %d allocation contacts, %d door pins, %d outreach requests",
+			trigger, c.Guests, c.Orders, c.OrderPositions, c.GuestAllocations, c.DoorPins, c.OutreachRequests),
 	})
 	return res, err
 }

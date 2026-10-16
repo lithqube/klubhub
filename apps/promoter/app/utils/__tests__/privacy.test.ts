@@ -78,8 +78,8 @@ describe('privacyBanner', () => {
 
 describe('countsText', () => {
   it('lists what was erased, singular and plural, zeros left out', () => {
-    expect(countsText({ guests: 12, order_positions: 1, orders: 0, guest_allocations: 2, door_pins: 1 }))
-      .toBe('12 guests · 1 ticket · 2 submitter contacts · 1 door PIN')
+    expect(countsText({ guests: 12, order_positions: 1, orders: 0, guest_allocations: 2, door_pins: 1, outreach_requests: 3 }))
+      .toBe('12 guests · 1 ticket · 2 submitter contacts · 1 door PIN · 3 outreach requests')
     expect(countsText({ guests: 1, orders: 3, checkins_kept: 5 })).toBe('1 guest · 3 orders · 5 other rows')
     expect(countsText({})).toBe('nothing to erase')
     expect(countsText(null)).toBe('nothing to erase')

@@ -21,6 +21,7 @@ import (
 	platformhttp "github.com/klubhub/dj/api/internal/platform/http"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/promoter/audience"
+	"github.com/klubhub/dj/api/internal/promoter/bookings"
 	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
@@ -49,6 +50,7 @@ type Deps struct {
 	Reports       *report.Handler
 	Retention     *retention.Handler
 	Sealed        *sealed.Handler
+	Bookings      *bookings.Handler
 	Origins       []string
 	ServeFrontend bool
 	NuxtURL       string
@@ -112,6 +114,9 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 	}
 	if d.Sealed != nil {
 		d.Sealed.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Bookings != nil {
+		d.Bookings.Mount(r, d.Authz, reg, onDeny)
 	}
 
 	notFound := func(w http.ResponseWriter, req *http.Request) {
