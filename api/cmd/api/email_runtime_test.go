@@ -59,7 +59,7 @@ func TestFinanceEmailRuntimeStartupAndDrain(t *testing.T) {
 	}))
 	defer provider.Close()
 	cfg := &config.Config{PlunkBaseURL: provider.URL, PlunkAPIKey: "local-fixture", PlunkProjectID: "fixture", PlunkFromEmail: "from@example.com"}
-	handler, done := buildFinanceRuntime(ctx, cfg, pool, nil, nil, silentLogger())
+	handler, _, done := buildFinanceRuntime(ctx, cfg, pool, nil, nil, silentLogger())
 	if handler == nil {
 		t.Fatal("no finance routes")
 	}

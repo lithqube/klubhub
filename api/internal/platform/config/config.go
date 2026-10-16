@@ -123,6 +123,18 @@ type Config struct {
 	PlunkFromEmail string `envconfig:"PLUNK_FROM_EMAIL" default:""`
 	PlunkFromName  string `envconfig:"PLUNK_FROM_NAME" default:""`
 
+	// Optional: DJ→promoter outreach (booking requests). Sends go through
+	// the same Plunk configuration above; when Plunk is unconfigured the
+	// outreach routes still serve reads and answer 503 on POST /requests.
+	// OUTREACH_FROM_NAME overrides PLUNK_FROM_NAME as the From display name.
+	OutreachFromName string `envconfig:"OUTREACH_FROM_NAME" default:""`
+	// OutreachMaxPerDay caps booking-request sends per local-midnight day
+	// (failed attempts count). The OSS DJ API is unauthenticated — the cap
+	// bounds the damage when the API is exposed (see SECURITY.md).
+	OutreachMaxPerDay int `envconfig:"OUTREACH_MAX_PER_DAY" default:"50"`
+	// EpkPublicURL fills the {{epk_link}} template variable (optional).
+	EpkPublicURL string `envconfig:"EPK_PUBLIC_URL" default:""`
+
 	// Optional: e-invoice generator sidecar (gflohr/e-invoice-eu) behind
 	// Factur-X / XRechnung export. It has no authentication: point this only at
 	// an address that nothing outside the stack can reach (the compose

@@ -54,6 +54,13 @@ KlubHub DJ is designed for **self-hosting by a single user or small team**:
 If you expose the stack to the internet, you are responsible for adding a
 reverse proxy, TLS, and authentication in front of it.
 
+The same applies to the outreach API (`/api/v1/outreach/*`): anyone who can
+reach `POST /api/v1/outreach/requests` can send mail from the DJ's Plunk
+identity with the EPK PDF attached. The per-day cap (`OUTREACH_MAX_PER_DAY`,
+default 50, counting failed attempts) bounds the damage, but the endpoint
+must sit behind the operator's reverse-proxy authentication, exactly as the
+finance email endpoints already must.
+
 ## KlubHub Promoter: security model
 
 Promoter holds other people's data (guest lists, audiences, artist fees,

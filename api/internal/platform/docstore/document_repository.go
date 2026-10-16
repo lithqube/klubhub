@@ -92,16 +92,25 @@ func (r *DocumentRepository) CreateWithDetails(ctx context.Context, req CreateDo
 	return &d, nil
 }
 
-// GetCurrent returns the latest version of a document for an owner.
+// GetCurrent returns the latest version of a document for an owner in the
+// 'general' kind stream.
 func (r *DocumentRepository) GetCurrent(ctx context.Context, ownerType DocumentOwnerType, ownerID uuid.UUID) (*Document, error) {
+	return r.GetCurrentByKind(ctx, ownerType, ownerID, DocumentKindGeneral)
+}
+
+// GetCurrentByKind returns the current document of one kind for an owner,
+// or ErrDocumentNotFound. Kind-aware so non-general streams (e.g. an EPK
+// pointer with kind 'epk_pdf') can be looked up without listing every
+// version.
+func (r *DocumentRepository) GetCurrentByKind(ctx context.Context, ownerType DocumentOwnerType, ownerID uuid.UUID, kind DocumentKind) (*Document, error) {
 	const sql = `
 		SELECT id, owner_type, owner_id, kind, storage_key, filename, mime_type,
 			size_bytes, checksum_sha256, version, uploaded_by, is_current, created_at
 		FROM documents
-		WHERE owner_type = $1 AND owner_id = $2 AND kind = 'general' AND is_current = true
+		WHERE owner_type = $1 AND owner_id = $2 AND kind = $3 AND is_current = true
 	`
 	var d Document
-	err := r.db.QueryRow(ctx, sql, ownerType, ownerID).Scan(
+	err := r.db.QueryRow(ctx, sql, ownerType, ownerID, kind).Scan(
 		&d.ID, &d.OwnerType, &d.OwnerID, &d.Kind, &d.StorageKey, &d.Filename, &d.MimeType,
 		&d.SizeBytes, &d.ChecksumSHA256, &d.Version, &d.UploadedBy, &d.IsCurrent, &d.CreatedAt)
 	if err != nil {
