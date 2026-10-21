@@ -132,8 +132,8 @@ func (s *Service) resolveTemplate(ctx context.Context, tx pgx.Tx, tenant uuid.UU
 
 // SendOffer sends one booking-offer email and logs it. The flow:
 // validate → load contact (must have an email, not suppressed) → slot
-// authorization (the slot's event must be the caller's — booking.write
-// semantics, SPEC §6.2 v2.1) → resolve the member's ReplyTo → resolve
+// tenancy check (the slot must be the caller's org's; the route's
+// talent.write is the only action gate) → resolve the member's ReplyTo → resolve
 // template + render → race-free daily cap + insert the request row in ONE
 // transaction → EmailService.Send → sync status onto the row.
 //
@@ -180,21 +180,22 @@ func (s *Service) SendOffer(ctx context.Context, p authz.Principal, in *SendOffe
 		if suppressed {
 			return ErrSuppressed
 		}
-		// 3. Slot authorization: the slot must be the tenant's own. RLS makes
-		// a cross-tenant slot invisible; ErrForbidden (not ErrNotFound) avoids
-		// leaking its existence (SPEC §6.2 v2.1).
+		// 3. Slot tenancy: the slot must be the tenant's own. RLS makes a
+		// cross-tenant slot invisible; ErrForbidden (not ErrNotFound) avoids
+		// leaking its existence. There is no per-slot action check: the
+		// route's talent.write is the only action gate.
 		var slot *OpenSlot
 		var ev *eventOffer
 		if in.OpenSlotID != nil {
-			s, err := getOpenSlot(ctx, tx, tenant, *in.OpenSlotID)
+			slotRow, err := getOpenSlot(ctx, tx, tenant, *in.OpenSlotID)
 			if err != nil {
 				return ErrForbidden
 			}
-			e, err := getEventForOffer(ctx, tx, tenant, s.EventID)
+			evRow, err := getEventForOffer(ctx, tx, tenant, slotRow.EventID)
 			if err != nil {
 				return err
 			}
-			slot, ev = &s, &e
+			slot, ev = &slotRow, &evRow
 		}
 		// 4. ReplyTo = the sending member's email (OFFER-06 v2.1). Orgs have
 		// no contact email (00007), so the member's address is where DJ
@@ -239,7 +240,7 @@ func (s *Service) SendOffer(ctx context.Context, p authz.Principal, in *SendOffe
 			promoterName = s.cfg.FromName
 		}
 		vars := offerVariables(orgName, promoterName, memberEmail, contact.Name, ev, slot, s.now())
-		subject = email.Render(subject, vars)
+		subject = email.RenderSubject(subject, vars)
 		body = email.Render(body, vars)
 		// 7. Seal the request row's PII (recipient + rendered copy).
 		rowID := uuid.New()
@@ -273,7 +274,7 @@ func (s *Service) SendOffer(ctx context.Context, p authz.Principal, in *SendOffe
 		// 8. Race-free per-tenant daily cap + insert in this transaction
 		// (SPEC §9 v2.1): the window is local midnight in the ORG's timezone;
 		// failed attempts count because the row is inserted before the send.
-		since := localMidnightIn(s.now(), orgTZ)
+		since := email.LocalMidnightIn(s.now(), orgTZ)
 		if err := insertOfferWithDailyCap(ctx, tx, tenant, offer, s.cfg.MaxPerDay, since); err != nil {
 			return err
 		}
@@ -314,14 +315,13 @@ func (s *Service) SendOffer(ctx context.Context, p authz.Principal, in *SendOffe
 		return nil, err
 	}
 	// 10. Sync the delivery status onto the row (a second scope: the send is
-	// done, the log row is not part of the send transaction).
+	// done, the log row is not part of the send transaction). Best-effort: the
+	// mail is out, and failing the call here would invite a retry and a
+	// duplicate offer; the outbox row (owner-linked) still carries the status.
 	status := string(msg.Status)
-	err = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
+	_ = s.db.WithTenant(ctx, tenant, func(tx pgx.Tx) error {
 		return updateOfferSent(ctx, tx, tenant, out.ID, &msg.ID, status, msg.SentAt)
 	})
-	if err != nil {
-		return nil, err
-	}
 	out.EmailMessageID = &msg.ID
 	out.Status = status
 	out.SentAt = msg.SentAt

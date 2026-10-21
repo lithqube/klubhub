@@ -410,6 +410,11 @@ func (s *Service) purgeLocked(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, 
 		{&res.Counts.GuestAllocations, `UPDATE guest_allocations SET submitter_contact_enc = NULL
 		  WHERE event_id = $1 AND submitter_contact_enc IS NOT NULL`, []any{e.ID}},
 		{&res.Counts.DoorPins, `DELETE FROM door_pins WHERE event_id = $1`, []any{e.ID}},
+		// The sealed outbox copies of the offers (recipient, subject, body,
+		// reply-to) go first, while the log rows still point at them.
+		{&res.Counts.EmailMessages, `DELETE FROM email_messages WHERE id IN (
+		  SELECT email_message_id FROM outreach_requests
+		  WHERE event_id = $1 AND email_message_id IS NOT NULL)`, []any{e.ID}},
 		// The sent log's recipient and rendered offer are sealed NOT NULL,
 		// so the rows are deleted rather than anonymised.
 		{&res.Counts.OutreachRequests, `DELETE FROM outreach_requests WHERE event_id = $1`, []any{e.ID}},

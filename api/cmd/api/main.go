@@ -30,7 +30,6 @@ import (
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/migrations"
 	"github.com/klubhub/dj/api/internal/platform/storage"
-	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 	"github.com/klubhub/dj/api/internal/ra"
 	"github.com/klubhub/dj/api/internal/rider"
 	"github.com/klubhub/dj/api/internal/settings"
@@ -477,10 +476,9 @@ func buildSharedEmailService(cfg *config.Config, pool *pgxpool.Pool, storeClient
 		FromEmail: cfg.PlunkFromEmail,
 		FromName:  cfg.PlunkFromName,
 	})
-	// The DJ side wraps its pool with tenantdb.New and passes
-	// tenantScoped=false: plaintext columns, SQL byte-identical to the
-	// pre-extraction repository.
-	emailSvc := email.NewEmailService(email.NewEmailRepository(tenantdb.New(pool), false), sender)
+	// The DJ side uses the plain repository over the raw pool: plaintext
+	// columns, SQL byte-identical to the pre-extraction repository.
+	emailSvc := email.NewEmailService(email.NewPlainEmailRepository(pool), sender)
 	if storeClient != nil {
 		emailSvc.WithAttachments(docstore.AttachmentSource{Svc: docSvc})
 	}

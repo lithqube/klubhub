@@ -18,7 +18,7 @@ import (
 // a nil *tenantdb.DB: any database access would panic, so a clean
 // tenantdb.ErrNoTenant return proves the guard fires first.
 func TestTenantScopedRepository_RequiresTenantInContext(t *testing.T) {
-	repo := NewEmailRepository(nil, true)
+	repo := NewEmailRepository(nil)
 	ctx := context.Background() // no tenant
 	id := uuid.New()
 	ownerID := uuid.New()
@@ -79,7 +79,7 @@ func TestTenantScopedRepository_RequiresTenantInContext(t *testing.T) {
 // be invoked outside a tenant scope (it would resolve the wrong DEK).
 func TestTenantScopedRepository_WithSealerStillRequiresTenant(t *testing.T) {
 	sealer := &recordingSealer{}
-	repo := NewEmailRepository(nil, true).WithFieldSealer(sealer)
+	repo := NewEmailRepository(nil).WithFieldSealer(sealer)
 
 	_, err := repo.Create(context.Background(), &EmailMessage{ID: uuid.New(), ToEmail: "to@example.com"})
 	if !errors.Is(err, tenantdb.ErrNoTenant) {

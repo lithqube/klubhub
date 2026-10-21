@@ -1,7 +1,6 @@
 package outreach
 
 import (
-	"fmt"
 	"net/mail"
 	"sort"
 	"strings"
@@ -9,6 +8,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/klubhub/dj/api/internal/platform/email"
+	"github.com/klubhub/dj/api/internal/platform/envelope"
 )
 
 // ValidationError lists the invalid fields of an outreach write. It
@@ -39,9 +41,7 @@ func sortedKeys(m map[string]string) []string {
 
 // NormalizeEmail lower-cases and trims an email address — the form stored
 // in outreach_suppressions and compared against contact emails.
-func NormalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
+func NormalizeEmail(addr string) string { return envelope.NormalizeEmail(addr) }
 
 // NormalizeCurrency trims and upper-cases an ISO 4217 currency code.
 func NormalizeCurrency(c string) string { return strings.ToUpper(strings.TrimSpace(c)) }
@@ -238,24 +238,4 @@ func ValidateSuppression(in *SuppressionCreate) error {
 }
 
 // formatFee renders the slot fee range for the {{fee}} variable.
-func formatFee(s *Slot) string {
-	cur := ""
-	if s.Currency != nil && *s.Currency != "" {
-		cur = " " + *s.Currency
-	}
-	switch {
-	case s.FeeMin != nil && s.FeeMax != nil && *s.FeeMin == *s.FeeMax:
-		return formatMoney(*s.FeeMin) + cur
-	case s.FeeMin != nil && s.FeeMax != nil:
-		return formatMoney(*s.FeeMin) + "–" + formatMoney(*s.FeeMax) + cur
-	case s.FeeMin != nil:
-		return "from " + formatMoney(*s.FeeMin) + cur
-	case s.FeeMax != nil:
-		return "up to " + formatMoney(*s.FeeMax) + cur
-	}
-	return ""
-}
-
-func formatMoney(v float64) string {
-	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", v), "0"), ".")
-}
+func formatFee(s *Slot) string { return email.FormatFee(s.FeeMin, s.FeeMax, s.Currency) }

@@ -24,22 +24,32 @@ func TestRender_UnknownKeyRendersEmpty(t *testing.T) {
 	}
 }
 
-func TestRender_NoVarsIsIdentity(t *testing.T) {
+func TestRender_EmptyVarsRendersPlaceholdersEmpty(t *testing.T) {
 	text := "Hello {{name}}\nsecond line"
-	if got := Render(text, nil); got != text {
-		t.Errorf("got %q, want %q", got, text)
+	want := "Hello \nsecond line"
+	if got := Render(text, nil); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
-	if got := Render(text, map[string]string{}); got != text {
-		t.Errorf("got %q, want %q", got, text)
+	if got := Render(text, map[string]string{}); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
-// TestRender_StripsCRLFFromValues is the SPEC §7 v2.1 header-injection
+// TestRender_KeepsValueNewlines: body values (multi-line notes) are inserted
+// verbatim; only RenderSubject flattens.
+func TestRender_KeepsValueNewlines(t *testing.T) {
+	got := Render("Notes:\n{{notes}}", map[string]string{"notes": "Soundcheck 18:00\nParking behind venue"})
+	if want := "Notes:\nSoundcheck 18:00\nParking behind venue"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestRenderSubject_StripsCRLFFromValues is the SPEC §7 v2.1 header-injection
 // defense: substituted values are untrusted (contact names, notes), so CR/LF
 // is flattened before replacement — a value like "a\r\nBcc: x@y" can never
-// smuggle an extra header into a subject built by Render.
-func TestRender_StripsCRLFFromValues(t *testing.T) {
-	got := Render("Subject: {{subject}}", map[string]string{
+// smuggle an extra header into a subject built by RenderSubject.
+func TestRenderSubject_StripsCRLFFromValues(t *testing.T) {
+	got := RenderSubject("Subject: {{subject}}", map[string]string{
 		"subject": "hi\r\nBcc: attacker@evil.com",
 	})
 	if want := "Subject: hi  Bcc: attacker@evil.com"; got != want {
@@ -50,15 +60,15 @@ func TestRender_StripsCRLFFromValues(t *testing.T) {
 	}
 
 	// Bare LF and bare CR are flattened too.
-	if got := Render("{{v}}", map[string]string{"v": "a\nb\rc"}); got != "a b c" {
+	if got := RenderSubject("{{v}}", map[string]string{"v": "a\nb\rc"}); got != "a b c" {
 		t.Errorf("got %q", got)
 	}
 }
 
 // TestRender_TemplateNewlinesUntouched verifies only the substituted values
 // are sanitised; the template's own line breaks survive.
-func TestRender_TemplateNewlinesUntouched(t *testing.T) {
-	got := Render("line1\n{{v}}\nline3", map[string]string{"v": "x\r\ny"})
+func TestRenderSubject_TemplateNewlinesUntouched(t *testing.T) {
+	got := RenderSubject("line1\n{{v}}\nline3", map[string]string{"v": "x\r\ny"})
 	if want := "line1\nx  y\nline3"; got != want { // CR and LF each flatten to a space
 		t.Errorf("got %q, want %q", got, want)
 	}

@@ -153,7 +153,7 @@ func serve() error {
 		// Tenant-scoped outbox (sealed columns, 00014): the repository seals
 		// on write and unseals for delivery/log through the envelope-backed
 		// codec, so talent PII is never stored in clear.
-		repo := email.NewEmailRepository(rt.db, true)
+		repo := email.NewEmailRepository(rt.db)
 		emailSvc = email.NewEmailService(repo, sender)
 		emailSvc.WithFieldCodec(bookings.EnvelopeCodec{Keys: rt.keys})
 		repo.WithFieldSealer(emailSvc)

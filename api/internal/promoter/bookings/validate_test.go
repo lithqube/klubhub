@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/klubhub/dj/api/internal/platform/email"
 )
 
 func wantInvalid(t *testing.T, err error, field string) {
@@ -267,8 +269,8 @@ func TestFormatFee(t *testing.T) {
 func TestFormatMoney(t *testing.T) {
 	cases := map[float64]string{500: "500", 500.5: "500.5", 500.25: "500.25", 0: "0", 1234.99: "1234.99"}
 	for in, want := range cases {
-		if got := formatMoney(in); got != want {
-			t.Fatalf("formatMoney(%v) = %q, want %q", in, got, want)
+		if got := email.FormatMoney(in); got != want {
+			t.Fatalf("FormatMoney(%v) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -277,17 +279,17 @@ func TestLocalMidnightIn(t *testing.T) {
 	// 2026-10-15 12:00 UTC is 14:00 in Berlin (CEST, UTC+2): local midnight is
 	// 2026-10-14 22:00 UTC.
 	at := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
-	mid := localMidnightIn(at, "Europe/Berlin")
+	mid := email.LocalMidnightIn(at, "Europe/Berlin")
 	want := time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)
 	if !mid.Equal(want) {
-		t.Fatalf("localMidnightIn = %s, want %s", mid, want)
+		t.Fatalf("LocalMidnightIn = %s, want %s", mid, want)
 	}
 	if mid.Location().String() != "Europe/Berlin" {
 		t.Fatalf("midnight must carry the org location, got %s", mid.Location())
 	}
 
 	// An unknown timezone falls back to UTC rather than failing the send.
-	mid = localMidnightIn(at, "Mars/Olympus")
+	mid = email.LocalMidnightIn(at, "Mars/Olympus")
 	if !mid.Equal(time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("unknown tz must fall back to UTC midnight, got %s", mid)
 	}

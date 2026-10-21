@@ -105,6 +105,7 @@ type Counts struct {
 	GuestAllocations int `json:"guest_allocations"`
 	DoorPins         int `json:"door_pins"`
 	OutreachRequests int `json:"outreach_requests"`
+	EmailMessages    int `json:"email_messages"`
 }
 
 // Upcoming is an ended or running event not purged yet. Timezone is the

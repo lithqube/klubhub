@@ -18,6 +18,33 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/email"
 )
 
+// Built-in fallback for a missing default template; mirrors the copy seeded
+// by migration 034.
+const (
+	DefaultTemplateName    = "Default booking request"
+	DefaultTemplateSubject = "Booking request: {{dj_name}} in {{city}} on {{date}}"
+	DefaultTemplateBody    = `Hi {{promoter_name}},
+
+I'm {{dj_name}}, a DJ playing {{genres}}. I'm available in {{city}} on {{date}} and would love to play for you.
+
+Date: {{date}}
+City: {{city}}
+Genres: {{genres}}
+Fee: {{fee}}
+{{notes}}
+
+My press kit (EPK) is attached to this email.
+{{epk_link}}
+
+If you're interested, just reply to this email — it lands directly in my inbox ({{dj_email}}).
+
+If you'd rather not hear from us, reply "stop" and we'll remove you.
+
+Best,
+{{dj_name}}
+{{dj_phone}}`
+)
+
 // maxEPKPointerBytes caps the in-memory read when computing the documents
 // pointer checksum for an EPK attach. EPK PDFs are a few MB; the cap only
 // guards against a pathological object.
@@ -41,7 +68,7 @@ type RepositoryIface interface {
 	InsertRequestWithDailyCap(ctx context.Context, row *Request, maxPerDay int, since time.Time) error
 	ListRequests(ctx context.Context) ([]*Request, error)
 	GetRequest(ctx context.Context, id uuid.UUID) (*Request, error)
-	UpdateRequestSent(ctx context.Context, id, emailMessageID uuid.UUID, status string, sentAt *time.Time) error
+	UpdateRequestSent(ctx context.Context, id uuid.UUID, emailMessageID *uuid.UUID, status string, sentAt *time.Time) error
 
 	ListSuppressions(ctx context.Context) ([]*Suppression, error)
 	AddSuppression(ctx context.Context, in *SuppressionCreate) (*Suppression, error)
@@ -249,8 +276,20 @@ func (s *Service) SendRequest(ctx context.Context, in *SendRequestInput) (*Reque
 		}
 	}
 	vars := s.variables(contact, slot, dj)
-	subject = email.Render(subject, vars)
+	subject = email.RenderSubject(subject, vars)
 	body = email.Render(body, vars)
+
+	// EPK attach: register/reuse the documents pointer BEFORE the row is
+	// inserted, so a bad export (legacy key, unreadable object) is refused
+	// without leaving a queued row or spending a daily-cap slot.
+	var docID *uuid.UUID
+	if in.EPKExportID != nil {
+		doc, err := s.epkDocumentPointer(ctx, *in.EPKExportID)
+		if err != nil {
+			return nil, err
+		}
+		docID = &doc.ID
+	}
 
 	// Race-free daily cap + insert (SPEC §9 v2.1). The window is local
 	// midnight in the sender's timezone — the DJ side has no user-level
@@ -258,7 +297,7 @@ func (s *Service) SendRequest(ctx context.Context, in *SendRequestInput) (*Reque
 	row := &Request{
 		ContactID:          in.ContactID,
 		AvailabilitySlotID: in.AvailabilitySlotID,
-		TemplateID:         &tpl.ID,
+		TemplateID:         templateIDOrNil(tpl),
 		EPKExportID:        in.EPKExportID,
 		ToEmail:            contact.Email,
 		Subject:            subject,
@@ -269,16 +308,8 @@ func (s *Service) SendRequest(ctx context.Context, in *SendRequestInput) (*Reque
 		return nil, err
 	}
 
-	// EPK attach: register/reuse the documents pointer, then send owned so
-	// the ownership guard passes at enqueue and at delivery retry.
-	var docID *uuid.UUID
-	if in.EPKExportID != nil {
-		doc, err := s.epkDocumentPointer(ctx, *in.EPKExportID)
-		if err != nil {
-			return nil, err
-		}
-		docID = &doc.ID
-	}
+	// Send owned when an EPK is attached so the ownership guard passes at
+	// enqueue and at delivery retry.
 	req := email.CreateEmailRequest{
 		Kind:      EmailKindBookingRequest,
 		FromEmail: s.cfg.FromEmail,
@@ -300,11 +331,16 @@ func (s *Service) SendRequest(ctx context.Context, in *SendRequestInput) (*Reque
 		msg, err = s.emails.Send(ctx, req)
 	}
 	if err != nil {
+		// Enqueue/validation failure: no outbox row exists. Mark the request
+		// failed so the log does not show it queued forever (the cap already
+		// counted it — failed attempts count, SPEC §9 v2.1).
+		_ = s.repo.UpdateRequestSent(ctx, row.ID, nil, string(email.EmailStatusFailed), nil)
 		return nil, err
 	}
-	if err := s.repo.UpdateRequestSent(ctx, row.ID, msg.ID, string(msg.Status), msg.SentAt); err != nil {
-		return nil, err
-	}
+	// The mail is out: syncing the log row is best-effort. Failing the call
+	// here would invite a retry and a duplicate booking request; the outbox
+	// row (owner-linked) still carries the delivery status.
+	_ = s.repo.UpdateRequestSent(ctx, row.ID, &msg.ID, string(msg.Status), msg.SentAt)
 	row.EmailMessageID = &msg.ID
 	row.Status = string(msg.Status)
 	row.SentAt = msg.SentAt
@@ -329,7 +365,13 @@ func (s *Service) resolveTemplate(ctx context.Context, id *uuid.UUID) (*Template
 	if id != nil {
 		return s.repo.GetTemplate(ctx, *id)
 	}
-	return s.repo.GetDefaultTemplate(ctx)
+	tpl, err := s.repo.GetDefaultTemplate(ctx)
+	if errors.Is(err, ErrNotFound) {
+		// The default was deleted or unflagged: fall back to the built-in copy
+		// (mirrors the seeded 034 template); template_id stays NULL.
+		return &Template{Name: DefaultTemplateName, Subject: DefaultTemplateSubject, Body: DefaultTemplateBody}, nil
+	}
+	return tpl, err
 }
 
 // variables builds the {{var}} map for one send (SPEC §7).
@@ -451,6 +493,14 @@ func (s *Service) DeleteSuppression(ctx context.Context, id uuid.UUID) error {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+// templateIDOrNil is nil for the built-in fallback (no template row).
+func templateIDOrNil(t *Template) *uuid.UUID {
+	if t.ID == uuid.Nil {
+		return nil
+	}
+	return &t.ID
+}
 
 // localMidnight returns local midnight of t's day in t's location — the
 // start of the daily-cap window.

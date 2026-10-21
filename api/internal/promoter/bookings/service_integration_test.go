@@ -112,7 +112,7 @@ func setup(t *testing.T) *fixture {
 	// Wire the outbox exactly like cmd/promoter: tenant-scoped repository,
 	// envelope-backed codec, the service as FieldSealer.
 	sender := &fakeSender{}
-	repo := email.NewEmailRepository(db, true)
+	repo := email.NewEmailRepository(db)
 	emailSvc := email.NewEmailService(repo, sender)
 	emailSvc.WithFieldCodec(bookings.EnvelopeCodec{Keys: keys})
 	repo.WithFieldSealer(emailSvc)

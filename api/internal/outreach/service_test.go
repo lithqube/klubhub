@@ -156,11 +156,11 @@ func (f *fakeRepo) GetRequest(ctx context.Context, id uuid.UUID) (*Request, erro
 	return nil, ErrNotFound
 }
 
-func (f *fakeRepo) UpdateRequestSent(ctx context.Context, id, emailMessageID uuid.UUID, status string, sentAt *time.Time) error {
+func (f *fakeRepo) UpdateRequestSent(ctx context.Context, id uuid.UUID, emailMessageID *uuid.UUID, status string, sentAt *time.Time) error {
 	f.updatedSent = append(f.updatedSent, id)
 	for _, r := range f.requests {
 		if r.ID == id {
-			r.EmailMessageID = &emailMessageID
+			r.EmailMessageID = emailMessageID
 			r.Status = status
 			r.SentAt = sentAt
 			r.EmailStatus = status

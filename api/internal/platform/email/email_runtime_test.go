@@ -21,7 +21,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/klubhub/dj/api/internal/platform/migrations"
-	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 )
 
 // Real-Postgres coverage for the outbox runtime: claim semantics, worker
@@ -90,7 +89,7 @@ func TestMain(m *testing.M) {
 // newTestRepo builds the DJ-side repository: plaintext columns, no tenant
 // scoping (tenantScoped=false).
 func newTestRepo() *EmailRepository {
-	return NewEmailRepository(tenantdb.New(testPool), false)
+	return NewPlainEmailRepository(testPool)
 }
 
 const runtimePlunkAck = `{"success":true,"data":{"emails":[{"contact":{"email":"to@example.com"},"email":"ac32f08e-c6b9-45d3-9824-a73dff1e3bbf"}],"timestamp":"2025-01-15T10:30:00.000Z"}}`

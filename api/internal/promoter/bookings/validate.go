@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"net/mail"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/klubhub/dj/api/internal/platform/email"
 )
 
 // Validation limits (SPEC §6.1). Every validator normalizes in place (trim,
@@ -261,37 +262,4 @@ func validateSuppression(in *SuppressionCreate) error {
 }
 
 // formatFee renders the slot fee range for the {{fee}} variable.
-func formatFee(s *OpenSlot) string {
-	cur := ""
-	if s.Currency != nil && *s.Currency != "" {
-		cur = " " + *s.Currency
-	}
-	switch {
-	case s.FeeMin != nil && s.FeeMax != nil && *s.FeeMin == *s.FeeMax:
-		return formatMoney(*s.FeeMin) + cur
-	case s.FeeMin != nil && s.FeeMax != nil:
-		return formatMoney(*s.FeeMin) + "–" + formatMoney(*s.FeeMax) + cur
-	case s.FeeMin != nil:
-		return "from " + formatMoney(*s.FeeMin) + cur
-	case s.FeeMax != nil:
-		return "up to " + formatMoney(*s.FeeMax) + cur
-	}
-	return ""
-}
-
-func formatMoney(v float64) string {
-	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", v), "0"), ".")
-}
-
-// localMidnightIn returns local midnight of t's day in the named IANA
-// timezone — the start of the daily-cap window (SPEC §9 v2.1: the window is
-// the ORG's timezone, organizations.timezone). An unknown timezone falls back
-// to UTC rather than failing the send.
-func localMidnightIn(t time.Time, tzName string) time.Time {
-	loc, err := time.LoadLocation(tzName)
-	if err != nil || loc == nil {
-		loc = time.UTC
-	}
-	local := t.In(loc)
-	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
-}
+func formatFee(s *OpenSlot) string { return email.FormatFee(s.FeeMin, s.FeeMax, s.Currency) }

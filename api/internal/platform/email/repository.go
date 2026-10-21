@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 )
@@ -24,16 +25,22 @@ import (
 //     the FieldSealer (the service's FieldCodec); the repository stores
 //     bytes as-is and unseals on every read, inside the same transaction.
 type EmailRepository struct {
-	db           *tenantdb.DB
+	db           *tenantdb.DB  // tenant-scoped path only
+	pool         *pgxpool.Pool // plain (DJ-side) path only
 	tenantScoped bool
 	sealer       FieldSealer // nil on the DJ side: plaintext columns
 }
 
-// NewEmailRepository creates an EmailRepository. The DJ side wraps its pool
-// with tenantdb.New(pool) and passes tenantScoped=false; the promoter binary
-// passes its existing *tenantdb.DB with tenantScoped=true.
-func NewEmailRepository(db *tenantdb.DB, tenantScoped bool) *EmailRepository {
-	return &EmailRepository{db: db, tenantScoped: tenantScoped}
+// NewEmailRepository creates the tenant-scoped (promoter) repository: every
+// statement runs through db.WithTenant, so RLS applies.
+func NewEmailRepository(db *tenantdb.DB) *EmailRepository {
+	return &EmailRepository{db: db, tenantScoped: true}
+}
+
+// NewPlainEmailRepository creates the DJ-side repository over a raw pool
+// (single-user, no tenant column). The pool stays inside this package.
+func NewPlainEmailRepository(pool *pgxpool.Pool) *EmailRepository {
+	return &EmailRepository{pool: pool}
 }
 
 // WithFieldSealer wires the callback the tenant-scoped paths invoke inside
@@ -81,7 +88,7 @@ func (r *EmailRepository) createPlain(ctx context.Context, msg *EmailMessage) (*
 		attachments = []uuid.UUID{}
 	}
 	var out EmailMessage
-	err := r.db.Pool().QueryRow(ctx, sql,
+	err := r.pool.QueryRow(ctx, sql,
 		msg.Kind, ownerType, msg.OwnerID, msg.FromEmail, msg.FromName,
 		msg.ToEmail, cc, bcc, msg.Subject, msg.Body, msg.BodyHTML, attachments,
 		msg.Status, msg.Attempts, msg.ReplyTo,
@@ -191,7 +198,7 @@ func (r *EmailRepository) GetByID(ctx context.Context, id uuid.UUID) (*EmailMess
 		FROM email_messages WHERE id = $1
 	`
 	var m EmailMessage
-	err := r.db.Pool().QueryRow(ctx, sql, id).Scan(
+	err := r.pool.QueryRow(ctx, sql, id).Scan(
 		&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 		&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
 		&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
@@ -258,7 +265,7 @@ func (r *EmailRepository) ListByOwner(ctx context.Context, ownerType string, own
 			status, sent_at, last_error, attempts, created_at, updated_at
 		FROM email_messages WHERE owner_type = $1 AND owner_id = $2 ORDER BY created_at DESC
 	`
-	rows, err := r.db.Pool().Query(ctx, sql, ownerType, ownerID)
+	rows, err := r.pool.Query(ctx, sql, ownerType, ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("list emails by owner: %w", err)
 	}
@@ -350,7 +357,7 @@ func (r *EmailRepository) updateStatus(ctx context.Context, id uuid.UUID, status
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
 	var m EmailMessage
-	err := r.db.Pool().QueryRow(ctx, sql, status, lastError, sentAt, id, attempts, claimedAt).Scan(
+	err := r.pool.QueryRow(ctx, sql, status, lastError, sentAt, id, attempts, claimedAt).Scan(
 		&m.ID, &m.Kind, &m.OwnerType, &m.OwnerID, &m.FromEmail, &m.FromName,
 		&m.ToEmail, &m.CCEmails, &m.BCCEmails, &m.Subject, &m.Body, &m.BodyHTML,
 		&m.AttachmentIDs, &m.ReplyTo, &m.Status, &m.SentAt, &m.LastError, &m.Attempts,
@@ -419,7 +426,7 @@ func (r *EmailRepository) ListByStatus(ctx context.Context, status EmailStatus, 
 			status, sent_at, last_error, attempts, created_at, updated_at
 		FROM email_messages WHERE status = $1 ORDER BY created_at ASC LIMIT $2
 	`
-	rows, err := r.db.Pool().Query(ctx, sql, status, limit)
+	rows, err := r.pool.Query(ctx, sql, status, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list emails by status: %w", err)
 	}
@@ -519,7 +526,7 @@ func (r *EmailRepository) ClaimFailedForRetry(ctx context.Context, limit, maxAtt
 			cc_emails, bcc_emails, subject, body, body_html, attachment_ids, reply_to,
 			status, sent_at, last_error, attempts, created_at, updated_at
 	`
-	rows, err := r.db.Pool().Query(ctx, sql, maxAttempts, backoffBaseSeconds, limit)
+	rows, err := r.pool.Query(ctx, sql, maxAttempts, backoffBaseSeconds, limit)
 	if err != nil {
 		return nil, fmt.Errorf("claim failed emails for retry: %w", err)
 	}
@@ -639,7 +646,7 @@ func (r *EmailRepository) RequeueStale(ctx context.Context, olderThan time.Durat
 			last_error = 'requeued: stuck in sending past timeout'
 		WHERE status = 'sending' AND updated_at < $1
 	`
-	tag, err := r.db.Pool().Exec(ctx, sql, cutoff)
+	tag, err := r.pool.Exec(ctx, sql, cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("requeue stale sending emails: %w", err)
 	}

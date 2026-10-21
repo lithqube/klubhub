@@ -5,7 +5,6 @@ import (
 
 	"github.com/klubhub/dj/api/internal/platform/docstore"
 	"github.com/klubhub/dj/api/internal/platform/email"
-	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 )
 
 // Email transport and document storage moved to the shared platform packages
@@ -52,11 +51,11 @@ var (
 	ValidateCreateEmailRequest = email.ValidateCreateEmailRequest
 )
 
-// NewEmailRepository is the DJ-side constructor: the platform repository
-// takes a *tenantdb.DB, so finance wraps its pool (tenantScoped=false —
-// plaintext columns, SQL byte-identical to the pre-extraction repository).
+// NewEmailRepository is the DJ-side constructor: the platform plain repository
+// over a raw pool (plaintext columns, SQL byte-identical to the
+// pre-extraction repository).
 func NewEmailRepository(pool *pgxpool.Pool) *email.EmailRepository {
-	return email.NewEmailRepository(tenantdb.New(pool), false)
+	return email.NewPlainEmailRepository(pool)
 }
 
 // --- docstore (platform/docstore) ---

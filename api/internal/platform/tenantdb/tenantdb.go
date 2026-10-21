@@ -89,11 +89,6 @@ type DB struct{ pool *pgxpool.Pool }
 // New wraps pool. Call AssertRuntimeRole on the pool first.
 func New(pool *pgxpool.Pool) *DB { return &DB{pool: pool} }
 
-// Pool returns the underlying connection pool. Callers that need unscoped
-// access (e.g. the DJ-side email repository, tenantScoped=false) use this;
-// tenant-scoped callers must go through WithTenant/Run so RLS applies.
-func (d *DB) Pool() *pgxpool.Pool { return d.pool }
-
 // WithTenant runs fn in a transaction scoped to tenantID.
 func (d *DB) WithTenant(ctx context.Context, tenantID uuid.UUID, fn func(pgx.Tx) error) error {
 	return WithTenant(ctx, d.pool, tenantID, fn)

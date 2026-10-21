@@ -376,8 +376,9 @@ func (r *Repository) GetRequest(ctx context.Context, id uuid.UUID) (*Request, er
 	return q, nil
 }
 
-// UpdateRequestSent links the outbox row and syncs the delivery status.
-func (r *Repository) UpdateRequestSent(ctx context.Context, id, emailMessageID uuid.UUID, status string, sentAt *time.Time) error {
+// UpdateRequestSent links the outbox row (nil when the send failed before an
+// outbox row existed) and syncs the delivery status.
+func (r *Repository) UpdateRequestSent(ctx context.Context, id uuid.UUID, emailMessageID *uuid.UUID, status string, sentAt *time.Time) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE outreach_requests
 		SET email_message_id = $2, status = $3, sent_at = $4

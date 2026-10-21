@@ -25,7 +25,6 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/docstore"
 	"github.com/klubhub/dj/api/internal/platform/email"
 	"github.com/klubhub/dj/api/internal/platform/migrations"
-	"github.com/klubhub/dj/api/internal/platform/tenantdb"
 )
 
 // Real-Postgres coverage for the outreach package: migrations 033-035 apply
@@ -182,7 +181,7 @@ func newRig(t *testing.T, maxPerDay int) *rig {
 	store := newMemStore()
 	docSvc := docstore.NewDocumentService(docRepo, store, testBucket)
 	sender := &fakeSender{}
-	emailSvc := email.NewEmailService(email.NewEmailRepository(tenantdb.New(testPool), false), sender)
+	emailSvc := email.NewEmailService(email.NewPlainEmailRepository(testPool), sender)
 	emailSvc.WithAttachments(docstore.AttachmentSource{Svc: docSvc})
 	svc := NewService(repo, emailSvc, docRepo, objectReader{store: store}, ServiceConfig{
 		FromEmail:    "dj@klubhub.example",
