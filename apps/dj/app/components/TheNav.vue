@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Banknote,
   ClipboardList,
+  Megaphone,
 } from 'lucide-vue-next'
 import type { KhNavItem } from '#kui/types/shell'
 
@@ -18,6 +19,7 @@ const primaryNav: KhNavItem[] = [
   { label: 'SOCIAL',    icon: Send,             to: '/social' },
   { label: 'EPK',       icon: FileText,         to: '/epk' },
   { label: 'GIGS',      icon: CalendarDays,     to: '/gigs' },
+  { label: 'OUTREACH',  icon: Megaphone,        to: '/outreach' },
   { label: 'RIDER',     icon: ClipboardList,    to: '/rider' },
   { label: 'FINANCE',   icon: Banknote,         to: '/finance' },
 ]
