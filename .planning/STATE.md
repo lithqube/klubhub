@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 6-release-planner
 current_plan: not started
-status: release_v1.2.0
-last_updated: "2026-10-03T12:00:00Z"
+status: phase_04.10_shipped
+last_updated: "2026-10-21T22:00:00Z"
 progress:
-  total_phases: 15
-  completed_phases: 8
-  total_plans: 42
-  completed_plans: 42
+  total_phases: 16
+  completed_phases: 9
+  total_plans: 47
+  completed_plans: 47
 ---
 
 # Session State
@@ -24,8 +24,8 @@ See: .planning/PROJECT.md
 **Milestone:** v1.0 milestone
 **Current phase:** 6-release-planner (not started)
 **Current plan:** not started
-**Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03, 04 (Gig Tracker), 4.5 (Rider Templates), 05 (Finance Tracker), 0.5 (Garage S3)
-**Status:** Phase 5 (Finance Tracker) shipped 2026-09-28 via PR #34 (#35 follow-up tests). Phase 4 (Gig Tracker) shipped via PRs #17/#18 with GigReader interface for downstream modules. Phase 4.5 (Rider Templates) and the v1.2.0 finance work (EN 16931 e-invoicing, archive, receipts) shipped; release branch `release/v1.2.0`. Next: Phase 6 (Release Planner).
+**Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03, 04 (Gig Tracker), 4.5 (Rider Templates), 04.10 (Availability & Outreach, 2-sided), 05 (Finance Tracker), 0.5 (Garage S3)
+**Status:** **Phase 04.10 (Availability & Outreach) shipped 2026-10-21 on `feat/availability-outreach`** — both sides (DJ app + promoter app), 5/5 plans, 58 new tests, chromium e2e green. Also shipped earlier: Phase 5 (Finance Tracker, PR #34/#35, 2026-09-28), Phase 4.5 (Rider Templates, v1.2.0, 2026-10-03), Phase 4 (Gig Tracker, PR #17/#18). Pre-ship gate (not code): confirm Plunk ToS permits B2B outreach; document reverse-proxy auth for the exposed DJ API. Next: Phase 6 (Release Planner).
 
 ## Completed Phases Summary
 

@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Gig Tracker** - Gig CRUD with status/payment workflows, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, GigReader interface for downstream modules
 - [x] **Phase 4.5: Rider Templates** - INSERTED — Reusable technical/hospitality rider templates, per-gig attachment with overrides, PDF export (RIDER-01..05; shipped in v1.2.0)
 - [ ] **Phase 4.8: Bandsintown Sync** - INSERTED (optional) — Outbound event push to Bandsintown on gig confirmed
-- [ ] **Phase 4.10: Availability & Outreach** - INSERTED — Two-sided booking outreach on a shared extracted email platform: DJ availability slots matched to promoter contacts with EPK-attached requests (DJ app), event open slots matched to talent contacts with offer emails (promoter app)
+- [x] **Phase 4.10: Availability & Outreach** - INSERTED — Two-sided booking outreach on a shared extracted email platform: DJ availability slots matched to promoter contacts with EPK-attached requests (DJ app), event open slots matched to talent contacts with offer emails (promoter app). Shipped 2026-10-21 on `feat/availability-outreach` (5/5 plans).
 - [x] **Phase 5: Finance Tracker** - Income & expense ledger, multi-currency summaries, gig-linked auto-income, in-app FIN-04/05 reconciliation prompts, plus invoices/payments, versioned PDFs, event agreements and explicit email sends
 - [ ] **Phase 5.5: US Invoicing & Tax Compliance** - INSERTED — US-compatible e-invoicing (UBL) and payee tax forms: W-9, 1099-NEC, W-8BEN withholding, 1042-S; scope in `.claude/plans/e-invoicing.plan.md` §7
 - [ ] **Phase 6: Release Planner** - Release CRUD with status workflow, deadline tracking, promo checklist with customizable default template
@@ -222,9 +222,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Depends on**: Phase 4 (contacts/venues/gigs), Phase 5 (Plunk email infra), Phase 3 (EPK exports); promoter side aligns with promoter plan P4 (`.claude/plans/promoter-app.plan.md`)
 **Requirements**: EMAIL-01..04, AVAIL-01..03, OUTR-01..09 (DJ app); TALENT-01..03, OSLOT-01..02, OFFER-01..10 (promoter app) — indexed in the phase `CONTEXT.md`
-**Status**: Planned
-**Spec**: `.planning/phases/04.10-availability-outreach/04.10-SPEC.md`
-**Plans**: 04.10-01-PLAN.md … 04.10-05-PLAN.md
+**Status**: Complete — 2026-10-21 on `feat/availability-outreach`
+**Spec**: `.planning/phases/04.10-availability-outreach/04.10-SPEC.md` (v2.1)
+**Plans**: 04.10-01-PLAN.md … 04.10-05-PLAN.md (5 committed summaries)
 
 **Key deliverables:**
 - Shared extraction: `api/internal/platform/email` + `api/internal/platform/docstore` moved out of `finance` (behavior-preserving); both binaries import them
@@ -318,7 +318,7 @@ Phases execute in numeric order: 0 → 0.5 → 1 → 1.5 → 1.5.5 → 2 → 3 �
 | 4.5. Rider Templates             | —              | ✅ Complete  | 2026-10-03 |
 || 4.8. Spotify Integration (INSERTED) | 0/TBD       | Future       | —          |
 || 4.9. RA Integration (INSERTED)    | 3/3            | ✅ Complete  | 2026-09-20 |
-| 4.10. Availability & Outreach (INSERTED) | 0/5  | Planned      | —          |
+| 4.10. Availability & Outreach (INSERTED) | 5/5 | ✅ Complete | 2026-10-21 |
 | 5. Finance Tracker               | v1.1.0 invoicing + earnings ledger + v1.2.0 e-invoicing, archive, receipts | ✅ Complete  | 2026-10-03 |
 | 5.5. US Invoicing & Tax Compliance | 0/TBD          | Future       | —          |
 | 6. Release Planner               | 0/TBD          | Future       | —          |
