@@ -161,7 +161,7 @@ test.describe('privacy and retention (mock API)', () => {
     await expect(input).not.toHaveAttribute('aria-invalid', 'true');
     await input.fill('klubnacht 2');
     await expect(erase).toBeDisabled();
-    await expect(dialog.getByTestId('erase-match')).toHaveText('Not matching yet — check spelling and spaces.');
+    await expect(dialog.getByTestId('erase-match')).toHaveText('Not matching yet. Check spelling and spaces.');
     await expect(input).toHaveAttribute('aria-invalid', 'true');
     // Case and spacing do not matter (normalised like the server).
     await input.fill('  KLUBNACHT   02 ');
