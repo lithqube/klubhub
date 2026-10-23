@@ -222,7 +222,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Depends on**: Phase 4 (contacts/venues/gigs), Phase 5 (Plunk email infra), Phase 3 (EPK exports); promoter side aligns with promoter plan P4 (`.claude/plans/promoter-app.plan.md`)
 **Requirements**: EMAIL-01..04, AVAIL-01..03, OUTR-01..09 (DJ app); TALENT-01..03, OSLOT-01..02, OFFER-01..10 (promoter app) — indexed in the phase `CONTEXT.md`
-**Status**: Complete — 2026-10-21 on `feat/availability-outreach`
+**Status**: Complete — 2026-10-21 on `feat/availability-outreach`. **Outreach sends gated 2026-10-23 (56c7a52):** booking requests/offers are cold B2B outreach; hosted Plunk's ToS §5 prohibits that, so both send paths fail closed behind `OUTREACH_PROVIDER_PERMITS_OUTREACH=true` (self-host or a permitted provider). Reads + finance email unaffected. See `docs/OUTREACH-PROVIDER.md`.
 **Spec**: `.planning/phases/04.10-availability-outreach/04.10-SPEC.md` (v2.1)
 **Plans**: 04.10-01-PLAN.md … 04.10-05-PLAN.md (5 committed summaries)
 
@@ -236,7 +236,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - Wormhole / public-tunnel idea dropped (threat model, sealed PII)
 - Cross-tenant marketplace/directory deferred to Cloud; geo-radius matching deferred until lat/lng exist
 - SPEC v2.1 resolved Q1 (new `talent_contacts` table) and Q3 (new `talent.read`/`talent.write` authz actions); plans reconciled to v2.1
-- Pre-ship gate: confirm Plunk ToS allows B2B outreach; document that the unauthenticated DJ API's outreach sits behind reverse-proxy auth (SECURITY.md/SELF-HOSTING.md)
+- Pre-ship gate: **RESOLVED 2026-10-23 (commit 56c7a52)** — Plunk's ToS §5 does prohibit this use, so outreach sending now fails closed behind an operator attestation (`OUTREACH_PROVIDER_PERMITS_OUTREACH=true`) for a self-hosted or otherwise-permitted provider. Rationale and residual operator obligations in `docs/OUTREACH-PROVIDER.md`. Reverse-proxy auth for the exposed DJ API is documented in SECURITY.md.
 
 ### Phase 5: Finance Tracker
 

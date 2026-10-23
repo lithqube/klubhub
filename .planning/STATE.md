@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 6-release-planner
 current_plan: not started
-status: phase_04.10_shipped
-last_updated: "2026-10-21T22:00:00Z"
+status: phase_04.10_shipped_outreach_gated
+last_updated: "2026-10-23T17:05:00Z"
 progress:
   total_phases: 16
   completed_phases: 9
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md
 **Current phase:** 6-release-planner (not started)
 **Current plan:** not started
 **Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03, 04 (Gig Tracker), 4.5 (Rider Templates), 04.10 (Availability & Outreach, 2-sided), 05 (Finance Tracker), 0.5 (Garage S3)
-**Status:** **Phase 04.10 (Availability & Outreach) shipped 2026-10-21 on `feat/availability-outreach`** — both sides (DJ app + promoter app), 5/5 plans, 58 new tests, chromium e2e green. Also shipped earlier: Phase 5 (Finance Tracker, PR #34/#35, 2026-09-28), Phase 4.5 (Rider Templates, v1.2.0, 2026-10-03), Phase 4 (Gig Tracker, PR #17/#18). Pre-ship gate (not code): confirm Plunk ToS permits B2B outreach; document reverse-proxy auth for the exposed DJ API. Next: Phase 6 (Release Planner).
+**Status:** **Phase 04.10 (Availability & Outreach) shipped 2026-10-21 on `feat/availability-outreach`** — both sides (DJ app + promoter app), 5/5 plans, 58 new tests, chromium e2e green. **Outreach sending is now GATED (2026-10-23, commit 56c7a52):** booking requests/offers are cold B2B outreach and hosted Plunk's ToS §5 prohibits that outright, so both send paths fail closed behind `OUTREACH_PROVIDER_PERMITS_OUTREACH=true`. Outreach reads and finance email are unaffected. An operator must attest a permitted provider (self-hosted Plunk, or a provider allowing opted-out B2B) — see `docs/OUTREACH-PROVIDER.md`. Also shipped earlier: Phase 5 (Finance Tracker, PR #34/#35, 2026-09-28), Phase 4.5 (Rider Templates, v1.2.0, 2026-10-03), Phase 4 (Gig Tracker, PR #17/#18). Next: Phase 6 (Release Planner).
 
 ## Completed Phases Summary
 
