@@ -96,7 +96,7 @@ export function requestErrorText(e: OutreachApiError | null): string {
       // permitted provider. This is an admin configuration step, not a user
       // error — say so plainly rather than echoing the raw server string.
       if (text.includes('provider') || code === 'outreach_not_permitted') {
-        return 'Outreach sending is turned off for this server: its email provider\’s terms do not permit unsolicited B2B outreach. An administrator must set OUTREACH_PROVIDER_PERMITS_OUTREACH=true after confirming a permitted provider: see docs/OUTREACH-PROVIDER.md.'
+        return 'Outreach sending is turned off for this server: its email provider’s terms do not permit unsolicited B2B outreach. An administrator must set OUTREACH_PROVIDER_PERMITS_OUTREACH=true after confirming a permitted provider: see docs/OUTREACH-PROVIDER.md.'
       }
       if (text.includes('no email')) return 'This contact has no email address on file.'
       if (text.includes('no DJ contact email')) {

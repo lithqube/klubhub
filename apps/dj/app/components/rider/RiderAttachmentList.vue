@@ -43,7 +43,7 @@ onMounted(async () => {
       ...gigStore.gigs.map(g => riderStore.loadAttachmentByGig(g.id)),
     ])
   } catch (e) {
-    error.value = 'Could not load rider attachments.'
+    error.value = 'Could not load rider attachments: ' + (e instanceof Error ? e.message : String(e))
   } finally {
     loading.value = false
   }
