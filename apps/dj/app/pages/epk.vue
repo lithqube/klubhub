@@ -7,7 +7,7 @@ import { useEpkAutosave } from '~/composables/useEpkAutosave'
 import { useFeatures } from '~/composables/useFeatures'
 import { Download, ExternalLink, Image, Loader, Plus, Trash2, X, Check, AlertCircle } from 'lucide-vue-next'
 
-useHead({ title: 'EPK — KlubHub DJ' })
+useHead({ title: 'EPK: KlubHub DJ' })
 
 const store = useEpkStore()
 const settings = useSettingsStore()
@@ -290,7 +290,7 @@ async function handleExportPdf() {
           <Loader v-if="saveState === 'saving'" class="animate-spin" style="width:10px;height:10px;" aria-hidden="true" />
           <Check v-else-if="saveState === 'saved'" style="width:10px;height:10px;" aria-hidden="true" />
           <AlertCircle v-else style="width:10px;height:10px;" aria-hidden="true" />
-          {{ saveState === 'saving' ? 'SAVING…' : saveState === 'saved' ? 'ALL CHANGES SAVED' : 'NOT SAVED — RETRY BY EDITING' }}
+          {{ saveState === 'saving' ? 'SAVING…' : saveState === 'saved' ? 'ALL CHANGES SAVED' : 'NOT SAVED: RETRY BY EDITING' }}
         </span>
         <button
           class="btn-hud btn-hud-cta"
@@ -622,7 +622,7 @@ async function handleExportPdf() {
               @click="fileInput?.click()"
             >
               <Image style="width:20px;height:20px;stroke:var(--color-tertiary);stroke-width:1.5;" aria-hidden="true" />
-              <span class="section-lbl" style="color:var(--color-tertiary);">NO PHOTOS YET — CLICK TO ADD</span>
+              <span class="section-lbl" style="color:var(--color-tertiary);">NO PHOTOS YET: CLICK TO ADD</span>
             </button>
           </div>
 

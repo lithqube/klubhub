@@ -131,7 +131,7 @@ async function remove(id: string) {
     </form>
 
     <p v-if="slotsSec.loading && !slots.length" role="status" class="data-frag" style="font-size:11px;">LOADING…</p>
-    <KhEmptyState v-else-if="!slots.length" title="NO AVAILABILITY YET" hint="Add an open date — promoter contacts in the same city show up as matches." />
+    <KhEmptyState v-else-if="!slots.length" title="NO AVAILABILITY YET" hint="Add an open date: promoter contacts in the same city show up as matches." />
     <ul v-else style="list-style:none;margin:0;padding:0;display:grid;gap:6px;">
       <li
         v-for="s in slots" :key="s.id" class="hud-card"

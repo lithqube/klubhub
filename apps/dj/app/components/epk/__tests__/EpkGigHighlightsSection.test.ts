@@ -76,7 +76,7 @@ describe('EpkGigHighlightsSection', () => {
   it('import-from-gigs button has correct title attribute', () => {
     const wrapper = mount(EpkGigHighlightsSection)
     const btn = wrapper.find('[data-testid="import-from-gigs-btn"]')
-    expect(btn.attributes('title')).toBe('Coming Soon — available after Gig Tracker is set up')
+    expect(btn.attributes('title')).toBe('Coming Soon: available after Gig Tracker is set up')
   })
 
   it('section is wrapped in glass-panel', () => {

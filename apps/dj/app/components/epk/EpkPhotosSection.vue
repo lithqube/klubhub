@@ -50,7 +50,7 @@ function onFileChange(e: Event) {
         DROP PHOTOS HERE
       </p>
       <p class="text-xs text-tertiary font-terminal uppercase">
-        {{ photoCount }} / 20 UPLOADED — JPEG OR PNG
+        {{ photoCount }} / 20 UPLOADED: JPEG OR PNG
       </p>
       <input
         ref="fileInput"
@@ -67,7 +67,7 @@ function onFileChange(e: Event) {
       data-testid="photo-limit-label"
       class="text-xs tracking-terminal text-tertiary uppercase font-terminal text-center py-3"
     >
-      20 / 20 PHOTOS — REMOVE ONE TO ADD MORE
+      20 / 20 PHOTOS: REMOVE ONE TO ADD MORE
     </p>
 
     <!-- Photo grid -->

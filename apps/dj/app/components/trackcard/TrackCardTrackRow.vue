@@ -271,7 +271,7 @@ const getArtworkStyle = () => {
           v-else-if="visibleFields.includes('bpm')"
           :style="{ ...readout, color: `${colors.text}66` }"
         >
-          — BPM
+          : BPM
         </div>
 
         <div
@@ -284,7 +284,7 @@ const getArtworkStyle = () => {
           v-else-if="visibleFields.includes('musical_key')"
           :style="{ ...readout, width: `${t.keyW}px`, color: `${colors.text}66` }"
         >
-          — Key
+          : Key
         </div>
       </div>
     </div>

@@ -67,7 +67,7 @@ async function save() {
   } catch (e) {
     const err = e as { statusCode?: number, data?: { error?: unknown } }
     formError.value = err.statusCode === 409
-      ? 'The template changed since you loaded it — reload and try again.'
+      ? 'The template changed since you loaded it: reload and try again.'
       : (err?.data?.error as string) || 'Could not save the template.'
   }
 }

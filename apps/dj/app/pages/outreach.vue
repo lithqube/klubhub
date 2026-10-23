@@ -11,7 +11,7 @@ import type { AvailabilitySlot, MatchedContact } from '~/types/outreach'
  * promoter contacts → compose a booking request), TEMPLATES (the reusable
  * copy) and SENT (the delivery log plus the do-not-contact list).
  */
-useHead({ title: 'Outreach — KlubHub DJ' })
+useHead({ title: 'Outreach: KlubHub DJ' })
 
 const store = useOutreachStore()
 const {
