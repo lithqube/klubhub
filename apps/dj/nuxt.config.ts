@@ -30,7 +30,7 @@ const deploymentStage = process.env.NUXT_DEPLOYMENT_STAGE ?? process.env.NODE_EN
 const allowsMocks = deploymentStage === 'development' || deploymentStage === 'staging'
 // App pages prerendered as SPA shells so deep links work on static hosting
 // (/render/* is the screenshot target and stays out of the demo).
-const DEMO_ROUTES = ['/', '/tracklist', '/social', '/epk', '/gigs', '/rider', '/finance']
+const DEMO_ROUTES = ['/', '/tracklist', '/social', '/epk', '/gigs', '/rider', '/finance', '/outreach']
 
 if (process.env.NODE_ENV === 'production' && !allowsMocks && !isDemo) {
   if (!process.env.NUXT_PUBLIC_API_BASE) {

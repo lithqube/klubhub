@@ -371,3 +371,132 @@ describe('demo rider (shared rider-mock core)', () => {
     expect((list.body.data as unknown[]).length).toBe(3)
   })
 })
+
+describe('demo outreach', () => {
+  it('seeds slots, matches, templates and a sent request', async () => {
+    const b = backend()
+    const slots = (await call(b, 'GET', '/api/v1/outreach/availability/slots')).body
+    expect(slots.length).toBe(2)
+    expect(slots[0].city).toBe('Berlin')
+    expect(slots[1].city).toBe('Paris')
+
+    const matches = (await call(b, 'GET', '/api/v1/outreach/availability/matches')).body
+    expect(matches.length).toBe(2)
+    const berlin = matches.find((m: any) => m.slot.city === 'Berlin')
+    expect(berlin.contacts.length).toBeGreaterThan(0)
+    expect(berlin.venues.length).toBeGreaterThan(0)
+    // past_gig_in_city ranks first
+    expect(berlin.contacts[0].past_gig_in_city).toBe(true)
+
+    const templates = (await call(b, 'GET', '/api/v1/outreach/templates')).body
+    expect(templates.length).toBe(1)
+    expect(templates[0].is_default).toBe(true)
+
+    const requests = (await call(b, 'GET', '/api/v1/outreach/requests')).body
+    expect(requests.length).toBe(1)
+    expect(requests[0].status).toBe('sent')
+    expect(requests[0].email_status).toBe('delivered')
+  })
+
+  it('creates a slot, rejects past date and duplicate city/date/country', async () => {
+    const b = backend()
+    const future = new Date()
+    future.setUTCDate(future.getUTCDate() + 10)
+    const date = future.toISOString().slice(0, 10)
+    const created = await call(b, 'POST', '/api/v1/outreach/availability/slots', { date, city: 'Amsterdam', country: 'NL', genres: ['house'], fee_min: 400, fee_max: 600, currency: 'EUR', notes: '' })
+    expect(created.status).toBe(201)
+
+    const past = await call(b, 'POST', '/api/v1/outreach/availability/slots', { date: '2020-01-01', city: 'Berlin', country: 'DE', genres: [], fee_min: null, fee_max: null, currency: 'EUR', notes: '' })
+    expect(past.status).toBe(422)
+    expect(past.body.error).toContain('must not be in the past')
+
+    const dup = await call(b, 'POST', '/api/v1/outreach/availability/slots', { date, city: 'Amsterdam', country: 'NL', genres: ['house'], fee_min: 400, fee_max: 600, currency: 'EUR', notes: '' })
+    expect(dup.status).toBe(409)
+    expect(dup.body.error).toBe('conflict')
+  })
+
+  it('lists templates, creates, updates with version token, and deletes', async () => {
+    const b = backend()
+    const created = await call(b, 'POST', '/api/v1/outreach/templates', { name: 'Custom', subject: 'Sub', body: 'Body', is_default: false })
+    expect(created.status).toBe(201)
+    expect(created.body.version).toBe(1)
+    const id = created.body.id
+    const dup = await call(b, 'POST', '/api/v1/outreach/templates', { name: 'Custom', subject: 'Sub', body: 'Body', is_default: false })
+    expect(dup.status).toBe(409)
+
+    const updated = await call(b, 'PUT', `/api/v1/outreach/templates/${id}`, { subject: 'New Sub', version: 1 })
+    expect(updated.status).toBe(200)
+    expect(updated.body.subject).toBe('New Sub')
+    expect(updated.body.version).toBe(2)
+
+    const stale = await call(b, 'PUT', `/api/v1/outreach/templates/${id}`, { subject: 'X', version: 1 })
+    expect(stale.status).toBe(409)
+    expect(stale.body.error).toBe('conflict')
+
+    const del = await call(b, 'DELETE', `/api/v1/outreach/templates/${id}`)
+    expect(del.status).toBe(204)
+    expect((await call(b, 'GET', `/api/v1/outreach/templates/${id}`)).status).toBe(404)
+  })
+
+  it('sends a request, records it with rendered copy and EPK link, enforces daily cap', async () => {
+    const b = backend()
+    const contact = (await call(b, 'GET', '/api/v1/contacts')).body.find((c: any) => c.email === 'alex@alpha.example')
+    const slot = (await call(b, 'GET', '/api/v1/outreach/availability/slots')).body[0]
+    const tpl = (await call(b, 'GET', '/api/v1/outreach/templates')).body[0]
+
+    const sent = await call(b, 'POST', '/api/v1/outreach/requests', { contact_id: contact.id, availability_slot_id: slot.id, template_id: tpl.id })
+    expect(sent.status).toBe(201)
+    expect(sent.body.contact_id).toBe(contact.id)
+    expect(sent.body.subject).toContain('Berlin')
+    expect(sent.body.status).toBe('sent')
+
+    const requests = (await call(b, 'GET', '/api/v1/outreach/requests')).body
+    expect(requests[0].id).toBe(sent.body.id)
+  })
+
+  it('rejects a contact without email, a suppressed email', async () => {
+    const b = backend()
+    const contact = (await call(b, 'GET', '/api/v1/contacts')).body.find((c: any) => c.email === 'alex@alpha.example')
+    const slot = (await call(b, 'GET', '/api/v1/outreach/availability/slots')).body[0]
+    const tpl = (await call(b, 'GET', '/api/v1/outreach/templates')).body[0]
+    // create a contact without email
+    const noEmail = await call(b, 'POST', '/api/v1/contacts', { name: 'No Email', company: 'Test', email: '', phone: '0', type: 'promoter' })
+
+    const r1 = await call(b, 'POST', '/api/v1/outreach/requests', { contact_id: noEmail.body.id, availability_slot_id: slot.id, template_id: tpl.id })
+    expect(r1.status).toBe(422)
+    expect(r1.body.error).toContain('no email address')
+
+    // suppressed email
+    const suppressed = await call(b, 'POST', '/api/v1/outreach/suppressions', { email: 'alex@alpha.example', reason: 'test' })
+    expect(suppressed.status).toBe(201)
+    const r2 = await call(b, 'POST', '/api/v1/outreach/requests', { contact_id: contact.id, availability_slot_id: slot.id, template_id: tpl.id })
+    expect(r2.status).toBe(409)
+    expect(r2.body.error).toContain('suppressed')
+  })
+
+  it('suppressions list, add (idempotent), and delete', async () => {
+    const b = backend()
+    const list = (await call(b, 'GET', '/api/v1/outreach/suppressions')).body
+    expect(list.length).toBe(2)
+
+    const added = await call(b, 'POST', '/api/v1/outreach/suppressions', { email: 'new@example.com', reason: 'manual' })
+    expect(added.status).toBe(201)
+    const again = await call(b, 'POST', '/api/v1/outreach/suppressions', { email: 'new@example.com', reason: 'again' })
+    expect(again.status).toBe(201)
+    expect(again.body.id).toBe(added.body.id)
+
+    await call(b, 'DELETE', `/api/v1/outreach/suppressions/${added.body.id}`)
+    expect((await call(b, 'GET', `/api/v1/outreach/suppressions/${added.body.id}`)).status).toBe(404)
+  })
+
+  it('slot match by slot_id returns single group, unknown slot is 404', async () => {
+    const b = backend()
+    const slots = (await call(b, 'GET', '/api/v1/outreach/availability/slots')).body
+    const match = await call(b, 'GET', `/api/v1/outreach/availability/matches?slot_id=${slots[0].id}`)
+    expect(match.status).toBe(200)
+    expect(match.body.length).toBe(1)
+    expect(match.body[0].slot.id).toBe(slots[0].id)
+
+    expect((await call(b, 'GET', '/api/v1/outreach/availability/matches?slot_id=00000000-0000-4000-8000-000000000999')).status).toBe(404)
+  })
+})

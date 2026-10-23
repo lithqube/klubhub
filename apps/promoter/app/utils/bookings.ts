@@ -110,24 +110,24 @@ export function mentionsVenue(text: string): boolean {
 export function offerErrorText(e: ApiError | null): string {
   switch (e?.error) {
     case 'email_unavailable':
-      return 'Email is not configured (Plunk) — offers cannot be sent until transactional email is set up.'
+      return 'Email is not configured (Plunk): offers cannot be sent until transactional email is set up.'
     // Provider-terms gate: offers are cold B2B outreach and most hosted
     // providers prohibit it, so the API refuses unless an administrator
     // attested a permitted provider. An admin step, not a user error.
     case 'outreach_not_permitted':
-      return 'Outreach sending is turned off for this server: its email provider’s terms do not permit unsolicited B2B outreach. An administrator must set OUTREACH_PROVIDER_PERMITS_OUTREACH=true after confirming a permitted provider — see docs/OUTREACH-PROVIDER.md.'
+      return 'Outreach sending is turned off for this server: its email provider\’s terms do not permit unsolicited B2B outreach. An administrator must set OUTREACH_PROVIDER_PERMITS_OUTREACH=true after confirming a permitted provider: see docs/OUTREACH-PROVIDER.md.'
     case 'suppressed':
       return 'This DJ is on your do-not-contact list.'
     case 'conflict':
-      return 'The template changed since you loaded it — reload and try again.'
+      return 'The template changed since you loaded it: reload and try again.'
     case 'duplicate':
       return 'This DJ is already on your do-not-contact list.'
     case 'rate_limited':
-      return 'Daily offer limit reached — try again tomorrow.'
+      return 'Daily offer limit reached: try again tomorrow.'
     case 'no_contact_email':
       return 'This DJ has no email address on file.'
     case 'no_reply_to':
-      return 'No reply address for your account — set your email so DJs can reply.'
+      return 'No reply address for your account: set your email so DJs can reply.'
     case 'forbidden':
       return 'That slot belongs to another event.'
     case 'invalid':

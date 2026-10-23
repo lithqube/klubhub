@@ -205,7 +205,7 @@ describe('OutreachComposer', () => {
     [503, { error: 'email is not available' }, 'Email is not configured (Plunk)'],
     [409, { error: 'address is suppressed' }, 'This contact is on your do-not-contact list.'],
     [409, { error: 'conflict' }, 'The template changed since you loaded it'],
-    [429, { error: 'daily outreach limit reached' }, 'Daily outreach limit reached — try again tomorrow.'],
+    [429, { error: 'daily outreach limit reached' }, 'Daily outreach limit reached: try again tomorrow.'],
     [422, { error: 'contact has no email address' }, 'This contact has no email address on file.'],
     [422, { error: 'no DJ contact email configured' }, 'Set your contact email in Settings'],
     [422, { error: 'epk export has no garage object key' }, 'This EPK export has no file'],

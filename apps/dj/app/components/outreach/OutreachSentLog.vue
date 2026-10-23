@@ -41,7 +41,7 @@ async function doNotContact(r: OutreachRequest) {
           </span>
         </span>
         <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-          <span v-if="r.epk_export_id" class="badge-hud badge-draft" data-testid="request-epk">
+          <span v-if="r.epk_export_id" class="social-chip" data-testid="request-epk">
             <FileText style="width:10px;height:10px;" aria-hidden="true" /> EPK
           </span>
           <span class="badge-hud" :class="requestStatusClass(r.status)" data-testid="request-status">{{ deliveryLabel(r) }}</span>

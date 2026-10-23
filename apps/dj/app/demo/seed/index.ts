@@ -8,11 +8,13 @@ import { financeLookup } from '../handlers/finance'
 import { seedAccount, seedEpk, seedPosts, seedSettings } from './content'
 import { seedGigs } from './gigs'
 import { seedTracklists } from './tracklists'
+import { seedOutreach } from '../handlers/outreach'
 
 export function createSeedState(now: Date): DemoState {
   const { tracklists, tracks } = seedTracklists(now)
   const { gigs, customers, venues, contacts, gigLinks } = seedGigs(now)
   const { epk, assets } = seedEpk(now)
+  const outreach = seedOutreach(now)
   const state: DemoState = {
     version: 1,
     seededAt: now.toISOString(),
@@ -37,5 +39,6 @@ export function createSeedState(now: Date): DemoState {
   seedInvoices(db, gigDate)
   seedFinanceEntries(db, gigDate)
   state.finance = db.toJSON()
+  ;(state as any).outreach = outreach
   return state
 }

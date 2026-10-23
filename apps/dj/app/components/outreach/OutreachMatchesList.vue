@@ -33,16 +33,16 @@ const groups = computed(() => (selectedSlotId.value
     <KhEmptyState
       v-else-if="!groups.length"
       title="NO MATCHES YET"
-      :hint="selectedSlotId ? 'No promoter contacts in this city — add some in Contacts.' : 'Add an availability slot and load its matches.'"
+      :hint="selectedSlotId ? 'No promoter contacts in this city: add some in Contacts.' : 'Add an availability slot and load its matches.'"
       data-testid="matches-empty"
     />
     <div v-else class="space-y-4">
       <div v-for="m in groups" :key="m.slot.id" class="space-y-2" data-testid="match-group">
         <p class="data-frag" style="font-size:11px;margin:0;">
-          {{ m.slot.date }} · {{ m.slot.city }} — {{ m.contacts.length }} promoter{{ m.contacts.length === 1 ? '' : 's' }}
+          {{ m.slot.date }} · {{ m.slot.city }} · {{ m.contacts.length }} promoter{{ m.contacts.length === 1 ? '' : 's' }}
         </p>
         <div v-if="m.venues.length" style="display:flex;gap:6px;flex-wrap:wrap;">
-          <span v-for="v in m.venues" :key="v.id" class="badge-hud badge-archived" data-testid="venue-chip">{{ v.name }}</span>
+          <span v-for="v in m.venues" :key="v.id" class="social-chip" data-testid="venue-chip">{{ v.name }}</span>
         </div>
         <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px;">
           <li

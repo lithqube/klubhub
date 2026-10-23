@@ -83,29 +83,29 @@ export function requestErrorText(e: OutreachApiError | null): string {
   const text = message || code
   switch (status) {
     case 503:
-      return 'Email is not configured (Plunk) — booking requests cannot be sent until transactional email is set up.'
+      return 'Email is not configured (Plunk): booking requests cannot be sent until transactional email is set up.'
     case 409:
       return code === 'conflict'
-        ? 'The template changed since you loaded it — reload and try again.'
+        ? 'The template changed since you loaded it: reload and try again.'
         : 'This contact is on your do-not-contact list.'
     case 429:
-      return 'Daily outreach limit reached — try again tomorrow.'
+      return 'Daily outreach limit reached: try again tomorrow.'
     case 422:
       // Provider-terms gate: outreach is cold B2B and most hosted providers
       // prohibit it, so the API refuses unless the operator attested a
       // permitted provider. This is an admin configuration step, not a user
       // error — say so plainly rather than echoing the raw server string.
       if (text.includes('provider') || code === 'outreach_not_permitted') {
-        return 'Outreach sending is turned off for this server: its email provider’s terms do not permit unsolicited B2B outreach. An administrator must set OUTREACH_PROVIDER_PERMITS_OUTREACH=true after confirming a permitted provider — see docs/OUTREACH-PROVIDER.md.'
+        return 'Outreach sending is turned off for this server: its email provider\’s terms do not permit unsolicited B2B outreach. An administrator must set OUTREACH_PROVIDER_PERMITS_OUTREACH=true after confirming a permitted provider: see docs/OUTREACH-PROVIDER.md.'
       }
       if (text.includes('no email')) return 'This contact has no email address on file.'
       if (text.includes('no DJ contact email')) {
         return 'Set your contact email in Settings → EPK contact info so promoters can reply.'
       }
-      if (text.includes('no garage object key')) return 'This EPK export has no file — export a fresh PDF and try again.'
+      if (text.includes('no garage object key')) return 'This EPK export has no file: export a fresh PDF and try again.'
       return text || 'The booking request was rejected.'
     case 404:
-      return 'That contact or slot no longer exists — reload and try again.'
+      return 'That contact or slot no longer exists: reload and try again.'
     default:
       return text || 'Could not send the request.'
   }
