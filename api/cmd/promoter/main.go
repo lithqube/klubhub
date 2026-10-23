@@ -29,10 +29,12 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/auth"
 	"github.com/klubhub/dj/api/internal/platform/authz"
 	platformconfig "github.com/klubhub/dj/api/internal/platform/config"
+	"github.com/klubhub/dj/api/internal/platform/email"
 	"github.com/klubhub/dj/api/internal/platform/envelope"
 	"github.com/klubhub/dj/api/internal/platform/events"
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/tenantdb"
+	"github.com/klubhub/dj/api/internal/promoter/bookings"
 	"github.com/klubhub/dj/api/internal/promoter/config"
 	"github.com/klubhub/dj/api/internal/promoter/door"
 	"github.com/klubhub/dj/api/internal/promoter/event"
@@ -136,6 +138,37 @@ func serve() error {
 	guests := guest.NewService(rt.db, rt.keys, nil)
 	events.OnCreate(guests.CopyStandingLists) // standing lists join each new event atomically
 	aud := audience.NewService(rt.db, rt.keys, nil)
+	// Bookings (phase 04.10): promoter→DJ outreach. The handler is always
+	// mounted — reads work without Plunk, POST /offers answers 503.
+	var bookingsEmails bookings.EmailServiceIface
+	var emailSvc *email.EmailService
+	if rt.cfg.PlunkConfigured() {
+		sender := email.NewPlunkSender(email.PlunkConfig{
+			BaseURL:   rt.cfg.PlunkBaseURL,
+			ProjectID: rt.cfg.PlunkProjectID,
+			APIKey:    rt.cfg.PlunkAPIKey,
+			FromEmail: rt.cfg.PlunkFromEmail,
+			FromName:  rt.cfg.PlunkFromName,
+		})
+		// Tenant-scoped outbox (sealed columns, 00014): the repository seals
+		// on write and unseals for delivery/log through the envelope-backed
+		// codec, so talent PII is never stored in clear.
+		repo := email.NewEmailRepository(rt.db)
+		emailSvc = email.NewEmailService(repo, sender)
+		emailSvc.WithFieldCodec(bookings.EnvelopeCodec{Keys: rt.keys})
+		repo.WithFieldSealer(emailSvc)
+		bookingsEmails = emailSvc
+	} else {
+		rt.log.Warn().Msg("Plunk not configured: booking-offer email is disabled (reads still work, sends answer 503)")
+	}
+	bk := bookings.NewService(rt.db, rt.keys, bookingsEmails, bookings.ServiceConfig{
+		FromEmail: rt.cfg.PlunkFromEmail,
+		FromName:  rt.cfg.PlunkFromName,
+		MaxPerDay: rt.cfg.OutreachMaxPerDay,
+		// Fail-closed provider attestation — see docs/OUTREACH-PROVIDER.md.
+		OutreachGate: email.NewOutreachGate(
+			strings.EqualFold(strings.TrimSpace(rt.cfg.OutreachProviderPermitsOutreach), "true")),
+	}, nil)
 	deps := server.Deps{
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),
 		Events:        event.NewHandler(events),
@@ -144,6 +177,7 @@ func serve() error {
 		Reports:       report.NewHandler(report.NewService(rt.db, rt.keys, nil)),
 		Retention:     retention.NewHandler(retention.NewService(rt.db, nil)),
 		Sealed:        sealed.NewHandler(sealed.NewService(rt.db, rt.keys, nil)),
+		Bookings:      bookings.NewHandler(bk),
 		ServeFrontend: rt.cfg.ServeFrontend, NuxtURL: rt.cfg.NuxtInternalURL,
 	}
 	var managerPINs door.ManagerPINs // door sessions and PINs exist with local identity only
@@ -183,6 +217,13 @@ func serve() error {
 	// Retention job: once at start, then hourly; stops with the server.
 	stopRetention := startRetention(ctx, rt)
 	defer stopRetention()
+
+	// Email worker: per-tenant retry passes over the sealed outbox (only when
+	// Plunk is configured — without a sender there is nothing to deliver).
+	if emailSvc != nil {
+		stopEmail := startEmailWorker(ctx, rt, emailSvc)
+		defer stopEmail()
+	}
 
 	srv := &http.Server{
 		Addr:              net.JoinHostPort(rt.cfg.BindAddress, rt.cfg.Port),
@@ -254,6 +295,47 @@ func startRetention(ctx context.Context, rt *runtime) func() {
 	go func() {
 		defer close(done)
 		w.Run(ctx)
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+// startEmailWorker runs a per-tenant retry pass over the sealed outbox until
+// ctx ends, with an immediate first pass. RLS is FORCE'd, so an unscoped poll
+// sees nothing: the worker lists tenants (a SECURITY DEFINER id-only
+// function) and runs each pass inside WithTenant.
+func startEmailWorker(ctx context.Context, rt *runtime, svc *email.EmailService) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			tenants, err := rt.db.Tenants(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					rt.log.Error().Err(err).Msg("email worker: list tenants failed")
+				}
+			} else {
+				for _, tenant := range tenants {
+					tctx := tenantdb.ContextWithTenant(ctx, tenant)
+					if _, err := svc.RetryFailed(tctx, 8); err != nil && ctx.Err() == nil {
+						rt.log.Error().Err(err).Str("tenant", tenant.String()).Msg("email retry pass failed")
+					}
+				}
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
 	}()
 	return func() {
 		cancel()

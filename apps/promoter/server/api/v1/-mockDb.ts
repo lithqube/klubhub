@@ -19,9 +19,14 @@ import type {
   Counts as AudienceCounts, ImportResult as AudienceImportResult, Page as AudiencePage, Segment as AudienceSegment,
   SegmentFilter as AudienceSegmentFilter,
 } from '~/types/audience'
+import type {
+  OpenSlot, OpenSlotInput, OutreachRequest, OutreachTemplate, SendOfferInput, Suppression, SuppressionCreate,
+  TalentContact, TalentContactInput, TalentMatch, TalentSource, TemplateCreate, TemplateUpdate,
+} from '~/types/bookings'
 import {
   allocationState, arrivalsFrom, countByStatus, cutoffInstant, fold, headsHeld, holdsQuota, LIST_TYPES, STATUSES,
 } from '~/utils/guests'
+import { offerVariables, renderOfferText } from '~/utils/bookings'
 import { validateTimetable } from '~/utils/timetable'
 import { BUCKET_MS, bucketStart } from '~/utils/report'
 import { instantToZoned } from '~/utils/datetime'
@@ -1146,7 +1151,7 @@ function personalRows(eventId: string): number {
 
 /** Anonymise one event in place; returns rows touched per table. */
 function purge(eventId: string, trigger: PurgeRow['trigger'], at = new Date().toISOString()): PurgeRow {
-  const counts = { guests: 0, orders: 0, order_positions: 0, guest_allocations: 0, door_pins: 0 }
+  const counts = { guests: 0, orders: 0, order_positions: 0, guest_allocations: 0, door_pins: 0, outreach_requests: 0 }
   for (const g of guests.filter(x => x.event_id === eventId && !x.purged)) {
     Object.assign(g, { name: '', email: '', phone: '', note: '', purged: true })
     counts.guests++
@@ -1447,4 +1452,356 @@ export function deleteAudienceSegment(id: string) {
   const i = audienceSegmentRows.findIndex(s => s.id === id)
   if (i < 0) throw guestErr(404, { error: 'not_found' })
   audienceSegmentRows.splice(i, 1)
+}
+
+// ---------------------------------------------------------------- bookings (04.10)
+// Mirrors api/internal/promoter/bookings: the talent book, open slots, slot
+// matching (SPEC §8), offer templates, the sent log and the do-not-contact
+// list. The suppression rows keep the email in memory as the blind-index
+// stand-in; the API shape never returns it. All names below are fictional.
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** The mock member the offers are sent from (ReplyTo, OFFER-06). */
+const MOCK_MEMBER = { name: 'Nachtwerk Bookings', email: 'bookings@nachtwerk.example' }
+/** OUTREACH_MAX_PER_DAY (default 50). */
+const OUTREACH_MAX_PER_DAY = 50
+
+/** The built-in template used when the tenant has no default row (00017 seeds one). */
+export const DEFAULT_TEMPLATE_SUBJECT = 'Booking offer: {{event_name}} on {{date}}'
+export const DEFAULT_TEMPLATE_BODY = `Hi {{dj_name}},
+
+we're {{org_name}} and we'd love to have you play {{event_name}}.
+
+Event: {{event_name}}
+Date: {{date}}
+City: {{city}}
+Venue: {{venue}}
+Slot: {{slot_role}}
+Genres: {{genres}}
+Fee: {{fee}}
+{{notes}}
+
+If you're interested, just reply to this email — it lands directly in {{promoter_name}}'s inbox ({{promoter_email}}).
+
+If you'd rather not hear from us, reply "stop" and we'll remove you.
+
+{{org_name}}`
+
+const talentRows: TalentContact[] = [
+  { id: 'tc-nadia', name: 'Nadia Kova', email: 'nadia@kovadjs.example', phone: '', has_email: true, city: 'Berlin', country: 'DE', genres: ['techno', 'hard techno'], source: 'past_gig', notes: 'Played Klubnacht 02 — reliable, no drama.', created_at: iso(-8), updated_at: iso(-8) },
+  { id: 'tc-omar', name: 'Omar Reyes', email: 'omar@reyes.example', phone: '+49 30 555 0142', has_email: true, city: 'Berlin', country: 'DE', genres: ['house', 'techno'], source: 'referral', notes: 'Warm intro from Ben Klock.', created_at: iso(-6), updated_at: iso(-6) },
+  { id: 'tc-june', name: 'June Park', email: 'june@park.example', phone: '', has_email: true, city: 'Berlin', country: 'DE', genres: ['techno'], source: 'manual', notes: '', created_at: iso(-4), updated_at: iso(-4) },
+  // No email on file: matchable, never sendable (OFFER-10).
+  { id: 'tc-lena', name: 'Lena W', email: '', phone: '+49 30 555 0177', has_email: false, city: 'Berlin', country: 'DE', genres: ['techno', 'acid'], source: 'past_gig', notes: 'Ask for an email at the door.', created_at: iso(-2), updated_at: iso(-2) },
+  // Hamburg: never matches the Berlin events (match is by event city).
+  { id: 'tc-finn', name: 'Finn Okafor', email: 'finn@okafor.example', phone: '', has_email: true, city: 'Hamburg', country: 'DE', genres: ['techno'], source: 'manual', notes: 'Travels for the right gig.', created_at: iso(-1), updated_at: iso(-1) },
+]
+
+const openSlotRows: OpenSlot[] = [
+  { id: 'os-klub-head', event_id: 'e-klubnacht', role: 'Headliner', genres: ['techno'], fee_min: 800, fee_max: 1200, currency: 'EUR', notes: '23:00–02:00, Main Room.', created_at: iso(-3) },
+  { id: 'os-klub-open', event_id: 'e-klubnacht', role: '', genres: [], fee_min: null, fee_max: null, currency: null, notes: '', created_at: iso(-2) },
+  { id: 'os-ware', event_id: 'e-warehouse', role: 'Warm-up', genres: ['techno', 'house'], fee_min: 400, fee_max: 400, currency: 'EUR', notes: '', created_at: iso(-1) },
+]
+
+const outreachTemplateRows: OutreachTemplate[] = [
+  { id: 'tpl-default', name: 'Default booking offer', direction: 'promoter_to_dj', subject: DEFAULT_TEMPLATE_SUBJECT, body: DEFAULT_TEMPLATE_BODY, is_default: true, version: 1, created_at: iso(-5), updated_at: iso(-5) },
+  { id: 'tpl-short', name: 'Short ask', direction: 'promoter_to_dj', subject: 'Quick one: {{event_name}}', body: 'Hi {{dj_name}},\n\nshort on DJs for {{event_name}} ({{date}}, {{city}}). Fee: {{fee}}. Interested?\n\n{{org_name}}', is_default: false, version: 2, created_at: iso(-3), updated_at: iso(-1) },
+]
+
+const outreachRequestRows: OutreachRequest[] = [
+  { id: 'or-june', event_id: 'e-klubnacht', open_slot_id: 'os-klub-head', talent_contact_id: 'tc-june', template_id: 'tpl-default', email_message_id: 'plunk-mock-1', to_email: 'june@park.example', subject: 'Booking offer: Klubnacht 03', body: '(rendered offer — see the sent log row)', status: 'sent', sent_at: iso(-1, -3), created_at: iso(-1, -3), email_status: 'delivered' },
+  { id: 'or-omar', event_id: null, open_slot_id: null, talent_contact_id: 'tc-omar', template_id: null, email_message_id: null, to_email: 'omar@reyes.example', subject: 'Booking offer: Klubnacht 03', body: '(rendered offer — delivery failed)', status: 'failed', sent_at: null, created_at: iso(-2), email_status: 'failed', email_error: 'mailbox full' },
+]
+
+interface SuppressionRow { id: string, email: string, reason: string, created_at: string }
+const suppressionRows: SuppressionRow[] = [
+  { id: 'sup-1', email: 'stopme@example.com', reason: 'replied "stop"', created_at: iso(-5) },
+]
+
+const suppressionView = (r: SuppressionRow): Suppression => ({ id: r.id, reason: r.reason, created_at: r.created_at })
+
+function validateGenres(genres: string[]): string[] {
+  const out = (genres ?? []).map(g => (g ?? '').trim()).filter(Boolean)
+  if ((genres ?? []).some(g => !(g ?? '').trim())) throw invalidField('genres', 'genres must not be empty')
+  if (out.length > 12) throw invalidField('genres', 'at most 12 genres')
+  return out
+}
+
+function validateTalentInput(b: TalentContactInput): { name: string, email: string, genres: string[], source: TalentSource } {
+  const name = (b.name ?? '').trim()
+  const email = (b.email ?? '').trim()
+  if (!name && !email) throw invalidField('name', 'a name or an email is required')
+  if (email && !EMAIL_RE.test(email)) throw invalidField('email', 'must be a valid email address')
+  const source = ((b.source ?? '').trim() || 'manual') as TalentSource
+  if (!['past_gig', 'referral', 'manual'].includes(source)) {
+    throw invalidField('source', 'must be one of past_gig, referral, manual')
+  }
+  return { name, email, genres: validateGenres(b.genres ?? []), source }
+}
+
+export function listTalent(filter: { city?: string, genre?: string, q?: string } = {}): TalentContact[] {
+  const city = (filter.city ?? '').trim().toLowerCase()
+  const genre = (filter.genre ?? '').trim()
+  // The API matches q against the name/email blind index (exact); the mock
+  // approximates it with a case-insensitive substring.
+  const q = (filter.q ?? '').trim().toLowerCase()
+  return talentRows
+    .filter(r => (!city || r.city.trim().toLowerCase() === city)
+      && (!genre || r.genres.includes(genre))
+      && (!q || r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q)))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    .map(r => ({ ...r }))
+}
+
+export function createTalent(b: TalentContactInput): TalentContact {
+  const v = validateTalentInput(b)
+  if (v.email && talentRows.some(r => r.email.toLowerCase() === v.email.toLowerCase())) {
+    throw guestErr(409, { error: 'duplicate' })
+  }
+  const now = new Date().toISOString()
+  const row: TalentContact = {
+    id: newId('tc'), name: v.name, email: v.email, phone: (b.phone ?? '').trim(), has_email: v.email !== '',
+    city: (b.city ?? '').trim(), country: (b.country ?? '').trim(), genres: v.genres, source: v.source,
+    notes: (b.notes ?? '').trim(), created_at: now, updated_at: now,
+  }
+  talentRows.unshift(row)
+  return { ...row }
+}
+
+export function updateTalent(id: string, b: TalentContactInput): TalentContact {
+  const row = talentRows.find(r => r.id === id)
+  if (!row) throw guestErr(404, { error: 'not_found' })
+  const v = validateTalentInput(b)
+  if (v.email && talentRows.some(r => r.id !== id && r.email.toLowerCase() === v.email.toLowerCase())) {
+    throw guestErr(409, { error: 'duplicate' })
+  }
+  row.name = v.name
+  row.email = v.email
+  row.has_email = v.email !== ''
+  row.phone = (b.phone ?? '').trim()
+  row.city = (b.city ?? '').trim()
+  row.country = (b.country ?? '').trim()
+  row.genres = v.genres
+  row.source = v.source
+  row.notes = (b.notes ?? '').trim()
+  row.updated_at = new Date().toISOString()
+  return { ...row }
+}
+
+export function deleteTalent(id: string): void {
+  const i = talentRows.findIndex(r => r.id === id)
+  if (i < 0) throw guestErr(404, { error: 'not_found' })
+  talentRows.splice(i, 1)
+}
+
+function insertSuppression(email: string, reason: string): Suppression {
+  if (suppressionRows.some(r => r.email.toLowerCase() === email.toLowerCase())) {
+    throw guestErr(409, { error: 'duplicate' })
+  }
+  const row: SuppressionRow = { id: newId('sup'), email, reason, created_at: new Date().toISOString() }
+  suppressionRows.unshift(row)
+  return suppressionView(row)
+}
+
+/** One-click opt-out from the talent book: the contact's email joins the
+ * do-not-contact list; the row stays but leaves the matchable pool. */
+export function suppressTalent(id: string): Suppression {
+  const row = talentRows.find(r => r.id === id)
+  if (!row) throw guestErr(404, { error: 'not_found' })
+  if (!row.has_email) throw guestErr(422, { error: 'no_contact_email' })
+  return insertSuppression(row.email, 'marked do-not-contact')
+}
+
+export function listSlots(eventId: string): OpenSlot[] {
+  findEvent(eventId)
+  return openSlotRows.filter(s => s.event_id === eventId).map(s => ({ ...s }))
+}
+
+export function createSlot(eventId: string, b: OpenSlotInput): OpenSlot {
+  findEvent(eventId)
+  const role = (b.role ?? '').trim()
+  const genres = validateGenres(b.genres ?? [])
+  const feeMin = b.fee_min ?? null
+  const feeMax = b.fee_max ?? null
+  if (feeMin != null && feeMin < 0) throw invalidField('fee_min', 'must not be negative')
+  if (feeMax != null && feeMax < 0) throw invalidField('fee_max', 'must not be negative')
+  if (feeMin != null && feeMax != null && feeMin > feeMax) throw invalidField('fee_min', 'must not exceed fee_max')
+  const currency = (b.currency ?? '').trim().toUpperCase() || null
+  if (currency && !/^[A-Z]{3}$/.test(currency)) throw invalidField('currency', 'must be a 3-letter ISO 4217 code')
+  // UNIQUE (event_id, role) — one slot per role per event.
+  if (openSlotRows.some(s => s.event_id === eventId && s.role === role)) {
+    throw guestErr(409, { error: 'conflict' })
+  }
+  const row: OpenSlot = {
+    id: newId('os'), event_id: eventId, role, genres, fee_min: feeMin, fee_max: feeMax, currency,
+    notes: (b.notes ?? '').trim(), created_at: new Date().toISOString(),
+  }
+  openSlotRows.push(row)
+  return { ...row }
+}
+
+export function deleteSlot(id: string): void {
+  const i = openSlotRows.findIndex(s => s.id === id)
+  if (i < 0) throw guestErr(404, { error: 'not_found' })
+  openSlotRows.splice(i, 1)
+}
+
+/** SPEC §8: same city as the event, genre overlap when both sides have
+ * genres, suppressed addresses excluded, ranked by overlap desc then most
+ * recently added. Contacts without an email still match (OFFER-10). */
+export function matchSlot(slotId: string): TalentMatch[] {
+  const slot = openSlotRows.find(s => s.id === slotId)
+  if (!slot) throw guestErr(404, { error: 'not_found' })
+  const ev = findEvent(slot.event_id)
+  const eventGenres = ev.genres ?? []
+  const city = ev.city.trim().toLowerCase()
+  const suppressed = new Set(suppressionRows.map(s => s.email.toLowerCase()))
+  return talentRows
+    .filter(r => r.city.trim().toLowerCase() === city
+      && (eventGenres.length === 0 || r.genres.length === 0 || r.genres.some(g => eventGenres.includes(g)))
+      && (!r.has_email || !suppressed.has(r.email.toLowerCase())))
+    .map(r => ({ contact: { ...r }, overlap_genres: r.genres.filter(g => eventGenres.includes(g)) }))
+    .sort((a, b) => b.overlap_genres.length - a.overlap_genres.length
+      || Date.parse(b.contact.created_at) - Date.parse(a.contact.created_at))
+}
+
+export function listTemplates(): OutreachTemplate[] {
+  return outreachTemplateRows.map(t => ({ ...t }))
+}
+
+export function createTemplate(b: TemplateCreate): OutreachTemplate {
+  const name = (b.name ?? '').trim()
+  if (!name) throw invalidField('name', 'required')
+  if (outreachTemplateRows.some(t => t.name === name)) throw guestErr(409, { error: 'conflict' })
+  const subject = (b.subject ?? '').trim()
+  if (!subject) throw invalidField('subject', 'required')
+  const body = (b.body ?? '').trim()
+  if (!body) throw invalidField('body', 'required')
+  const now = new Date().toISOString()
+  if (b.is_default) outreachTemplateRows.forEach(t => { t.is_default = false })
+  const row: OutreachTemplate = {
+    id: newId('tpl'), name, direction: 'promoter_to_dj', subject, body,
+    is_default: !!b.is_default, version: 1, created_at: now, updated_at: now,
+  }
+  outreachTemplateRows.push(row)
+  return { ...row }
+}
+
+export function updateTemplate(id: string, b: TemplateUpdate): OutreachTemplate {
+  const row = outreachTemplateRows.find(t => t.id === id)
+  if (!row) throw guestErr(404, { error: 'not_found' })
+  if (!b.version || b.version < 1) throw invalidField('version', 'required (optimistic concurrency token)')
+  if (row.version !== b.version) throw guestErr(409, { error: 'conflict' })
+  if (b.name !== undefined) {
+    const name = b.name.trim()
+    if (!name) throw invalidField('name', 'required')
+    if (outreachTemplateRows.some(t => t.id !== id && t.name === name)) throw guestErr(409, { error: 'conflict' })
+    row.name = name
+  }
+  if (b.subject !== undefined) {
+    const subject = b.subject.trim()
+    if (!subject) throw invalidField('subject', 'required')
+    row.subject = subject
+  }
+  if (b.body !== undefined) {
+    const body = b.body.trim()
+    if (!body) throw invalidField('body', 'required')
+    row.body = body
+  }
+  if (b.is_default !== undefined) {
+    if (b.is_default) outreachTemplateRows.forEach(t => { if (t.id !== id) t.is_default = false })
+    row.is_default = b.is_default
+  }
+  row.version += 1
+  row.updated_at = new Date().toISOString()
+  return { ...row }
+}
+
+export function deleteTemplate(id: string): void {
+  const i = outreachTemplateRows.findIndex(t => t.id === id)
+  if (i < 0) throw guestErr(404, { error: 'not_found' })
+  outreachTemplateRows.splice(i, 1)
+}
+
+/** Sends one offer: validate → contact (must have an email, not suppressed)
+ * → slot authorization → resolve template + render → daily cap → insert the
+ * request row. The mock renders with the same variables as the server and
+ * always delivers (status 'sent'). */
+export function sendOffer(b: SendOfferInput): OutreachRequest {
+  if (!b.talent_contact_id) throw invalidField('talent_contact_id', 'required')
+  const contact = talentRows.find(r => r.id === b.talent_contact_id)
+  if (!contact) throw guestErr(404, { error: 'not_found' })
+  if (!contact.has_email) throw guestErr(422, { error: 'no_contact_email' })
+  if (suppressionRows.some(s => s.email.toLowerCase() === contact.email.toLowerCase())) {
+    throw guestErr(409, { error: 'suppressed' })
+  }
+  let slot: OpenSlot | null = null
+  let ev: EventDetail | null = null
+  if (b.open_slot_id) {
+    slot = openSlotRows.find(s => s.id === b.open_slot_id) ?? null
+    // RLS makes a cross-tenant slot invisible; ErrForbidden avoids leaking it.
+    if (!slot) throw guestErr(403, { error: 'forbidden' })
+    ev = findEvent(slot.event_id)
+  }
+  let tpl: OutreachTemplate | null
+  if (b.template_id) {
+    tpl = outreachTemplateRows.find(t => t.id === b.template_id) ?? null
+    if (!tpl) throw guestErr(404, { error: 'not_found' })
+  } else {
+    tpl = outreachTemplateRows.find(t => t.is_default) ?? null
+  }
+  const today = new Date().toDateString()
+  if (outreachRequestRows.filter(r => new Date(r.created_at).toDateString() === today).length >= OUTREACH_MAX_PER_DAY) {
+    throw guestErr(429, { error: 'rate_limited' })
+  }
+  const vars = offerVariables({
+    orgName: mockOrg().name,
+    promoterName: MOCK_MEMBER.name,
+    promoterEmail: MOCK_MEMBER.email,
+    contact,
+    event: ev,
+    venueName: ev?.venue?.name ?? null,
+    slot,
+  })
+  const now = new Date().toISOString()
+  const row: OutreachRequest = {
+    id: newId('or'), event_id: slot?.event_id ?? null, open_slot_id: slot?.id ?? null,
+    talent_contact_id: contact.id, template_id: tpl?.id ?? null,
+    email_message_id: `plunk-mock-${Math.random().toString(36).slice(2, 10)}`,
+    to_email: contact.email,
+    subject: renderOfferText(b.subject ?? tpl?.subject ?? DEFAULT_TEMPLATE_SUBJECT, vars),
+    body: renderOfferText(b.body ?? tpl?.body ?? DEFAULT_TEMPLATE_BODY, vars),
+    status: 'sent', sent_at: now, created_at: now, email_status: 'delivered',
+  }
+  outreachRequestRows.unshift(row)
+  return { ...row }
+}
+
+export function listOffers(): OutreachRequest[] {
+  return [...outreachRequestRows]
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    .map(r => ({ ...r }))
+}
+
+export function getOffer(id: string): OutreachRequest {
+  const row = outreachRequestRows.find(r => r.id === id)
+  if (!row) throw guestErr(404, { error: 'not_found' })
+  return { ...row }
+}
+
+export function listSuppressions(): Suppression[] {
+  return suppressionRows.map(suppressionView)
+}
+
+export function addSuppression(b: SuppressionCreate): Suppression {
+  const email = (b.email ?? '').trim()
+  if (!email) throw invalidField('email', 'required')
+  if (!EMAIL_RE.test(email)) throw invalidField('email', 'must be a valid email address')
+  return insertSuppression(email, (b.reason ?? '').trim())
+}
+
+export function deleteSuppression(id: string): void {
+  const i = suppressionRows.findIndex(s => s.id === id)
+  if (i < 0) throw guestErr(404, { error: 'not_found' })
+  suppressionRows.splice(i, 1)
 }

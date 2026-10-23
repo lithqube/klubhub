@@ -19,6 +19,7 @@ const query = ref(props.modelValue?.name || '')
 const results = ref<Contact[]>([])
 const isOpen = ref(false)
 const isLoading = ref(false)
+const error = ref<string | null>(null)
 const highlightedIndex = ref(-1)
 const inputRef = ref<HTMLInputElement | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -36,12 +37,14 @@ async function search() {
     return
   }
   isLoading.value = true
+  error.value = null
   try {
     results.value = await contactStore.fetchAutocomplete(query.value, 5)
     isOpen.value = results.value.length > 0
     highlightedIndex.value = -1
   } catch {
     results.value = []
+    error.value = 'Could not load contacts. Check your connection and try again.'
   } finally {
     isLoading.value = false
   }
@@ -152,9 +155,20 @@ onClickOutside(inputRef, () => {
       </div>
     </div>
 
+    <!-- Error state -->
+    <div
+      v-if="isOpen && error"
+      class="glass"
+      style="position:absolute;top:100%;left:0;right:0;z-index:50;padding:12px;text-align:center;margin-top:2px;background:color-mix(in srgb, var(--color-error) 5%, var(--color-surface-container));border:1px solid color-mix(in srgb, var(--color-error) 15%, transparent);"
+      role="alert"
+    >
+      <span style="font-family:var(--font-data);font-size:11px;color:var(--color-error);">{{ error }}</span>
+      <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs" style="margin-top:8px;" @click="search()">RETRY</button>
+    </div>
+
     <!-- No results -->
     <div
-      v-if="isOpen && !isLoading && results.length === 0 && query.length >= 2"
+      v-if="isOpen && !isLoading && !error && results.length === 0 && query.length >= 2"
       class="glass"
       style="position:absolute;top:100%;left:0;right:0;z-index:50;padding:12px;text-align:center;margin-top:2px;"
     >

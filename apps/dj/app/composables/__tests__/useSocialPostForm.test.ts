@@ -138,7 +138,7 @@ describe('useSocialPostForm', () => {
     it('generates caption with DJ name, title, track count, avg BPM', () => {
       const { caption, generateCaption } = useSocialPostForm();
       generateCaption({ title: 'Summer Rave', trackCount: 25, avgBpm: 140.6 });
-      expect(caption.value).toBe('DJ Techno @ Summer Rave — 25 tracks • avg 141 BPM\n#techno #djset');
+      expect(caption.value).toBe('DJ Techno @ Summer Rave: 25 tracks • avg 141 BPM\n#techno #djset');
     });
 
     it('rounds avgBpm to nearest integer', () => {

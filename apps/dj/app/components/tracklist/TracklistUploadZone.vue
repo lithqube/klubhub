@@ -107,9 +107,14 @@ const loadSampleFile = () => {
     <!-- Drop zone — HUD design spec: dashed ghost border, glow on hover -->
     <div
       ref="dropZoneRef"
-      class="upload-zone hud-card"
+      class="upload-zone hud-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
       :class="isOverDropZone ? 'luminous-threshold' : ''"
+      role="button"
+      tabindex="0"
+      aria-label="Upload a DJ history file, TXT or XML"
       @click="openFilePicker"
+      @keydown.enter.prevent="openFilePicker"
+      @keydown.space.prevent="openFilePicker"
     >
       <CloudUpload
         style="width:36px;height:36px;stroke:var(--color-primary);stroke-width:1.5;opacity:.5;"

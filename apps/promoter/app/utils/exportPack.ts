@@ -59,7 +59,7 @@ export function staticPage(x: ExportData, jsonld: Record<string, unknown> | null
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(e.title)} — ${esc(x.organizer)}</title>
+<title>${esc(e.title)}: ${esc(x.organizer)}</title>
 ${e.visibility === 'unlisted' ? '<meta name="robots" content="noindex">\n' : ''}<meta name="description" content="${esc(desc.slice(0, 160))}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="${esc(e.title)}">

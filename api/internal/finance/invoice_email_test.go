@@ -11,8 +11,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/klubhub/dj/api/internal/platform/docstore"
 )
 
 // mailHarness is the archive harness with a real PlunkSender pointed at a
@@ -45,7 +48,7 @@ func newMailHarness(t *testing.T) *mailHarness {
 	t.Cleanup(m.server.Close)
 
 	sender := NewPlunkSender(PlunkConfig{BaseURL: m.server.URL, APIKey: "k"})
-	m.emails = NewEmailService(m.repo, sender).WithAttachments(m.docs)
+	m.emails = NewEmailService(m.repo, sender).WithAttachments(docstore.AttachmentSource{Svc: m.docs})
 	m.mailer = NewInvoiceMailer(m.svc, m.emails, "billing@klubhub.example", "KlubHub")
 	m.h = NewInvoiceHandler(m.svc).WithMailer(m.mailer)
 	return m
@@ -249,10 +252,15 @@ func TestInvoiceEmail_FailedDeliveryIsStoredAndRetriedWithItsAttachments(t *test
 	}
 
 	// The provider recovers; the retry loads the same two files again.
+	// (finalizeDelivery is unexported in platform/email, so the retry goes
+	// through the public RetryFailed: age the failed row past the backoff.)
 	m.status = http.StatusOK
-	msg, _ := m.repo.GetByID(context.Background(), out.Data.ID)
-	msg.Status, msg.Attempts = EmailStatusSending, 2
-	got, err := m.emails.finalizeDelivery(context.Background(), msg)
+	m.repo.messages[out.Data.ID].UpdatedAt = time.Now().UTC().Add(-time.Hour)
+	n, err := m.emails.RetryFailed(context.Background(), 10)
+	if err != nil || n != 1 {
+		t.Fatalf("retry: n=%d, %v", n, err)
+	}
+	got, err := m.repo.GetByID(context.Background(), out.Data.ID)
 	if err != nil || got.Status != EmailStatusSent {
 		t.Fatalf("retry: %+v, %v", got, err)
 	}
@@ -439,10 +447,9 @@ func TestInvoiceEmail_RetryKeepsTheReplyTo(t *testing.T) {
 	_ = json.Unmarshal(m.post(inv.ID, `{}`).Body.Bytes(), &out)
 
 	m.status = http.StatusOK
-	msg, _ := m.repo.GetByID(context.Background(), out.Data.ID)
-	msg.Status, msg.Attempts = EmailStatusSending, 2
-	if _, err := m.emails.finalizeDelivery(context.Background(), msg); err != nil {
-		t.Fatal(err)
+	m.repo.messages[out.Data.ID].UpdatedAt = time.Now().UTC().Add(-time.Hour)
+	if n, err := m.emails.RetryFailed(context.Background(), 10); err != nil || n != 1 {
+		t.Fatalf("retry: n=%d, %v", n, err)
 	}
 	if len(m.sent) != 1 || m.sent[0].Reply != contact {
 		t.Errorf("retry reply = %v, want %q", m.sent, contact)

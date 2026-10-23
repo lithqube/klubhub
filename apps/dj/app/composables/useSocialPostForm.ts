@@ -46,7 +46,7 @@ export function useSocialPostForm() {
   });
 
   function generateCaption(tracklist: { title: string; trackCount: number; avgBpm: number }): void {
-    caption.value = `${djName.value} @ ${tracklist.title} — ${tracklist.trackCount} tracks • avg ${Math.round(tracklist.avgBpm)} BPM\n#techno #djset`;
+    caption.value = `${djName.value} @ ${tracklist.title}: ${tracklist.trackCount} tracks • avg ${Math.round(tracklist.avgBpm)} BPM\n#techno #djset`;
   }
 
   function resetForm(): void {

@@ -273,6 +273,9 @@ func personalLeft(t *testing.T, eventID uuid.UUID) map[string]int {
 		  OR secret_bidx IS NOT NULL OR purged_at IS NULL)`, eventID),
 		"guest_allocations": count(t, `SELECT count(*) FROM guest_allocations WHERE event_id = $1 AND submitter_contact_enc IS NOT NULL`, eventID),
 		"door_pins":         count(t, `SELECT count(*) FROM door_pins WHERE event_id = $1`, eventID),
+		"outreach_requests": count(t, `SELECT count(*) FROM outreach_requests WHERE event_id = $1`, eventID),
+		"email_messages": count(t, `SELECT count(*) FROM email_messages m JOIN outreach_requests r ON r.email_message_id = m.id
+		  WHERE r.event_id = $1`, eventID),
 	}
 }
 
@@ -289,6 +292,8 @@ func TestSchemaPersonalColumnsAreAllPurged(t *testing.T) {
 		"order_positions.attendee_name_bidx": true, "order_positions.attendee_email_bidx": true, "order_positions.secret_bidx": true,
 		"guest_allocations.submitter_contact_enc": true,
 		"door_pins.pin_hash_enc":                  true, "door_pins.check_enc": true, // rows deleted
+		"outreach_requests.to_email_enc": true, "outreach_requests.to_email_bidx": true, // rows deleted
+		"outreach_requests.subject_enc": true, "outreach_requests.body_enc": true, // rows deleted
 	}
 	rows, err := testDB.Owner.Query(context.Background(), `SELECT c.table_name || '.' || c.column_name FROM information_schema.columns c
 	  WHERE c.table_schema = 'public' AND (c.column_name LIKE '%\_enc' OR c.column_name LIKE '%\_bidx')
@@ -317,6 +322,30 @@ func TestPurgeAnonymisesEventAndKeepsReport(t *testing.T) {
 	other := s.newOrg(t)
 	osd := other.seed("Klubnacht")
 
+	// The sent log holds the recipient and the rendered offer in sealed
+	// NOT NULL columns: the purge deletes the rows. Dummy bytes stand in
+	// for ciphertext — the purge never unseals them.
+	// Each request links to its sealed outbox copy, which the purge deletes too.
+	seedOutreach := func(tenant, eventID uuid.UUID) {
+		msgID := uuid.Must(uuid.NewV7())
+		_, err := testDB.Owner.Exec(context.Background(), `INSERT INTO email_messages
+		  (id, tenant_id, kind, from_email, to_email_enc, subject_enc, body_enc, status)
+		  VALUES ($1, $2, 'booking_offer', 'from@example.test', '\x0001'::bytea, '\x0003'::bytea, '\x0004'::bytea, 'sent')`,
+			msgID, tenant)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = testDB.Owner.Exec(context.Background(), `INSERT INTO outreach_requests
+		  (id, tenant_id, event_id, email_message_id, to_email_enc, to_email_bidx, subject_enc, body_enc, status, sent_at)
+		  VALUES ($1, $2, $3, $4, '\x0001'::bytea, '\x0002'::bytea, '\x0003'::bytea, '\x0004'::bytea, 'sent', now())`,
+			uuid.Must(uuid.NewV7()), tenant, eventID, msgID)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	seedOutreach(a.id, sd.ev.ID)
+	seedOutreach(other.id, osd.ev.ID)
+
 	checkins := count(t, `SELECT count(*) FROM checkins WHERE event_id = $1`, sd.ev.ID)
 	counters := count(t, `SELECT count(*) FROM door_counters WHERE event_id = $1`, sd.ev.ID)
 	before := a.reportJSON(sd.ev.ID)
@@ -343,7 +372,7 @@ func TestPurgeAnonymisesEventAndKeepsReport(t *testing.T) {
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &res) != nil {
 		t.Fatalf("purge: %d %s", rec.Code, rec.Body)
 	}
-	want := retention.Counts{Guests: 3, Orders: 2, OrderPositions: 3, GuestAllocations: 1, DoorPins: 2}
+	want := retention.Counts{Guests: 3, Orders: 2, OrderPositions: 3, GuestAllocations: 1, DoorPins: 2, OutreachRequests: 1, EmailMessages: 1}
 	if res.Counts != want || res.Trigger != retention.TriggerManual || res.EventID != sd.ev.ID {
 		t.Fatalf("purge result: %+v", res)
 	}
@@ -374,7 +403,8 @@ func TestPurgeAnonymisesEventAndKeepsReport(t *testing.T) {
 
 	// The other tenant's identical event is untouched.
 	left := personalLeft(t, osd.ev.ID)
-	if left["guests"] != 3 || left["orders"] != 2 || left["order_positions"] != 3 || left["guest_allocations"] != 1 || left["door_pins"] != 2 {
+	if left["guests"] != 3 || left["orders"] != 2 || left["order_positions"] != 3 || left["guest_allocations"] != 1 ||
+		left["door_pins"] != 2 || left["outreach_requests"] != 1 || left["email_messages"] != 1 {
 		t.Fatalf("a purge in one tenant touched another: %v", left)
 	}
 	if n := count(t, `SELECT count(*) FROM event_purges WHERE tenant_id = $1`, other.id); n != 0 {
@@ -388,7 +418,7 @@ func TestPurgeAnonymisesEventAndKeepsReport(t *testing.T) {
 
 	// Recorded, emitted (identifiers only) and audited (counts only).
 	if n := count(t, `SELECT count(*) FROM event_purges WHERE event_id = $1 AND trigger = 'manual' AND purged_at IS NOT NULL
-	  AND counts = '{"guests":3,"orders":2,"order_positions":3,"guest_allocations":1,"door_pins":2}'::jsonb`, sd.ev.ID); n != 1 {
+	  AND counts = '{"guests":3,"orders":2,"order_positions":3,"guest_allocations":1,"door_pins":2,"outreach_requests":1,"email_messages":1}'::jsonb`, sd.ev.ID); n != 1 {
 		t.Fatalf("event_purges row: %d", n)
 	}
 	var payload string
@@ -404,7 +434,7 @@ func TestPurgeAnonymisesEventAndKeepsReport(t *testing.T) {
 		t.Fatalf("outbox payload: %s", payload)
 	}
 	if n := count(t, `SELECT count(*) FROM audit_log WHERE tenant_id = $1 AND action = 'retention.purged' AND actor_id = $2
-	  AND resource = $3 AND reason = 'manual: 3 guests, 2 orders, 3 order positions, 1 allocation contacts, 2 door pins'`,
+	  AND resource = $3 AND reason = 'manual: 3 guests, 2 orders, 3 order positions, 1 allocation contacts, 2 door pins, 1 outreach requests'`,
 		a.id, staffSub, "event:"+sd.ev.ID.String()); n != 1 {
 		t.Fatalf("audit entry: %d", n)
 	}

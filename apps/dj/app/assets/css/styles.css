@@ -85,19 +85,6 @@
     position: relative;
     overflow: hidden;
   }
-  .upload-zone::before {
-    content: '';
-    position: absolute;
-    top: -40px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 160px;
-    height: 160px;
-    background: var(--color-primary);
-    opacity: .04;
-    filter: blur(50px);
-    border-radius: 50%;
-  }
   .upload-zone:hover {
     border-color: rgba(150,248,255,.5);
     background: rgba(150,248,255,.02);

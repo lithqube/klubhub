@@ -17,7 +17,7 @@ const meta = computed(() => {
         <span class="section-lbl" style="margin:0;">{{ field.label }}</span>
         <span class="data-frag" style="font-size:8px;" :style="field.withheld ? 'color:var(--color-secondary)' : ''">{{ meta }}</span>
       </div>
-      <div style="font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:8.5em;overflow:auto;margin-top:2px;user-select:text;">{{ field.value || '—' }}</div>
+      <div style="font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:8.5em;overflow:auto;margin-top:2px;user-select:text;">{{ field.value || 'Not provided' }}</div>
     </div>
     <ExportCopyButton v-if="field.value" :text="field.value" :label="`Copy ${field.label.toLowerCase()}`" />
   </div>

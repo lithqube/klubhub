@@ -116,7 +116,7 @@ function submit() {
             :aria-invalid="!!typed && !matches" :aria-describedby="describedBy" data-testid="erase-confirm-input"
           >
           <p v-if="typed" :id="`${uid}-hint`" class="erase-hint" :class="{ 'erase-hint-ok': matches }" aria-live="polite" data-testid="erase-match">
-            {{ matches ? 'Title matches.' : 'Not matching yet — check spelling and spaces.' }}
+            {{ matches ? 'Title matches.' : 'Not matching yet. Check spelling and spaces.' }}
           </p>
           <p v-if="errorText" :id="`${uid}-err`" role="alert" class="erase-err" data-testid="erase-error">
             {{ errorText }}

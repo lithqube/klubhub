@@ -33,6 +33,8 @@ export const useGigStore = defineStore('gig', () => {
   // Unfiltered dashboard results must never replace the gigs-page filter cache.
   const dashboardGigs = ref<Gig[]>([])
   const loading = ref(false)
+  const error = ref<string | null>(null)
+  const loaded = ref(false)
   // Per-record request generations: a later operation owns cache installation.
   // Unrelated gig requests cannot invalidate one another.
   const generations = new Map<string, number>()
@@ -128,6 +130,7 @@ export const useGigStore = defineStore('gig', () => {
     const listRequest = ++listGeneration
     const { install, changedSinceStart } = beginListRead()
     loading.value = true
+    error.value = null
     try {
       const params = new URLSearchParams()
       Object.entries(filters.value).forEach(([k, v]) => {
@@ -143,9 +146,11 @@ export const useGigStore = defineStore('gig', () => {
       )
       if (listRequest !== listGeneration) return
       gigs.value = install(unwrapList(result), gigs.value)
+      loaded.value = true
     } catch (e) {
       console.error('fetchGigs failed:', e)
       if (listRequest === listGeneration) {
+        error.value = 'Could not load gigs. Your existing gigs may still be available. Retry the request.'
         gigs.value = gigs.value.filter(g => changedSinceStart(g.id))
       }
     } finally {
@@ -378,6 +383,8 @@ export const useGigStore = defineStore('gig', () => {
     dashboardGigs,
     fetchDashboardGigs,
     loading,
+    loaded,
+    error,
     filters,
     upcomingGigs,
     ytdEarned,

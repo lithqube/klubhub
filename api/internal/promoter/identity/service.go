@@ -500,6 +500,12 @@ func userIDFromSub(sub string) *uuid.UUID {
 	return &id
 }
 
+// UserIDFromSub is the exported form of userIDFromSub for sibling domain
+// packages (e.g. bookings resolves the sending member's email for ReplyTo,
+// OFFER-06 v2.1). It returns nil for non-local principals (device sessions,
+// Zitadel subjects).
+func UserIDFromSub(sub string) *uuid.UUID { return userIDFromSub(sub) }
+
 func (s *Service) seal(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, table, column string, row uuid.UUID, v []byte) ([]byte, error) {
 	dek, err := s.keys.Current(ctx, tx, tenant)
 	if err != nil {

@@ -8,7 +8,7 @@ async function hydrated(page: Page) {
 test.describe('promoter shell (desktop)', () => {
   test('dashboard loads with the organisation from the API', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle(/Dashboard — KlubHub Promoter/);
+    await expect(page).toHaveTitle(/Dashboard: KlubHub Promoter/);
     await expect(page.getByText('Nachtwerk Collective', { exact: false })).toBeVisible();
   });
 

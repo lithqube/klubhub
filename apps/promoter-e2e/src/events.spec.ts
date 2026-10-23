@@ -58,7 +58,7 @@ test.describe('events, export and venues (mock API)', () => {
     await hydrated(page);
     await page.getByLabel('WEBSITE').fill('http://nachtwerk.example');
     await page.getByLabel('Accent colour hex').fill('#1a1a40');
-    await expect(page.getByText(/hard to read/)).toBeVisible();
+    await expect(page.getByText(/hard to read/i)).toBeVisible();
     await page.getByRole('button', { name: 'SAVE PROFILE' }).click();
     await expect(page.getByText('Use a full https:// link.')).toBeVisible();
     await expect(page.getByLabel('WEBSITE')).toBeFocused();

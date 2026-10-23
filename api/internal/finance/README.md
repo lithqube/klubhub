@@ -12,16 +12,28 @@ is the user-facing reference.
 | Billing profile | `model.go` | `repository.go` | `service.go` | `handler.go` |
 | Invoices | `invoice_model.go` | `invoice_repository.go` | `invoice_service.go` | `invoice_handler.go` |
 | Payments | `payment_model.go` | `payment_repository.go` | (in `payment_model.go`) | `payment_handler.go` |
-| Documents | `document_model.go` | `document_repository.go` | (in `document_model.go`) | (planned) |
+| Documents | platform/docstore | platform/docstore | platform/docstore | `document_handler.go` |
 | Agreements (templates + instances) | `agreement_model.go` | (in `agreement_model.go`) | (in `agreement_model.go`) | `agreement_handler.go` |
-| Email outbox | `email_model.go` | (in `email_model.go`) | (in `email_model.go`) | `email_handler.go` |
+| Email outbox | platform/email | platform/email | platform/email | `agreement_handler.go` (`NewEmailHandler`) |
+
+Email transport and document storage are **not** in this package any
+more: they live in the shared platform packages
+[`internal/platform/email`](../../internal/platform/email) and
+[`internal/platform/docstore`](../../internal/platform/docstore) so the
+promoter binary can reuse them. `platform_aliases.go` re-exports the
+platform types under the historical finance names (`EmailMessage`,
+`DocumentService`, `NewPlunkSender`, …) and `email_kinds.go` holds the
+six finance email kinds (`invoice_issued`, …) registered into the
+platform's open kind registry — so finance code and tests keep using
+the unqualified names unchanged.
 
 Shared / cross-cutting files in this package:
 
 - `mux.go` — `Mux` composes all sub-resource handlers under `/api/v1/finance/*` and rewrites paths so each child handler sees its own sub-prefix.
 - `mux_test.go` — 9 dispatch tests.
 - `pdf_renderer.go` — pure-Go PDF invoice renderer ([`go-pdf/fpdf`](https://codeberg.org/go-pdf/fpdf), embedded DejaVu font from `platform/pdffont`).
-- `plunk_sender.go` — [`Plunk`](https://github.com/useplunk/plunk) transactional-email sender; the prod wiring.
+- `platform_aliases.go` / `email_kinds.go` — re-exports of the shared
+  `platform/email` + `platform/docstore` packages (see the note above).
 
 ## Layer contract
 
@@ -43,17 +55,16 @@ type RepositoryIface interface { ... }       // billing
 type InvoiceRepositoryIface interface { ... }
 type BillingServiceIface interface { ... }  // subset of billing.Service the invoice needs
 type GigFeeProvider interface { GetGigFeeInfo(ctx, gigID) (*GigFeeInfo, error) }
-type EmailSender interface { Send(msg *EmailMessage) error }
-type ObjectStore interface {                 // Garage S3 or in-memory fake
-    PutObject(ctx, bucket, key, reader, size, contentType) error
-    GetObject(ctx, bucket, key) (io.ReadCloser, error)
-    DeleteObject(ctx, bucket, key) error
-}
+// EmailSender and ObjectStore are platform/email.EmailSender and
+// platform/docstore.ObjectStore, re-exported via platform_aliases.go.
 ```
 
 This is what lets `*_contract_test.go` files use lightweight fakes
 instead of a real Postgres container. The integration tests
-(`*_integration_test.go`) hit real Postgres via testcontainers.
+(`*_integration_test.go`) hit real Postgres via testcontainers. The
+email/document fakes the staying finance tests use live in
+`email_fakes_test.go` (the pure email/document contract tests moved to
+`platform/email` and `platform/docstore` with the extraction).
 
 ## HTTP routing
 
@@ -81,20 +92,20 @@ segment. The mux strips the `finance` segment and forwards the rest.
 
 ## Email sender swappability
 
-`EmailSender` has two implementations:
+`EmailSender` (platform/email) has two implementations:
 
-- `PlunkSender` (default for prod / dev): `POST {BaseURL}/api/v1/{ProjectID}/emails` with `Authorization: Bearer ***`, `Idempotency-Key: <msg.ID>`, JSON body matching Plunk's `from/to/cc/bcc/subject/body/bodyHtml` schema.
+- `PlunkSender` (default for prod / dev): `POST {BaseURL}/v1/send` with `Authorization: Bearer ***`, `Idempotency-Key: <msg.ID>`, JSON body matching Plunk's `from/to/cc/bcc/subject/body/bodyHtml` schema.
 - `DefaultSMTPSender` (legacy / local dev without Plunk): a thin wrapper around `net/smtp.SendMail`.
 
-The contract test `email_contract_test.go` only requires `EmailSender`,
+The contract tests in `platform/email` only require `EmailSender`,
 so swapping is a one-line change in `cmd/api/main.go`:
 
 ```go
-var sender finance.EmailSender
+var sender email.EmailSender
 if cfg.Plunk.BaseURL != "" {
-    sender = finance.NewPlunkSender(finance.PlunkConfig{...})
+    sender = email.NewPlunkSender(email.PlunkConfig{...})
 } else {
-    sender = finance.NewDefaultSMTPSender(finance.SMTPConfig{...})
+    sender = email.NewDefaultSMTPSender(email.SMTPConfig{...})
 }
 ```
 
@@ -103,10 +114,10 @@ the outbox still records messages for later replay.
 
 ## Storage swappability
 
-`ObjectStore` is satisfied by:
+`ObjectStore` (platform/docstore) is satisfied by:
 
 - **Garage S3** in production (the existing `storage` Garage container).
-- An in-memory `fakeObjectStore` in `document_contract_test.go`.
+- An in-memory `fakeObjectStore` in `email_fakes_test.go`.
 
 Tests verify the contract; production wiring lives in
 `cmd/api/main.go`.
@@ -162,10 +173,14 @@ The finance-package contract tests cover:
   credit notes / correction (contract: docs/INVOICING.md). Pure VAT rules
   (suggestion, notes, totals, issue validation) live in `finance/tax`.
 - Payment create / update / listing / sum-by-invoice (deposits, partials)
-- Document versioning (S3-backed via `fakeObjectStore`)
+- Document versioning (S3-backed via `fakeObjectStore`; the pure
+  document contract tests live in `platform/docstore`)
 - Agreement template CRUD + instance sign / decline / expire
-- Email queue / send / fail / retry lifecycle per kind
-- Plunk sender payload shape, auth header, idempotency
+- Email queue / send / fail / retry lifecycle per kind (the pure email
+  contract + runtime tests live in `platform/email`; finance keeps the
+  agreement-generation and handler-coupled cases in
+  `email_runtime_finance_test.go`)
+- Plunk sender payload shape, auth header, idempotency (in `platform/email`)
 - Mux dispatch and path rewriting
 
 ## Migration order

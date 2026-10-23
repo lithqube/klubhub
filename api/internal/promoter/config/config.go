@@ -52,6 +52,36 @@ type Config struct {
 
 	ServeFrontend   bool   `envconfig:"SERVE_FRONTEND" default:"false"`
 	NuxtInternalURL string `envconfig:"NUXT_INTERNAL_URL" default:"http://127.0.0.1:3001"`
+
+	// Plunk delivers the promoter→DJ booking offers (phase 04.10) through
+	// the shared platform/email outbox. When any of the three is missing,
+	// email is unconfigured: the bookings routes still serve reads and
+	// POST /api/v1/bookings/offers answers 503.
+	PlunkBaseURL    string `envconfig:"PLUNK_BASE_URL" default:""`
+	PlunkProjectID  string `envconfig:"PLUNK_PROJECT_ID" default:""`
+	PlunkAPIKeyFile string `envconfig:"PLUNK_API_KEY_FILE" default:""`
+	// PlunkAPIKey is populated from PLUNK_API_KEY_FILE by LoadFileSecrets
+	// (or set directly). The _FILE field above only holds the path.
+	PlunkAPIKey    string `envconfig:"PLUNK_API_KEY" default:""`
+	PlunkFromEmail string `envconfig:"PLUNK_FROM_EMAIL" default:""`
+	PlunkFromName  string `envconfig:"PLUNK_FROM_NAME" default:""`
+
+	// OutreachMaxPerDay caps booking-offer sends per tenant per day, counted
+	// from local midnight in the organisation's timezone (failed attempts
+	// count; SPEC §9 v2.1).
+	OutreachMaxPerDay int `envconfig:"OUTREACH_MAX_PER_DAY" default:"50"`
+	// OutreachProviderPermitsOutreach is the operator attestation that the
+	// configured provider's terms allow unsolicited B2B outreach. Booking
+	// offers are cold outreach — the talent contact never opted in — and
+	// Plunk's ToS §5 ("NO COLD EMAILING POLICY") prohibits it outright,
+	// including via /v1/send. Fail-closed: unset answers 422
+	// outreach_not_permitted on POST /offers. See docs/OUTREACH-PROVIDER.md.
+	OutreachProviderPermitsOutreach string `envconfig:"OUTREACH_PROVIDER_PERMITS_OUTREACH" default:"false"`
+}
+
+// PlunkConfigured reports whether transactional email is fully configured.
+func (c *Config) PlunkConfigured() bool {
+	return c.PlunkBaseURL != "" && c.PlunkProjectID != "" && c.PlunkAPIKey != ""
 }
 
 // Load reads PROMOTER_* variables (after resolving *_FILE secrets).

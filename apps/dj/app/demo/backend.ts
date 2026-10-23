@@ -6,6 +6,7 @@ import { RiderMockDb } from '../../shared/rider-mock/db'
 import { registerEpk } from './handlers/epk'
 import { financeLookup, registerFinance } from './handlers/finance'
 import { registerGigs } from './handlers/gigs'
+import { registerOutreach } from './handlers/outreach'
 import { registerRider } from './handlers/rider'
 import { registerSettings } from './handlers/settings'
 import { postImage, registerSocial } from './handlers/social'
@@ -35,6 +36,7 @@ export function buildRouter(): DemoRouter {
   registerEpk(r)
   registerGigs(r)
   registerFinance(r)
+  registerOutreach(r)
   registerRider(r)
   return r
 }

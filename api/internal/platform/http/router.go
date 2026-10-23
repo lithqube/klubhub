@@ -56,6 +56,7 @@ func NewRouter(
 	contactHandler http.Handler,
 	financeHandler http.Handler,
 	riderHandler http.Handler,
+	outreachHandler http.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -106,6 +107,13 @@ func NewRouter(
 	// riderHandler is rider.Handler.Routes(); chi's Mount strips the prefix.
 	if riderHandler != nil {
 		r.Mount("/api/v1/rider", riderHandler)
+	}
+
+	// Outreach: availability slots, matches, templates, booking requests,
+	// suppressions. Mounted always — reads work without Plunk; POST
+	// /requests answers 503 when email is unconfigured.
+	if outreachHandler != nil {
+		r.Mount("/api/v1/outreach", outreachHandler)
 	}
 
 	if cfg.ServeFrontend {

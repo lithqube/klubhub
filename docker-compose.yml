@@ -125,6 +125,19 @@ services:
       DISCOGS_API_KEY: ${DISCOGS_API_KEY:-}
       INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
       INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
+      # Email. PLUNK_API_KEY_FILE is the preferred path (Docker secret);
+      # PLUNK_API_KEY is the direct fallback. Outreach sends are gated on
+      # OUTREACH_PROVIDER_PERMITS_OUTREACH — fail-closed, because booking
+      # outreach is cold B2B and hosted Plunk's ToS §5 prohibits it. See
+      # docs/OUTREACH-PROVIDER.md.
+      PLUNK_BASE_URL: ${PLUNK_BASE_URL:-}
+      PLUNK_API_KEY: ${PLUNK_API_KEY:-}
+      PLUNK_FROM_EMAIL: ${PLUNK_FROM_EMAIL:-}
+      PLUNK_FROM_NAME: ${PLUNK_FROM_NAME:-}
+      OUTREACH_PROVIDER_PERMITS_OUTREACH: ${OUTREACH_PROVIDER_PERMITS_OUTREACH:-false}
+      OUTREACH_MAX_PER_DAY: ${OUTREACH_MAX_PER_DAY:-50}
+      OUTREACH_FROM_NAME: ${OUTREACH_FROM_NAME:-}
+      EPK_PUBLIC_URL: ${EPK_PUBLIC_URL:-}
       # Switchable features (docs/EDITIONS.md). RA import is on unless .env sets
       # it false. Dev Nuxt runs on the host and is on too whenever it proxies a
       # real API; to turn it off there, export NUXT_PUBLIC_FEATURES_RA_IMPORT=false.

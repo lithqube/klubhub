@@ -78,6 +78,11 @@ function handleOpen(rec: EntryReconciliation): void {
 .rec-panel-head { display: flex; align-items: center; justify-content: space-between; }
 .rec-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .rec-banner { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 8px 12px; width: 100%; background: color-mix(in srgb, var(--color-primary) 6%, transparent); border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent); cursor: pointer; font-family: var(--font-command); font-size: 11px; font-weight: 600; letter-spacing: -.02em; text-transform: uppercase; color: var(--color-primary); }
-.rec-banner:hover, .rec-banner:focus-visible { background: color-mix(in srgb, var(--color-primary) 12%, transparent); outline: none; }
+.rec-banner:hover,
+.rec-banner:focus-visible {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 4px var(--color-surface);
+}
 .rec-banner-amount, .rec-banner-status { font-family: var(--font-terminal); font-size: 8px; font-weight: 600; letter-spacing: .06em; color: var(--color-on-surface-variant); }
 </style>

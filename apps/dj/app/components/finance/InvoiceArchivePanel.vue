@@ -119,7 +119,19 @@ const rendered = (d: ArchivedDocument) => d.uploaded_by === 'backfill'
 .iar-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .iar-item { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 8px 0; border-top: 1px dashed var(--color-outline-variant); }
 .iar-item:first-child { border-top: 0; padding-top: 0; }
-.iar-old { opacity: .65; }
+.iar-old {
+  /* Use tertiary token at full strength instead of blanket opacity.
+     --color-tertiary is WCAG AA on every surface step (dark #8897A9 ~4.8:1, light #4E5E6A ~4.5:1).
+     The previous opacity:.65 on --color-on-surface-variant dropped contrast below AA. */
+  color: var(--color-tertiary);
+}
+.iar-old .iar-kind,
+.iar-old .iar-tag,
+.iar-old .iar-meta,
+.iar-old .iar-file,
+.iar-old .iar-sum {
+  color: var(--color-tertiary);
+}
 .iar-main { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .iar-kind { font-family: var(--font-terminal); font-size: 10px; font-weight: 600; letter-spacing: .06em; color: var(--color-on-surface); }
 .iar-tag { font-family: var(--font-terminal); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border: 1px dashed var(--color-outline-variant); color: var(--color-on-surface-variant); }

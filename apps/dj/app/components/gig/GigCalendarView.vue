@@ -150,11 +150,16 @@ const emit = defineEmits<{
               v-for="gig in (gigsByDate.get(dayKey(day)) || []).slice(0, 3)"
               :key="gig.id"
             >
-              <div
+              <button
                 style="width:6px;height:6px;"
                 :style="{ background: gigStatusColor(gig.status) }"
                 :title="gig.event_name"
                 @click="emit('gig-click', gig)"
+                tabindex="0"
+                role="button"
+                @keydown.enter="emit('gig-click', gig)"
+                @keydown.space.prevent="emit('gig-click', gig)"
+                class="cal-gig-marker"
               />
             </template>
             <div

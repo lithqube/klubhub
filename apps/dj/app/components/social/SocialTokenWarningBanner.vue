@@ -34,7 +34,7 @@ async function reAuthorize() {
     class="glass-panel border border-error px-6 py-4 flex items-center justify-between gap-6"
   >
     <span class="font-terminal tracking-terminal text-xs uppercase text-error">
-      INSTAGRAM DISCONNECTED — RE-AUTHORIZE
+      INSTAGRAM DISCONNECTED: RE-AUTHORIZE
     </span>
     <button
       class="ghost-border px-4 py-2 font-terminal tracking-terminal text-xs uppercase text-error border-error hover:bg-error-container/40 transition-colors"
@@ -50,7 +50,7 @@ async function reAuthorize() {
     class="glass-panel border border-status-archived px-6 py-4 flex items-center justify-between gap-6"
   >
     <span class="font-terminal tracking-terminal text-xs uppercase text-status-archived">
-      INSTAGRAM TOKEN EXPIRING IN {{ daysUntilExpiry }} DAYS — RE-AUTHORIZE
+      INSTAGRAM TOKEN EXPIRING IN {{ daysUntilExpiry }} DAYS: RE-AUTHORIZE
     </span>
     <button
       class="ghost-border px-4 py-2 font-terminal tracking-terminal text-xs uppercase text-status-archived border-status-archived hover:bg-status-archived/10 transition-colors"

@@ -10,6 +10,7 @@ import (
 	nethttp "net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,8 +22,11 @@ import (
 	"github.com/klubhub/dj/api/internal/epk"
 	"github.com/klubhub/dj/api/internal/finance"
 	"github.com/klubhub/dj/api/internal/gig"
+	"github.com/klubhub/dj/api/internal/outreach"
 	"github.com/klubhub/dj/api/internal/platform/config"
 	"github.com/klubhub/dj/api/internal/platform/db"
+	"github.com/klubhub/dj/api/internal/platform/docstore"
+	"github.com/klubhub/dj/api/internal/platform/email"
 	apphttp "github.com/klubhub/dj/api/internal/platform/http"
 	applog "github.com/klubhub/dj/api/internal/platform/log"
 	"github.com/klubhub/dj/api/internal/platform/migrations"
@@ -301,7 +305,9 @@ func run() error {
 	// 9b. Wire finance module (billing profile, invoices, payments,
 	// agreements, email). Documents have no HTTP surface yet (nil → 503);
 	// agreement PDF generation is explicitly unsupported and creates no artifacts.
-	financeHandler, emailDone := buildFinanceRuntime(ctx, cfg, pool, storeClient, transitionProcessor, logger)
+	// The Plunk-backed email service is shared with outreach (04.10) and
+	// its retry worker is started exactly once, here.
+	financeHandler, sharedEmailSvc, emailDone := buildFinanceRuntime(ctx, cfg, pool, storeClient, transitionProcessor, logger)
 	// Always cancel and drain email before deferred database teardown, even
 	// on ListenAndServe failure (not only the signal shutdown path).
 	defer func() { cancel(); <-emailDone }()
@@ -322,6 +328,11 @@ func run() error {
 	riderSvc.SetBucket(cfg.S3Bucket)
 	riderHandler := rider.NewHandler(riderSvc)
 
+	// 9d. Wire outreach module (Phase 04.10 — availability & outreach):
+	// slots, matches, templates, booking requests, suppressions. Always
+	// mounted — reads work without Plunk; POST /requests answers 503.
+	outreachHandler := buildOutreachHandler(cfg, pool, storeClient, sharedEmailSvc)
+
 	// 10. Build router (internal http package aliased as apphttp).
 	router := apphttp.NewRouter(cfg, pool, storeClient, logger,
 		settingsHandler,
@@ -333,6 +344,7 @@ func run() error {
 		contactHandler.Routes(),
 		financeHandler,
 		riderHandler.Routes(),
+		outreachHandler,
 	)
 
 	// 11. Start HTTP server. Run ListenAndServe in a goroutine so main can
@@ -436,14 +448,82 @@ func runHealthcheck() int {
 }
 
 // buildFinanceRuntime owns delivery lifecycle separately from route composition.
-func buildFinanceRuntime(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger) (*finance.Mux, <-chan struct{}) {
+// It also returns the shared Plunk-backed email service (nil when Plunk is
+// unconfigured) so the outreach module sends through the same outbox and the
+// retry worker is started exactly once.
+func buildFinanceRuntime(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger) (*finance.Mux, *email.EmailService, <-chan struct{}) {
 	disabledDone := make(chan struct{})
 	close(disabledDone)
 	var done <-chan struct{} = disabledDone
-	handler := buildFinanceHandler(cfg, pool, storeClient, transitionProcessor, logger, func(svc *finance.EmailService) {
+	docSvc := docstore.NewDocumentService(docstore.NewDocumentRepository(pool), docstore.NewStorageAdapter(storeClient), cfg.S3Bucket)
+	emailSvc := buildSharedEmailService(cfg, pool, storeClient, docSvc)
+	handler := buildFinanceHandler(cfg, pool, storeClient, transitionProcessor, docSvc, emailSvc, logger, func(svc *finance.EmailService) {
 		done = svc.StartWorker(ctx, 5*time.Second, func(err error) { logger.Error().Err(err).Msg("finance email recovery failed") })
 	})
-	return handler, done
+	return handler, emailSvc, done
+}
+
+// buildSharedEmailService constructs the Plunk-backed email service shared by
+// finance and outreach, or returns nil when Plunk is not fully configured.
+// Attachment loading is wired only when object storage exists.
+func buildSharedEmailService(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, docSvc *docstore.DocumentService) *email.EmailService {
+	if cfg.PlunkBaseURL == "" || cfg.PlunkProjectID == "" || cfg.PlunkAPIKey == "" {
+		return nil
+	}
+	sender := email.NewPlunkSender(email.PlunkConfig{
+		BaseURL:   cfg.PlunkBaseURL,
+		ProjectID: cfg.PlunkProjectID,
+		APIKey:    cfg.PlunkAPIKey,
+		FromEmail: cfg.PlunkFromEmail,
+		FromName:  cfg.PlunkFromName,
+	})
+	// The DJ side uses the plain repository over the raw pool: plaintext
+	// columns, SQL byte-identical to the pre-extraction repository.
+	emailSvc := email.NewEmailService(email.NewPlainEmailRepository(pool), sender)
+	if storeClient != nil {
+		emailSvc.WithAttachments(docstore.AttachmentSource{Svc: docSvc})
+	}
+	return emailSvc
+}
+
+// buildOutreachHandler wires the DJ→promoter outreach module (Phase 04.10).
+// The handler is always mounted: reads work without Plunk, POST /requests
+// answers 503 when email is unconfigured.
+func buildOutreachHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, emailSvc *email.EmailService) nethttp.Handler {
+	// Typed-nil guard: a nil *email.EmailService must not become a non-nil
+	// interface — the service checks emails == nil for ErrEmailUnavailable.
+	var emails outreach.EmailServiceIface
+	if emailSvc != nil {
+		emails = emailSvc
+	}
+	var objects outreach.ObjectReaderIface
+	if storeClient != nil {
+		objects = docstore.NewStorageAdapter(storeClient)
+	}
+	fromName := cfg.OutreachFromName
+	if fromName == "" {
+		fromName = cfg.PlunkFromName
+	}
+	svc := outreach.NewService(
+		outreach.NewRepository(pool),
+		emails,
+		docstore.NewDocumentRepository(pool),
+		objects,
+		outreach.ServiceConfig{
+			FromEmail:    cfg.PlunkFromEmail,
+			FromName:     fromName,
+			MaxPerDay:    cfg.OutreachMaxPerDay,
+			EPKPublicURL: cfg.EpkPublicURL,
+			Bucket:       cfg.S3Bucket,
+			// Fail-closed provider attestation. Booking requests are cold
+			// outreach; hosted Plunk's ToS §5 prohibits that, so outreach
+			// stays disabled until the operator attests a permitted provider
+			// (self-hosted instance or a provider allowing opted-out B2B).
+			OutreachGate: email.NewOutreachGate(
+				strings.EqualFold(strings.TrimSpace(cfg.OutreachProviderPermitsOutreach), "true")),
+		},
+	)
+	return outreach.NewHandler(svc).Routes()
 }
 
 // newInvoiceService wires the invoice service exactly as the API runs it: with
@@ -460,15 +540,17 @@ func newInvoiceService(cfg *config.Config, pool *pgxpool.Pool, storeClient *stor
 		logger.Info().Msg("e-invoice export disabled: EINVOICE_URL is not set")
 	}
 	if storeClient != nil {
-		invoiceSvc.WithArchive(finance.NewDocumentService(finance.NewDocumentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket))
+		invoiceSvc.WithArchive(docstore.NewDocumentService(docstore.NewDocumentRepository(pool), docstore.NewStorageAdapter(storeClient), cfg.S3Bucket))
 	}
 	return billingSvc, invoiceSvc
 }
 
 // buildFinanceHandler composes the finance routes. Email is only mounted
-// when Plunk is fully configured; otherwise /finance/emails answers 503
-// instead of queuing mail that can never be delivered.
-func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, logger zerolog.Logger, startWorker ...func(*finance.EmailService)) *finance.Mux {
+// when Plunk is fully configured (emailSvc != nil); otherwise
+// /finance/emails answers 503 instead of queuing mail that can never be
+// delivered. The email service itself is built by buildSharedEmailService so
+// outreach shares the outbox and the single retry worker.
+func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *storage.Client, transitionProcessor *finance.GigPaymentTransitionProcessor, docSvc *docstore.DocumentService, emailSvc *email.EmailService, logger zerolog.Logger, startWorker ...func(*finance.EmailService)) *finance.Mux {
 	billingSvc, invoiceSvc := newInvoiceService(cfg, pool, storeClient, logger)
 	// The transition processor is shared with the gig service so the
 	// manual gig-edit path and the invoice-payment sync path see the
@@ -476,7 +558,6 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 	// processors could each decide the same gig is "becoming paid"
 	// and double-book the income stream.
 	paymentSvc := finance.NewPaymentService(finance.NewPaymentRepositoryWithTransitionProcessor(pool, transitionProcessor))
-	docSvc := finance.NewDocumentService(finance.NewDocumentRepository(pool), finance.NewStorageAdapter(storeClient), cfg.S3Bucket)
 	tplRepo := finance.NewAgreementTemplateRepository(pool)
 	tplSvc := finance.NewAgreementTemplateService(tplRepo)
 	instSvc := finance.NewAgreementInstanceService(finance.NewAgreementInstanceRepository(pool), tplRepo, docSvc)
@@ -484,21 +565,13 @@ func buildFinanceHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *st
 
 	invoiceHandler := finance.NewInvoiceHandler(invoiceSvc)
 	var emailHandler nethttp.Handler
-	if cfg.PlunkBaseURL != "" && cfg.PlunkProjectID != "" && cfg.PlunkAPIKey != "" {
-		sender := finance.NewPlunkSender(finance.PlunkConfig{
-			BaseURL:   cfg.PlunkBaseURL,
-			ProjectID: cfg.PlunkProjectID,
-			APIKey:    cfg.PlunkAPIKey,
-			FromEmail: cfg.PlunkFromEmail,
-			FromName:  cfg.PlunkFromName,
-		})
-		emailSvc := finance.NewEmailService(finance.NewEmailRepository(pool), sender)
+	if emailSvc != nil {
 		emailHandler = finance.NewEmailHandler(emailSvc)
 		// Invoices go out with their archived PDF and e-invoice attached, which
-		// needs the document store the archive lives in. Set before the worker
-		// starts so retried messages can load their attachments too.
+		// needs the document store the archive lives in. Attachments were wired
+		// on the shared service before the worker starts, so retried messages
+		// can load them too.
 		if storeClient != nil {
-			emailSvc.WithAttachments(docSvc)
 			invoiceHandler.WithMailer(finance.NewInvoiceMailer(invoiceSvc, emailSvc, cfg.PlunkFromEmail, cfg.PlunkFromName))
 		}
 		if len(startWorker) > 0 {

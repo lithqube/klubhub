@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, Calendar, List, Download } from 'lucide-vue-next'
+import { Plus, Calendar, List, Download, AlertCircle, Loader } from 'lucide-vue-next'
 import { useGigStore } from '../stores/gig'
 import { storeToRefs } from 'pinia'
 import type { Gig } from '../types/gig'
@@ -13,12 +13,12 @@ import { DEMO_ICAL_HINT, useDemo } from '../composables/useDemo'
 import InvoiceWorkspace from '../components/finance/InvoiceWorkspace.vue'
 
 
-useHead({ title: 'Gigs — KlubHub DJ' })
+useHead({ title: 'Gigs: KlubHub DJ' })
 
 const gigStore = useGigStore()
 // Licensed edition feature (docs/EDITIONS.md): hidden unless enabled.
 const raImportEnabled = useFeatures().isEnabled('raImport')
-const { gigs, loading, filters } = storeToRefs(gigStore)
+const { gigs, loading, loaded, error, filters } = storeToRefs(gigStore)
 
 const viewMode = ref<'list' | 'calendar'>('list')
 const formOpen = ref(false)
@@ -192,8 +192,15 @@ function clearFilters() {
         <div class="section-lbl" style="margin-bottom:8px;">GIG SCHEDULE</div>
 
         <!-- Loading state -->
-        <div v-if="loading" class="glass" style="padding:32px 24px;text-align:center;">
-          <div class="section-lbl" style="font-size:10px;color:var(--color-tertiary);">LOADING GIGS...</div>
+        <div v-if="loading || !loaded && !error" class="glass" role="status" style="padding:32px 24px;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <Loader class="animate-spin" style="width:13px;height:13px;color:var(--color-primary);" aria-hidden="true" />
+          <span class="section-lbl">LOADING GIGS...</span>
+        </div>
+
+        <div v-else-if="error" role="alert" class="glass" style="padding:20px;background:color-mix(in srgb, var(--color-error) 5%, var(--color-surface-container));border:1px solid color-mix(in srgb, var(--color-error) 15%, transparent);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <AlertCircle style="width:14px;height:14px;color:var(--color-error);" aria-hidden="true" />
+          <span style="font-family:var(--font-data);font-size:12px;color:var(--color-error);flex:1;">{{ error }}</span>
+          <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" @click="gigStore.fetchGigs()">RETRY</button>
         </div>
 
         <!-- Empty state -->
@@ -210,7 +217,7 @@ function clearFilters() {
           <div
             style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-tertiary);"
           >
-            ADD YOUR FIRST GIG TO GET STARTED
+            ADD YOUR FIRST GIG
           </div>
         </div>
 

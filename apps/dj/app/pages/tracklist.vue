@@ -3,7 +3,7 @@ import TrackcardPreviewPanel from '@/components/trackcard/TrackcardPreviewPanel.
 import TrackcardPreview from '@/components/TrackcardPreview.vue'
 import { ArrowLeft } from 'lucide-vue-next'
 
-useHead({ title: 'Tracklist — KlubHub DJ' })
+useHead({ title: 'Tracklist: KlubHub DJ' })
 
 const settingsStore = useSettingsStore()
 const tracklistStore = useTracklistStore()

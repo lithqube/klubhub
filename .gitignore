@@ -96,3 +96,4 @@ brag-output-*
 # KlubHub Promoter local state (generated secrets, NATS creds) and Infisical link
 .local/
 .infisical.json
+videos/

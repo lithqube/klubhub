@@ -20,7 +20,7 @@ useHead(computed(() => ({
   ],
 })))
 
-useHead({ titleTemplate: (t?: string) => (t ? `${t} — KlubHub Promoter` : 'KlubHub Promoter') })
+useHead({ titleTemplate: (t?: string) => (t ? `${t}: KlubHub Promoter` : 'KlubHub Promoter') })
 
 onMounted(() => initTheme())
 

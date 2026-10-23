@@ -18,6 +18,7 @@ known_actions := {
 	"audience.read", "audience.write", "audience.export",
 	"campaign.read", "campaign.write", "campaign.send",
 	"booking.read", "booking.write", "artist_fee.read",
+	"talent.read", "talent.write",
 	"finance.read", "finance.write", "finance.approve",
 }
 
@@ -29,6 +30,7 @@ role_grants := {
 		"account.self", "org.read", "member.read", "event.read", "event.write",
 		"guestlist.read", "guestlist.write", "door.read",
 		"booking.read", "booking.write", "artist_fee.read",
+		"talent.read", "talent.write",
 		"door.device.manage", "venue.reveal",
 	},
 	"finance": {

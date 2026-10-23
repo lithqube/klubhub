@@ -412,7 +412,7 @@ function onEscape(e: KeyboardEvent): void {
     </header>
 
     <p class="ee-fin10" role="note">
-      FIN-10 — No tax or VAT is computed on this entry. Multi-currency
+      FIN-10: No tax or VAT is computed on this entry. Multi-currency
       totals are grouped by code and never converted (FIN-09).
     </p>
 
@@ -474,7 +474,7 @@ function onEscape(e: KeyboardEvent): void {
             id="ee-description"
             v-model="form.description"
             class="hud-input"
-            placeholder="Sample Records — Royalties Q1"
+            placeholder="Sample Records: Royalties Q1"
             :aria-invalid="!!requiredShown || undefined"
             @blur="touch('required')"
           >

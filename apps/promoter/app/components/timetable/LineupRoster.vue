@@ -45,10 +45,10 @@ function toggleB2B(i: number) {
   <section class="glass" style="padding:14px;" aria-labelledby="roster-title">
     <h2 id="roster-title" class="section-lbl">LINEUP · BILLING ORDER</h2>
     <form v-if="!readonly" style="margin:10px 0;" @submit.prevent="add">
-      <label for="paste-acts" class="sr-only">Add acts — paste a list</label>
+      <label for="paste-acts" class="sr-only">Add acts: paste a list</label>
       <textarea
         id="paste-acts" v-model="paste" class="hud-textarea" rows="2"
-        placeholder="Add acts — paste a list, one per line" @keydown.meta.enter.prevent="add" @keydown.ctrl.enter.prevent="add"
+        placeholder="Add acts: paste a list, one per line" @keydown.meta.enter.prevent="add" @keydown.ctrl.enter.prevent="add"
       />
       <button type="submit" class="btn-hud btn-hud-ghost" style="min-height:44px;margin-top:6px;" :disabled="!paste.trim()">ADD</button>
     </form>

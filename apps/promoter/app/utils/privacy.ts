@@ -104,6 +104,7 @@ const COUNT_LABELS: [key: string, one: string, many: string][] = [
   ['orders', 'order', 'orders'],
   ['guest_allocations', 'submitter contact', 'submitter contacts'],
   ['door_pins', 'door PIN', 'door PINs'],
+  ['outreach_requests', 'outreach request', 'outreach requests'],
 ]
 
 /** "12 guests · 4 tickets · 1 order" (zeros left out); "nothing to erase" when empty. */

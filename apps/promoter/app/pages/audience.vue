@@ -158,12 +158,12 @@ async function removeSegment(id: string, name: string) {
 
 <template>
   <div>
-    <div class="page-header">
-      <div>
+    <div class="page-header" style="flex-wrap:wrap;gap:10px;">
+      <div style="min-width:0;">
         <h1 class="page-title">AUDIENCE</h1>
         <p class="page-sub">A consent-first list of followers, past attendees and notify-me sign-ups.</p>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;min-width:0;">
         <a :href="store.exportUrl({ status: statusTab || undefined, source: sourceFilter || undefined })" class="btn-hud btn-hud-ghost btn-hud-sm" style="min-height:44px;" data-testid="audience-export">
           <Download style="width:14px;height:14px;" aria-hidden="true" /> EXPORT
         </a>

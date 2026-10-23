@@ -149,6 +149,8 @@ The same overlay applies to `docker-compose.prod.yml`; substitute it for `docker
 
 If any of these are missing at boot, the API still mounts `/api/v1/finance/emails/*` but queues messages without sending them — the outbox row is preserved for replay once Plunk is reachable.
 
+The same Plunk configuration powers DJ→promoter outreach (`/api/v1/outreach/*`): booking-request emails with the EPK PDF attached. The API still mounts the outreach routes when Plunk is missing, but `POST /api/v1/outreach/requests` answers 503. Optional knobs: `OUTREACH_FROM_NAME` (From display name, defaults to `PLUNK_FROM_NAME`), `OUTREACH_MAX_PER_DAY` (per-day send cap, default 50, failed attempts count), `EPK_PUBLIC_URL` (fills the `{{epk_link}}` template variable). The OSS DJ API is unauthenticated — put `/api/v1/outreach/*` behind your reverse-proxy authentication, as with the finance email endpoints; the per-day cap bounds the damage.
+
 ## Production
 
 Use `docker-compose.prod.yml` **alone**, not merged with the development files. It contains only image references, with no local application build:

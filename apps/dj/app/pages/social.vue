@@ -4,7 +4,7 @@ import { useSocialStore } from '~/stores/social'
 import SocialPageHeader from '~/components/social/SocialPageHeader.vue'
 import SocialTabs from '~/components/social/SocialTabs.vue'
 
-useHead({ title: 'Social Scheduler — KlubHub DJ' })
+useHead({ title: 'Social Scheduler: KlubHub DJ' })
 
 const route = useRoute()
 const store = useSocialStore()
@@ -32,8 +32,23 @@ function handleAddToQueue() {
   store.openComposePanel()
 }
 
+function csvField(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+}
+
 function handleQuickExport() {
-  store.openComposePanel()
+  const columns = ['caption', 'scheduledAtUtc', 'timezoneName', 'status', 'postType'] as const
+  const rows = [
+    columns.join(','),
+    ...posts.value.map(post => columns.map(column => csvField(post[column] ?? '')).join(',')),
+  ]
+  const blob = new Blob([rows.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'klubhub-social-queue.csv'
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 async function handleAuthorize() {
@@ -80,7 +95,7 @@ async function handleAuthorize() {
       style="margin:0 20px;margin-top:14px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"
     >
       <span class="font-terminal tracking-terminal text-status-archived" style="font-size:8px;letter-spacing:.06em;text-transform:uppercase;">
-        INSTAGRAM TOKEN EXPIRING SOON — RE-AUTHORIZE
+        INSTAGRAM TOKEN EXPIRING SOON: RE-AUTHORIZE
       </span>
       <button class="btn-hud btn-hud-ghost btn-hud-sm border-status-archived/30 text-status-archived" @click="handleAuthorize">
         RE-AUTHORIZE

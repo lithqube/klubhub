@@ -90,7 +90,7 @@ function onHighlightChange(index: number, value: string | number) {
         size="sm"
         type="button"
         :disabled="true"
-        title="Coming Soon — available after Gig Tracker is set up"
+        title="Coming Soon: available after Gig Tracker is set up"
         data-testid="import-from-gigs-btn"
       >
         IMPORT FROM GIGS

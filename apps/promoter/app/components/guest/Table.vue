@@ -59,7 +59,7 @@ const editError = ref<ApiError | null>(null)
 
 const firstIn = (iso: string | null) => (iso ? timeLabel(iso, props.timezone) : '')
 const tagOf = (g: Guest) => arrivalTag(g, firstIn(g.first_in_at))
-const listName = (id: string) => props.lists.find(l => l.id === id)?.name ?? '—'
+const listName = (id: string) => props.lists.find(l => l.id === id)?.name ?? 'Unknown list'
 const allocLabel = (g: Guest) => props.lists.flatMap(l => l.allocations).find(a => a.id === g.allocation_id)?.label ?? ''
 const collects = (g: Guest) => props.lists.find(l => l.id === g.list_id)?.collect_contact ?? false
 

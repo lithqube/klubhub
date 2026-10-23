@@ -59,7 +59,7 @@ const items = computed<StatusItem[]>(() => {
       // The thing that must be found: lit when it is today or tomorrow.
       tone: p.nextGig.days <= 1 ? 'primary' : 'default',
       to: '/gigs',
-      title: [g.event_name, [g.venue, g.city].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
+      title: [g.event_name, [g.venue, g.city].filter(Boolean).join(', ')].filter(Boolean).join(' · '),
     }
   } else {
     gig = { key: 'gig', label: 'NEXT GIG', value: 'NONE BOOKED', tone: 'muted', to: '/gigs', title: 'No confirmed gig from today on' }
