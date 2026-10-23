@@ -22,7 +22,7 @@ import RiderTemplateCreateForm from '../components/rider/RiderTemplateCreateForm
 import RiderTemplateEditor from '../components/rider/RiderTemplateEditor.vue'
 import RiderTemplateList from '../components/rider/RiderTemplateList.vue'
 
-useHead({ title: 'Rider — KlubHub DJ' })
+useHead({ title: 'Rider: KlubHub DJ' })
 
 type LoadState = 'loading' | 'ready' | 'error'
 
@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
 
       <div v-else class="space-y-3" data-testid="rider-deep-link-empty">
         <p class="rider-note">No rider is attached to this gig yet.</p>
-        <RiderAttachmentCard :gig="deepLinkGig" @open-editor="() => {}" />
+        <RiderAttachmentCard :gig="deepLinkGig" @open-editor="loadAttachment" />
       </div>
     </div>
 

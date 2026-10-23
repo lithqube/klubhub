@@ -50,7 +50,11 @@ const { mon, day } = formatDate(props.gig.date)
     class="gig-list-row"
     :class="accentClass"
     style="cursor:pointer;"
+    tabindex="0"
+    role="button"
     @click="emit('edit', gig)"
+    @keydown.enter="emit('edit', gig)"
+    @keydown.space.prevent="emit('edit', gig)"
   >
     <!-- Date block -->
     <div class="gig-date-block">

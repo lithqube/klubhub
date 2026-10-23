@@ -200,28 +200,27 @@ function clearForm() {
 
       <!-- Event items -->
       <div style="display:flex;flex-direction:column;gap:6px;">
-        <div
+        <button
           v-for="event in events"
           :key="event.id"
           class="hud-card"
-          style="padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:7px;"
+          style="padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);transition:all .15s;display:flex;flex-direction:column;gap:7px;text-align:left;"
           :style="selectedEventIds.has(event.id) ? 'border-color:color-mix(in srgb, var(--color-primary) 24%, transparent);background:color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-container-lowest));box-shadow:0 0 24px rgba(150,248,255,.06);' : ''"
           @click="toggleEvent(event.id)"
+          @keydown.enter="toggleEvent(event.id)"
+          @keydown.space.prevent="toggleEvent(event.id)"
           :data-testid="`ra-event-${event.id}`"
         >
           <!-- Row 1: checkbox + title + status badge -->
           <div style="display:flex;align-items:flex-start;gap:8px;">
-            <div
-              style="width:16px;height:16px;border:1.5px solid flex-shrink:0;margin-top:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;background:transparent;"
-              :style="selectedEventIds.has(event.id) ? 'border-color:var(--color-primary);background:var(--color-primary);box-shadow:0 0 12px rgba(150,248,255,.3);' : 'border-color:var(--color-outline);'"
+            <input
+              type="checkbox"
+              style="width:16px;height:16px;border:1.5px solid flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:all .15s;background:transparent;accent-color:var(--color-primary);"
+              :checked="selectedEventIds.has(event.id)"
+              @click.stop
+              @change="toggleEvent(event.id)"
               :data-testid="`ra-event-checkbox-${event.id}`"
             >
-              <Check
-                v-if="selectedEventIds.has(event.id)"
-                style="width:9px;height:9px;color:var(--color-surface);"
-                aria-hidden="true"
-              />
-            </div>
             <div style="flex:1;min-width:0;">
               <div style="display:flex;align-items:center;gap:6px;">
                 <span
@@ -281,7 +280,7 @@ function clearForm() {
             <ExternalLink style="width:9px;height:9px;" aria-hidden="true" />
             VIEW TICKETS
           </a>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -366,7 +365,7 @@ function clearForm() {
       </div>
       <p style="font-family:var(--font-data);font-size:11px;color:var(--color-tertiary);line-height:1.55;margin:5px 0 0;">
         <template v-if="fetchSkipped.length > 0">
-          {{ fetchSkipped.length }} event{{ fetchSkipped.length === 1 ? '' : 's' }} skipped — {{ fetchSkipped[0] }}
+          {{ fetchSkipped.length }} event{{ fetchSkipped.length === 1 ? '' : 's' }} skipped: {{ fetchSkipped[0] }}
         </template>
         <template v-else>
           The artist was found on Resident Advisor, but has no upcoming events listed.

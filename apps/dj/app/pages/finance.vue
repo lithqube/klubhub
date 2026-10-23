@@ -18,8 +18,12 @@ import { useInvoiceStore } from '../stores/invoice'
 import { useEarningsStore } from '../stores/earnings'
 import type { Entry, EntryReconciliation, Invoice } from '../types/finance'
 import { useToast } from '#kui/components/ui/toast/use-toast'
+import { useDialogFocus } from '../utils/dialogFocus'
 
-useHead({ title: 'Finance — KlubHub DJ' })
+const voidTitleEl = ref<HTMLElement | null>(null)
+const deleteTitleEl = ref<HTMLElement | null>(null)
+
+useHead({ title: 'Finance: KlubHub DJ' })
 
 const invoiceStore = useInvoiceStore()
 const earningsStore = useEarningsStore()
@@ -57,6 +61,16 @@ function onVoid(entry: Entry): void {
 }
 function onDelete(entry: Entry): void {
   deletingEntry.value = entry
+}
+
+useDialogFocus(() => !!voidingEntry.value, voidTitleEl)
+useDialogFocus(() => !!deletingEntry.value, deleteTitleEl)
+
+function onFinanceDialogEscape(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  if (voidingEntry.value) voidingEntry.value = null
+  else if (deletingEntry.value) deletingEntry.value = null
 }
 
 async function confirmMutation(action: 'void' | 'delete'): Promise<void> {
@@ -203,7 +217,7 @@ watch(entriesLoaded, (loaded) => {
 
       <p v-if="mutationError" role="alert" class="finance-notice">{{ mutationError }}</p>
       <p class="finance-notice" role="note">
-        FIN-10 — No tax or VAT is computed on ledger entries; invoices calculate tax/VAT separately. Multi-currency totals are
+        FIN-10: No tax or VAT is computed on ledger entries; invoices calculate tax/VAT separately. Multi-currency totals are
         grouped by code and never converted (FIN-09). Auto-generated income tied to a paid gig
         (FIN-03) is read-only; void it instead of editing it.
       </p>
@@ -217,11 +231,13 @@ watch(entriesLoaded, (loaded) => {
         v-if="voidingEntry"
         role="dialog"
         aria-modal="true"
+        aria-labelledby="finance-void-title"
         class="finance-confirm-overlay"
+        @keydown="onFinanceDialogEscape"
         @click.self="voidingEntry = null"
       >
         <div class="glass finance-confirm">
-          <h3 class="finance-confirm-title">VOID THIS ENTRY?</h3>
+          <h3 id="finance-void-title" ref="voidTitleEl" tabindex="-1" class="finance-confirm-title">VOID THIS ENTRY?</h3>
           <p class="finance-confirm-body">
             Voiding keeps the row on the books but zeroes it out of totals. You can edit the
             amount instead if you'd rather.
@@ -238,11 +254,13 @@ watch(entriesLoaded, (loaded) => {
         v-if="deletingEntry"
         role="dialog"
         aria-modal="true"
+        aria-labelledby="finance-delete-title"
         class="finance-confirm-overlay"
+        @keydown="onFinanceDialogEscape"
         @click.self="deletingEntry = null"
       >
         <div class="glass finance-confirm">
-          <h3 class="finance-confirm-title">DELETE THIS ENTRY?</h3>
+          <h3 id="finance-delete-title" ref="deleteTitleEl" tabindex="-1" class="finance-confirm-title">DELETE THIS ENTRY?</h3>
           <p class="finance-confirm-body">This permanently removes the entry. Auto-generated entries cannot be deleted.</p>
           <div class="finance-confirm-actions">
             <button type="button" class="btn-hud" @click="deletingEntry = null">CANCEL</button>

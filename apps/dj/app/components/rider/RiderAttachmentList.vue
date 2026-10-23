@@ -8,11 +8,14 @@ import { useGigStore } from '~/stores/gig'
 import { useRiderStore } from '~/stores/rider'
 import type { Gig } from '~/types/gig'
 import RiderAttachmentCard from './RiderAttachmentCard.vue'
+import { Loader, AlertCircle } from 'lucide-vue-next'
 
 const gigStore = useGigStore()
 const riderStore = useRiderStore()
 
 const filter = ref<'all' | 'upcoming' | 'past'>('all')
+const loading = ref(false)
+const error = ref<string | null>(null)
 
 const filtered = computed(() => {
   const now = Date.now()
@@ -28,14 +31,22 @@ const upcoming = computed(() => filtered.value.filter(g => new Date(g.date).getT
 const past = computed(() => filtered.value.filter(g => new Date(g.date).getTime() < Date.now()))
 
 onMounted(async () => {
-  if (gigStore.gigs.length === 0) {
-    await gigStore.fetchGigs()
+  loading.value = true
+  error.value = null
+  try {
+    if (gigStore.gigs.length === 0) {
+      await gigStore.fetchGigs()
+    }
+    // Independent loads: one failing request must not stop the others.
+    await Promise.allSettled([
+      riderStore.loadTemplates(),
+      ...gigStore.gigs.map(g => riderStore.loadAttachmentByGig(g.id)),
+    ])
+  } catch (e) {
+    error.value = 'Could not load rider attachments.'
+  } finally {
+    loading.value = false
   }
-  // Independent loads: one failing request must not stop the others.
-  await Promise.allSettled([
-    riderStore.loadTemplates(),
-    ...gigStore.gigs.map(g => riderStore.loadAttachmentByGig(g.id)),
-  ])
 })
 
 async function onOpenEditor(gigId: string): Promise<void> {
@@ -56,7 +67,18 @@ async function onOpenEditor(gigId: string): Promise<void> {
       >{{ f.toUpperCase() }}</button>
     </div>
 
-    <div v-if="upcoming.length">
+    <div v-if="loading" class="glass" role="status" style="padding:16px;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;">
+      <Loader class="animate-spin" style="width:13px;height:13px;color:var(--color-primary);" aria-hidden="true" />
+      <span class="section-lbl">LOADING ATTACHMENTS...</span>
+    </div>
+
+    <div v-else-if="error" role="alert" class="glass" style="padding:20px;background:color-mix(in srgb, var(--color-error) 5%, var(--color-surface-container));border:1px solid color-mix(in srgb, var(--color-error) 15%, transparent);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <AlertCircle style="width:14px;height:14px;color:var(--color-error);" aria-hidden="true" />
+      <span style="font-family:var(--font-data);font-size:12px;color:var(--color-error);flex:1;">{{ error }}</span>
+      <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm" @click="loadAttachment">RETRY</button>
+    </div>
+
+    <div v-else-if="upcoming.length">
       <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal mb-2">UPCOMING</p>
       <div class="space-y-2">
         <RiderAttachmentCard
@@ -68,7 +90,7 @@ async function onOpenEditor(gigId: string): Promise<void> {
       </div>
     </div>
 
-    <div v-if="past.length">
+    <div v-else-if="past.length">
       <p class="text-xs tracking-terminal text-tertiary uppercase font-terminal mb-2 mt-4">PAST</p>
       <div class="space-y-2">
         <RiderAttachmentCard
@@ -80,7 +102,7 @@ async function onOpenEditor(gigId: string): Promise<void> {
       </div>
     </div>
 
-    <p v-if="filtered.length === 0" class="text-tertiary font-terminal uppercase text-xs">
+    <p v-if="!loading && !error && filtered.length === 0" class="text-tertiary font-terminal uppercase text-xs">
       No gigs match this filter.
     </p>
   </div>

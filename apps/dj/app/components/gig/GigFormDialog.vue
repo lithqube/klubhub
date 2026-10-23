@@ -14,6 +14,10 @@ import { isActiveInvoice, invoiceNumberLabel, statusLabel } from '../../utils/in
 import { formatMinor } from '../../utils/money'
 import EntryReconciliationDialog from '../finance/EntryReconciliationDialog.vue'
 import RiderAttachmentInlineCard from '../rider/RiderAttachmentInlineCard.vue'
+import { useDialogFocus } from '../../utils/dialogFocus'
+
+const formTitleEl = ref<HTMLElement | null>(null)
+const cancelTitleEl = ref<HTMLElement | null>(null)
 
 const gigStore = useGigStore()
 const tracklistStore = useTracklistStore()
@@ -178,6 +182,15 @@ const showCopyFromDropdown = ref(false)
 const copyQuery = ref('')
 const copyResults = ref<Gig[]>([])
 const showCancelConfirm = ref(false)
+useDialogFocus(() => props.open && !showCancelConfirm.value, formTitleEl)
+useDialogFocus(showCancelConfirm, cancelTitleEl)
+function onDialogEscape(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  if (showCancelConfirm.value) showCancelConfirm.value = false
+  else close()
+}
 const isSaving = ref(false)
 const saveError = ref<string | null>(null)
 const editSnapshot = ref<Gig | null>(null)
@@ -432,7 +445,11 @@ function close() {
     >
       <div
         v-if="open"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="gig-form-title"
         style="position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);"
+        @keydown="onDialogEscape"
         @click.self="close"
       >
         <div
@@ -441,7 +458,7 @@ function close() {
         >
           <!-- Dialog header -->
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);">
-            <div style="font-family:var(--font-command);font-size:13px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase;">{{ title }}</div>
+            <h2 id="gig-form-title" ref="formTitleEl" tabindex="-1" class="gig-dialog-title" style="font-family:var(--font-command);font-size:13px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase;">{{ title || 'ADD GIG' }}</h2>
             <button class="btn-hud btn-hud-xs" @click="close">✕</button>
           </div>
 
@@ -752,14 +769,18 @@ function close() {
       >
         <div
           v-if="showCancelConfirm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gig-cancel-title"
           style="position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);"
+          @keydown="onDialogEscape"
         >
           <div class="glass" style="padding:24px;max-width:360px;text-align:center;background:var(--color-surface-container);">
-            <div
+            <h3 id="gig-cancel-title" ref="cancelTitleEl" tabindex="-1" class="gig-dialog-title"
               style="font-family:var(--font-command);font-size:12px;font-weight:700;margin-bottom:12px;letter-spacing:-.02em;text-transform:uppercase;"
             >
               CONFIRM CANCELLATION
-            </div>
+            </h3>
             <div style="font-size:11px;color:var(--color-tertiary);margin-bottom:20px;">
               Cancelling a gig is permanent and cannot be undone. Are you sure?
             </div>

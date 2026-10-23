@@ -159,7 +159,7 @@ describe('RaEventImport interactions', () => {
     const empty = wrapper.find('[data-testid="ra-empty"]')
     expect(empty.exists()).toBe(true)
     expect(empty.text()).toContain('NO UPCOMING EVENTS TO IMPORT FOR "dj-phantom"')
-    expect(empty.text()).toContain('2 events skipped — event too old')
+    expect(empty.text()).toContain('2 events skipped: event too old')
   })
 
   it('previews an import with the selected event ids', async () => {
@@ -199,8 +199,8 @@ describe('RaEventImport interactions', () => {
     await fetchEvents(wrapper)
 
     // turn the dry run off
-    const checkbox = wrapper.find('input[type="checkbox"]')
-    await checkbox.setValue(false)
+    const checkbox = wrapper.find('label:has(input[type="checkbox"])')
+    await checkbox.find('input[type="checkbox"]').setValue(false)
     expect(buttonWithText(wrapper, 'IMPORT EVENTS')).toBeDefined()
 
     mockFetch.mockResolvedValueOnce({ ...previewResult([]), gigs_created: 1, dry_run: false })
