@@ -83,11 +83,11 @@ const summary = ref<HTMLElement | null>(null)
 const show = (k: string) => (touched[k] || submitted.value) && errors.value[k]
 
 const previewLocation = computed(() => {
-  const city = f.city || venue.value?.city || '—'
+  const city = f.city || venue.value?.city || 'City not set'
   if (f.locationMode === 'city_only') return { now: city, later: null }
   if (f.locationMode === 'secret') {
     return {
-      now: `${city.toUpperCase()} — LOCATION TBA`,
+      now: `${city.toUpperCase()}: LOCATION TBA`,
       later: f.revealDate ? `from ${f.revealDate} ${f.revealTime}: ${venue.value?.name ?? city}` : 'hidden until you change it',
     }
   }
@@ -166,7 +166,7 @@ watch(() => props.serverError, async (e) => {
         <p v-if="night" id="night-hint" style="margin:0;font-size:12px;color:var(--color-on-surface-variant);" aria-live="polite">
           <template v-if="night.overnight">Ends +1 {{ nextDayName }} · </template>{{ durationLabel(night.durationMinutes) }} · times in {{ f.timezone }} ({{ zone }})
           <strong v-if="night.dstShiftMinutes" style="display:block;color:var(--color-secondary);">
-            CLOCKS CHANGE THIS NIGHT — IT IS {{ durationLabel(night.durationMinutes) }}, NOT {{ durationLabel(night.durationMinutes - night.dstShiftMinutes) }}.
+            CLOCKS CHANGE THIS NIGHT: IT IS {{ durationLabel(night.durationMinutes) }}, NOT {{ durationLabel(night.durationMinutes - night.dstShiftMinutes) }}.
           </strong>
         </p>
         <p v-if="f.timezone !== deviceTz" style="margin:0;font-size:12px;color:var(--color-tertiary);">
@@ -207,7 +207,7 @@ watch(() => props.serverError, async (e) => {
       <fieldset style="border:0;padding:0;margin:10px 0 0;">
         <legend class="sr-only">Location privacy</legend>
         <div class="theme-seg" role="radiogroup" aria-label="Location privacy">
-          <label v-for="m in (['venue', 'city_only', 'secret'] as LocationMode[])" :key="m" class="theme-opt" :class="{ active: f.locationMode === m }" style="min-height:44px;cursor:pointer;">
+          <label v-for="m in (['venue', 'city_only', 'secret'] as LocationMode[])" :key="m" class="theme-opt privacy-option" :class="{ active: f.locationMode === m }" style="min-height:44px;cursor:pointer;">
             <input v-model="f.locationMode" type="radio" name="location_mode" :value="m" class="sr-only">{{ m.replace('_', ' ').toUpperCase() }}
           </label>
         </div>
@@ -258,3 +258,12 @@ watch(() => props.serverError, async (e) => {
     </div>
   </form>
 </template>
+
+<style scoped>
+.privacy-option:focus-within {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+}
+</style>

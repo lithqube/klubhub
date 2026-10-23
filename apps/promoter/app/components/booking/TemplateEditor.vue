@@ -105,7 +105,7 @@ const canSubmit = computed(() => !saving.value && !!form.name.trim() && !!form.s
         <input v-model="form.isDefault" type="checkbox" data-testid="template-default"> DEFAULT TEMPLATE (used when an offer picks no template)
       </label>
       <p v-if="error" role="alert" class="glass" style="padding:10px 12px;border-left:3px solid var(--color-error);font-size:13px;">
-        {{ error.error === 'conflict' ? 'The template changed since you loaded it — reload and try again.' : (error.error === 'invalid' ? `Invalid ${error.field ?? 'input'}: ${error.problem ?? ''}` : 'Could not save the template.') }}
+        {{ error.error === 'conflict' ? 'The template changed since you loaded it. Reload and try again.' : (error.error === 'invalid' ? `Invalid ${error.field ?? 'input'}: ${error.problem ?? ''}` : 'Could not save the template.') }}
       </p>
       <div style="display:flex;gap:8px;">
         <button type="submit" class="btn-hud btn-hud-cta btn-hud-sm" style="min-height:44px;" :disabled="!canSubmit" data-testid="template-save">SAVE TEMPLATE</button>

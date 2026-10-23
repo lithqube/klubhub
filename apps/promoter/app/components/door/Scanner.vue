@@ -23,6 +23,23 @@ const REPEAT_MS = 2000
 const RESULT_MS = 1600
 const video = ref<HTMLVideoElement | null>(null)
 const codeInput = ref<HTMLInputElement | null>(null)
+const scanner = ref<HTMLElement | null>(null)
+const closeButton = ref<HTMLButtonElement | null>(null)
+let opener: HTMLElement | null = null
+const focusable = () => Array.from(scanner.value?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])') ?? [])
+  .filter(el => el.getClientRects().length > 0 && el.tabIndex >= 0)
+function trapTab(e: KeyboardEvent) {
+  if (e.key !== 'Tab') return
+  const items = focusable()
+  if (!items.length) { e.preventDefault(); scanner.value?.focus(); return }
+  const first = items[0]!
+  const last = items.at(-1)!
+  if (e.shiftKey && (document.activeElement === first || !scanner.value?.contains(document.activeElement))) {
+    e.preventDefault(); last.focus()
+  } else if (!e.shiftKey && (document.activeElement === last || !scanner.value?.contains(document.activeElement))) {
+    e.preventDefault(); first.focus()
+  }
+}
 const radios = ref<HTMLButtonElement[]>([])
 const typed = ref('')
 const status = ref<'starting' | 'scanning' | 'nocamera'>('starting')
@@ -150,18 +167,23 @@ function onModeKey(e: KeyboardEvent) {
   nextTick(() => radios.value[express.value ? 1 : 0]?.focus())
 }
 
-onMounted(() => void start())
+onMounted(() => {
+  opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  closeButton.value?.focus()
+  void start()
+})
 onBeforeUnmount(() => {
   stop()
   clearTimeout(resultTimer)
+  opener?.focus()
 })
 </script>
 
 <template>
-  <div class="scanner" role="dialog" aria-modal="true" aria-labelledby="scan-h" @keydown.esc="stop(); emit('close')">
+  <div ref="scanner" class="scanner" role="dialog" aria-modal="true" aria-labelledby="scan-h" tabindex="-1" @keydown.esc="stop(); emit('close')" @keydown="trapTab">
     <div class="head">
       <h2 id="scan-h" class="section-lbl" style="margin:0;font-size:11px;">SCAN · {{ express ? 'EXPRESS: A SCAN CHECKS IN' : 'STANDARD: A SCAN OPENS THE CARD' }}</h2>
-      <button type="button" class="btn-hud btn-hud-ghost close" aria-label="Close scanner" @click="stop(); emit('close')">
+      <button ref="closeButton" type="button" class="btn-hud btn-hud-ghost close" aria-label="Close scanner" @click="stop(); emit('close')">
         <X style="width:22px;height:22px;" aria-hidden="true" />
       </button>
     </div>

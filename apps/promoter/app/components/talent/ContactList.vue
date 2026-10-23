@@ -39,7 +39,7 @@ async function remove(c: TalentContact) {
     </div>
 
     <p v-if="loading && !contacts.length" role="status" class="data-frag" style="font-size:11px;">LOADING…</p>
-    <KhEmptyState v-else-if="!contacts.length" title="NO TALENT CONTACTS" hint="Add the DJs you know — they become matchable for your open slots." action-label="ADD DJ" @action="emit('add')" />
+    <KhEmptyState v-else-if="!contacts.length" title="NO TALENT CONTACTS" hint="Add the DJs you know. They become matchable for your open slots." action-label="ADD DJ" @action="emit('add')" />
     <ul v-else style="list-style:none;margin:0;padding:0;display:grid;gap:6px;">
       <li v-for="c in contacts" :key="c.id" class="hud-card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;" data-testid="talent-row">
         <span style="min-width:0;">

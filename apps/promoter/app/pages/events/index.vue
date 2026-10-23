@@ -31,14 +31,14 @@ const empty = computed(() => ({
 
 <template>
   <div>
-    <div class="page-header">
+    <div class="page-header" style="flex-wrap:wrap;gap:10px;">
       <div>
         <h1 class="page-title">EVENTS</h1>
         <div class="page-sub">PLAN · RELEASE · RUN</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0;">
         <label class="sr-only" for="event-search">Search events</label>
-        <input id="event-search" v-model="search" class="hud-input" type="search" placeholder="Search events…" style="width:200px;height:40px;">
+        <input id="event-search" v-model="search" class="hud-input" type="search" placeholder="Search events…" style="width:200px;max-width:100%;height:40px;">
         <NuxtLink to="/events/new" class="btn-hud btn-hud-cta" style="min-height:44px;">+ NEW EVENT</NuxtLink>
       </div>
     </div>

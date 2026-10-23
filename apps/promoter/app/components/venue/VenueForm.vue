@@ -184,7 +184,7 @@ const PROTECTED: { key: keyof VenueProtected, label: string, flag: 'address' | '
           <textarea id="vf-tech_notes" v-model="f.techNotes" class="hud-textarea" rows="4" maxlength="5000" placeholder="Decks, mixer, sound system, load-in" aria-describedby="tech-hint" />
         </label>
         <p id="tech-hint" style="margin:6px 0 0;font-size:12px;" :style="techNotesOverLimit ? 'color:var(--color-error);font-weight:600;' : pii ? 'color:var(--color-secondary);font-weight:600;' : 'color:var(--color-on-surface-variant);'" aria-live="polite">
-          <template v-if="techNotesOverLimit">That would be over the 5000-byte limit — nothing was added.</template>
+          <template v-if="techNotesOverLimit">That would be over the 5000-byte limit. Nothing was added.</template>
           <template v-else-if="pii">This looks like {{ pii === 'email' ? 'an email address' : 'a phone number' }}. Tech notes are not encrypted: put contacts in the protected fields below.</template>
           <template v-else>Internal. Shared with your team, never exported. Not encrypted.</template>
         </p>
@@ -216,7 +216,7 @@ const PROTECTED: { key: keyof VenueProtected, label: string, flag: 'address' | '
             autocomplete="off" :aria-invalid="!!show(row.key)" @blur="touched[row.key] = true"
           >
           <div v-else class="hud-input" :aria-label="`${row.label}: ${initial?.protected[row.flag] ? 'hidden' : 'not set'}`" style="display:flex;align-items:center;color:var(--color-on-surface-variant);">
-            {{ revealed ? (revealed[row.key] || '—') : initial?.protected[row.flag] ? '••••••••' : '—' }}
+            {{ revealed ? (revealed[row.key] || 'Not provided') : initial?.protected[row.flag] ? '••••••••' : 'Not provided' }}
           </div>
           <span v-if="show(row.key)" style="font-size:12px;color:var(--color-error);">{{ show(row.key) }}</span>
           <span v-else style="font-size:11px;color:var(--color-on-surface-variant);">{{ row.hint }}</span>

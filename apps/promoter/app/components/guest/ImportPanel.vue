@@ -138,7 +138,7 @@ const ACTION_LABEL = { new: 'NEW', update: 'UPDATE', unchanged: 'SAME' } as cons
         <div v-for="f in IMPORT_FIELDS" :key="f.id" style="display:grid;gap:4px;">
           <label :for="`${uid}-map-${f.id}`" class="section-lbl">{{ f.label }}</label>
           <select :id="`${uid}-map-${f.id}`" v-model="mapping[f.id]" class="hud-input">
-            <option :value="undefined">—</option>
+            <option :value="undefined">Not mapped</option>
             <option v-for="h in table.headers" :key="h" :value="h">{{ h }}</option>
           </select>
         </div>

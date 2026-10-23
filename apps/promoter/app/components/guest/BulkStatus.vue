@@ -49,7 +49,7 @@ async function submit() {
   <form class="hud-card" style="padding:12px 14px;display:grid;gap:10px;" aria-labelledby="bulk-h" novalidate @submit.prevent="submit">
     <h3 id="bulk-h" class="section-lbl" style="margin:0;">SET STATUS BY EMAIL</h3>
     <label style="display:grid;gap:4px;">
-      <span style="font-size:12px;color:var(--color-on-surface-variant);">Paste emails in any layout — a column, a mail thread, a CSV row. Only lists that collect contacts have emails.</span>
+      <span style="font-size:12px;color:var(--color-on-surface-variant);">Paste emails in any layout: a column, a mail thread, a CSV row. Only lists that collect contacts have emails.</span>
       <textarea :id="`${uid}-emails`" v-model="text" class="hud-textarea" rows="4" placeholder="aiko@label.example, rafael@press.example" />
     </label>
     <p v-if="preview" aria-live="polite" class="preview" data-testid="bulk-preview">

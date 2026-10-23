@@ -482,7 +482,10 @@ const when = (iso: string | null) => (iso ? `${dayLabel(iso, tz.value)} ${timeLa
   font-size: 13px;
 }
 .devs li.revoked {
-  opacity: .6;
+  border-left: 3px solid var(--color-tertiary);
+}
+.devs li.revoked strong {
+  color: var(--color-tertiary);
 }
 .dev-acts {
   display: flex;

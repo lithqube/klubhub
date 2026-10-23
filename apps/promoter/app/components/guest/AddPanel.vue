@@ -89,7 +89,7 @@ const canSubmit = computed(() => !!list.value && !saving.value && (mode.value ==
       <div class="field">
         <label :for="`${uid}-alloc`" class="section-lbl">ALLOCATION</label>
         <select :id="`${uid}-alloc`" v-model="allocationId" class="hud-input" :disabled="!openAllocations.length">
-          <option value="">{{ openAllocations.length ? 'None — straight onto the list' : 'No open allocations' }}</option>
+          <option value="">{{ openAllocations.length ? 'None (straight onto the list)' : 'No open allocations' }}</option>
           <option v-for="a in openAllocations" :key="a.id" :value="a.id">{{ a.label }} · {{ a.used }}/{{ a.quota }}</option>
         </select>
       </div>

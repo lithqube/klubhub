@@ -98,7 +98,7 @@ function submit() {
         </div>
         <span v-if="show('accent_color')" style="display:block;font-size:12px;color:var(--color-error);margin-top:6px;">{{ show('accent_color') }}</span>
         <p style="margin:8px 0 0;font-size:12px;" :style="ratio < 4.5 ? 'color:var(--color-secondary);font-weight:600;' : 'color:var(--color-on-surface-variant);'" aria-live="polite">
-          <template v-if="ratio < 4.5">Contrast {{ ratio.toFixed(1) }}:1 on the dark export background — hard to read. Pick a lighter colour (4.5:1 or more).</template>
+          <template v-if="ratio < 4.5">Contrast {{ ratio.toFixed(1) }}:1 on the dark export background. Hard to read. Pick a lighter colour (4.5:1 or more).</template>
           <template v-else>Contrast {{ ratio.toFixed(1) }}:1 on the dark export background. Used for share images, pages and embeds.</template>
         </p>
       </section>

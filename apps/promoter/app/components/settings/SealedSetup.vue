@@ -123,7 +123,7 @@ const groupNo = (i: number) => i + 1
         You also get a <strong>recovery kit</strong>: the only way back in if every owner forgets their passphrase. It is shown once. Keep it offline.
       </p>
       <p class="txt">
-        If every owner forgets their passphrase and the kit is lost, nobody — not even KlubHub — can open the ban list again. You'd start a new,
+        If every owner forgets their passphrase and the kit is lost, nobody, not even KlubHub, can open the ban list again. You'd start a new,
         empty one. Events, guests and tickets are not affected.
       </p>
       <SettingsSealedSecurity v-if="block" :kind="block" :next="next" action="Setting up sealed data" />
@@ -135,7 +135,7 @@ const groupNo = (i: number) => i + 1
     <template v-else-if="step === 'kit' && setup">
       <h3 :id="`${uid}-h`" ref="heading" tabindex="-1" class="lbl">RECOVERY KIT · STEP 3 OF 4 · SHOWN ONCE</h3>
       <p class="txt">
-        Download it or write it down now, then store it away from this computer — printed in a drawer or safe, or in a password manager.
+        Download it or write it down now, then store it away from this computer (printed in a drawer or safe, or in a password manager).
         Anyone with it can read the ban list. KlubHub cannot show it again or recover it for you.
       </p>
       <ol class="kit" aria-label="Recovery kit groups" data-testid="sealed-kit">

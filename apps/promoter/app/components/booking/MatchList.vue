@@ -19,7 +19,7 @@ const emit = defineEmits<{ compose: [match: TalentMatch] }>()
     <p v-if="!openSlot" class="data-frag" style="font-size:11px;">Select a slot to see who matches it.</p>
     <template v-else>
       <p v-if="loading && !matches.length" role="status" class="data-frag" style="font-size:11px;">LOADING…</p>
-      <KhEmptyState v-else-if="!matches.length" title="NO MATCHES" :hint="`No talent contacts in ${openSlot.genres.length ? 'these genres' : 'this city'} yet — add some in the Talent tab.`" />
+      <KhEmptyState v-else-if="!matches.length" title="NO MATCHES" :hint="`No talent contacts in ${openSlot.genres.length ? 'these genres' : 'this city'} yet. Add some in the Talent tab.`" />
       <ul v-else style="list-style:none;margin:0;padding:0;display:grid;gap:6px;">
         <li v-for="m in matches" :key="m.contact.id" class="hud-card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;" data-testid="match-row">
           <span style="min-width:0;">

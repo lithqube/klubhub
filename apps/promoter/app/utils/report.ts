@@ -11,7 +11,7 @@ export const BUCKET_MS = 15 * 60_000
 
 /** "38%" from a 0–1 rate; null (nobody going) reads "—". */
 export function formatPercent(rate: number | null | undefined): string {
-  if (rate === null || rate === undefined || !Number.isFinite(rate)) return '—'
+  if (rate === null || rate === undefined || !Number.isFinite(rate)) return 'N/A'
   return `${Math.round(rate * 100)}%`
 }
 

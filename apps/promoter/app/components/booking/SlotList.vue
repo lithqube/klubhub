@@ -132,14 +132,14 @@ function pick(slot: OpenSlot) {
       <p v-if="loading && !slots.length" role="status" class="data-frag" style="font-size:11px;">LOADING…</p>
       <KhEmptyState v-else-if="!slots.length" title="NO OPEN SLOTS" hint="Add a slot to see which of your talent contacts match it." action-label="ADD SLOT" @action="startAdd" />
       <ul v-else style="list-style:none;margin:0;padding:0;display:grid;gap:6px;">
-        <li v-for="s in slots" :key="s.id" class="hud-card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;" :style="selected === s.id ? 'border-color:var(--color-accent);' : ''" data-testid="slot-row" @click="pick(s)">
-          <span style="min-width:0;">
+        <li v-for="s in slots" :key="s.id" class="hud-card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;" :style="selected === s.id ? 'border-color:var(--color-primary);' : ''" data-testid="slot-row">
+          <button type="button" :aria-pressed="selected === s.id" style="min-width:0;flex:1;text-align:left;background:none;border:0;color:inherit;cursor:pointer;padding:6px;" class="slot-select" @click="pick(s)">
             <span style="display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ s.role || 'Open slot' }}</span>
             <span class="data-frag" style="font-size:11px;">
               <template v-if="s.genres.length">{{ s.genres.join(', ') }} · </template>{{ formatFee(s) || 'fee on request' }}
               <template v-if="s.notes"> · {{ s.notes }}</template>
             </span>
-          </span>
+          </button>
           <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
             <span v-if="selected === s.id" class="badge-hud badge-ready">SELECTED</span>
             <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs" style="min-height:36px;" aria-label="Delete slot" @click.stop="remove(s)">
@@ -151,3 +151,10 @@ function pick(slot: OpenSlot) {
     </template>
   </section>
 </template>
+
+<style scoped>
+.slot-select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+</style>

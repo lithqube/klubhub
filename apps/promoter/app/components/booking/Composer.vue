@@ -121,12 +121,12 @@ async function send() {
       </div>
 
       <p v-if="!contact.has_email" role="alert" class="glass" style="padding:10px 12px;border-left:3px solid var(--color-error);font-size:13px;">
-        THIS DJ HAS NO EMAIL ADDRESS — offers cannot be sent to them.
+        THIS DJ HAS NO EMAIL ADDRESS: offers cannot be sent to them.
       </p>
 
       <p v-if="venueWarning" role="alert" class="glass" style="padding:10px 12px;border-left:3px solid var(--color-warning, #e0a800);font-size:13px;display:flex;gap:8px;align-items:center;" data-testid="venue-warning">
         <TriangleAlert style="width:14px;height:14px;flex-shrink:0;" aria-hidden="true" />
-        THIS EVENT WITHHOLDS ITS VENUE — {{ VENUE_VAR }} WILL BE SENT EMPTY.
+        THIS EVENT WITHHOLDS ITS VENUE: {{ VENUE_VAR }} WILL BE SENT EMPTY.
       </p>
 
       <label style="display:grid;gap:2px;font-size:11px;">

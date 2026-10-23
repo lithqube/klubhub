@@ -125,7 +125,7 @@ describe('guestErrorText', () => {
 
   it('points validation errors at the pasted line', () => {
     expect(guestErrorText({ error: 'invalid', field: 'guests[2].plus_n', problem: 'more than this allocation allows' }))
-      .toBe('Line 3: +N — more than this allocation allows')
+      .toBe('Line 3: +N: more than this allocation allows')
   })
 
   it('covers closed and revoked allocations', () => {
