@@ -17,6 +17,17 @@ var (
 	ErrSuppressed       = errors.New("bookings: address is suppressed")
 	ErrRateLimited      = errors.New("bookings: daily outreach limit reached")
 	ErrEmailUnavailable = errors.New("bookings: email is not available")
+
+	// ErrOutreachNotPermitted is returned when the configured email provider
+	// has not been attested as permitting unsolicited B2B outreach. Booking
+	// offers are cold outreach by construction — the talent contact never
+	// opted in — and Plunk's ToS §5 ("NO COLD EMAILING POLICY") prohibits
+	// exactly that, including via the transactional endpoint. The operator
+	// must attest (OUTREACH_PROVIDER_PERMITS_OUTREACH=true) that their
+	// provider permits it. Fail-closed. See platform/email.OutreachGate.
+	ErrOutreachNotPermitted = errors.New(
+		"bookings: outreach sending is disabled: your email provider's terms " +
+			"prohibit unsolicited B2B outreach (see docs/OUTREACH-PROVIDER.md)")
 )
 
 // InvalidError reports a field that failed validation.

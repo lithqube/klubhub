@@ -24,6 +24,16 @@ type ServiceConfig struct {
 	FromEmail string // PLUNK_FROM_EMAIL — the instance sender
 	FromName  string // PLUNK_FROM_NAME — fallback for {{promoter_name}}
 	MaxPerDay int    // OUTREACH_MAX_PER_DAY (default 50)
+
+	// OutreachGate is the fail-closed provider attestation. Nil blocks all
+	// offer sends with ErrOutreachNotPermitted — see
+	// platform/email.OutreachGate for why booking offers trip this.
+	OutreachGate *email.OutreachGate
+}
+
+// AllowsOutreach reports whether the send path may deliver. Fail-closed.
+func (c ServiceConfig) AllowsOutreach() bool {
+	return c.OutreachGate.AllowsOutreach()
 }
 
 // Service is the bookings business layer: talent contacts, open slots,

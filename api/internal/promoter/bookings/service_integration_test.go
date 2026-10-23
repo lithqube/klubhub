@@ -122,6 +122,9 @@ func setup(t *testing.T) *fixture {
 		FromEmail: "offers@klubhub.example",
 		FromName:  "KlubHub Outreach",
 		MaxPerDay: 50,
+		// Fixtures exercise offer-path rules, not provider policy. The gate
+		// has its own tests (TestSendOfferRefusesWithoutProviderAttestation).
+		OutreachGate: email.NewOutreachGate(true),
 	}, func() time.Time { return f.now })
 	return f
 }
@@ -836,6 +839,7 @@ func TestSendOffer_DailyCap(t *testing.T) {
 	// A tight cap: two per day.
 	svc := bookings.NewService(f.db, f.keys, f.emailSvc, bookings.ServiceConfig{
 		FromEmail: "offers@klubhub.example", FromName: "KlubHub Outreach", MaxPerDay: 2,
+		OutreachGate: email.NewOutreachGate(true),
 	}, func() time.Time { return f.now })
 	c := f.contact("Nadia Voss", "nadia@example.com", "Berlin", nil)
 	in := &bookings.SendOfferInput{TalentContactID: c.ID}
@@ -1117,6 +1121,7 @@ func TestRLS_Isolation(t *testing.T) {
 	keysB := f.keys // same KEK; the DEK is per tenant
 	svcB := bookings.NewService(f.db, keysB, f.emailSvc, bookings.ServiceConfig{
 		FromEmail: "offers@klubhub.example", FromName: "Outreach", MaxPerDay: 50,
+		OutreachGate: email.NewOutreachGate(true),
 	}, func() time.Time { return f.now })
 
 	list, err := svcB.ListTalentContacts(ctxB, bookings.TalentFilter{})
@@ -1146,3 +1151,21 @@ func TestRLS_Isolation(t *testing.T) {
 }
 
 func sptr(v string) *string { return &v }
+
+// TestSendOfferRefusesWithoutProviderAttestation pins the fail-closed
+// provider gate on the promoter side. A booking offer is cold outreach —
+// the talent contact never opted in — and hosted Plunk's ToS §5 prohibits
+// it. Without an operator attestation the send must be refused, and the
+// refusal must win over the other send-path checks.
+func TestSendOfferRefusesWithoutProviderAttestation(t *testing.T) {
+	f := setup(t)
+	svc := bookings.NewService(f.db, f.keys, f.emailSvc, bookings.ServiceConfig{
+		FromEmail: "offers@klubhub.example", MaxPerDay: 50,
+		OutreachGate: email.NewOutreachGate(false),
+	}, func() time.Time { return f.now })
+	c := f.contact("Nadia Voss", "nadia@example.com", "Berlin", nil)
+	_, err := svc.SendOffer(f.ctx, f.principal(), &bookings.SendOfferInput{TalentContactID: c.ID})
+	if !errors.Is(err, bookings.ErrOutreachNotPermitted) {
+		t.Fatalf("err = %v, want ErrOutreachNotPermitted", err)
+	}
+}

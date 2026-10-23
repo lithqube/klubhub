@@ -128,6 +128,20 @@ type Config struct {
 	// outreach routes still serve reads and answer 503 on POST /requests.
 	// OUTREACH_FROM_NAME overrides PLUNK_FROM_NAME as the From display name.
 	OutreachFromName string `envconfig:"OUTREACH_FROM_NAME" default:""`
+	// OutreachProviderPermitsOutreach is a REQUIRED operator attestation
+	// before any booking request may be sent. Booking outreach is cold
+	// outreach: the promoter contact never opted in. Plunk's Terms of Service
+	// §5 ("NO COLD EMAILING POLICY") prohibits exactly that — including via
+	// the transactional /v1/send endpoint — and bans suspension/termination
+	// under §10. Most hosted providers draw the same line.
+	//
+	// Default "" = fail-closed: reads work, POST /requests answers 422
+	// outreach_not_permitted. Set to "true" ONLY if your provider's terms
+	// permit it — e.g. a self-hosted Plunk instance you control, or a
+	// provider allowing opted-out B2B under a documented lawful basis.
+	// You remain responsible for lawful basis, opt-out handling and
+	// CAN-SPAM/GDPR/CASL compliance. See docs/OUTREACH-PROVIDER.md.
+	OutreachProviderPermitsOutreach string `envconfig:"OUTREACH_PROVIDER_PERMITS_OUTREACH" default:"false"`
 	// OutreachMaxPerDay caps booking-request sends per local-midnight day
 	// (failed attempts count). The OSS DJ API is unauthenticated — the cap
 	// bounds the damage when the API is exposed (see SECURITY.md).

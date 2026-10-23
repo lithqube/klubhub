@@ -137,3 +137,17 @@ describe('offerStatusClass', () => {
     expect(offerStatusClass('bounced')).toBe('badge-failed')
   })
 })
+
+describe('offerErrorText — provider-terms gate', () => {
+  it('explains an admin step for outreach_not_permitted', () => {
+    const text = offerErrorText({ error: 'outreach_not_permitted' } as never)
+    expect(text).toContain('OUTREACH_PROVIDER_PERMITS_OUTREACH')
+  })
+
+  it('leaves email_unavailable and the other reasons alone', () => {
+    expect(offerErrorText({ error: 'email_unavailable' } as never))
+      .toContain('Email is not configured')
+    expect(offerErrorText({ error: 'suppressed' } as never))
+      .toBe('This DJ is on your do-not-contact list.')
+  })
+})

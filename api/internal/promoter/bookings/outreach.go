@@ -144,6 +144,12 @@ func (s *Service) SendOffer(ctx context.Context, p authz.Principal, in *SendOffe
 	if s.emails == nil {
 		return nil, ErrEmailUnavailable
 	}
+	// Provider attestation gate — fail-closed, checked before any work so a
+	// blocked operator gets an actionable error instead of a send that would
+	// breach their provider's terms.
+	if !s.cfg.AllowsOutreach() {
+		return nil, ErrOutreachNotPermitted
+	}
 	if err := validateSendOffer(in); err != nil {
 		return nil, err
 	}

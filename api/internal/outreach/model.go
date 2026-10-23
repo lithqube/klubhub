@@ -197,4 +197,24 @@ var (
 	ErrRateLimited      = errors.New("daily outreach limit reached")
 	ErrEmailUnavailable = errors.New("email is not available")
 	ErrEPKLegacyExport  = errors.New("epk export has no garage object key")
+
+	// ErrOutreachNotPermitted is returned when the configured email provider
+	// has not been attested as permitting unsolicited B2B outreach.
+	//
+	// Booking requests are cold outreach by construction: the recipient is a
+	// promoter contact in the DJ's own database who has never opted in. Most
+	// hosted email providers prohibit this in their terms — Plunk's ToS §5
+	// ("NO COLD EMAILING POLICY") bans one-time cold outreach outright, even
+	// via the transactional endpoint. The application cannot introspect a
+	// provider's contract, so the operator must affirmatively attest that
+	// their provider permits it (OUTREACH_PROVIDER_PERMITS_OUTREACH=true,
+	// e.g. a self-hosted Plunk instance they control, or a provider whose
+	// terms allow opted-out B2B under a documented lawful basis).
+	//
+	// Fail-closed: unset or "false" refuses the send. This gates ONLY
+	// outreach — finance's invoice/agreement email is genuine transactional
+	// mail and is unaffected.
+	ErrOutreachNotPermitted = errors.New(
+		"outreach sending is disabled: your email provider's terms prohibit " +
+			"unsolicited B2B outreach (see docs/OUTREACH-PROVIDER.md)")
 )

@@ -61,6 +61,17 @@ default 50, counting failed attempts) bounds the damage, but the endpoint
 must sit behind the operator's reverse-proxy authentication, exactly as the
 finance email endpoints already must.
 
+**Outreach sending is disabled by default.** Booking requests are cold B2B
+outreach — the recipient never opted in — and Plunk's Terms of Service §5
+("NO COLD EMAILING POLICY") prohibits exactly that, including via the
+transactional endpoint. Both binaries therefore require an explicit operator
+attestation, `OUTREACH_PROVIDER_PERMITS_OUTREACH=true`, before any outreach
+mail is sent; without it the send paths return `422 outreach_not_permitted`.
+This gates outreach only — finance's transactional email is unaffected. See
+[`docs/OUTREACH-PROVIDER.md`](docs/OUTREACH-PROVIDER.md) for the rationale,
+the self-host / alternate-provider paths, and what the attestation does not
+cover.
+
 ## KlubHub Promoter: security model
 
 Promoter holds other people's data (guest lists, audiences, artist fees,

@@ -111,6 +111,19 @@ type ServiceConfig struct {
 	MaxPerDay    int    // OUTREACH_MAX_PER_DAY (default 50)
 	EPKPublicURL string // EPK_PUBLIC_URL — fills {{epk_link}}
 	Bucket       string // Garage bucket holding EPK exports
+
+	// OutreachGate is the fail-closed provider attestation. A nil gate
+	// refuses all outreach (ErrOutreachNotPermitted). See
+	// platform/email.OutreachGate for why this exists: booking requests are
+	// cold outreach, and most hosted providers — Plunk's ToS §5 explicitly —
+	// prohibit that regardless of endpoint.
+	OutreachGate *email.OutreachGate
+}
+
+// AllowsOutreach reports whether the send path may deliver. Fail-closed: a
+// nil gate blocks.
+func (c ServiceConfig) AllowsOutreach() bool {
+	return c.OutreachGate.AllowsOutreach()
 }
 
 // Service is the outreach business layer: slots, templates, matching, and
@@ -228,6 +241,12 @@ func (s *Service) MatchSlots(ctx context.Context, slotID *uuid.UUID) ([]*SlotMat
 func (s *Service) SendRequest(ctx context.Context, in *SendRequestInput) (*Request, error) {
 	if s.emails == nil {
 		return nil, ErrEmailUnavailable
+	}
+	// Provider attestation gate — fail-closed. Checked before any work so a
+	// blocked operator gets an actionable 422/503 rather than a silent send
+	// that would breach their provider's terms.
+	if !s.cfg.AllowsOutreach() {
+		return nil, ErrOutreachNotPermitted
 	}
 	if err := ValidateSendRequest(in); err != nil {
 		return nil, err

@@ -10,6 +10,7 @@ import (
 	nethttp "net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -514,6 +515,12 @@ func buildOutreachHandler(cfg *config.Config, pool *pgxpool.Pool, storeClient *s
 			MaxPerDay:    cfg.OutreachMaxPerDay,
 			EPKPublicURL: cfg.EpkPublicURL,
 			Bucket:       cfg.S3Bucket,
+			// Fail-closed provider attestation. Booking requests are cold
+			// outreach; hosted Plunk's ToS §5 prohibits that, so outreach
+			// stays disabled until the operator attests a permitted provider
+			// (self-hosted instance or a provider allowing opted-out B2B).
+			OutreachGate: email.NewOutreachGate(
+				strings.EqualFold(strings.TrimSpace(cfg.OutreachProviderPermitsOutreach), "true")),
 		},
 	)
 	return outreach.NewHandler(svc).Routes()

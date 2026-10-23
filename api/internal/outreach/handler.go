@@ -282,7 +282,12 @@ func (h *Handler) writeServiceError(w http.ResponseWriter, err error) {
 		h.writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrRateLimited):
 		h.writeError(w, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, ErrOutreachNotPermitted):
+		// 422, not 503: a provider-terms decision is not a transient outage.
+		// Retrying cannot help until the operator attests a provider.
+		h.writeError(w, http.StatusUnprocessableEntity, err.Error())
 	case errors.Is(err, ErrEmailUnavailable):
+		// SPEC §5.5 / §6.3: unconfigured sender stays 503 (transient).
 		h.writeError(w, http.StatusServiceUnavailable, err.Error())
 	default:
 		h.writeError(w, http.StatusInternalServerError, err.Error())

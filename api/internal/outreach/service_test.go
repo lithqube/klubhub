@@ -310,6 +310,10 @@ func newTestService(repo *fakeRepo, emails EmailServiceIface, docs DocumentRepoI
 		MaxPerDay:    50,
 		EPKPublicURL: "https://epk.klubhub.example/abc",
 		Bucket:       "klubhub",
+		// These tests exercise the send-path rules (validation, suppression,
+		// cap, rendering), not the provider policy. The gate has its own
+		// tests in TestSendRequestRefusesWithoutProviderAttestation.
+		OutreachGate: email.NewOutreachGate(true),
 	})
 }
 
@@ -917,3 +921,56 @@ func TestNewServiceDefaultsMaxPerDay(t *testing.T) {
 }
 
 func ptrString(s string) *string { return &s }
+
+// TestSendRequestRefusesWithoutProviderAttestation pins the fail-closed
+// provider gate. Booking outreach is cold outreach (the promoter contact
+// never opted in) and hosted Plunk's ToS §5 prohibits it — so an operator
+// who has not attested a permitted provider must get a refusal, not a send.
+//
+// The gate must also fire BEFORE the other send-path rules: a blocked
+// operator should not be told "invalid input" while the real problem is
+// their provider's terms.
+func TestSendRequestRefusesWithoutProviderAttestation(t *testing.T) {
+	cases := []struct {
+		name string
+		gate *email.OutreachGate
+	}{
+		{"nil gate", nil},
+		{"explicit false", email.NewOutreachGate(false)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewService(newFakeRepo(), &fakeEmails{}, &fakeDocs{}, &fakeObjects{}, ServiceConfig{
+				FromEmail:    "dj@klubhub.example",
+				MaxPerDay:    50,
+				OutreachGate: tc.gate,
+			})
+			slotID, tplID := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+			_, err := svc.SendRequest(context.Background(), &SendRequestInput{
+				ContactID:         uuid.Must(uuid.NewV7()),
+				AvailabilitySlotID: &slotID,
+				TemplateID:        &tplID,
+			})
+			if !errors.Is(err, ErrOutreachNotPermitted) {
+				t.Fatalf("err = %v, want ErrOutreachNotPermitted", err)
+			}
+		})
+	}
+}
+
+// The gate must not weaken when attested: with a permitted provider the
+// normal validation path still runs.
+func TestSendRequestAttestedStillValidates(t *testing.T) {
+	svc := NewService(newFakeRepo(), &fakeEmails{}, &fakeDocs{}, &fakeObjects{}, ServiceConfig{
+		FromEmail:    "dj@klubhub.example",
+		MaxPerDay:    50,
+		OutreachGate: email.NewOutreachGate(true),
+	})
+	_, err := svc.SendRequest(context.Background(), &SendRequestInput{}) // invalid: no ids
+	if err == nil {
+		t.Fatal("expected a validation error for an empty input")
+	}
+	if errors.Is(err, ErrOutreachNotPermitted) {
+		t.Fatal("attested provider must not trip the gate")
+	}
+}

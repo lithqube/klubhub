@@ -129,6 +129,10 @@ func fail(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate_limited"})
 	case errors.Is(err, ErrEmailUnavailable):
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "email_unavailable"})
+	case errors.Is(err, ErrOutreachNotPermitted):
+		// 422: a provider-terms decision, not a transient outage. Matches the
+		// SPEC §6 error map shape (coded, not a free-text message).
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "outreach_not_permitted"})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 	}

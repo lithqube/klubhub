@@ -189,6 +189,9 @@ func newRig(t *testing.T, maxPerDay int) *rig {
 		MaxPerDay:    maxPerDay,
 		EPKPublicURL: "https://epk.klubhub.example/pub",
 		Bucket:       testBucket,
+		// The integration rig stands in for an operator who has attested a
+		// permitted provider; the fail-closed gate has its own unit tests.
+		OutreachGate: email.NewOutreachGate(true),
 	})
 	return &rig{repo: repo, svc: svc, sender: sender, store: store, docRepo: docRepo}
 }

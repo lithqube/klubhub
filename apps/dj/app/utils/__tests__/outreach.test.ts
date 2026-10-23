@@ -139,3 +139,24 @@ describe('slot helpers', () => {
     expect(genresToText(['techno'])).toBe('techno')
   })
 })
+
+describe('requestErrorText — provider-terms gate', () => {
+  it('explains an admin step for the outreach provider gate instead of echoing the raw sentence', () => {
+    const text = requestErrorText({
+      statusCode: 422,
+      data: { error: 'outreach sending is disabled: your email provider\'s terms prohibit unsolicited B2B outreach' },
+    } as never)
+    expect(text).toContain('OUTREACH_PROVIDER_PERMITS_OUTREACH')
+    expect(text).not.toContain('your email provider\'s terms prohibit')
+  })
+
+  it('recognises the coded error even without the long server sentence', () => {
+    const text = requestErrorText({ statusCode: 422, data: { error: 'outreach_not_permitted' } } as never)
+    expect(text).toContain('OUTREACH_PROVIDER_PERMITS_OUTREACH')
+  })
+
+  it('does not hijack the ordinary 422 reasons', () => {
+    expect(requestErrorText({ statusCode: 422, data: { error: 'contact has no email address' } } as never))
+      .toBe('This contact has no email address on file.')
+  })
+})

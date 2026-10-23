@@ -165,6 +165,9 @@ func serve() error {
 		FromEmail: rt.cfg.PlunkFromEmail,
 		FromName:  rt.cfg.PlunkFromName,
 		MaxPerDay: rt.cfg.OutreachMaxPerDay,
+		// Fail-closed provider attestation — see docs/OUTREACH-PROVIDER.md.
+		OutreachGate: email.NewOutreachGate(
+			strings.EqualFold(strings.TrimSpace(rt.cfg.OutreachProviderPermitsOutreach), "true")),
 	}, nil)
 	deps := server.Deps{
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),

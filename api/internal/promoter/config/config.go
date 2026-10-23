@@ -70,6 +70,13 @@ type Config struct {
 	// from local midnight in the organisation's timezone (failed attempts
 	// count; SPEC §9 v2.1).
 	OutreachMaxPerDay int `envconfig:"OUTREACH_MAX_PER_DAY" default:"50"`
+	// OutreachProviderPermitsOutreach is the operator attestation that the
+	// configured provider's terms allow unsolicited B2B outreach. Booking
+	// offers are cold outreach — the talent contact never opted in — and
+	// Plunk's ToS §5 ("NO COLD EMAILING POLICY") prohibits it outright,
+	// including via /v1/send. Fail-closed: unset answers 422
+	// outreach_not_permitted on POST /offers. See docs/OUTREACH-PROVIDER.md.
+	OutreachProviderPermitsOutreach string `envconfig:"OUTREACH_PROVIDER_PERMITS_OUTREACH" default:"false"`
 }
 
 // PlunkConfigured reports whether transactional email is fully configured.
