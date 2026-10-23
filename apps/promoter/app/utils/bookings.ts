@@ -115,7 +115,7 @@ export function offerErrorText(e: ApiError | null): string {
     // providers prohibit it, so the API refuses unless an administrator
     // attested a permitted provider. An admin step, not a user error.
     case 'outreach_not_permitted':
-      return 'Outreach sending is turned off for this server: its email provider\’s terms do not permit unsolicited B2B outreach. An administrator must set OUTREACH_PROVIDER_PERMITS_OUTREACH=true after confirming a permitted provider: see docs/OUTREACH-PROVIDER.md.'
+      return 'Outreach sending is turned off for this server: its email provider’s terms do not permit unsolicited B2B outreach. An administrator must set OUTREACH_PROVIDER_PERMITS_OUTREACH=true after confirming a permitted provider: see docs/OUTREACH-PROVIDER.md.'
     case 'suppressed':
       return 'This DJ is on your do-not-contact list.'
     case 'conflict':
