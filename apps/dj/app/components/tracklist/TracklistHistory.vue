@@ -111,7 +111,7 @@ onMounted(() => {
         NO_TRACKLISTS_FOUND
       </div>
       <div style="font-family:var(--font-data);font-size:11px;color:var(--color-tertiary);margin-top:4px;">
-        Upload a tracklist to get started
+        Upload a tracklist
       </div>
     </div>
 

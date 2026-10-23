@@ -22,8 +22,13 @@ const nextSlotDisplay = computed(() => {
 <template>
   <div
     data-testid="next-slot-card"
-    class="upload-zone min-h-[240px]"
+    class="upload-zone min-h-[240px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+    role="button"
+    tabindex="0"
+    aria-label="Schedule new activity"
     @click="store.openComposePanel()"
+    @keydown.enter.prevent="store.openComposePanel()"
+    @keydown.space.prevent="store.openComposePanel()"
   >
     <span class="text-2xl text-tertiary">+</span>
     <div class="text-center px-4">

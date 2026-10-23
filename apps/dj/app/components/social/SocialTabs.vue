@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import SocialPostCompose from '~/components/social/SocialPostCompose.vue'
 import SocialQueueGrid from '~/components/social/SocialQueueGrid.vue'
 import type { ScheduledPost } from '~/types/social'
@@ -11,17 +10,9 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'tab-change': [value: 'queue' | 'calendar']
   'quick-export': []
   'add-to-queue': []
 }>()
-
-const activeTab = ref<'queue' | 'calendar'>('queue')
-
-function onTabChange(val: string) {
-  activeTab.value = val as 'queue' | 'calendar'
-  emit('tab-change', activeTab.value)
-}
 </script>
 
 <template>
@@ -35,34 +26,27 @@ function onTabChange(val: string) {
 
         <!-- QUEUE tab -->
         <button
-          class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase transition-colors border-b-2 -mb-px"
-          :class="activeTab === 'queue'
-            ? 'text-primary border-primary'
-            : 'text-tertiary border-transparent hover:text-on-surface'"
+          class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase transition-colors border-b-2 -mb-px text-primary border-primary"
           role="tab"
-          :aria-selected="activeTab === 'queue'"
-          @click="onTabChange('queue')"
+          aria-selected="true"
         >
           QUEUE
         </button>
 
-        <!-- CALENDAR tab -->
-        <button
-          class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase transition-colors border-b-2 -mb-px"
-          :class="activeTab === 'calendar'
-            ? 'text-primary border-primary'
-            : 'text-tertiary border-transparent hover:text-on-surface'"
-          role="tab"
-          :aria-selected="activeTab === 'calendar'"
-          @click="onTabChange('calendar')"
-        >
-          CALENDAR
-        </button>
+        <!-- CALENDAR stub -->
+        <div class="relative group hidden sm:block">
+          <span class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-tertiary cursor-not-allowed inline-flex items-center border-b-2 border-transparent -mb-px">
+            CALENDAR
+          </span>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-surface-container border border-outline-variant/30 font-terminal tracking-terminal text-[10px] text-tertiary uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+            Coming Soon
+          </div>
+        </div>
 
         <!-- Stub tabs: hidden on mobile (Hick's Law — progressive disclosure of future features) -->
         <!-- ANALYTICS stub -->
         <div class="relative group hidden sm:block">
-          <span class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-tertiary/40 cursor-not-allowed inline-flex items-center border-b-2 border-transparent -mb-px">
+          <span class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-tertiary cursor-not-allowed inline-flex items-center border-b-2 border-transparent -mb-px">
             ANALYTICS
           </span>
           <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-surface-container border border-outline-variant/30 font-terminal tracking-terminal text-[10px] text-tertiary uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
@@ -72,7 +56,7 @@ function onTabChange(val: string) {
 
         <!-- AUTOMATIONS stub -->
         <div class="relative group hidden sm:block">
-          <span class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-tertiary/40 cursor-not-allowed inline-flex items-center border-b-2 border-transparent -mb-px">
+          <span class="px-4 py-3 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-tertiary cursor-not-allowed inline-flex items-center border-b-2 border-transparent -mb-px">
             AUTOMATIONS
           </span>
           <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-surface-container border border-outline-variant/30 font-terminal tracking-terminal text-[10px] text-tertiary uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
@@ -89,7 +73,7 @@ function onTabChange(val: string) {
       <div class="flex items-center gap-2 md:gap-3 pb-3">
         <button
           class="ghost-border px-3 md:px-4 min-h-[44px] font-terminal tracking-terminal text-xs uppercase text-on-surface-variant hover:text-primary hover:border-primary/40 transition-colors flex items-center gap-1.5 md:gap-2"
-          aria-label="Quick export from tracklist"
+          aria-label="Quick export social queue as CSV"
           @click="emit('quick-export')"
         >
           <span aria-hidden="true">⚡</span>
@@ -119,21 +103,7 @@ function onTabChange(val: string) {
       />
 
       <!-- Queue view -->
-      <div v-if="activeTab === 'queue'">
-        <SocialQueueGrid :posts="props.posts" />
-      </div>
-
-      <!-- Calendar view (stub) -->
-      <div v-else-if="activeTab === 'calendar'" class="flex items-center justify-center py-20">
-        <div class="text-center">
-          <p class="font-terminal tracking-terminal text-xs text-tertiary uppercase">
-            CALENDAR VIEW
-          </p>
-          <p class="font-data text-xs text-on-surface-variant mt-2">
-            Monthly calendar coming soon
-          </p>
-        </div>
-      </div>
+      <SocialQueueGrid :posts="props.posts" />
 
     </div>
 

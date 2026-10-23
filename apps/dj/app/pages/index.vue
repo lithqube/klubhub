@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Send, Layers, TrendingUp, Zap, CalendarPlus, Plus } from 'lucide-vue-next'
+import { Send, Layers, TrendingUp, Clock, CalendarPlus, Plus } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { useDashboard } from '../composables/useDashboard'
 
-useHead({ title: 'Dashboard — KlubHub DJ' })
+useHead({ title: 'Dashboard: KlubHub DJ' })
 
 const { gigs, posts: socialPosts, pastTracklists, loading, gigError, socialError, tracklistError, demoData, financeUnavailable, pendingUnavailable, finance } = useDashboard()
 // Gig dates are calendar days, not scheduled UTC instants. Keep today's gig
@@ -98,7 +98,7 @@ const recentTracklists = computed(() => {
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <span v-if="demoData" class="badge-hud badge-draft" data-demo-label>DEMO DATA</span>
             <span class="badge-hud badge-ready" style="border-color:color-mix(in srgb, var(--color-primary) 50%, transparent);box-shadow:0 0 12px rgba(150,248,255,.1);">
-              <Zap style="width:8px;height:8px;" aria-hidden="true" />
+              <Clock style="width:8px;height:8px;" aria-hidden="true" />
               UPCOMING
             </span>
             <span class="badge-hud badge-ready">{{ upcomingGig.status.toUpperCase() }}</span>
@@ -217,7 +217,7 @@ const recentTracklists = computed(() => {
           <div v-else class="glass accent-bar-draft" style="padding:16px;text-align:center;">
             <Send style="width:24px;height:24px;color:var(--color-tertiary);margin:0 auto 8px;" aria-hidden="true" />
             <div style="font-family:var(--font-command);font-size:12px;color:var(--color-on-surface-variant);">QUEUE IS EMPTY</div>
-            <div style="font-family:var(--font-data);font-size:10px;color:var(--color-tertiary);margin-top:4px;">Schedule a post to get started.</div>
+            <div style="font-family:var(--font-data);font-size:10px;color:var(--color-tertiary);margin-top:4px;">Schedule a post.</div>
           </div>
         </section>
 
@@ -251,7 +251,7 @@ const recentTracklists = computed(() => {
           <div v-else class="glass accent-bar-draft" style="padding:16px;text-align:center;">
             <Layers style="width:24px;height:24px;color:var(--color-tertiary);margin:0 auto 8px;" aria-hidden="true" />
             <div style="font-family:var(--font-command);font-size:12px;color:var(--color-on-surface-variant);">NO TRACKLISTS YET</div>
-            <div style="font-family:var(--font-data);font-size:10px;color:var(--color-tertiary);margin-top:4px;">Upload a tracklist to get started.</div>
+            <div style="font-family:var(--font-data);font-size:10px;color:var(--color-tertiary);margin-top:4px;">Upload a tracklist.</div>
           </div>
 
           <NuxtLink

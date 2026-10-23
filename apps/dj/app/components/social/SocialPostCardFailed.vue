@@ -78,7 +78,7 @@ async function handleRetry() {
       </p>
 
       <!-- Error reason -->
-      <p v-if="post.lastError" class="font-data text-xs text-error/80">
+      <p v-if="post.lastError" class="font-data text-xs text-error">
         {{ post.lastError }}
       </p>
 
