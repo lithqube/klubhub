@@ -99,7 +99,7 @@ test('lists the shipped KlubHub DJ modules and the editions', async () => {
   const html = await read('index.html');
   for (const feature of [
     'Tracklist artwork', 'Social scheduling', 'Press kits',
-    'Gig tracking', 'Invoices and agreements', 'E-invoices',
+    'Gig tracking', 'Booking outreach', 'Invoices and agreements', 'E-invoices',
     'Expenses and receipts',
   ]) {
     assert.ok(html.includes(feature), feature);

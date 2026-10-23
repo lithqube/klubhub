@@ -838,10 +838,10 @@ html { background-color: var(--color-surface, #0E0E0F); }
 }
 
 [data-theme="light"] .gradient-cta {
-  background: linear-gradient(135deg, #006875, #009EA8);
+  background: linear-gradient(135deg, var(--color-primary), #00798A);
 }
 [data-theme="light"] .btn-hud-cta {
-  background: linear-gradient(135deg, #006875, #009EA8);
+  background: linear-gradient(135deg, var(--color-primary), #00798A);
 }
 [data-theme="light"] .btn-hud-violet {
   background: linear-gradient(135deg, #5B4BBD, #7B5EA7);
@@ -898,10 +898,10 @@ html { background-color: var(--color-surface, #0E0E0F); }
 [data-theme="light"] .accent-bar-published  { border-left-color: #4E5E6A; }
 
 [data-theme="light"] .progress-bar-fill {
-  background: linear-gradient(90deg, #006875, #009EA8);
+  background: linear-gradient(90deg, #006875, #00798A);
 }
 [data-theme="light"] .prog-fill {
-  background: linear-gradient(90deg, #006875, #009EA8);
+  background: linear-gradient(90deg, #006875, #00798A);
 }
 
 [data-theme="light"] .row-selected {
