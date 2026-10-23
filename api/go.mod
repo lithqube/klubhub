@@ -1,6 +1,6 @@
 module github.com/klubhub/dj/api
 
-go 1.26.9
+go 1.26.10
 
 require (
 	codeberg.org/go-pdf/fpdf v0.11.1
