@@ -3,8 +3,11 @@
   "version": "1.2.0",
   "private": true,
   "dependencies": {
+    "@dev/ui": "workspace:*",
     "@pinia/nuxt": "^0.11.3",
     "@tailwindcss/vite": "^4.3.3",
+    "@ui-sdk/core": "0.1.0-beta.16",
+    "@ui-sdk/vue": "0.1.0-beta.16",
     "@vueuse/core": "^14.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -12,8 +15,7 @@
     "pinia": "^3.0.4",
     "radix-vue": "^1.9.17",
     "tailwind-merge": "^3.7.0",
-    "tailwindcss": "^4.3.3",
-    "@dev/ui": "workspace:*"
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0",

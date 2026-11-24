@@ -52,7 +52,7 @@ export default defineNuxtConfig({
   // a directory layer (looking for libs/ui/apps/dj/nuxt.config.ts).
   extends: [fileURLToPath(new URL('../../libs/ui/nuxt.config.ts', import.meta.url))],
   workspaceDir: '../../',
-  modules: ['@pinia/nuxt'],
+  modules: ['@pinia/nuxt', '@ui-sdk/vue'],
   hooks: {
     'app:resolve'(app) {
       // Exclude the import root BEFORE Nuxt generates its plugin imports.
