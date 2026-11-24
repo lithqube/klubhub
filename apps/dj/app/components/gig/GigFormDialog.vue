@@ -680,7 +680,7 @@ function close() {
               <label class="section-lbl" style="display:block;margin-bottom:6px;">LINKED TRACKLISTS</label>
               <div v-for="tl in linkedTracklists" :key="tl.id" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:color-mix(in srgb, var(--color-primary) 6%, transparent);margin-bottom:4px;">
                 <span style="flex:1;font-family:var(--font-ui);font-size:13px;color:var(--green);font-weight:600;">{{ tl.title }}</span>
-                <button class="btn-hud btn-hud-xs" style="color:var(--red);" @click="unlinkTracklist(tl.id)" :disabled="unlinkingTl">✕</button>
+                <button class="btn-hud btn-hud-xs" style="color:var(--red);" :disabled="unlinkingTl" @click="unlinkTracklist(tl.id)">✕</button>
               </div>
               <div v-if="linkedTracklists.length === 0" style="font-size:12px;color:var(--muted);padding:4px 0;">No tracklists linked yet.</div>
               <div style="margin-top:8px;">
@@ -776,7 +776,8 @@ function close() {
           @keydown="onDialogEscape"
         >
           <div class="glass" style="padding:24px;max-width:360px;text-align:center;background:var(--color-surface-container);">
-            <h3 id="gig-cancel-title" ref="cancelTitleEl" tabindex="-1" class="gig-dialog-title"
+            <h3
+id="gig-cancel-title" ref="cancelTitleEl" tabindex="-1" class="gig-dialog-title"
               style="font-family:var(--font-command);font-size:12px;font-weight:700;margin-bottom:12px;letter-spacing:-.02em;text-transform:uppercase;"
             >
               CONFIRM CANCELLATION

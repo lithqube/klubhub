@@ -4,7 +4,12 @@
  * comes from the @dev/ui layer; this file only adds DJ surfaces
  * (social posts, upload zone, transactions, gigs, EPK).
  */
+/* ui-sdk: declare its layer first. kinetic.css stands in for
+   `@import "tailwindcss"` (it imports Tailwind itself); web.css goes in
+   `components` so Tailwind's base can't reset it and utilities still win. */
+@layer ui-sdk;
 @import "#kui/assets/css/kinetic.css";
+@import "@ui-sdk/core/web.css" layer(components);
 
 @layer components {
   /* ── Square checkbox (zero-radius rule; native boxes are rounded) ──

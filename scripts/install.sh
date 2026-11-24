@@ -474,12 +474,15 @@ image_tags() { # repo — every published tag, one per line
     | sed -e 's/.*"tags":\[//' -e 's/\].*//' | tr ',' '\n' | tr -d '" '
 }
 resolve_tag() { # var, image repo, flag name
-  # CI publishes an image only when that product's files change, tagged
-  # sha-<short commit>. Use the newest one built from the installed commit
+  # A v* release ref uses the image published for that tag. Otherwise CI
+  # publishes an image only when that product's files change, tagged
+  # sha-<short commit>: use the newest one built from the installed commit
   # or its history, so scripts and image always come from the same line.
   local __v="$1" repo="$2" flag="$3" tag="${!1:-}" tags c n
   if [[ -n "$tag" ]]; then
     image_exists "$repo" "$tag" || die "Image $REGISTRY/$repo:$tag is not published. Check the tag passed with $flag."
+  elif [[ "${REF:-}" == v* ]] && image_exists "$repo" "$REF"; then
+    tag="$REF"
   else
     tags="$(image_tags "$repo")" || die "Could not reach the image registry (ghcr.io). Check your internet connection."
     for c in $(git -C "$DIR" rev-list --max-count="$HISTORY" HEAD); do
@@ -490,7 +493,7 @@ resolve_tag() { # var, image repo, flag name
     [[ -n "$tag" ]] || die "No published $repo image found for commit $COMMIT or its last $HISTORY ancestors. If it was just pushed, CI may still be building it: wait a few minutes and re-run, or pass $flag <tag>."
   fi
   printf -v "$__v" '%s' "$tag"
-  if [[ "$tag" == "sha-$COMMIT" ]]; then ok "image $REGISTRY/$repo:$tag"
+  if [[ "$tag" == "sha-$COMMIT" || "$tag" == "${REF:-}" ]]; then ok "image $REGISTRY/$repo:$tag"
   else ok "image $REGISTRY/$repo:$tag $D(newest build for this commit's history)$N"; fi
 }
 

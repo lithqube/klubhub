@@ -13,6 +13,9 @@ on:
       - '.github/workflows/promoter-ci.yml'
   push:
     branches: [main]
+    # A v* release tag also publishes :<tag> (path filters are not
+    # evaluated for tag pushes, so every release tag builds).
+    tags: ['v*']
     paths: *paths
   workflow_dispatch:
 
@@ -184,7 +187,18 @@ jobs:
       # main, so keep git's short form.
       - name: Tag
         id: tag
-        run: echo "tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          echo "tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          release=""
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            release="$GITHUB_REF_NAME"
+            if ! [[ "$release" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+              echo "::error::release tag '$release' must look like v1.2.3 or v1.2.3-rc.1"
+              exit 1
+            fi
+          fi
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
@@ -202,12 +216,15 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         env:
           TAG: ${{ steps.tag.outputs.tag }}
+          RELEASE: ${{ steps.tag.outputs.release }}
         run: |
           set -euo pipefail
           ref="${IMAGE}:${TAG}"
           sources=()
           for d in *; do sources+=("$IMAGE@sha256:$d"); done
-          docker buildx imagetools create -t "$ref" "${sources[@]}"
+          tags=(-t "$ref")
+          if [ -n "$RELEASE" ]; then tags+=(-t "${IMAGE}:${RELEASE}"); fi
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
           docker buildx imagetools inspect "$ref"
           # Attestation manifests carry platform unknown/unknown; skip them.
           platforms=$(docker buildx imagetools inspect "$ref" --raw \

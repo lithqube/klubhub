@@ -246,7 +246,8 @@ Requirements: Docker with Compose v2, `openssl`, and
 NATS credentials.
 
 No versioned Promoter release exists yet — only `sha-<commit>` tags are
-published to `ghcr.io/lithqube/klubhub-promoter-api`. `PROMOTER_TAG` has no
+published to `ghcr.io/lithqube/klubhub-promoter-api`. The first `v*` release
+tag pushed to the repository will also publish `:vX.Y.Z` for the Promoter. `PROMOTER_TAG` has no
 default, so `docker compose` refuses to start until you set it: pick the
 newest tag from a [package listing](https://github.com/lithqube/klubhub/pkgs/container/klubhub-promoter-api)
 (the one-line installer does this resolution for you).

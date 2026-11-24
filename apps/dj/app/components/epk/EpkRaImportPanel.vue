@@ -137,8 +137,8 @@ function clearForm() {
       <div class="input-label" style="margin-bottom:6px;">RA ARTIST SLUG</div>
       <div style="display:flex;gap:8px;">
         <Input
-          v-model="artistSlug"
           :key="clearTrigger"
+          v-model="artistSlug"
           placeholder="e.g. helenahauff"
           class="hud-input flex-1"
           style="height:34px;font-size:12px;"
