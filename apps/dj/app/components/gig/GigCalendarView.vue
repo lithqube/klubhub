@@ -154,12 +154,12 @@ const emit = defineEmits<{
                 style="width:6px;height:6px;"
                 :style="{ background: gigStatusColor(gig.status) }"
                 :title="gig.event_name"
-                @click="emit('gig-click', gig)"
                 tabindex="0"
                 role="button"
+                class="cal-gig-marker"
+                @click="emit('gig-click', gig)"
                 @keydown.enter="emit('gig-click', gig)"
                 @keydown.space.prevent="emit('gig-click', gig)"
-                class="cal-gig-marker"
               />
             </template>
             <div

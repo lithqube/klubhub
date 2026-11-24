@@ -206,10 +206,10 @@ function clearForm() {
           class="hud-card"
           style="padding:11px 13px;background:var(--color-surface-container-lowest);border:1px solid color-mix(in srgb, var(--color-primary) 8%, transparent);transition:all .15s;display:flex;flex-direction:column;gap:7px;text-align:left;"
           :style="selectedEventIds.has(event.id) ? 'border-color:color-mix(in srgb, var(--color-primary) 24%, transparent);background:color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-container-lowest));box-shadow:0 0 24px rgba(150,248,255,.06);' : ''"
+          :data-testid="`ra-event-${event.id}`"
           @click="toggleEvent(event.id)"
           @keydown.enter="toggleEvent(event.id)"
           @keydown.space.prevent="toggleEvent(event.id)"
-          :data-testid="`ra-event-${event.id}`"
         >
           <!-- Row 1: checkbox + title + status badge -->
           <div style="display:flex;align-items:flex-start;gap:8px;">
@@ -217,9 +217,9 @@ function clearForm() {
               type="checkbox"
               style="width:16px;height:16px;border:1.5px solid flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:all .15s;background:transparent;accent-color:var(--color-primary);"
               :checked="selectedEventIds.has(event.id)"
+              :data-testid="`ra-event-checkbox-${event.id}`"
               @click.stop
               @change="toggleEvent(event.id)"
-              :data-testid="`ra-event-checkbox-${event.id}`"
             >
             <div style="flex:1;min-width:0;">
               <div style="display:flex;align-items:center;gap:6px;">
@@ -288,10 +288,10 @@ function clearForm() {
     <div v-if="events.length > 0" style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid color-mix(in srgb, var(--color-primary) 6%, transparent);margin-bottom:14px;">
       <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
         <input
-          type="checkbox"
           v-model="dryRun"
+          type="checkbox"
           style="width:15px;height:15px;accent-color:var(--color-primary);cursor:pointer;"
-        />
+        >
         <span class="section-lbl" style="color:var(--color-tertiary);">DRY RUN</span>
       </label>
       <span style="font-family:var(--font-terminal);font-size:8px;color:var(--color-tertiary);letter-spacing:.04em;text-transform:uppercase;">

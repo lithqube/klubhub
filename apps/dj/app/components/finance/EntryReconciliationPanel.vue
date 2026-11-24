@@ -61,8 +61,8 @@ function handleOpen(rec: EntryReconciliation): void {
         <button
           type="button"
           class="rec-banner"
-          @click="handleOpen(r)"
           :aria-label="`Resolve reconciliation for gig ${r.gig_id}: ${copyFor(r.reason)}`"
+          @click="handleOpen(r)"
         >
           <span class="rec-banner-kind">{{ copyFor(r.reason) }}</span>
           <span class="rec-banner-amount">{{ formatMinor(r.gig_amount_minor, r.gig_currency) }}</span>
