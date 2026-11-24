@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "description": "KlubHub OSS release (DJ + Promoter)",
+  "project": {
+    "owner": "lithqube",
+    "title": "KlubHub build board",
+    "number": 3
+  },
+  "worker_backend": "workflow",
+  "host": "claude",
+  "model_tier": "medium",
+  "target": {
+    "type": "repo",
+    "url": null
+  },
+  "repo": {
+    "path": ".",
+    "remote": "https://github.com/lithqube/klubhub"
+  },
+  "base_branch": "main",
+  "timezone": "Europe/Berlin",
+  "columns": [
+    "Backlog",
+    "Ready",
+    "Building",
+    "QA",
+    "Review",
+    "Blocked",
+    "Done"
+  ],
+  "labels": [
+    "qa",
+    "bug",
+    "feature"
+  ],
+  "paths": {
+    "project_md": "docs/super-board/PROJECT.md",
+    "pre_flight_md": "docs/super-board/pre-flight.md",
+    "runs_dir": "docs/super-board/runs"
+  },
+  "human_approves_merge": true,
+  "merge_policy": {
+    "default": "human",
+    "auto_max_lines": 400,
+    "size_exclude": [
+      "**/pnpm-lock.yaml",
+      "**/go.sum",
+      "**/generated/**",
+      "**/*.gen.*",
+      "**/*.map",
+      "**/__snapshots__/**",
+      "**/*.snap"
+    ],
+    "always_human": {
+      "money": {
+        "labels": [
+          "money",
+          "payments",
+          "billing",
+          "pricing",
+          "finance"
+        ],
+        "paths": [
+          "api/internal/finance/**",
+          "api/internal/einvoice/**",
+          "apps/dj/app/**/finance/**"
+        ],
+        "keywords": [
+          "invoice.create",
+          "payment_intent",
+          "stripe."
+        ]
+      },
+      "auth": {
+        "labels": [
+          "auth",
+          "security"
+        ],
+        "paths": [
+          "api/internal/promoter/authz/**",
+          "api/internal/promoter/identity/**",
+          "**/auth/**",
+          "**/authz/**"
+        ],
+        "keywords": [
+          "jwt.sign",
+          "bcrypt",
+          "password_hash"
+        ]
+      },
+      "schema": {
+        "labels": [
+          "schema",
+          "destructive"
+        ],
+        "paths": [
+          "api/internal/*/migrations/**",
+          "api/internal/promoter/migrations/**"
+        ],
+        "keywords": [
+          "drop table",
+          "drop column",
+          "truncate table",
+          "rename column",
+          "drop schema"
+        ]
+      }
+    },
+    "allow_auto_on_production": false
+  },
+  "migrations": {
+    "globs": [
+      "api/internal/*/migrations/**",
+      "api/internal/promoter/migrations/**"
+    ],
+    "allowed_envs": [
+      "test"
+    ],
+    "target_env": "live",
+    "commands": {},
+    "checks": {},
+    "human_steps": [
+      "goose migrations are embedded and run by the API at startup; integration tests use disposable Postgres (pnpm nx run api:test)"
+    ]
+  },
+  "verify_commands": [
+    "pnpm nx run-many -t lint -p @dev/dj @dev/dj-e2e @dev/promoter @dev/promoter-e2e",
+    "pnpm nx typecheck @dev/dj",
+    "pnpm nx typecheck @dev/promoter",
+    "pnpm nx run-many -t test -p @dev/dj @dev/promoter @dev/ui",
+    "pnpm nx run api:test"
+  ],
+  "collect": {
+    "sources": [
+      "github",
+      "prs",
+      "architecture"
+    ],
+    "window_days": 14,
+    "prs": {
+      "max_prs": 200
+    },
+    "architecture": {
+      "max_findings": 5
+    },
+    "custom": []
+  },
+  "notifications": {
+    "channel": "session",
+    "chat_id": null,
+    "bot_identity": "lithqube"
+  }
+}
