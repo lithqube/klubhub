@@ -4,11 +4,11 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 6-release-planner
 current_plan: not started
-status: phase_04.10_shipped_outreach_gated
-last_updated: "2026-10-23T17:05:00Z"
+status: ready_to_plan_phase_6
+last_updated: "2026-11-24T12:00:00Z"
 progress:
-  total_phases: 16
-  completed_phases: 9
+  total_phases: 18
+  completed_phases: 13
   total_plans: 47
   completed_plans: 47
 ---
@@ -24,8 +24,11 @@ See: .planning/PROJECT.md
 **Milestone:** v1.0 milestone
 **Current phase:** 6-release-planner (not started)
 **Current plan:** not started
-**Completed phases:** 00, 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03, 04 (Gig Tracker), 4.5 (Rider Templates), 04.10 (Availability & Outreach, 2-sided), 05 (Finance Tracker), 0.5 (Garage S3)
-**Status:** **Phase 04.10 (Availability & Outreach) shipped 2026-10-21 on `feat/availability-outreach`** — both sides (DJ app + promoter app), 5/5 plans, 58 new tests, chromium e2e green. **Outreach sending is now GATED (2026-10-23, commit 56c7a52):** booking requests/offers are cold B2B outreach and hosted Plunk's ToS §5 prohibits that outright, so both send paths fail closed behind `OUTREACH_PROVIDER_PERMITS_OUTREACH=true`. Outreach reads and finance email are unaffected. An operator must attest a permitted provider (self-hosted Plunk, or a provider allowing opted-out B2B) — see `docs/OUTREACH-PROVIDER.md`. Also shipped earlier: Phase 5 (Finance Tracker, PR #34/#35, 2026-09-28), Phase 4.5 (Rider Templates, v1.2.0, 2026-10-03), Phase 4 (Gig Tracker, PR #17/#18). Next: Phase 6 (Release Planner).
+**Completed phases:** 00, 0.5 (Garage S3), 01, 1.5, 1.5.5 (Kinetic HUD), 02, 03, 04 (Gig Tracker), 4.5 (Rider Templates), 4.9 (RA Integration), 04.10 (Availability & Outreach, 2-sided), 05 (Finance Tracker), 09 (Production Hardening)
+**Not started / deferred:** 4.8 (Spotify, documented for later), 5.5 (US invoicing, documented for later), 6, 7, 8
+**Status:** **Phase 04.10 (Availability & Outreach) shipped 2026-10-21, merged to `main` via PR #49 on 2026-10-23** — both sides (DJ app + promoter app), 5/5 plans, 58 new tests, chromium e2e green. **Outreach sending is now GATED (2026-10-23, commit 56c7a52):** booking requests/offers are cold B2B outreach and hosted Plunk's ToS §5 prohibits that outright, so both send paths fail closed behind `OUTREACH_PROVIDER_PERMITS_OUTREACH=true`. Outreach reads and finance email are unaffected. An operator must attest a permitted provider (self-hosted Plunk, or a provider allowing opted-out B2B) — see `docs/OUTREACH-PROVIDER.md`. Also shipped earlier: Phase 5 (Finance Tracker, PR #34/#35, 2026-09-28), Phase 4.5 (Rider Templates, v1.2.0, 2026-10-03), Phase 4 (Gig Tracker, PR #17/#18). Next: Phase 6 (Release Planner) — needs `/gsd:discuss-phase 6` then `/gsd:plan-phase 6`; no phase directory yet.
+
+**KlubHub Promoter (tracked outside GSD, in `.claude/plans/`):** P0–P2 done; P3.1 Audience CRM done (PR #33, 2026-09-28); P3.2–P3.5 (email platform, campaigns, social assets, attribution) not started — see `.claude/plans/promoter-p3-audience-promotion.plan.md`. 04.10 also delivered the front half of promoter P4 (Offers).
 
 ## Completed Phases Summary
 
@@ -37,9 +40,13 @@ See: .planning/PROJECT.md
 - **Phase 02 — Social Media Scheduler**: 7/7 plans complete (2026-03-22)
 - **Phase 03 — EPK / Press Kit Builder**: 7/7 plans complete (2026-03-23)
 - **Phase 04 — Gig Tracker**: 5/5 plans complete; shipped via PR #17/#18. GigReader interface defined in model.go (stable contract for Finance/Tour/EPK)
-- **Phase 05 — Finance Tracker**: shipped 2026-09-28 via PR #34 (FIN-01..07/09 earnings ledger) + #35 tests; follow-up invoices/agreements/email per .hermes/plans/2026-09-24_213014-phase-5-invoices-agreements-email.md
+- **Phase 05 — Finance Tracker**: shipped 2026-09-28 via PR #34 (FIN-01..07/09 earnings ledger) + #35 tests; follow-up invoices/agreements/email per .hermes/plans/2026-09-24_213014-phase-5-invoices-agreements-email.md; v1.2.0 (2026-10-03) completed it with EN 16931 e-invoicing, archive and receipts
+- **Phase 4.5 — Rider Templates**: complete in v1.2.0 (2026-10-03)
+- **Phase 4.9 — RA Integration** (INSERTED): RA client + EPK/gig import landed 2026-09-20 (`7aaa3d5`); open source and on by default since v1.2.0
+- **Phase 4.10 — Availability & Outreach** (INSERTED): 5/5 plans, shipped 2026-10-21, merged PR #49 (2026-10-23); sends gated behind provider attestation
+- **Phase 09 — Production Hardening**: complete 2026-09-16 (v1.0.0)
 
-## Phase 4.5 — Rider Templates (next, IN PROGRESS)
+## Phase 4.5 — Rider Templates ✅ (complete, v1.2.0 — 2026-10-03)
 
 Requirements (RIDER-01..05, REQUIREMENTS.md §Rider Templates):
 - RIDER-01: CRUD named rider templates with four sections (technical / hospitality / backline / other notes), each free-text
@@ -179,11 +186,12 @@ A full pixel-perfect UI migration was performed against the `ui_kits/dj-app/inde
 - 2026-04-27: Phase 1.5.5 Kinetic HUD UI migration COMPLETE — full pixel-perfect redesign; new gigs/finance pages; mock data layer; proxy conditional on env var
 - 2026-04-27: Documentation review and update — CLAUDE.md rewritten (was duplicate of AGENTS.md); README.md refreshed; STATE.md progress counters updated (7 completed phases)
 - 2026-04-27: Added Phase 0.5 (Garage S3 Storage) — inserted between Phase 0 and Phase 1 to replace MinIO with Garage (open-source, actively maintained S3 server); updated ROADMAP.md with phase entry and progress table; README.md gains mock vs backend status table and Garage compatibility table
+- 2026-11-24: Planning docs synced with shipped code — 4.9 RA marked complete, 4.10 merged (PR #49), Phase 9 checked off, 4.8 checklist renamed to Spotify, stale 4.5 "in progress" heading and footer fixed, promoter P3 status noted
 
 ---
 
-_Phase: 0.5-Garage-s3-storage_
-_Status: NOT STARTED — planning next_
+_Phase: 6-release-planner_
+_Status: NOT STARTED — discuss/plan next_
 
 ## Mock vs Backend Implementation Audit
 
