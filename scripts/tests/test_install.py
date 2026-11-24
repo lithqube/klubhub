@@ -427,6 +427,37 @@ echo "BACKUP_ONLY=$BACKUP_ONLY"'''))
         self.assertIn('BACKUP_ONLY=1', r.stdout)
 
 
+class ResolveTagTests(unittest.TestCase):
+    # Registry and git are stubbed: v1.3.0 is published only when asked,
+    # and sha-abc1234 is the newest sha build in the checkout's history.
+    def resolve(self, ref, release_published):
+        sb = Sandbox(self)
+        sb.stub('git', '''if [[ "$*" == *rev-list* ]]; then echo abc1234fffffff; exit 0; fi
+echo "unstubbed git $*" >&2; exit 99
+''')
+        published = 'true' if release_published else 'false'
+        return sb.bash(sourced(f'''DIR="{sb.dir}"; COMMIT=abc1234; REF="{ref}"
+image_exists() {{ [[ "$2" == v1.3.0 ]] && {published}; }}
+image_tags() {{ printf 'sha-abc1234\\nsha-0000000\\n'; }}
+resolve_tag DJ_TAG klubhub-dj-api --dj-tag
+echo "TAG=$DJ_TAG"'''))
+
+    def test_release_ref_uses_its_published_image(self):
+        r = self.resolve('v1.3.0', release_published=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('TAG=v1.3.0', r.stdout)
+
+    def test_release_ref_without_its_image_falls_back_to_sha(self):
+        r = self.resolve('v1.3.0', release_published=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('TAG=sha-abc1234', r.stdout)
+
+    def test_branch_ref_uses_sha(self):
+        r = self.resolve('main', release_published=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('TAG=sha-abc1234', r.stdout)
+
+
 class WriteSettingsTests(unittest.TestCase):
     PREV = '''KLUBHUB_REF=main
 KLUBHUB_COMMIT=aaa111bbb

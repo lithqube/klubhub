@@ -3,6 +3,9 @@ name: Publish KlubHub DJ container image
 on:
   push:
     branches: [main]
+    # A v* release tag publishes :<tag> as well (path filters are not
+    # evaluated for tag pushes, so every release tag builds).
+    tags: ['v*']
     paths:
       - 'apps/dj/**'
       - 'libs/ui/**'
@@ -46,14 +49,28 @@ jobs:
         env:
           TAG_OVERRIDE: ${{ github.event.inputs.tag_override }}
         run: |
+          set -euo pipefail
           SHORT_SHA=$(git rev-parse --short HEAD)
           if [ -n "$TAG_OVERRIDE" ]; then
             TAG="$TAG_OVERRIDE"
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            TAG="$GITHUB_REF_NAME"
           else
             TAG="sha-${SHORT_SHA}"
           fi
+          # Release tags keep the repo's v-prefixed form (docker-compose.prod.yml
+          # defaults IMAGE_TAG to one); reject anything else before pushing.
+          if [ "$TAG" != "sha-${SHORT_SHA}" ] && ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::release tag '$TAG' must look like v1.2.3 or v1.2.3-rc.1"
+            exit 1
+          fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          # A release build also gets the sha tag, so scripts/install.sh
+          # finds it by commit. Empty on sha builds (the action skips it).
+          if [ "$TAG" != "sha-${SHORT_SHA}" ]; then
+            echo "sha_ref=${IMAGE}:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
 
       # Loaded locally (not pushed yet) so Trivy scans the exact image
       # before anything reaches the registry, matching promoter-ci.yml.
@@ -106,6 +123,7 @@ jobs:
           sbom: true
           tags: |
             ${{ env.IMAGE }}:${{ steps.tags.outputs.tag }}
+            ${{ steps.tags.outputs.sha_ref }}
           cache-from: type=gha,scope=containers-ci
 
       - name: Verify manifest
