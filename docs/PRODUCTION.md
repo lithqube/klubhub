@@ -19,7 +19,7 @@ Default state: **everything bound to loopback**. Remote access requires explicit
 Before any command, confirm:
 
 - [ ] Docker Engine 24+ with Compose v2, daemon running.
-- [ ] Architecture is `linux/arm64`. Production images do not claim amd64 support.
+- [ ] Architecture is `linux/amd64` or `linux/arm64`. Tags up to `v1.2.0` are `linux/arm64` only; on amd64 pick a tag that lists both platforms and set `APP_PLATFORM=linux/amd64`.
 - [ ] Host can pull `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:?Set IMAGE_TAG to the published release}`.
 - [ ] Selected `IMAGE_TAG` actually contains the runtime fixes. The default `v1.2.0` exists only once the release workflow has published it (run it manually with `tag_override=v1.2.0`); local changes do not propagate to existing GHCR tags.
 - [ ] Working directory is the repo root containing `docker-compose.prod.yml`.
@@ -112,7 +112,7 @@ Run all of these after any change to image tag, environment variables, or infras
 | Check | Command | Pass criteria |
 |---|---|---|
 | Image pullable | `docker pull "ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG}"` | Exit 0; no `403` |
-| Manifest architecture | `docker buildx imagetools inspect "ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG}" --raw` | One non-attestation descriptor with `os=linux, architecture=arm64` |
+| Manifest architecture | `docker buildx imagetools inspect "ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG}" --raw` | Non-attestation descriptors for `linux/amd64` and `linux/arm64` (tags up to `v1.2.0`: `linux/arm64` only) |
 | Binary version | `docker compose ... exec -T app /api -version` | `KlubHub-DJ <version>` matches `IMAGE_TAG` |
 | All services healthy | `docker compose ... ps` | Three rows, all `healthy` |
 | API health | `curl --fail http://127.0.0.1:8080/api/v1/health` | HTTP 200 |
@@ -138,7 +138,7 @@ docker pull "ghcr.io/lithqube/klubhub-dj-api:${NEW_IMAGE_TAG:?}"
 
 # 5.2 — Inspect manifest.
 docker buildx imagetools inspect "ghcr.io/lithqube/klubhub-dj-api:${NEW_IMAGE_TAG}" --raw
-# Expect one non-attestation descriptor, linux/arm64.
+# Expect non-attestation descriptors for linux/amd64 and linux/arm64.
 
 # 5.3 — Back up before rolling the image tag. Never upgrade without a backup.
 bash scripts/backup.sh -f docker-compose.prod.yml /var/backups/klubhub
@@ -261,7 +261,7 @@ docker compose --env-file /dev/null -f docker-compose.prod.yml down -v
 | `/api/v1/health` 503 with `frontend: error` | Nuxt did not start inside the container | `docker compose logs app`; runtime supervisor exits if Nitro fails to listen |
 | Browser cannot download S3 objects | `S3_PUBLIC_ENDPOINT` is loopback or container DNS | Set `S3_PUBLIC_ENDPOINT` to a browser-reachable URL |
 | Container OOM killed | Playwright/Chromium + Node + Go exceeds `mem_limit: 768m` | Increase `mem_limit`, or extract Chromium into its own service (see §11) |
-| `docker buildx imagetools inspect` shows `linux/amd64` | The runner is x86; you have the wrong image | Verify the runner was `ubuntu-24.04-arm`; do not deploy |
+| `docker buildx imagetools inspect` shows only one platform | A single-arch tag (up to `v1.2.0`) or a failed merge job | Pick a tag the merge job published; on amd64 do not deploy an arm64-only tag without emulation |
 
 ---
 

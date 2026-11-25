@@ -89,7 +89,9 @@ services:
     # future products use e.g. `klubhub-promoter-api`. Operators can
     # override IMAGE_REPOSITORY to pin a fork or local build.
     image: ${IMAGE_REPOSITORY:-ghcr.io/lithqube/klubhub-dj-api}:${IMAGE_TAG:-v1.2.0}
-    platform: linux/arm64
+    # v1.2.0 and earlier are arm64-only. Set APP_PLATFORM=linux/amd64 on x86
+    # with an IMAGE_TAG that publishes both platforms.
+    platform: ${APP_PLATFORM:-linux/arm64}
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
