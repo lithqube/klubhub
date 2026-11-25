@@ -109,8 +109,17 @@ describe('inline invoice create form with real transport-backed Pinia', () => {
     const wrapper = render({ presetGigId: 'gig-1' })
     await flushPromises()
     expect((wrapper.get('#inv-create-gig').element as HTMLInputElement).value).toContain('First')
+    // The composer focuses this field itself, which opens the list.
+    await wrapper.get('#inv-create-gig').trigger('focus')
     await wrapper.setProps({ presetGigId: 'gig-2' })
     await flushPromises()
     expect((wrapper.get('#inv-create-gig').element as HTMLInputElement).value).toContain('Second')
+  })
+
+  it('shows the preset gig when the gigs arrive after the field already has focus', async () => {
+    const wrapper = render({ presetGigId: 'gig-1' })
+    await wrapper.get('#inv-create-gig').trigger('focus')
+    await flushPromises()
+    expect((wrapper.get('#inv-create-gig').element as HTMLInputElement).value).toContain('Actual venue')
   })
 })

@@ -84,7 +84,8 @@ jobs:
       - run: pnpm nx run-many -t lint -p @dev/promoter @dev/promoter-e2e
       - run: pnpm nx typecheck @dev/promoter
       # The shared layer also ships in KlubHub DJ: keep DJ's suite green.
-      - run: pnpm nx run-many -t test -p @dev/promoter @dev/ui @dev/dj
+      # stream: buffered output is cut off at exit, hiding which test failed
+      - run: pnpm nx run-many -t test -p @dev/promoter @dev/ui @dev/dj --outputStyle=stream
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm nx e2e @dev/promoter-e2e
 
