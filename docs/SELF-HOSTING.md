@@ -56,7 +56,7 @@ Every option can also be given as `KLUBHUB_<OPTION>` in the environment. Setting
 ~/klubhub/klubhub backup-info       # what to back up
 ```
 
-KlubHub DJ images are arm64-only (Apple Silicon, Raspberry Pi 5, Graviton/Ampere); on x86 the installer offers emulation or suggests Promoter only. The rest of this guide explains each step for manual setups and operations.
+KlubHub DJ tags up to `v1.2.0` are arm64-only; later tags also ship `linux/amd64` (see System requirements). On x86 the installer still runs the DJ image through arm64 emulation, or suggests Promoter only. The rest of this guide explains each step for manual setups and operations.
 
 ## System requirements
 
