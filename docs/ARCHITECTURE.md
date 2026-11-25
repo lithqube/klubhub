@@ -1023,7 +1023,7 @@ Every choice maps to a specific requirement.
 | Object storage | `dxflrs/garage:v2.2.0`; S3-compatible, with private Garage configuration. |
 | Development | Default Compose file builds the API; Nuxt runs on the host. |
 | Production app | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.3.0}`; supervised Go + Nuxt/Node + Playwright. |
-| Production platform | `linux/arm64`; no native amd64 release claim. |
+| Production platform | `linux/amd64` and `linux/arm64` from `v1.3.0`; earlier tags are `linux/arm64` only. |
 | Containerization | Docker Engine 24+ and Compose v2; distinct mode projects and volumes. |
 
 ### 7.4 Stack Evaluation Against BRD Preferred Stack

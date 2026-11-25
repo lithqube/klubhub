@@ -268,7 +268,7 @@ Back up both Postgres and Garage, along with the private configuration needed to
 The full v1 release plan lives in [`docs/v1-release-plan.md`](./docs/v1-release-plan.md).
 At a glance:
 
-- **Now:** v1.2.0 — Phase 4.5 Rider Templates and Phase 5 Finance are complete: invoicing, payments, agreements, the expense ledger with receipts, and EN 16931 e-invoicing (Factur-X / XRechnung) with an archive of issued documents and send-by-email; the tracklist editor and a real-data dashboard also landed
+- **Now:** v1.3.0 — Phase 4.10 availability and booking outreach (sends off until you attest your email provider allows it), `./klubhub update` with backup and `rollback`, and DJ images built for both amd64 and arm64; v1.2.0 completed Phase 4.5 Rider Templates and Phase 5 Finance
 - **Next:** Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard)
 - **Later:** US market — US-compatible e-invoicing (UBL) and payee tax forms (W-9, 1099-NEC, W-8BEN withholding, 1042-S); scope in [the invoicing doc](./docs/INVOICING.md)
 
