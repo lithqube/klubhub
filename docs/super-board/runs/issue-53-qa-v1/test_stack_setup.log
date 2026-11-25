@@ -1,0 +1,12 @@
+test_compose_contracts_with_real_compose (__main__.SetupTests.test_compose_contracts_with_real_compose) ... ok
+test_email_overlay_wires_plunk_when_email_env_present (__main__.SetupTests.test_email_overlay_wires_plunk_when_email_env_present)
+Plunk overlay must not break the existing dev/prod configs. ... ok
+test_empty_or_symlink_credentials_fail_closed (__main__.SetupTests.test_empty_or_symlink_credentials_fail_closed) ... ok
+test_mismatched_s3_credentials_are_not_replaced (__main__.SetupTests.test_mismatched_s3_credentials_are_not_replaced) ... ok
+test_prepare_is_private_and_no_clobber (__main__.SetupTests.test_prepare_is_private_and_no_clobber) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.507s
+
+OK
+EXIT=0

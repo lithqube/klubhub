@@ -1,0 +1,262 @@
+▲ [WARNING] Cannot find base config file "./.nuxt/tsconfig.json" [tsconfig.json]
+
+    apps/dj/tsconfig.json:11:13:
+      11 │   "extends": "./.nuxt/tsconfig.json"
+         ╵              ~~~~~~~~~~~~~~~~~~~~~~~
+
+▲ [WARNING] Cannot find base config file "./.nuxt/tsconfig.json" [tsconfig.json]
+
+    apps/promoter/tsconfig.json:11:13:
+      11 │   "extends": "./.nuxt/tsconfig.json"
+         ╵              ~~~~~~~~~~~~~~~~~~~~~~~
+
+▲ [WARNING] Cannot find base config file "./.nuxt/tsconfig.json" [tsconfig.json]
+
+    apps/dj/tsconfig.json:11:13:
+      11 │   "extends": "./.nuxt/tsconfig.json"
+         ╵              ~~~~~~~~~~~~~~~~~~~~~~~
+
+▲ [WARNING] Cannot find base config file "./.nuxt/tsconfig.json" [tsconfig.json]
+
+    apps/promoter/tsconfig.json:11:13:
+      11 │   "extends": "./.nuxt/tsconfig.json"
+         ╵              ~~~~~~~~~~~~~~~~~~~~~~~
+
+
+ NX   Running target lint for 4 projects:
+
+- @dev/dj
+- @dev/dj-e2e
+- @dev/promoter
+- @dev/promoter-e2e
+
+
+
+> nx run @dev/promoter-e2e:lint
+
+> eslint .
+
+[0m
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/promoter-e2e/src/audience.spec.ts[24m
+  [2m17:48[22m  [33mwarning[39m  Unexpected usage of not.toBeVisible(). Use toBeHidden() instead  [2mplaywright/no-useless-not[22m
+  [2m51:48[22m  [33mwarning[39m  Unexpected usage of not.toBeVisible(). Use toBeHidden() instead  [2mplaywright/no-useless-not[22m
+
+[33m[1m✖ 2 problems (0 errors, 2 warnings)[22m[39m
+[33m[1m  0 errors and 2 warnings potentially fixable with the `--fix` option.[22m[39m
+[0m
+
+> nx run @dev/dj-e2e:lint
+
+> eslint .
+
+[0m
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj-e2e/src/screenshot.spec.ts[24m
+  [2m15:5[22m  [33mwarning[39m  Unexpected use of the `.skip()` annotation  [2mplaywright/no-skipped-test[22m
+  [2m34:5[22m  [33mwarning[39m  Unexpected use of the `.skip()` annotation  [2mplaywright/no-skipped-test[22m
+  [2m50:5[22m  [33mwarning[39m  Unexpected use of the `.skip()` annotation  [2mplaywright/no-skipped-test[22m
+
+[33m[1m✖ 3 problems (0 errors, 3 warnings)[22m[39m
+[0m
+
+> nx run @dev/promoter:lint
+
+> eslint .
+
+
+> nx run @dev/dj:lint
+
+> eslint .
+
+[0m
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/epk/EpkContactInfoSection.vue[24m
+  [2m12:46[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/epk/EpkSocialLinksSection.vue[24m
+  [2m39:46[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/epk/__tests__/EpkExportPanel.test.ts[24m
+  [2m22:18[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/gig/GigFormDialog.vue[24m
+  [2m710:26[22m  [33mwarning[39m  Variable 'gig' is already declared in the upper scope  [2mvue/no-template-shadow[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/social/SocialPostCompose.vue[24m
+  [2m51:59[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m54:25[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/social/__tests__/SocialCalendarView.test.ts[24m
+  [2m62:30[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/social/__tests__/SocialComposeRecovery.test.ts[24m
+   [2m39:33[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+   [2m41:34[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m138:30[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m139:30[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m179:30[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/social/__tests__/SocialPostCompose.test.ts[24m
+  [2m64:65[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/components/tracklist/__tests__/TracklistEditor.test.ts[24m
+  [2m30:51[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m36:72[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/composables/useTracklist.ts[24m
+   [2m42:76[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+   [2m43:31[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+   [2m43:55[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m131:76[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m132:31[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m132:55[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m157:76[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m158:31[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m158:55[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m175:76[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m176:31[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m176:55[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m192:78[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m193:33[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m193:57[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m223:76[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m224:31[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m224:55[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/demo/seed/index.ts[24m
+  [2m42:14[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/pages/__tests__/dashboard.test.ts[24m
+  [2m270:34[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m300:34[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/stores/__tests__/tracklist.test.ts[24m
+   [2m40:36[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+   [2m48:40[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+   [2m56:36[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+   [2m56:56[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m104:49[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m118:45[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/stores/contact.ts[24m
+  [2m16:62[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/stores/gig.ts[24m
+  [2m366:24[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/stores/settings.ts[24m
+  [2m42:46[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m60:51[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m61:34[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m64:49[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m85:46[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/stores/social.ts[24m
+  [2m60:34[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m61:19[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m69:34[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m70:19[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/app/stores/venue.ts[24m
+  [2m16:60[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/nuxt.config.ts[24m
+  [2m175:7[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/screenshot/tracklist/[id].get.ts[24m
+  [2m58:37[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m89:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/contacts/[id].get.ts[24m
+  [2m10:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/contacts/[id].put.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/contacts/autocomplete.get.ts[24m
+  [2m17:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/contacts/index.get.ts[24m
+  [2m11:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/contacts/index.post.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/[id].delete.ts[24m
+  [2m11:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/[id].get.ts[24m
+  [2m10:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/[id].put.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/[id]/link-contact.post.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/[id]/link-venue.post.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/[id]/pdf.get.ts[24m
+  [2m43:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/[id]/tracklists/[tracklistId].delete.ts[24m
+  [2m14:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/[id]/tracklists/[tracklistId].post.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/autocomplete.get.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/calendar.ics.get.ts[24m
+  [2m38:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/index.get.ts[24m
+  [2m21:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/gigs/index.post.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/tracklists/[id].get.ts[24m
+   [2m1:35[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m25:39[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/venues/[id].get.ts[24m
+  [2m10:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/venues/[id].put.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/venues/autocomplete.get.ts[24m
+  [2m17:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/venues/index.get.ts[24m
+  [2m11:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/api/v1/venues/index.post.ts[24m
+  [2m15:17[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/server/plugins/playwright.ts[24m
+  [2m15:18[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m22:18[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tests/demo-backend.test.ts[24m
+   [2m30:65[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m385:37[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m443:78[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m459:78[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tests/demo-fetch.test.ts[24m
+  [2m92:67[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[4m/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tests/social-demo.test.ts[24m
+  [2m22:38[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+  [2m41:36[22m  [33mwarning[39m  Unexpected any. Specify a different type  [2m@typescript-eslint/no-explicit-any[22m
+
+[33m[1m✖ 90 problems (0 errors, 90 warnings)[22m[39m
+[0m
+
+
+
+ NX   Successfully ran target lint for 4 projects
+
+

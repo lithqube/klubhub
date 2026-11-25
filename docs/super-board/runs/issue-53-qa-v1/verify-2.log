@@ -1,0 +1,12 @@
+
+> nx run @dev/dj:typecheck
+
+> bash scripts/typecheck-phase5.sh
+
+Phase 5 typecheck OK (zero errors in Phase 5 surface; Go race suite green).
+
+
+
+ NX   Successfully ran target typecheck for project @dev/dj
+
+
