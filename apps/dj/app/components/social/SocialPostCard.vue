@@ -140,12 +140,14 @@ const platformTag = computed(() =>
       <div v-if="expanded" class="space-y-2" @click.stop>
         <textarea
           v-model="editCaption"
+          :disabled="saving"
           rows="3"
           class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-2 py-1.5 font-data text-xs text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
           placeholder="Caption..."
         />
         <input
           v-model="editScheduledAt"
+          :disabled="saving"
           type="datetime-local"
           :aria-label="`Publish time (${editTimezone})`"
           class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-2 py-1.5 font-data text-xs text-on-surface focus:outline-none focus:border-primary transition-colors"
@@ -155,6 +157,7 @@ const platformTag = computed(() =>
         </p>
         <div class="flex gap-2 justify-end">
           <button
+            :disabled="saving"
             class="ghost-border px-3 py-1 font-terminal tracking-terminal text-[10px] uppercase text-on-surface-variant hover:text-primary hover:border-primary/40 transition-colors"
             @click.stop="cancelEdit"
           >
