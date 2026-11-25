@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PromoterEvent } from '~/types/event'
 import type { OpenSlot, TalentContact } from '~/types/bookings'
 import {
-  formatEventDate, formatFee, mentionsVenue, offerErrorText, offerStatusClass,
+  formatEventDate, formatFee, mentionsVenue, offerDelivery, offerErrorText, offerStatusClass,
   offerVariables, previewVenue, renderOfferText, venueWithheld,
 } from '../bookings'
 
@@ -149,5 +149,18 @@ describe('offerErrorText — provider-terms gate', () => {
       .toContain('Email is not configured')
     expect(offerErrorText({ error: 'suppressed' } as never))
       .toBe('This DJ is on your do-not-contact list.')
+  })
+})
+
+describe('offerDelivery', () => {
+  it('treats a failed or bounced mail as failed even when the API call succeeded', () => {
+    expect(offerDelivery({ status: 'failed', email_status: 'failed' })).toBe('failed')
+    expect(offerDelivery({ status: 'sent', email_status: 'bounced' })).toBe('failed')
+    expect(offerErrorText({ error: 'delivery_failed', problem: 'mailbox full' })).toContain('NOT delivered (mailbox full)')
+  })
+
+  it('tells a queued offer from a sent one', () => {
+    expect(offerDelivery({ status: 'queued' })).toBe('queued')
+    expect(offerDelivery({ status: 'sent', email_status: 'delivered' })).toBe('sent')
   })
 })

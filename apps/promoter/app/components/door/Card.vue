@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, Ban, Check, EyeOff, Minus, Plus, ShieldAlert,
 import { storeToRefs } from 'pinia'
 import { useDoorStore } from '~/stores/door'
 import type { ManagerPinVerifier } from '~/types/door'
+import { fadeIn, shake } from '#kui/utils/motion'
 import type { DoorBanEntry } from '~/utils/doorBan'
 import type { SubjectView } from '~/utils/doorState'
 import { verifyManagerPin } from '~/utils/doorPin'
@@ -118,9 +119,18 @@ async function reveal() {
 }
 const until = (iso: string) => shortDate(iso, props.timezone)
 
-// A new card takes focus on its name, so screen readers start there.
-watch(() => v.value.key, () => nextTick(() => heading.value?.focus({ preventScroll: false })))
-onMounted(() => heading.value?.focus())
+// A new card takes focus on its name, so screen readers start there. It
+// arrives with a short fade, or a shake when it cannot be admitted.
+const card = ref<HTMLElement | null>(null)
+const arrive = () => (v.value.blocked ? shake : fadeIn)(card.value)
+watch(() => v.value.key, () => nextTick(() => {
+  heading.value?.focus({ preventScroll: false })
+  arrive()
+}))
+onMounted(() => {
+  heading.value?.focus()
+  arrive()
+})
 
 const reasons = computed(() => {
   const r: { code: string, text: string }[] = admitReasons(v.value)
@@ -166,6 +176,7 @@ function admit(e: MouseEvent) {
   if (needsSecondTap.value) {
     if (armedAt.value === null) {
       armedAt.value = Date.now()
+      shake(e.currentTarget as HTMLElement | null) // not admitted yet
       return
     }
     if (!confirmAllowed(armedAt.value, Date.now())) return
@@ -176,7 +187,7 @@ function admit(e: MouseEvent) {
 </script>
 
 <template>
-  <article class="card glass" :class="v.blocked ? 'accent-bar-failed' : needsSecondTap || banned ? 'accent-bar-archived' : 'accent-bar-ready'" :aria-labelledby="`card-${v.key}`">
+  <article ref="card" class="card glass" :class="v.blocked ? 'accent-bar-failed' : needsSecondTap || banned ? 'accent-bar-archived' : 'accent-bar-ready'" :aria-labelledby="`card-${v.key}`">
     <button type="button" class="btn-hud btn-hud-ghost back" @click="emit('back')">
       <ArrowLeft style="width:16px;height:16px;" aria-hidden="true" /> BACK TO SEARCH
     </button>

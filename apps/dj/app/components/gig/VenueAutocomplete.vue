@@ -26,10 +26,17 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(
   () => props.modelValue,
-  (val) => {
-    if (val) query.value = val.name
-  }
+  (val) => { query.value = val?.name ?? '' }
 )
+
+/** A venue that exists only as typed text: it is saved by name, with no linked record. */
+function typedVenue(name: string): Venue {
+  return {
+    id: '', name, city: '', country: '', capacity: null, website: null,
+    tech_contact_name: '', tech_contact_email: '', tech_contact_phone: '',
+    notes: '', created_at: '', updated_at: '', deleted_at: null,
+  }
+}
 
 async function search() {
   if (query.value.length < 2) {
@@ -51,6 +58,8 @@ async function search() {
 }
 
 function onInput() {
+  // What is in the box is what gets saved, picked from the list or not.
+  emit('update:modelValue', query.value.trim() ? typedVenue(query.value) : null)
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(search, 300)
 }
@@ -74,7 +83,7 @@ function onKeydown(e: KeyboardEvent) {
   if (!isOpen.value) return
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    highlightedIndex.value = Math.min(highlightedIndex.value + 1, results.value.length)
+    highlightedIndex.value = Math.min(highlightedIndex.value + 1, results.value.length - 1)
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
     highlightedIndex.value = Math.max(highlightedIndex.value - 1, -1)
@@ -143,12 +152,13 @@ onClickOutside(inputRef, () => {
           {{ [venue.city, venue.country].filter(Boolean).join(', ') }}
         </div>
       </div>
-      <div
-        style="padding:8px 12px;cursor:pointer;text-align:center;border-top:1px dashed color-mix(in srgb, var(--color-primary) 15%, transparent);"
+      <button
+        type="button"
+        style="display:block;width:100%;min-height:44px;padding:8px 12px;cursor:pointer;text-align:center;background:none;border:0;border-top:1px dashed color-mix(in srgb, var(--color-primary) 15%, transparent);"
         @click="isOpen = false"
       >
-        <span class="section-lbl" style="font-size:8px;color:var(--color-primary);">CREATE NEW VENUE</span>
-      </div>
+        <span class="section-lbl" style="font-size:9px;color:var(--color-primary);">USE “{{ query }}” AS TYPED</span>
+      </button>
     </div>
 
     <!-- Error state -->
@@ -169,12 +179,13 @@ onClickOutside(inputRef, () => {
       style="position:absolute;top:100%;left:0;right:0;z-index:50;padding:12px;text-align:center;margin-top:2px;"
     >
       <div class="section-lbl" style="font-size:9px;color:var(--color-tertiary);">NO VENUES FOUND</div>
-      <div
-        style="margin-top:8px;cursor:pointer;"
+      <button
+        type="button"
+        style="margin-top:8px;min-height:44px;cursor:pointer;background:none;border:0;"
         @click="isOpen = false"
       >
-        <span class="section-lbl" style="font-size:8px;color:var(--color-primary);">CREATE NEW VENUE</span>
-      </div>
+        <span class="section-lbl" style="font-size:9px;color:var(--color-primary);">USE “{{ query }}” AS TYPED</span>
+      </button>
     </div>
   </div>
 </template>

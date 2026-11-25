@@ -5,6 +5,9 @@ import {
   Send,
   FileText,
   CalendarDays,
+  Banknote,
+  ClipboardList,
+  Megaphone,
 } from 'lucide-vue-next'
 import type { KhNavItem } from '#kui/types/shell'
 
@@ -15,8 +18,15 @@ const primaryNav: KhNavItem[] = [
   { label: 'EPK',    icon: FileText,         to: '/epk'       },
   { label: 'GIGS',   icon: CalendarDays,     to: '/gigs'      },
 ]
+
+// The sections the bar has no room for.
+const moreNav: KhNavItem[] = [
+  { label: 'OUTREACH', icon: Megaphone,     to: '/outreach' },
+  { label: 'RIDER',    icon: ClipboardList, to: '/rider' },
+  { label: 'FINANCE',  icon: Banknote,      to: '/finance' },
+]
 </script>
 
 <template>
-  <KhBottomNav :items="primaryNav" />
+  <KhBottomNav :items="primaryNav" :more="moreNav" />
 </template>

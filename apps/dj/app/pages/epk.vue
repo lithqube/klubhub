@@ -4,6 +4,7 @@ import { useEpkStore } from '~/stores/epk'
 import { useSettingsStore } from '~/stores/settings'
 import { useGigStore } from '~/stores/gig'
 import { useEpkAutosave } from '~/composables/useEpkAutosave'
+import { createSaveQueue } from '~/utils/saveQueue'
 import { useFeatures } from '~/composables/useFeatures'
 import { Download, ExternalLink, Image, Loader, Plus, Trash2, X, Check, AlertCircle } from 'lucide-vue-next'
 
@@ -96,29 +97,14 @@ const socialFields = computed(() =>
   SOCIAL_FIELDS.filter((f) => raImportEnabled || f.key !== RA_LINK_KEY),
 )
 
-let settingsTimer: ReturnType<typeof setTimeout> | null = null
-let pendingSettings: Parameters<typeof settings.save>[0] = {}
-
-// One send path for both the debounce timer and leaving the page, so an edit
-// made inside the debounce window is not dropped on navigation.
-async function flushSettings() {
-  if (settingsTimer) clearTimeout(settingsTimer)
-  settingsTimer = null
-  const patchToSend = pendingSettings
-  pendingSettings = {}
-  if (Object.keys(patchToSend).length === 0) return
-  try {
-    await settings.save(patchToSend)
-  } catch {
-    // saveStatus is 'error'; the status chip tells the user
-  }
-}
+// One queue for the debounce timer, leaving the page and PDF export, so an edit
+// is never dropped or overtaken by an older one.
+const settingsQueue = createSaveQueue<Parameters<typeof settings.save>[0]>((patch) => settings.save(patch))
+const flushSettings = () => settingsQueue.flush()
 
 function queueSettings(patch: Parameters<typeof settings.save>[0]) {
-  pendingSettings = { ...pendingSettings, ...patch }
   settings.saveStatus = 'saving'
-  if (settingsTimer) clearTimeout(settingsTimer)
-  settingsTimer = setTimeout(flushSettings, 900)
+  settingsQueue.push(patch, 900)
 }
 
 function onDjName(e: Event) {
@@ -257,6 +243,12 @@ async function handleExportPdf() {
   exportUrl.value = ''
   exportError.value = ''
   try {
+    // The PDF is built from the saved copy: send pending edits first.
+    await Promise.all([flush(), flushSettings()])
+    if (saveState.value === 'error') {
+      exportError.value = 'Your latest changes are not saved, so they would be missing from the PDF. Edit a field to retry, then export.'
+      return
+    }
     const result = await store.generateExport()
     exportUrl.value = result.downloadUrl
     await store.loadExports()

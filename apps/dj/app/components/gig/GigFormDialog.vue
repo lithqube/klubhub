@@ -165,7 +165,6 @@ const form = reactive({
   city: '',
   country: '',
   event_name: '',
-  room_details: '',
   contact: null as Contact | null,
   promoter_name: '',
   promoter_email: '',
@@ -221,7 +220,6 @@ function initForm(source: Gig | null = props.gig) {
   if (source) {
     form.date = source.date ? (source.date.split('T')[0] ?? '') : ''
     form.event_name = source.event_name || ''
-    form.room_details = ''
     form.city = source.city || ''
     form.country = source.country || ''
     form.promoter_name = source.promoter_name || ''
@@ -239,7 +237,6 @@ function initForm(source: Gig | null = props.gig) {
     form.city = ''
     form.country = ''
     form.event_name = ''
-    form.room_details = ''
     form.contact = null
     form.promoter_name = ''
     form.promoter_email = ''
@@ -339,7 +336,8 @@ async function doSave() {
     showCancelConfirm.value = false
     return
   }
-  if (!form.venue?.name && !form.event_name) {
+  const venueName = form.venue?.name.trim() ?? ''
+  if (!venueName && !form.event_name) {
     saveError.value = 'Add a venue or an event name.'
     showCancelConfirm.value = false
     return
@@ -355,7 +353,7 @@ async function doSave() {
       // YYYY-MM-DD from the date input is rejected as invalid JSON.
       // Midnight UTC round-trips with the `split('T')[0]` used on read.
       date: `${form.date}T00:00:00Z`,
-      venue: form.venue?.name || form.event_name || '',
+      venue: venueName || form.event_name || '',
       city: form.city,
       country: form.country,
       event_name: form.event_name,
@@ -513,6 +511,7 @@ function close() {
               <VenueAutocomplete
                 :model-value="form.venue"
                 placeholder="Search venue..."
+                @update:model-value="form.venue = $event"
                 @venue-selected="onVenueSelected"
               />
             </div>
@@ -550,18 +549,6 @@ function close() {
                 class="hud-input"
                 style="width:100%;"
                 placeholder="Saturday Night"
-              >
-            </div>
-
-            <!-- Room / Details -->
-            <div>
-              <label class="section-lbl" style="display:block;margin-bottom:6px;">ROOM / DETAILS</label>
-              <input
-                v-model="form.room_details"
-                type="text"
-                class="hud-input"
-                style="width:100%;"
-                placeholder="Main Stage"
               >
             </div>
 

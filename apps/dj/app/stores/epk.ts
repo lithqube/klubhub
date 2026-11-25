@@ -24,16 +24,15 @@ export const useEpkStore = defineStore('epk', () => {
 
   // The Go API serializes empty slices/maps as JSON null (nil values) on a
   // fresh profile, so collections are coalesced to keep the refs usable.
-  function applyContent(data: EPKContent): void {
-    bioShort.value = data.bioShort ?? '';
-    bioLong.value = data.bioLong ?? '';
-    techRider.value = data.techRider ?? '';
-    stagePlotPath.value = data.stagePlotPath ?? '';
-    gigHighlights.value = data.gigHighlights ?? [];
-    pressQuotes.value = data.pressQuotes ?? [];
-    photoPaths.value = data.photoPaths ?? [];
-    photoUrls.value = data.photoUrls ?? {};
-    sectionVisibility.value = data.sectionVisibility ?? {};
+  function applyContent(data: EPKContent, wants: (key: keyof UpdateEPKContentRequest) => boolean = () => true): void {
+    if (wants('bioShort')) bioShort.value = data.bioShort ?? '';
+    if (wants('bioLong')) bioLong.value = data.bioLong ?? '';
+    if (wants('techRider')) techRider.value = data.techRider ?? '';
+    if (wants('stagePlotPath' as keyof UpdateEPKContentRequest)) stagePlotPath.value = data.stagePlotPath ?? '';
+    if (wants('gigHighlights')) gigHighlights.value = data.gigHighlights ?? [];
+    if (wants('pressQuotes')) pressQuotes.value = data.pressQuotes ?? [];
+    if (wants('photoPaths' as keyof UpdateEPKContentRequest)) photoPaths.value = data.photoPaths ?? [];
+    if (wants('sectionVisibility')) sectionVisibility.value = data.sectionVisibility ?? {};
   }
 
   // Actions
@@ -41,16 +40,24 @@ export const useEpkStore = defineStore('epk', () => {
     const result = await $fetch<{ data: EPKContent }>('/api/v1/epk/content');
     id.value = result.data.id;
     applyContent(result.data);
+    photoUrls.value = result.data.photoUrls ?? {};
   }
 
   async function updateContent(patch: UpdateEPKContentRequest): Promise<void> {
     saveStatus.value = 'saving';
+    const fields: Record<string, { value: unknown }> = {
+      bioShort, bioLong, techRider, stagePlotPath, gigHighlights, pressQuotes, photoPaths, sectionVisibility,
+    };
+    const sent = new Map(Object.keys(patch).map((key) => [key, fields[key]?.value]));
     try {
       const result = await $fetch<{ data: EPKContent }>('/api/v1/epk/content', {
         method: 'PUT',
         body: patch,
       });
-      applyContent(result.data);
+      // Only the fields this save sent, and only if nothing was typed in them
+      // since: the response holds old text for every other unsaved field.
+      applyContent(result.data, (key) => sent.has(key) && fields[key]?.value === sent.get(key));
+      if (result.data.photoUrls) photoUrls.value = result.data.photoUrls;
       saveStatus.value = 'saved';
     } catch (error) {
       saveStatus.value = 'error';

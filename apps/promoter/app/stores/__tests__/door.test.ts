@@ -100,6 +100,38 @@ describe('useDoorStore (door device)', () => {
     expect(s.phase).toBe('locked')
   })
 
+  it('keeps unsynced actions when a re-login succeeds but the bundle download fails', async () => {
+    const s = await ready()
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    await s.checkIn({ kind: 'guest', id: 'g1' }, 2)
+    await s.counter('walkup')
+    expect(s.queued).toBe(2)
+
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+    fetchMock.mockImplementation((url: string) => (url === '/api/v1/door/bundle' ? Promise.reject(new Error('bad signal')) : Promise.resolve(null)))
+    await expect(s.login('123456')).rejects.toBeTruthy()
+    expect(s.phase).toBe('locked')
+    expect(s.queued).toBe(2)
+
+    // A reload between the attempts still finds the queue on disk.
+    setActivePinia(createPinia())
+    fetchMock.mockImplementation(() => Promise.reject(new Error('bad signal')))
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    const again = useDoorStore()
+    await again.init()
+    expect(again.queued).toBe(2)
+
+    // The retry carries it into the new session.
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+    fetchMock.mockImplementation((url: string) => (url === '/api/v1/door/bundle'
+      ? Promise.resolve(bundle())
+      : url === '/api/v1/door/login' ? Promise.resolve(null) : Promise.reject(new Error('sync offline'))))
+    await again.login('123456')
+    expect(again.phase).toBe('ready')
+    expect(again.queued).toBe(2)
+    again.stopLoop()
+  })
+
   it('queues check-ins offline with nonces and syncs them in order when back online', async () => {
     const s = await ready()
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
