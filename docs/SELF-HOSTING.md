@@ -50,7 +50,7 @@ Every option can also be given as `KLUBHUB_<OPTION>` in the environment. Setting
 ~/klubhub/klubhub config            # saved settings (secrets masked)
 ~/klubhub/klubhub set dj LOG_LEVEL=debug   # change a setting and apply it
 ~/klubhub/klubhub update            # newest main (or: update <ref>)
-~/klubhub/klubhub update --release  # newest v* release tag
+~/klubhub/klubhub update --release  # newest final v* tag (skips -rc; --ref installs one)
 ~/klubhub/klubhub backup            # snapshot data + secrets to .local/backups/
 ~/klubhub/klubhub rollback          # restore the previous version (one step back)
 ~/klubhub/klubhub backup-info       # what to back up

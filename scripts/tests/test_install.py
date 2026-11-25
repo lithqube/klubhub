@@ -370,6 +370,18 @@ class LatestReleaseTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout.strip(), 'v1.10.0')
 
+    def test_final_wins_over_its_release_candidate(self):
+        sb = Sandbox(self)
+        stub_ls_remote(sb, 'a\trefs/tags/v1.2.0\nb\trefs/tags/v1.3.0\nc\trefs/tags/v1.3.0-rc.1\n')
+        r = sb.bash(sourced('latest_release'))
+        self.assertEqual(r.stdout.strip(), 'v1.3.0')
+
+    def test_candidate_never_beats_older_final(self):
+        sb = Sandbox(self)
+        stub_ls_remote(sb, 'a\trefs/tags/v1.2.0\nc\trefs/tags/v1.3.0-rc.1\n')
+        r = sb.bash(sourced('latest_release'))
+        self.assertEqual(r.stdout.strip(), 'v1.2.0')
+
 
 class ResolveRefTests(unittest.TestCase):
     def resolve(self, sb, *args, seed=None):
@@ -393,6 +405,11 @@ echo "REF=$REF"'''))
         r = self.resolve(Sandbox(self), '--release', '--ref', 'v1.9.0')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn('REF=v1.9.0', r.stdout)
+
+    def test_explicit_ref_still_installs_a_candidate(self):
+        r = self.resolve(Sandbox(self), '--release', '--ref', 'v1.3.0-rc.1')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('REF=v1.3.0-rc.1', r.stdout)
 
     def test_saved_ref_is_used_without_flags(self):
         r = self.resolve(Sandbox(self), seed='''KLUBHUB_REF=v1.1.0
