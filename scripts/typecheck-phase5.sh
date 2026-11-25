@@ -109,11 +109,16 @@ fi
 # 3) Go: every Phase 5 .go file must compile. The api:test target
 # already enforces -race -count=1 -p 1 across the whole Go module,
 # including these new packages, so we delegate to that for the Go half.
-if ! pnpm exec nx run api:test >/dev/null 2>&1; then
+# Keep this run's output: running the suite again to show a failure hides a
+# flaky test, because the second run passes.
+GO_OUT="$(mktemp -t phase5-go.XXXXXX)"
+if ! pnpm exec nx run api:test >"$GO_OUT" 2>&1; then
   echo "Phase 5 typecheck — api:test failed"
-  pnpm exec nx run api:test
+  cat "$GO_OUT"
+  rm -f "$GO_OUT"
   exit 1
 fi
+rm -f "$GO_OUT"
 
 rm -f "$OUT_FILE" "$PHASE5_ERRORS"
 echo "Phase 5 typecheck OK (zero errors in Phase 5 surface; Go race suite green)."
