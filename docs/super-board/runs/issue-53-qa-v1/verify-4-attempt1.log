@@ -1,0 +1,117 @@
+
+ NX   Running target test for 3 projects and 1 task they depend on:
+
+- @dev/dj
+- @dev/promoter
+- @dev/ui
+
+
+
+> nx run @dev/ui:test
+
+> vitest
+
+
+ RUN  v4.1.11 /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/libs/ui
+
+ ❯ |@dev/ui| app/types/shell.test.ts (0 test)
+ ❯ |@dev/ui| app/utils/motion.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@dev/ui| app/types/shell.test.ts [ app/types/shell.test.ts ]
+TSConfckParseError: failed to resolve "extends":"./.nuxt/tsconfig.json" in /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+  Plugin: vite:esbuild
+  File: /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/libs/ui/app/types/shell.test.ts
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5809:8
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:44
+ ❯ parseReferences ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:31
+ ❯ parse$13 ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5677:4
+ ❯ loadTsconfigJsonForFile ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6302:37
+ ❯ transformWithEsbuild ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6086:55
+ ❯ TransformPluginContext.transform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6172:20
+
+Caused by: Error: Cannot find module './.nuxt/tsconfig.json'
+Require stack:
+- /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5800:16
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:44
+ ❯ parseReferences ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@dev/ui| app/utils/motion.test.ts [ app/utils/motion.test.ts ]
+TSConfckParseError: failed to resolve "extends":"./.nuxt/tsconfig.json" in /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+  Plugin: vite:esbuild
+  File: /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/libs/ui/app/utils/motion.test.ts
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5809:8
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:44
+ ❯ parseReferences ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:31
+
+Caused by: Error: Cannot find module './.nuxt/tsconfig.json'
+Require stack:
+- /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5800:16
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:44
+ ❯ parseReferences ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  no tests
+   Start at  23:35:10
+   Duration  554ms (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 812ms)
+
+Warning: command "vitest" exited with non-zero status code
+> nx run @dev/ui:build
+
+> nuxt build
+
+[90m┌[39m  [36mBuilding Nuxt for production...[39m
+[90m│[39m
+[34m●[39m  [32mNuxt [1m4.5.2[22m[39m[90m (with [39m[90mNitro [1m2.13.4[22m[39m[90m, Vite [1m8.3.0[22m[39m[90m and Vue [1m3.5.42[22m[39m[90m)[39m
+[90m│[39m
+[34m●[39m  Nitro preset: [36mnode-server[39m
+[36mℹ[39m Building client...
+[36mℹ[39m [36mvite v8.3.0 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[0m 127 modules transformed.
+
+[41m[30m ERROR [39m[49m [31m✗[39m Build failed in 254ms
+
+[90m│[39m
+[31m■[39m  Nuxt build error: Error: [31mBuild failed with 1 error:
+[90m│[39m
+[90m│[39m  [31m[builtin:vite-transform] [0mplugin `builtin:vite-transform` threw an error
+[90m│[39m
+[90m│[39m  Caused by:
+[90m│[39m      Tsconfig not found /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/.nuxt/tsconfig.json
+[90m│[39m  [39m
+Warning: command "nuxt build" exited with non-zero status code
+
+
+ NX   Running target test for 3 projects and 1 task they depend on failed
+
+Tasks not run because their dependencies failed or --nx-bail=true:
+
+- @dev/dj:test
+- @dev/promoter:test
+
+Failed tasks:
+
+- @dev/ui:test
+- @dev/ui:build
+
+
+ NX   Nx detected 2 flaky tasks
+
+  @dev/ui:test
+  @dev/ui:build
+
+Flaky tasks can disrupt your CI pipeline. Automatically retry them with Nx Cloud. Learn more at https://nx.dev/ci/features/flaky-tasks
+

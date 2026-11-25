@@ -2,7 +2,7 @@
 
 > **Scope:** The module and data-model sections retain the original architecture blueprint, including historical MinIO and pure-Go rendering proposals. They are not a deployment runbook or a claim that every planned feature is implemented. The runtime/deployment sections below describe the current Compose contract: Garage, host Nuxt in development, and one supervised Go + Nuxt/Node + Playwright app image in production. Use [Setup and Self-Hosting](./SELF-HOSTING.md) for provisioning and upgrades.
 >
-> Local runtime changes require a new image publication. The default production v1.2.0 tag does not establish that these fixes are released; verify publication and GHCR access for the intended operator.
+> Local runtime changes require a new image publication. The default production v1.3.0 tag does not establish that later fixes are released; verify publication and GHCR access for the intended operator.
 
 **Version:** 1.0
 **Date:** 2026-03-11
@@ -1022,8 +1022,8 @@ Every choice maps to a specific requirement.
 | Database | `postgres:16-alpine`; production has no host database port. |
 | Object storage | `dxflrs/garage:v2.2.0`; S3-compatible, with private Garage configuration. |
 | Development | Default Compose file builds the API; Nuxt runs on the host. |
-| Production app | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.2.0}`; supervised Go + Nuxt/Node + Playwright. |
-| Production platform | `linux/arm64`; no native amd64 release claim. |
+| Production app | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.3.0}`; supervised Go + Nuxt/Node + Playwright. |
+| Production platform | `linux/amd64` and `linux/arm64` from `v1.3.0`; earlier tags are `linux/arm64` only. |
 | Containerization | Docker Engine 24+ and Compose v2; distinct mode projects and volumes. |
 
 ### 7.4 Stack Evaluation Against BRD Preferred Stack
@@ -1100,7 +1100,7 @@ An old `klubhub-dj` project's volumes require explicit reuse or migration. A new
 
 Host loopback publication and the API's all-interface container listener serve different purposes. S3 publication uses its own `S3_BIND`, and remote browsers need an explicit reachable `S3_PUBLIC_ENDPOINT`. CORS and TLS do not turn this unauthenticated single-user app into a public SaaS.
 
-Production does not execute local source edits: fixes need a new image publication, and the intended operator must be able to access the selected tag. The default tag is v1.2.0, but that does not establish that the image containing these fixes is published. Do not infer released functionality from the local Dockerfile or documentation.
+Production does not execute local source edits: fixes need a new image publication, and the intended operator must be able to access the selected tag. The default tag is v1.3.0, but that does not establish that the image containing these fixes is published. Do not infer released functionality from the local Dockerfile or documentation.
 
 ---
 

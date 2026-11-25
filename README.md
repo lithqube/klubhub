@@ -103,7 +103,7 @@ The API calls the host Nuxt server at `http://host.docker.internal:4200` for ima
 
 Setup defaults to `dev`, preserves existing credentials, creates private file secrets and Garage configuration under `.local/dev` or `.local/prod`, bootstraps Garage, and starts the selected stack. Development and production use separate Compose projects and volumes, but their default host ports overlap: stop one before starting the other, or configure distinct ports.
 
-**Publication caveat:** the production file defaults to `IMAGE_TAG=v1.2.0`, which is pullable only once the release image has been published. Until then export the newest `sha-<commit>` tag; do not use `1.0.1`, which predates invoicing. See [container images](./docs/container-images.md) for tag verification, and the [v1.2.0 release notes](./docs/release-notes/v1.2.0.md).
+**Image tag:** the production file defaults to `IMAGE_TAG=v1.3.0` (amd64 and arm64); do not use `1.0.1`, which predates invoicing. See [container images](./docs/container-images.md) for tag verification, and the [v1.3.0 release notes](./docs/release-notes/v1.3.0.md).
 
 **Existing installation?** Do not start a new project over an old deployment without a migration plan. The old `klubhub-dj` project's volumes need explicit reuse or migration; see [safe upgrades](./docs/SELF-HOSTING.md#upgrades-and-existing-installations).
 
@@ -268,7 +268,7 @@ Back up both Postgres and Garage, along with the private configuration needed to
 The full v1 release plan lives in [`docs/v1-release-plan.md`](./docs/v1-release-plan.md).
 At a glance:
 
-- **Now:** v1.2.0 — Phase 4.5 Rider Templates and Phase 5 Finance are complete: invoicing, payments, agreements, the expense ledger with receipts, and EN 16931 e-invoicing (Factur-X / XRechnung) with an archive of issued documents and send-by-email; the tracklist editor and a real-data dashboard also landed
+- **Now:** v1.3.0 — Phase 4.10 availability and booking outreach (sends off until you attest your email provider allows it), `./klubhub update` with backup and `rollback`, and DJ images built for both amd64 and arm64; v1.2.0 completed Phase 4.5 Rider Templates and Phase 5 Finance
 - **Next:** Phase 6 (Release Planner) → 7 (Tour Manager) → 8 (Unified Dashboard)
 - **Later:** US market — US-compatible e-invoicing (UBL) and payee tax forms (W-9, 1099-NEC, W-8BEN withholding, 1042-S); scope in [the invoicing doc](./docs/INVOICING.md)
 

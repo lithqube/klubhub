@@ -1,0 +1,4 @@
+postgres:16-alpine
+dxflrs/garage:v2.2.0
+gflohr/e-invoice-eu:slim@sha256:c5d7f966d604661de7c4b55bf33d08c8d489ecc228e92b82e4f3f51e9dbb9664
+ghcr.io/lithqube/klubhub-dj-api:v1.3.0

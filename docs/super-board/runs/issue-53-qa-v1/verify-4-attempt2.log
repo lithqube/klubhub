@@ -1,0 +1,503 @@
+
+ NX   Running target test for 3 projects and 1 task they depend on:
+
+- @dev/dj
+- @dev/promoter
+- @dev/ui
+
+
+
+> nx run @dev/ui:build  [local cache]
+
+> nuxt build
+
+[90m┌[39m  [36mBuilding Nuxt for production...[39m
+[90m│[39m
+[34m●[39m  [32mNuxt [1m4.5.2[22m[39m[90m (with [39m[90mNitro [1m2.13.4[22m[39m[90m, Vite [1m8.3.0[22m[39m[90m and Vue [1m3.5.42[22m[39m[90m)[39m
+[90m│[39m
+[34m●[39m  Nitro preset: [36mnode-server[39m
+[36mℹ[39m Building client...
+[36mℹ[39m [36mvite v8.3.0 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[0m 127 modules transformed.
+
+[41m[30m ERROR [39m[49m [31m✗[39m Build failed in 254ms
+
+[90m│[39m
+[31m■[39m  Nuxt build error: Error: [31mBuild failed with 1 error:
+[90m│[39m
+[90m│[39m  [31m[builtin:vite-transform] [0mplugin `builtin:vite-transform` threw an error
+[90m│[39m
+[90m│[39m  Caused by:
+[90m│[39m      Tsconfig not found /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/.nuxt/tsconfig.json
+[90m│[39m  [39m
+Warning: command "nuxt build" exited with non-zero status code
+> nx run @dev/ui:test  [local cache]
+
+> vitest
+
+
+ RUN  v4.1.11 /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/libs/ui
+
+ ❯ |@dev/ui| app/types/shell.test.ts (0 test)
+ ❯ |@dev/ui| app/utils/motion.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@dev/ui| app/types/shell.test.ts [ app/types/shell.test.ts ]
+TSConfckParseError: failed to resolve "extends":"./.nuxt/tsconfig.json" in /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+  Plugin: vite:esbuild
+  File: /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/libs/ui/app/types/shell.test.ts
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5809:8
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:44
+ ❯ parseReferences ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:31
+ ❯ parse$13 ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5677:4
+ ❯ loadTsconfigJsonForFile ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6302:37
+ ❯ transformWithEsbuild ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6086:55
+ ❯ TransformPluginContext.transform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6172:20
+
+Caused by: Error: Cannot find module './.nuxt/tsconfig.json'
+Require stack:
+- /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5800:16
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:44
+ ❯ parseReferences ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@dev/ui| app/utils/motion.test.ts [ app/utils/motion.test.ts ]
+TSConfckParseError: failed to resolve "extends":"./.nuxt/tsconfig.json" in /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+  Plugin: vite:esbuild
+  File: /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/libs/ui/app/utils/motion.test.ts
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5809:8
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:44
+ ❯ parseReferences ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:31
+
+Caused by: Error: Cannot find module './.nuxt/tsconfig.json'
+Require stack:
+- /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5800:16
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:44
+ ❯ parseReferences ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5745:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  no tests
+   Start at  23:35:10
+   Duration  554ms (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 812ms)
+
+Warning: command "vitest" exited with non-zero status code
+> nx run @dev/promoter:test  [local cache]
+
+> vitest
+
+
+ RUN  v4.1.11 /Users/admin/dev/klubhub/.claude/worktrees/issue-53-build/apps/promoter
+
+(node:88944) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:88952) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/utils/__tests__/doorState.test.ts (26 tests) 22ms
+(node:88949) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/utils/__tests__/guests.test.ts (23 tests) 34ms
+ ✓ |@dev/promoter| app/utils/__tests__/privacy.test.ts (18 tests) 39ms
+ ✓ |@dev/promoter| app/utils/__tests__/report.test.ts (24 tests) 41ms
+(node:88945) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/stores/__tests__/bookings.test.ts (13 tests) 10ms
+ ✓ |@dev/promoter| app/stores/__tests__/guest.test.ts (19 tests) 14ms
+ ✓ |@dev/promoter| app/utils/__tests__/sealed.test.ts (32 tests) 509ms
+ ✓ |@dev/promoter| app/stores/__tests__/door.test.ts (21 tests) 453ms
+ ✓ |@dev/promoter| app/utils/__tests__/bookings.test.ts (16 tests) 24ms
+(node:88977) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/utils/__tests__/attendeeImport.test.ts (39 tests) 28ms
+(node:88976) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/stores/__tests__/sealed.test.ts (18 tests) 890ms
+ ✓ |@dev/promoter| app/stores/__tests__/audience.test.ts (10 tests) 79ms
+(node:88980) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| server/api/v1/__tests__/bookings-mock.test.ts (9 tests) 79ms
+ ✓ |@dev/promoter| app/stores/__tests__/event.test.ts (14 tests) 106ms
+ ✓ |@dev/promoter| app/stores/__tests__/privacy.test.ts (9 tests) 7ms
+(node:88984) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/stores/__tests__/session.test.ts (15 tests) 11ms
+ ✓ |@dev/promoter| app/utils/__tests__/doorDb.test.ts (14 tests) 57ms
+(node:88986) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/stores/__tests__/venue.test.ts (10 tests) 35ms
+ ✓ |@dev/promoter| app/utils/__tests__/doorBan.test.ts (6 tests) 138ms
+ ✓ |@dev/promoter| app/utils/sealed/__tests__/kdf.test.ts (12 tests) 24ms
+ ✓ |@dev/promoter| app/utils/__tests__/qrDecode.test.ts (12 tests) 112ms
+ ✓ |@dev/promoter| app/utils/__tests__/doorSearch.test.ts (14 tests) 27ms
+ ✓ |@dev/promoter| app/utils/__tests__/exportPack.test.ts (6 tests) 43ms
+ ✓ |@dev/promoter| app/composables/__tests__/useTimetableDraft.test.ts (4 tests) 27ms
+ ✓ |@dev/promoter| app/utils/__tests__/sealedText.test.ts (5 tests) 4ms
+(node:89000) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/stores/__tests__/report.test.ts (5 tests) 6ms
+ ✓ |@dev/promoter| app/utils/__tests__/attention.test.ts (5 tests) 4ms
+ ✓ |@dev/promoter| app/utils/__tests__/timetable.test.ts (4 tests) 3ms
+ ✓ |@dev/promoter| app/utils/__tests__/doorPin.test.ts (4 tests) 18ms
+(node:89027) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ |@dev/promoter| app/utils/__tests__/datetime.test.ts (4 tests) 16ms
+ ✓ |@dev/promoter| app/utils/__tests__/doorReveal.test.ts (3 tests) 13ms
+ ✓ |@dev/promoter| app/stores/__tests__/org.test.ts (4 tests) 7ms
+ ✓ |@dev/promoter| app/utils/__tests__/api.test.ts (3 tests) 2ms
+ ✓ |@dev/promoter| app/utils/__tests__/nav.test.ts (3 tests) 2ms
+ ✓ |@dev/promoter| app/components/timetable/__tests__/LineupRoster.test.ts (1 test) 214ms
+ ✓ |@dev/promoter| app/utils/__tests__/zip.test.ts (2 tests) 5ms
+ ✓ |@dev/promoter| app/utils/__tests__/color.test.ts (2 tests) 2ms
+ ✓ |@dev/promoter| app/utils/__tests__/pii.test.ts (2 tests) 2ms
+
+ Test Files  38 passed (38)
+      Tests  431 passed (431)
+   Start at  23:23:16
+   Duration  5.30s (transform 2.63s, setup 0ms, import 5.68s, tests 3.11s, environment 28.13s)
+
+
+> nx run @dev/dj:test
+
+> vitest
+
+▲ [WARNING] Cannot find base config file "./.nuxt/tsconfig.json" [tsconfig.json]
+
+    tsconfig.json:11:13:
+      11 │   "extends": "./.nuxt/tsconfig.json"
+         ╵              ~~~~~~~~~~~~~~~~~~~~~~~
+
+
+ RUN  v4.1.11 /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj
+
+ ❯ |@dev/dj| tests/demo-backend.test.ts (0 test)
+ ❯ |@dev/dj| tests/finance-attachments.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/finance-edit-snapshots.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/EntryForm.receipts.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/social.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/EntryForm.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/gig.concurrency.test.ts (0 test)
+ ❯ |@dev/dj| app/pages/__tests__/dashboard.test.ts (0 test)
+ ❯ |@dev/dj| app/pages/__tests__/finance.mutations.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/invoice.test.ts (0 test)
+ ❯ |@dev/dj| tests/outreach-mocks.test.ts (0 test)
+ ❯ |@dev/dj| app/components/gig/__tests__/GigFormDialog.concurrency.test.ts (0 test)
+ ❯ |@dev/dj| tests/finance-lines-demo.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/finance-review-fixes.test.ts (0 test)
+ ❯ |@dev/dj| app/pages/__tests__/rider.test.ts (0 test)
+ ❯ |@dev/dj| app/composables/__tests__/useRiderAutosave.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/finance-ordering.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/earnings.test.ts (0 test)
+ ❯ |@dev/dj| tests/outreach-composer.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/gig.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/EntryList.test.ts (0 test)
+ ❯ |@dev/dj| app/components/tracklist/__tests__/TracklistEditor.test.ts (0 test)
+ ❯ |@dev/dj| tests/finance-mocks.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/finance-quality-fixes.test.ts (0 test)
+ ❯ |@dev/dj| tests/rider-mock-db.test.ts (0 test)
+ ❯ |@dev/dj| app/components/social/__tests__/SocialComposeRecovery.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/finance-mock-entries.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/epk.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/earnings.attachments.test.ts (0 test)
+ ❯ |@dev/dj| app/composables/__tests__/useReceiptQueue.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/finance-aggregates.test.ts (0 test)
+ ❯ |@dev/dj| app/components/social/__tests__/SocialPostCompose.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/settings.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/dashboard.contract.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/EarningsWorkspace.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceDraftEditor.lines.test.ts (0 test)
+ ❯ |@dev/dj| app/components/gig/__tests__/RaEventImport.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderConflict.test.ts (0 test)
+ ❯ |@dev/dj| tests/rider-mocks.test.ts (0 test)
+ ❯ |@dev/dj| app/components/tracklist/__tests__/TracklistMeta.test.ts (0 test)
+ ❯ |@dev/dj| tests/demo-fetch.test.ts (0 test)
+ ❯ |@dev/dj| tests/outreach-store.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderAttachmentExport.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderTemplateDelete.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/rider.test.ts (0 test)
+ ❯ |@dev/dj| app/components/gig/__tests__/VenueAutocomplete.test.ts (0 test)
+ ❯ |@dev/dj| app/components/epk/__tests__/EpkRaImportPanel.apply.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceLinesEditor.test.ts (0 test)
+ ❯ |@dev/dj| app/composables/__tests__/useSocialPostForm.test.ts (0 test)
+ ❯ |@dev/dj| app/composables/useTracklist.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/quickPreview.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/BillingProfileForm.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderTemplateCreateForm.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/outreach.test.ts (0 test)
+ ❯ |@dev/dj| app/pages/__tests__/finance.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/invoice.lines.test.ts (0 test)
+ ❯ |@dev/dj| app/components/gig/__tests__/GigFormDialog.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceCreateForm.transport.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceEmailPanel.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/vatTreatment.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderDialogsAndCard.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceList.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderAttachmentDetach.test.ts (0 test)
+ ❯ |@dev/dj| app/components/social/__tests__/SocialQueueGrid.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/ra.test.ts (0 test)
+ ❯ |@dev/dj| tests/social-demo.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/invoiceLines.test.ts (0 test)
+ ❯ |@dev/dj| app/components/epk/__tests__/EpkExportPanel.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/invoiceFields.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/EntryReconciliationDialog.test.ts (0 test)
+ ❯ |@dev/dj| app/components/tracklist/__tests__/TracklistUploadZone.recovery.test.ts (0 test)
+ ❯ |@dev/dj| app/components/gig/__tests__/ContactAutocomplete.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceArchivePanel.test.ts (0 test)
+ ❯ |@dev/dj| app/components/social/__tests__/SocialPostCompose.noDoubleError.test.ts (0 test)
+ ❯ |@dev/dj| tests/dashboard-gate.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/tracklist.test.ts (0 test)
+ ❯ |@dev/dj| app/components/trackcard/__tests__/TrackCardTrackRow.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/PaymentForm.test.ts (0 test)
+ ❯ |@dev/dj| app/components/social/__tests__/SocialPostComposeRecovery.test.ts (0 test)
+ ❯ |@dev/dj| app/components/trackcard/__tests__/TrackCardTrackList.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceReadOnlyViews.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceEInvoicePanel.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderSectionField.test.ts (0 test)
+ ❯ |@dev/dj| tests/finance-lines-nitro.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/money.test.ts (0 test)
+ ❯ |@dev/dj| app/components/social/__tests__/SocialCalendarView.test.ts (0 test)
+ ❯ |@dev/dj| app/components/tracklist/__tests__/TracklistExporter.text.test.ts (0 test)
+ ❯ |@dev/dj| tests/finance-tax-notes.test.ts (0 test)
+ ❯ |@dev/dj| app/composables/__tests__/useRiderAutosaveUnsaved.test.ts (0 test)
+ ❯ |@dev/dj| app/components/epk/__tests__/EpkGigHighlightsSection.test.ts (0 test)
+ ❯ |@dev/dj| app/components/epk/__tests__/EpkBioSection.test.ts (0 test)
+ ❯ |@dev/dj| app/components/finance/__tests__/InvoiceTaxFields.notes.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/billingProfile.test.ts (0 test)
+ ❯ |@dev/dj| app/components/epk/__tests__/EpkPhotosSection.test.ts (0 test)
+ ❯ |@dev/dj| app/components/epk/__tests__/EpkTechRiderSection.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderDialogA11y.test.ts (0 test)
+ ❯ |@dev/dj| tests/build-prod-gate.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/gig.relationships.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/paymentForm.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/invoiceDisplay.test.ts (0 test)
+ ❯ |@dev/dj| app/components/rider/__tests__/RiderAttachmentCard.test.ts (0 test)
+ ❯ |@dev/dj| app/components/social/__tests__/SocialTokenWarningBanner.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/invoice.email.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/venue.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/contact.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/tracklistText.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/invoice.einvoice.test.ts (0 test)
+ ❯ |@dev/dj| app/components/epk/__tests__/EpkSocialLinksSection.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/riderErrors.test.ts (0 test)
+ ❯ |@dev/dj| app/composables/__tests__/useEpkAutosave.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/invoice.documents.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/verification-targets.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/features.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/dialogFocus.test.ts (0 test)
+ ❯ |@dev/dj| app/stores/__tests__/ui.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/saveQueue.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/design-tokens.test.ts (0 test)
+ ❯ |@dev/dj| app/components/epk/__tests__/EpkRaImportPanel.test.ts (0 test)
+ ❯ |@dev/dj| app/composables/__tests__/useFeatures.test.ts (0 test)
+ ❯ |@dev/dj| app/components/social/__tests__/SocialPostCard.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/apiAssetUrl.test.ts (0 test)
+ ❯ |@dev/dj| app/utils/__tests__/socialTime.test.ts (0 test)
+
+⎯⎯⎯⎯⎯ Failed Suites 122 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@dev/dj| tests/build-prod-gate.test.ts [ tests/build-prod-gate.test.ts ]
+ FAIL  |@dev/dj| tests/dashboard-gate.test.ts [ tests/dashboard-gate.test.ts ]
+ FAIL  |@dev/dj| tests/demo-backend.test.ts [ tests/demo-backend.test.ts ]
+ FAIL  |@dev/dj| tests/demo-fetch.test.ts [ tests/demo-fetch.test.ts ]
+ FAIL  |@dev/dj| tests/finance-lines-demo.test.ts [ tests/finance-lines-demo.test.ts ]
+ FAIL  |@dev/dj| tests/finance-lines-nitro.test.ts [ tests/finance-lines-nitro.test.ts ]
+ FAIL  |@dev/dj| tests/finance-mocks.test.ts [ tests/finance-mocks.test.ts ]
+ FAIL  |@dev/dj| tests/finance-tax-notes.test.ts [ tests/finance-tax-notes.test.ts ]
+ FAIL  |@dev/dj| tests/outreach-composer.test.ts [ tests/outreach-composer.test.ts ]
+ FAIL  |@dev/dj| tests/outreach-mocks.test.ts [ tests/outreach-mocks.test.ts ]
+ FAIL  |@dev/dj| tests/outreach-store.test.ts [ tests/outreach-store.test.ts ]
+ FAIL  |@dev/dj| tests/rider-mock-db.test.ts [ tests/rider-mock-db.test.ts ]
+ FAIL  |@dev/dj| tests/rider-mocks.test.ts [ tests/rider-mocks.test.ts ]
+ FAIL  |@dev/dj| tests/social-demo.test.ts [ tests/social-demo.test.ts ]
+ FAIL  |@dev/dj| app/composables/useTracklist.test.ts [ app/composables/useTracklist.test.ts ]
+ FAIL  |@dev/dj| app/composables/__tests__/useEpkAutosave.test.ts [ app/composables/__tests__/useEpkAutosave.test.ts ]
+ FAIL  |@dev/dj| app/composables/__tests__/useFeatures.test.ts [ app/composables/__tests__/useFeatures.test.ts ]
+ FAIL  |@dev/dj| app/composables/__tests__/useReceiptQueue.test.ts [ app/composables/__tests__/useReceiptQueue.test.ts ]
+ FAIL  |@dev/dj| app/composables/__tests__/useRiderAutosave.test.ts [ app/composables/__tests__/useRiderAutosave.test.ts ]
+ FAIL  |@dev/dj| app/composables/__tests__/useRiderAutosaveUnsaved.test.ts [ app/composables/__tests__/useRiderAutosaveUnsaved.test.ts ]
+ FAIL  |@dev/dj| app/composables/__tests__/useSocialPostForm.test.ts [ app/composables/__tests__/useSocialPostForm.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/billingProfile.test.ts [ app/stores/__tests__/billingProfile.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/contact.test.ts [ app/stores/__tests__/contact.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/dashboard.contract.test.ts [ app/stores/__tests__/dashboard.contract.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/earnings.attachments.test.ts [ app/stores/__tests__/earnings.attachments.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/earnings.test.ts [ app/stores/__tests__/earnings.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/epk.test.ts [ app/stores/__tests__/epk.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/gig.concurrency.test.ts [ app/stores/__tests__/gig.concurrency.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/gig.relationships.test.ts [ app/stores/__tests__/gig.relationships.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/gig.test.ts [ app/stores/__tests__/gig.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/invoice.documents.test.ts [ app/stores/__tests__/invoice.documents.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/invoice.einvoice.test.ts [ app/stores/__tests__/invoice.einvoice.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/invoice.email.test.ts [ app/stores/__tests__/invoice.email.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/invoice.lines.test.ts [ app/stores/__tests__/invoice.lines.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/invoice.test.ts [ app/stores/__tests__/invoice.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/ra.test.ts [ app/stores/__tests__/ra.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/rider.test.ts [ app/stores/__tests__/rider.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/settings.test.ts [ app/stores/__tests__/settings.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/social.test.ts [ app/stores/__tests__/social.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/tracklist.test.ts [ app/stores/__tests__/tracklist.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/ui.test.ts [ app/stores/__tests__/ui.test.ts ]
+ FAIL  |@dev/dj| app/stores/__tests__/venue.test.ts [ app/stores/__tests__/venue.test.ts ]
+ FAIL  |@dev/dj| app/pages/__tests__/dashboard.test.ts [ app/pages/__tests__/dashboard.test.ts ]
+ FAIL  |@dev/dj| app/pages/__tests__/finance.mutations.test.ts [ app/pages/__tests__/finance.mutations.test.ts ]
+ FAIL  |@dev/dj| app/pages/__tests__/finance.test.ts [ app/pages/__tests__/finance.test.ts ]
+ FAIL  |@dev/dj| app/pages/__tests__/rider.test.ts [ app/pages/__tests__/rider.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/apiAssetUrl.test.ts [ app/utils/__tests__/apiAssetUrl.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/design-tokens.test.ts [ app/utils/__tests__/design-tokens.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/dialogFocus.test.ts [ app/utils/__tests__/dialogFocus.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/features.test.ts [ app/utils/__tests__/features.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/finance-mock-entries.test.ts [ app/utils/__tests__/finance-mock-entries.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/invoiceDisplay.test.ts [ app/utils/__tests__/invoiceDisplay.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/invoiceFields.test.ts [ app/utils/__tests__/invoiceFields.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/invoiceLines.test.ts [ app/utils/__tests__/invoiceLines.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/money.test.ts [ app/utils/__tests__/money.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/outreach.test.ts [ app/utils/__tests__/outreach.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/paymentForm.test.ts [ app/utils/__tests__/paymentForm.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/quickPreview.test.ts [ app/utils/__tests__/quickPreview.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/riderErrors.test.ts [ app/utils/__tests__/riderErrors.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/saveQueue.test.ts [ app/utils/__tests__/saveQueue.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/socialTime.test.ts [ app/utils/__tests__/socialTime.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/tracklistText.test.ts [ app/utils/__tests__/tracklistText.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/vatTreatment.test.ts [ app/utils/__tests__/vatTreatment.test.ts ]
+ FAIL  |@dev/dj| app/utils/__tests__/verification-targets.test.ts [ app/utils/__tests__/verification-targets.test.ts ]
+ FAIL  |@dev/dj| app/components/epk/__tests__/EpkBioSection.test.ts [ app/components/epk/__tests__/EpkBioSection.test.ts ]
+ FAIL  |@dev/dj| app/components/epk/__tests__/EpkExportPanel.test.ts [ app/components/epk/__tests__/EpkExportPanel.test.ts ]
+ FAIL  |@dev/dj| app/components/epk/__tests__/EpkGigHighlightsSection.test.ts [ app/components/epk/__tests__/EpkGigHighlightsSection.test.ts ]
+ FAIL  |@dev/dj| app/components/epk/__tests__/EpkPhotosSection.test.ts [ app/components/epk/__tests__/EpkPhotosSection.test.ts ]
+ FAIL  |@dev/dj| app/components/epk/__tests__/EpkRaImportPanel.apply.test.ts [ app/components/epk/__tests__/EpkRaImportPanel.apply.test.ts ]
+ FAIL  |@dev/dj| app/components/epk/__tests__/EpkRaImportPanel.test.ts [ app/components/epk/__tests__/EpkRaImportPanel.test.ts ]
+ FAIL  |@dev/dj| app/components/epk/__tests__/EpkSocialLinksSection.test.ts [ app/components/epk/__tests__/EpkSocialLinksSection.test.ts ]
+ FAIL  |@dev/dj| app/components/epk/__tests__/EpkTechRiderSection.test.ts [ app/components/epk/__tests__/EpkTechRiderSection.test.ts ]
+ FAIL  |@dev/dj| app/components/gig/__tests__/ContactAutocomplete.test.ts [ app/components/gig/__tests__/ContactAutocomplete.test.ts ]
+ FAIL  |@dev/dj| app/components/gig/__tests__/GigFormDialog.concurrency.test.ts [ app/components/gig/__tests__/GigFormDialog.concurrency.test.ts ]
+ FAIL  |@dev/dj| app/components/gig/__tests__/GigFormDialog.test.ts [ app/components/gig/__tests__/GigFormDialog.test.ts ]
+ FAIL  |@dev/dj| app/components/gig/__tests__/RaEventImport.test.ts [ app/components/gig/__tests__/RaEventImport.test.ts ]
+ FAIL  |@dev/dj| app/components/gig/__tests__/VenueAutocomplete.test.ts [ app/components/gig/__tests__/VenueAutocomplete.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderAttachmentCard.test.ts [ app/components/rider/__tests__/RiderAttachmentCard.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderAttachmentDetach.test.ts [ app/components/rider/__tests__/RiderAttachmentDetach.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderAttachmentExport.test.ts [ app/components/rider/__tests__/RiderAttachmentExport.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderConflict.test.ts [ app/components/rider/__tests__/RiderConflict.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderDialogA11y.test.ts [ app/components/rider/__tests__/RiderDialogA11y.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderDialogsAndCard.test.ts [ app/components/rider/__tests__/RiderDialogsAndCard.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderSectionField.test.ts [ app/components/rider/__tests__/RiderSectionField.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderTemplateCreateForm.test.ts [ app/components/rider/__tests__/RiderTemplateCreateForm.test.ts ]
+ FAIL  |@dev/dj| app/components/rider/__tests__/RiderTemplateDelete.test.ts [ app/components/rider/__tests__/RiderTemplateDelete.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/BillingProfileForm.test.ts [ app/components/finance/__tests__/BillingProfileForm.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/EarningsWorkspace.test.ts [ app/components/finance/__tests__/EarningsWorkspace.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/EntryForm.receipts.test.ts [ app/components/finance/__tests__/EntryForm.receipts.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/EntryForm.test.ts [ app/components/finance/__tests__/EntryForm.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/EntryList.test.ts [ app/components/finance/__tests__/EntryList.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/EntryReconciliationDialog.test.ts [ app/components/finance/__tests__/EntryReconciliationDialog.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceArchivePanel.test.ts [ app/components/finance/__tests__/InvoiceArchivePanel.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceCreateForm.transport.test.ts [ app/components/finance/__tests__/InvoiceCreateForm.transport.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceDraftEditor.lines.test.ts [ app/components/finance/__tests__/InvoiceDraftEditor.lines.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceEInvoicePanel.test.ts [ app/components/finance/__tests__/InvoiceEInvoicePanel.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceEmailPanel.test.ts [ app/components/finance/__tests__/InvoiceEmailPanel.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceLinesEditor.test.ts [ app/components/finance/__tests__/InvoiceLinesEditor.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceList.test.ts [ app/components/finance/__tests__/InvoiceList.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceReadOnlyViews.test.ts [ app/components/finance/__tests__/InvoiceReadOnlyViews.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/InvoiceTaxFields.notes.test.ts [ app/components/finance/__tests__/InvoiceTaxFields.notes.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/PaymentForm.test.ts [ app/components/finance/__tests__/PaymentForm.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/finance-aggregates.test.ts [ app/components/finance/__tests__/finance-aggregates.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/finance-edit-snapshots.test.ts [ app/components/finance/__tests__/finance-edit-snapshots.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/finance-ordering.test.ts [ app/components/finance/__tests__/finance-ordering.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/finance-quality-fixes.test.ts [ app/components/finance/__tests__/finance-quality-fixes.test.ts ]
+ FAIL  |@dev/dj| app/components/finance/__tests__/finance-review-fixes.test.ts [ app/components/finance/__tests__/finance-review-fixes.test.ts ]
+ FAIL  |@dev/dj| app/components/social/__tests__/SocialCalendarView.test.ts [ app/components/social/__tests__/SocialCalendarView.test.ts ]
+ FAIL  |@dev/dj| app/components/social/__tests__/SocialComposeRecovery.test.ts [ app/components/social/__tests__/SocialComposeRecovery.test.ts ]
+ FAIL  |@dev/dj| app/components/social/__tests__/SocialPostCard.test.ts [ app/components/social/__tests__/SocialPostCard.test.ts ]
+ FAIL  |@dev/dj| app/components/social/__tests__/SocialPostCompose.noDoubleError.test.ts [ app/components/social/__tests__/SocialPostCompose.noDoubleError.test.ts ]
+ FAIL  |@dev/dj| app/components/social/__tests__/SocialPostCompose.test.ts [ app/components/social/__tests__/SocialPostCompose.test.ts ]
+ FAIL  |@dev/dj| app/components/social/__tests__/SocialPostComposeRecovery.test.ts [ app/components/social/__tests__/SocialPostComposeRecovery.test.ts ]
+ FAIL  |@dev/dj| app/components/social/__tests__/SocialQueueGrid.test.ts [ app/components/social/__tests__/SocialQueueGrid.test.ts ]
+ FAIL  |@dev/dj| app/components/social/__tests__/SocialTokenWarningBanner.test.ts [ app/components/social/__tests__/SocialTokenWarningBanner.test.ts ]
+ FAIL  |@dev/dj| app/components/trackcard/__tests__/TrackCardTrackList.test.ts [ app/components/trackcard/__tests__/TrackCardTrackList.test.ts ]
+ FAIL  |@dev/dj| app/components/trackcard/__tests__/TrackCardTrackRow.test.ts [ app/components/trackcard/__tests__/TrackCardTrackRow.test.ts ]
+ FAIL  |@dev/dj| app/components/tracklist/__tests__/TracklistEditor.test.ts [ app/components/tracklist/__tests__/TracklistEditor.test.ts ]
+ FAIL  |@dev/dj| app/components/tracklist/__tests__/TracklistExporter.text.test.ts [ app/components/tracklist/__tests__/TracklistExporter.text.test.ts ]
+ FAIL  |@dev/dj| app/components/tracklist/__tests__/TracklistMeta.test.ts [ app/components/tracklist/__tests__/TracklistMeta.test.ts ]
+ FAIL  |@dev/dj| app/components/tracklist/__tests__/TracklistUploadZone.recovery.test.ts [ app/components/tracklist/__tests__/TracklistUploadZone.recovery.test.ts ]
+TSConfckParseError: failed to resolve "extends":"./.nuxt/tsconfig.json" in /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+  Plugin: vite:esbuild
+  File: /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tests/demo-backend.test.ts
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5809:8
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ getParsedDeep ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5696:32
+ ❯ parse$13 ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5674:84
+ ❯ loadTsconfigJsonForFile ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6302:37
+ ❯ transformWithEsbuild ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6086:55
+ ❯ TransformPluginContext.transform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6172:20
+ ❯ EnvironmentPluginContainer.transform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:28877:14
+ ❯ loadAndTransform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:22746:26
+
+Caused by: Error: Cannot find module './.nuxt/tsconfig.json'
+Require stack:
+- /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5800:16
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ getParsedDeep ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5696:32
+ ❯ parse$13 ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5674:84
+ ❯ loadTsconfigJsonForFile ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6302:37
+ ❯ transformWithEsbuild ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6086:55
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/122]⎯
+
+ FAIL  |@dev/dj| tests/finance-attachments.test.ts [ tests/finance-attachments.test.ts ]
+TSConfckParseError: failed to resolve "extends":"./.nuxt/tsconfig.json" in /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+  Plugin: vite:esbuild
+  File: /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tests/finance-attachments.test.ts
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5809:8
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ parse$13 ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5677:23
+ ❯ loadTsconfigJsonForFile ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6302:37
+ ❯ transformWithEsbuild ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6086:55
+ ❯ TransformPluginContext.transform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6172:20
+ ❯ EnvironmentPluginContainer.transform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:28877:14
+ ❯ loadAndTransform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:22746:26
+
+Caused by: Error: Cannot find module './.nuxt/tsconfig.json'
+Require stack:
+- /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/apps/dj/tsconfig.json
+ ❯ resolveExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5800:16
+ ❯ parseExtends ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5775:71
+ ❯ parse$13 ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:5677:23
+ ❯ loadTsconfigJsonForFile ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6302:37
+ ❯ transformWithEsbuild ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6086:55
+ ❯ TransformPluginContext.transform ../../node_modules/.pnpm/vite@7.3.6_@types+node@20.19.9_jiti@2.7.0_lightningcss@1.32.0_terser@5.51.2_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:6172:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/122]⎯
+
+
+ Test Files  122 failed (122)
+      Tests  no tests
+   Start at  23:38:20
+   Duration  6.97s (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 36.48s)
+
+Warning: command "vitest" exited with non-zero status code
+
+
+ NX   Running target test for 3 projects and 1 task they depend on failed
+
+Failed tasks:
+
+- @dev/dj:test
+
+
+ NX   Nx detected 4 flaky tasks
+
+  @dev/dj:test
+  @dev/promoter:test
+  @dev/ui:test
+  @dev/ui:build
+
+Flaky tasks can disrupt your CI pipeline. Automatically retry them with Nx Cloud. Learn more at https://nx.dev/ci/features/flaky-tasks
+

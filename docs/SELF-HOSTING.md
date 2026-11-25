@@ -2,7 +2,7 @@
 
 This is the canonical setup guide for frontend mocks, a local development backend, and an image-only production deployment. Run commands from the repository root. Keep the scripts, Compose files, and image version from a compatible release together; downloading only a Compose file is not enough.
 
-> **Release status:** `docker-compose.prod.yml` defaults `IMAGE_TAG` to `v1.2.0`, which exists only once the release workflow has published it (see [container images](./container-images.md)). Until then, pass the newest `sha-<commit>` tag. Do not fall back to `1.0.1`: it predates invoicing, e-invoices and rider templates (see the [v1.2.0 release notes](./release-notes/v1.2.0.md)). `bash scripts/setup.sh prod` does not set `IMAGE_TAG` itself.
+> **Release status:** `docker-compose.prod.yml` defaults `IMAGE_TAG` to `v1.3.0`, published for `linux/amd64` and `linux/arm64` when the tag was pushed (see [container images](./container-images.md) and the [v1.3.0 release notes](./release-notes/v1.3.0.md)). Do not fall back to `1.0.1`: it predates invoicing, e-invoices and rider templates. `bash scripts/setup.sh prod` does not set `IMAGE_TAG` itself.
 
 ## One-line install
 
@@ -160,9 +160,9 @@ Use `docker-compose.prod.yml` **alone**, not merged with the development files. 
 |---|---|---|
 | `db` | `postgres:16-alpine` | PostgreSQL; no published host port. |
 | `storage` | `dxflrs/garage:v2.2.0` | Garage S3; loopback host port 39000 by default. |
-| `app` | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.2.0}` | One supervised Go + Nuxt/Node + Playwright app container. |
+| `app` | `ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:-v1.3.0}` | One supervised Go + Nuxt/Node + Playwright app container. |
 
-The default `v1.2.0` is only pullable after the release image is published; if it is not yet, export `IMAGE_TAG` to the newest `sha-<commit>` from [container images](./container-images.md) before setup.
+To run a build newer than the default release, export `IMAGE_TAG` to its `sha-<commit>` tag from [container images](./container-images.md) before setup.
 
 ```bash
 # Set IMAGE_TAG to the published version you intend to run, then:

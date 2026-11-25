@@ -55,7 +55,7 @@ const healthcheckTimeout = 5 * time.Second
 //
 // for release builds. The defaults below apply when no ldflags are passed.
 var productName = "KlubHub-DJ"
-var version = "1.2.0"
+var version = "1.3.0"
 
 func main() {
 	// Plan B.2 — `-healthcheck` is the JSON-array-friendly form used by
