@@ -26,6 +26,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/event"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
+	"github.com/klubhub/dj/api/internal/promoter/marketing"
 	"github.com/klubhub/dj/api/internal/promoter/report"
 	"github.com/klubhub/dj/api/internal/promoter/retention"
 	"github.com/klubhub/dj/api/internal/promoter/sealed"
@@ -46,6 +47,7 @@ type Deps struct {
 	Events        *event.Handler
 	Guests        *guest.Handler
 	Audience      *audience.Handler
+	Marketing     *marketing.Handler
 	Door          *door.Handler
 	Reports       *report.Handler
 	Retention     *retention.Handler
@@ -102,6 +104,9 @@ func New(d Deps) (*chi.Mux, *authz.Registry) {
 	}
 	if d.Audience != nil {
 		d.Audience.Mount(r, d.Authz, reg, onDeny)
+	}
+	if d.Marketing != nil {
+		d.Marketing.Mount(r, d.Authz, reg, onDeny)
 	}
 	if d.Door != nil {
 		d.Door.Mount(r, d.Authz, reg, onDeny)
