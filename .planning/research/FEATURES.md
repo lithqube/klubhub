@@ -221,7 +221,7 @@ The tracklist image generator is the single must-ship feature that establishes t
 ### Add After Validation (v1.x)
 
 - [ ] TikTok posting — after Instagram integration is stable and proven
-- [ ] Text-only tracklist export (1001tracklists format) — requested frequently; low complexity
+- [ ] Text-only tracklist export — requested frequently; low complexity
 - [ ] Additional output formats (Twitter/X banner, A4 poster) — after Story/Square patterns are established
 - [ ] CSV/JSON data export for all modules — power-user feature; add when users ask for data portability
 - [ ] Calendar sync (iCal export, Google Calendar) — gig tracker enhancement; low complexity

@@ -78,7 +78,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 01-03-PLAN.md — Cover art fetcher: Spotify → Discogs → MusicBrainz chain, MinIO caching, goroutine worker pool
 - [x] 01-04-PLAN.md — Screenshot pipeline: Nitro Playwright plugin + screenshot endpoint + Go generate-image + Dockerfile update
 - [x] 01-05-PLAN.md — End-to-end smoke + human checkpoint
-- [ ] 01-06-PLAN.md — Text tracklist export: three format modes (1001Tracklists, Mixcloud/SoundCloud, numbered) — backlog
+- [ ] 01-06-PLAN.md — Text tracklist export: two format modes (Mixcloud/SoundCloud, numbered) — backlog
 
 ### Phase 1.5: Design System Foundation ✅ (INSERTED)
 

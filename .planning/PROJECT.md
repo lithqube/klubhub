@@ -93,7 +93,7 @@ A DJ can upload their DJ history file and get a professional, social-media-ready
 | Mobile app | Web-first; mobile later |
 | Real-time chat | Not core to DJ career management |
 | Contract management / e-signatures | v3.0+ roadmap item (booking confirmation PDF without e-signature ships in Phase 4 as GIG-12) |
-| Text-only tracklist export (1001tracklists format) | v1.x enhancement |
+| Text-only tracklist export | v1.x enhancement |
 
 ## Context
 

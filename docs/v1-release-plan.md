@@ -22,7 +22,7 @@ KlubHub DJ v1.0 is the complete, self-hosted, open-source DJ career toolkit. It 
 | # | Module | Phase | Description |
 |---|--------|-------|-------------|
 | 1 | Infrastructure | 0 | Four-service Docker Compose stack, health endpoint, migrations, backup/restore |
-| 2 | Tracklist Image Generator | 1 | Upload DJ history → professional tracklist image in <60s + text export (1001Tracklists / Mixcloud / SoundCloud) |
+| 2 | Tracklist Image Generator | 1 | Upload DJ history → professional tracklist image in <60s + text export (Mixcloud / SoundCloud) |
 | 3 | Design System | 1.5 | Tailwind CSS + shadcn-vue + Cyberpunk HUD design language |
 | 4 | Social Media Scheduler | 2 | Instagram OAuth, timezone-aware scheduling, retry with backoff (Instagram is OSS; multi-platform is KlubHub Cloud PRO) |
 | 5 | EPK / Press Kit Builder | 3 | Artist bio, press photos, tech rider, PDF export (PDF is OSS; hosted EPK URL is KlubHub Cloud PRO) |

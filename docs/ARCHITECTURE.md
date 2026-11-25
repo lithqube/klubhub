@@ -148,11 +148,7 @@ api/
 │   │   ├── handler.go           # HTTP handlers
 │   │   ├── service.go           # Business logic + CoverArtProvider calls
 │   │   ├── repository.go        # PostgreSQL queries
-│   │   ├── parser/
-│   │   │   ├── parser.go        # FileParser interface
-│   │   │   ├── rekordbox.go     # Rekordbox implementation
-│   │   │   ├── serato.go        # Serato implementation
-│   │   │   └── traktor.go       # Traktor implementation
+│   │   ├── parser.go            # Rekordbox history export (tab-separated .txt)
 │   │   ├── generator/
 │   │   │   ├── generator.go     # Image generation (gg + imaging)
 │   │   │   └── templates/       # Template definitions
@@ -256,7 +252,6 @@ Modules that need gig data depend on `GigReader`, not on `gig.Service` concretel
 
 | Interface | Package | Implementations |
 |---|---|---|
-| `FileParser` | `tracklist/parser` | `RekordboxParser`, `SeratoParser`, `TraktorParser` |
 | `CoverArtProvider` | `tracklist` | `SpotifyProvider`, `DiscogsProvider`, `MusicBrainzProvider` |
 | `SocialMediaPublisher` | `social/publisher` | `InstagramPublisher` (+ future: `TikTokPublisher`) |
 | `PDFGenerator` | `epk/pdf` | `GofpdfGenerator` (+ future: `ChromedpGenerator`) |
