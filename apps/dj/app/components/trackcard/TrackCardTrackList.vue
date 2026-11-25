@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { Track } from '../../types/tracklist';
 import type { PresetColors } from '@/utils/design-tokens';
+import { selectCardTracks } from '@/utils/tracklistText';
 import TrackCardTrackRow, { type RowDensity } from './TrackCardTrackRow.vue';
 
 const props = defineProps({
@@ -35,22 +36,9 @@ const props = defineProps({
   },
 });
 
-const visibleTracks = computed(() => {
-  let tracksToShow = [...props.tracks];
-
-  if (props.trackRangeStart !== null && props.trackRangeEnd !== null) {
-    tracksToShow = tracksToShow.slice(
-      props.trackRangeStart,
-      props.trackRangeEnd + 1,
-    );
-  }
-
-  if (props.maxTracks > 0) {
-    tracksToShow = tracksToShow.slice(0, props.maxTracks);
-  }
-
-  return tracksToShow;
-});
+const visibleTracks = computed(() =>
+  selectCardTracks(props.tracks, props.trackRangeStart, props.trackRangeEnd, props.maxTracks),
+);
 
 // The list has about 1500px between header and footer (measured). A comfortable
 // row is 83px, compact 66, dense 50. Each tier stops at ~92% of that space, so a
