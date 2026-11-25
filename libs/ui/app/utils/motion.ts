@@ -52,10 +52,13 @@ export function revealSections(root: ParentNode = document) {
   play(els, { opacity: [0.2, 1], y: [8, 0], duration: 220, delay: stagger(30), ease: 'outQuad' })
 }
 
-/** A result card arriving. Starts readable, so it never delays a decision. */
-export function popIn(el: HTMLElement | null) {
+/**
+ * A result card arriving. Starts readable, so it never delays a decision, and
+ * only fades: scaling would shrink touch targets while someone reaches for them.
+ */
+export function fadeIn(el: HTMLElement | null) {
   if (!el || !canAnimate()) return
-  play([el], { opacity: [0.6, 1], scale: [0.98, 1], duration: 160, ease: 'outQuad' })
+  play([el], { opacity: [0.6, 1], duration: 160, ease: 'outQuad' })
 }
 
 /** "No": a short sideways shake for a refused or not-yet-confirmed action. */

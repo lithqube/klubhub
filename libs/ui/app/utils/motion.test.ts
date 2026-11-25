@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { popIn, revealSections, shake } from './motion'
+import { animate } from 'animejs'
+import { fadeIn, revealSections, shake } from './motion'
 
 // A frame loop that never advances: the start state is applied and nothing else.
 const cancel = vi.fn()
@@ -26,9 +27,16 @@ describe('motion', () => {
   it('leaves everything untouched under reduced motion', () => {
     const els = setup(true)
     revealSections()
-    popIn(els[0]!)
+    fadeIn(els[0]!)
     shake(els[1]!)
     for (const el of els) expect(el.getAttribute('style')).toBeNull()
+  })
+
+  it('never resizes the card it brings in, so touch targets keep their size', () => {
+    const [el] = setup(false)
+    fadeIn(el!)
+    const params = vi.mocked(animate).mock.lastCall![1] as Record<string, unknown>
+    expect(Object.keys(params)).not.toContain('scale')
   })
 
   it('never leaves content faded when frames stall, and reveals a section once', () => {

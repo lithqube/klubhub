@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowLeft, Ban, Check, EyeOff, Minus, Plus, ShieldAlert,
 import { storeToRefs } from 'pinia'
 import { useDoorStore } from '~/stores/door'
 import type { ManagerPinVerifier } from '~/types/door'
-import { popIn, shake } from '#kui/utils/motion'
+import { fadeIn, shake } from '#kui/utils/motion'
 import type { DoorBanEntry } from '~/utils/doorBan'
 import type { SubjectView } from '~/utils/doorState'
 import { verifyManagerPin } from '~/utils/doorPin'
@@ -120,9 +120,9 @@ async function reveal() {
 const until = (iso: string) => shortDate(iso, props.timezone)
 
 // A new card takes focus on its name, so screen readers start there. It
-// arrives with a short pop, or a shake when it cannot be admitted.
+// arrives with a short fade, or a shake when it cannot be admitted.
 const card = ref<HTMLElement | null>(null)
-const arrive = () => (v.value.blocked ? shake : popIn)(card.value)
+const arrive = () => (v.value.blocked ? shake : fadeIn)(card.value)
 watch(() => v.value.key, () => nextTick(() => {
   heading.value?.focus({ preventScroll: false })
   arrive()

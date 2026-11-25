@@ -46,7 +46,7 @@ Three families, three fixed roles — never interchangeable:
 
 - Standard transition: `.15s`–`.2s`, default easing.
 - Live-state signals use keyframe motion: `pulse-dot` (2s) for "live" indicators, `scan` (2s linear) sweeping progress fills.
-- JS motion (extension added 2026-11-24, `animejs`, helpers in `libs/ui/app/utils/motion.ts`): new `.page-body` sections rise 8px and fade in over 220ms, 30ms apart; the door card pops in (160ms) and shakes (260ms) when a guest cannot be admitted or still needs a second tap. All of it is skipped under reduced motion, and inline styles are removed afterwards. Add motion only to show a change of state or feedback.
+- JS motion (extension added 2026-11-24, `animejs`, helpers in `libs/ui/app/utils/motion.ts`): new `.page-body` sections rise 8px and fade in over 220ms, 30ms apart; the door card fades in (160ms, never scaled: its 56px targets must keep their size) and shakes (260ms) when a guest cannot be admitted or still needs a second tap. All of it is skipped under reduced motion, and inline styles are removed afterwards. Add motion only to show a change of state or feedback.
 
 ## Components
 
