@@ -99,7 +99,7 @@ test('lists the shipped KlubHub DJ modules and the editions', async () => {
   const html = await read('index.html');
   for (const feature of [
     'Tracklist artwork', 'Social scheduling', 'Press kits',
-    'Gig tracking', 'Booking outreach', 'Invoices and agreements', 'E-invoices',
+    'Gig tracking', 'Rider templates', 'Booking outreach', 'Invoices and agreements', 'E-invoices',
     'Expenses and receipts',
   ]) {
     assert.ok(html.includes(feature), feature);
@@ -111,6 +111,11 @@ test('lists the shipped KlubHub DJ modules and the editions', async () => {
   assert.doesNotMatch(html, /COMMERCIAL LICENSE|DJ PRO/);
   // The business model is stated: own data and legal duties are free.
   assert.match(html, /your own data, and anything the law asks of you[^.]*is free/);
+  // Shipped features are not listed as still to come.
+  assert.doesNotMatch(html, /Rider templates, release planning/);
+  // Only tracklist sources the parser really reads are claimed.
+  assert.doesNotMatch(html, /1001/);
+  assert.match(html, /Rekordbox history export/);
   // Resident Advisor integration is intentionally not marketed for now.
   assert.doesNotMatch(html, /Resident Advisor|\bRA\b|ra\.co/);
   // The e-invoice claim is scoped: the EU standard is named, and the US is
