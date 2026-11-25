@@ -90,6 +90,21 @@ describe('TracklistUploadZone — failure does not lie about progress', () => {
     expect(useUiStore().uploadLoading).toBe(false)
   })
 
+  it('offers and accepts only the Rekordbox .txt export', async () => {
+    const send = vi.fn()
+    vi.stubGlobal('$fetch', send)
+    const wrapper = mount(TracklistUploadZone)
+    expect(wrapper.get('input[type="file"]').attributes('accept')).toBe('.txt')
+    expect(wrapper.text()).not.toMatch(/serato|traktor/i)
+
+    const input = wrapper.get('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [makeFile('collection.xml')] })
+    await input.trigger('change')
+    await flushPromises()
+    expect(send).not.toHaveBeenCalled()
+    expect(useUiStore().uploadError).toContain('.txt')
+  })
+
   it('advances step to edit only on successful parse', async () => {
     vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({
       tracklist: { id: 'tl-1' },

@@ -49,8 +49,9 @@ const onFileSelect = (e: Event) => {
 
 const handleFile = async (file: File) => {
   const lower = file.name.toLowerCase();
-  if (!lower.endsWith('.txt') && !lower.endsWith('.xml')) {
-    uiStore.uploadError = 'Only .txt or .xml files are allowed';
+  // The parser reads Rekordbox's tab-separated text export and nothing else.
+  if (!lower.endsWith('.txt')) {
+    uiStore.uploadError = 'Upload the .txt history file that Rekordbox exports.';
     return;
   }
 
@@ -111,7 +112,7 @@ const loadSampleFile = () => {
       :class="isOverDropZone ? 'luminous-threshold' : ''"
       role="button"
       tabindex="0"
-      aria-label="Upload a DJ history file, TXT or XML"
+      aria-label="Upload a Rekordbox history file (TXT)"
       @click="openFilePicker"
       @keydown.enter.prevent="openFilePicker"
       @keydown.space.prevent="openFilePicker"
@@ -125,7 +126,7 @@ const loadSampleFile = () => {
         DROP YOUR DJ HISTORY FILE
       </div>
       <div style="font-family:var(--font-terminal);font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-tertiary);">
-        REKORDBOX · SERATO · TRAKTOR
+        REKORDBOX HISTORY EXPORT · .TXT
       </div>
 
       <!-- File info when selected -->
@@ -141,7 +142,7 @@ const loadSampleFile = () => {
       <input
         ref="fileInputRef"
         type="file"
-        accept=".txt,.xml"
+        accept=".txt"
         class="hidden"
         @change="onFileSelect"
       >
