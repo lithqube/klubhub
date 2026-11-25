@@ -1,0 +1,25 @@
+
+> nx run @dev/promoter:typecheck
+
+> NODE_ENV=development nuxt prepare >/dev/null && vue-tsc --noEmit -p .nuxt/tsconfig.json
+
+[Vue] Load plugin failed: vue-router/volar/sfc-route-blocks
+[Vue] Failed to create plugin TypeError: plugin is not a function
+    at /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/@vue+language-core@2.2.12_typescript@5.9.3/node_modules/[4m@vue/language-core[24m/lib/plugins.js:53:30
+    at Array.flatMap (<anonymous>)
+    at createPlugins (/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/@vue+language-core@2.2.12_typescript@5.9.3/node_modules/[4m@vue/language-core[24m/lib/plugins.js:51:10)
+    at Object.createVueLanguagePlugin (/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/@vue+language-core@2.2.12_typescript@5.9.3/node_modules/[4m@vue/language-core[24m/lib/languagePlugin.js:52:49)
+    at /Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/vue-tsc@2.2.12_typescript@5.9.3/node_modules/[4mvue-tsc[24m/index.js:18:43
+    at Object.apply (/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/@volar+typescript@2.4.15_typescript@5.9.3/node_modules/[4m@volar/typescript[24m/lib/node/proxyCreateProgram.js:50:33)
+    at performCompilation (/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/typescript@5.9.3/node_modules/[4mtypescript[24m/lib/tsc.js:132243:19)
+    at executeCommandLineWorker (/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/typescript@5.9.3/node_modules/[4mtypescript[24m/lib/tsc.js:132050:7)
+    at executeCommandLine (/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/typescript@5.9.3/node_modules/[4mtypescript[24m/lib/tsc.js:132132:12)
+    at Object.<anonymous> (/Users/admin/dev/klubhub/.claude/worktrees/issue-53-qa/node_modules/[4m.pnpm[24m/typescript@5.9.3/node_modules/[4mtypescript[24m/lib/tsc.js:133823:1)
+
+
+
+ NX   Successfully ran target typecheck for project @dev/promoter
+
+
+Your AI agent configuration is outdated. Run "nx configure-ai-agents" to update.
+
