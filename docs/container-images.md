@@ -20,7 +20,9 @@ The production Compose file is standalone and image-only. Do not merge it with t
 
 ## Architecture
 
-The publishing workflow targets **`linux/arm64` only**, using the native `ubuntu-24.04-arm` runner. Native amd64 support is not part of this release configuration. A matching local build does not prove that the registry manifest exists or that an amd64 host can run it without emulation.
+The publishing workflow builds **`linux/amd64` and `linux/arm64`**, each natively (`ubuntu-24.04` and `ubuntu-24.04-arm`), scans each with Trivy, pushes each by digest, then merges them under one tag and signs it. The merge step fails unless the tag lists exactly `amd64,arm64`.
+
+Tags published before this change (`v1.2.0` and earlier) are `linux/arm64` only. `docker-compose.prod.yml` pins `platform: ${APP_PLATFORM:-linux/arm64}`; on an x86 host set `APP_PLATFORM=linux/amd64` together with an `IMAGE_TAG` that lists both platforms. A matching local build does not prove that the registry manifest exists.
 
 ## Tags and publishing
 
@@ -55,7 +57,7 @@ docker pull "ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:?Set IMAGE_TAG to the p
 docker buildx imagetools inspect "ghcr.io/lithqube/klubhub-dj-api:${IMAGE_TAG:?Set IMAGE_TAG to the published release}"
 ```
 
-Inspect the runnable manifest for `linux/arm64`. Build attestations can appear as additional non-runnable manifests; do not mistake them for extra supported CPU architectures. Record the digest and test the deployed UI, API, storage access, and image generation. Manifest inspection alone does not validate application startup.
+Inspect the runnable manifests for `linux/amd64` and `linux/arm64` (older tags: `linux/arm64` only). Build attestations can appear as additional non-runnable manifests; do not mistake them for extra supported CPU architectures. Record the digest and test the deployed UI, API, storage access, and image generation. Manifest inspection alone does not validate application startup.
 
 ## Official references
 

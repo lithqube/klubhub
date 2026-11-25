@@ -59,10 +59,10 @@ You get:
 | 8 | **Unified Dashboard** | 🔜 Planned | Cross-module overview, career analytics |
 | 9 | **Production Hardening** | ✅ Complete | arm64 images on GHCR, hardened compose, OAuth state, body caps, secrets via Docker `secrets:` block, restore drill |
 
-> **Note — architecture:** the KlubHub DJ image is `linux/arm64` only, by
-> design (Apple Silicon, Raspberry Pi 5, Graviton/Ampere) — not a
-> temporary gap; the installer offers amd64 emulation as a fallback. See
-> [SELF-HOSTING.md](./docs/SELF-HOSTING.md#system-requirements). KlubHub
+> **Note — architecture:** KlubHub DJ tags up to `v1.2.0` are `linux/arm64`
+> only; later tags are built natively for `linux/amd64` and `linux/arm64`
+> (see [container-images.md](./docs/container-images.md#architecture)). The
+> installer still runs the DJ image through arm64 emulation on x86. KlubHub
 > Promoter's image is built natively for both `linux/amd64` and
 > `linux/arm64`.
 

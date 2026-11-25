@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
-# Single linux/arm64 application image: ghcr.io/lithqube/klubhub-dj-api.
-FROM --platform=linux/arm64 node:22-bookworm-slim AS frontend-builder
+# Application image ghcr.io/lithqube/klubhub-dj-api (linux/amd64 + linux/arm64).
+# Each platform builds natively on its own CI runner, so stages use the
+# target platform.
+FROM node:22-bookworm-slim AS frontend-builder
 WORKDIR /repo
 RUN npm install -g pnpm@12.4.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -24,18 +26,20 @@ RUN node apps/dj/scripts/build-prod.mjs
 # not an independently resolved npx playwright version.
 RUN cp -aL apps/dj/node_modules/playwright-core /opt/playwright-core
 
-FROM --platform=linux/arm64 golang:1.26-alpine AS api-builder
+FROM golang:1.26-alpine AS api-builder
+ARG TARGETOS=linux
+ARG TARGETARCH
 WORKDIR /repo/api
 RUN apk add --no-cache git ca-certificates
 COPY api/go.mod api/go.sum ./
 RUN go mod download
 COPY api/ ./
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags='-s -w -X main.productName=KlubHub-DJ -X main.version=1.2.0' -o /out/api ./cmd/api
 
 # Retain Node, Chromium, its Debian shared libraries and fonts at runtime.
 # Browser installation is mandatory: never silently ship disabled rendering.
-FROM --platform=linux/arm64 node:22-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
     SERVE_FRONTEND=true \

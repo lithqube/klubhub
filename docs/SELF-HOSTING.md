@@ -57,12 +57,12 @@ Every option can also be given as `KLUBHUB_<OPTION>` in the environment. Setting
 ~/klubhub/klubhub backup-info       # what to back up
 ```
 
-KlubHub DJ images are arm64-only (Apple Silicon, Raspberry Pi 5, Graviton/Ampere); on x86 the installer offers emulation or suggests Promoter only. The rest of this guide explains each step for manual setups and operations.
+KlubHub DJ tags up to `v1.2.0` are arm64-only; later tags also ship `linux/amd64` (see System requirements). On x86 the installer still runs the DJ image through arm64 emulation, or suggests Promoter only. The rest of this guide explains each step for manual setups and operations.
 
 ## System requirements
 
 - Use Docker Engine 24+ with Compose v2 and a running daemon. On Apple Silicon, Docker Desktop or OrbStack provides the Linux VM.
-- Production app images target `linux/arm64`. Do not assume native amd64 support.
+- Production app images target `linux/amd64` and `linux/arm64` from the first release after `v1.2.0`; earlier tags are `linux/arm64` only. On x86 set `APP_PLATFORM=linux/amd64` with such a tag.
 - Local frontend development needs Node and pnpm matching the repository toolchain; run `pnpm install` first.
 - Setup uses Bash, Python 3, and Docker Compose. Reserve space for PostgreSQL, Garage objects, browser dependencies, and backups.
 
