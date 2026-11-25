@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/klubhub/dj/api/internal/social"
+	"github.com/stretchr/testify/require"
 )
 
 // mockRepo is a minimal in-memory stub for service tests.
@@ -317,4 +318,22 @@ func stringContains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestEditPostKeepsImageWhenNoneSent(t *testing.T) {
+	repo := newMockRepo()
+	id := uuid.New()
+	repo.posts[id] = &social.ScheduledPost{ID: id, Status: social.PostStatusScheduled, ImageStorageKey: "social/keep.jpg"}
+	svc := social.NewService(repo, social.ServiceConfig{})
+
+	req := social.EditPostRequest{Caption: "typo fixed", ScheduledAt: "2030-07-01T20:00", TimezoneName: "Europe/Berlin"}
+	got, err := svc.EditPost(context.Background(), id, req)
+	require.NoError(t, err)
+	require.Equal(t, "social/keep.jpg", got.ImageStorageKey)
+	require.Equal(t, "2030-07-01T18:00:00Z", got.ScheduledAtUTC.Format(time.RFC3339))
+
+	req.ImageStorageKey = "social/new.jpg"
+	got, err = svc.EditPost(context.Background(), id, req)
+	require.NoError(t, err)
+	require.Equal(t, "social/new.jpg", got.ImageStorageKey)
 }

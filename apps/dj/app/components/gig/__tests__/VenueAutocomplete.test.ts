@@ -78,9 +78,9 @@ describe('VenueAutocomplete', () => {
     await vi.advanceTimersByTimeAsync(300)
     await flushPromises()
     expect(mockFetch).toHaveBeenCalledWith('/api/v1/venues/autocomplete?q=ber&limit=5')
-    // two result rows + the "CREATE NEW VENUE" row inside the dropdown
+    // two result rows; the "use as typed" button sits below them
     const rows = wrapper.findAll('.glass > div')
-    expect(rows.length).toBe(3)
+    expect(rows.length).toBe(2)
     const names = wrapper.text()
     expect(names).toContain('Berghain')
     expect(names).toContain('Tresor')
@@ -103,10 +103,19 @@ describe('VenueAutocomplete', () => {
     await vi.advanceTimersByTimeAsync(300)
     await flushPromises()
     await wrapper.findAll('.glass > div')[0].trigger('click')
-    expect(wrapper.emitted('update:modelValue')).toEqual([[venue]])
+    expect(wrapper.emitted('update:modelValue')!.at(-1)).toEqual([venue])
     expect(wrapper.emitted('venue-selected')).toEqual([[venue]])
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('Berghain')
-    expect(wrapper.text()).not.toContain('CREATE NEW VENUE')
+    expect(wrapper.text()).not.toContain('AS TYPED')
+  })
+
+  it('emits what was typed as the venue, and null once the box is empty', async () => {
+    mockFetch.mockResolvedValue([])
+    const wrapper = mountAc()
+    await wrapper.find('input').setValue('Club Nowhere')
+    expect(wrapper.emitted('update:modelValue')!.at(-1)![0]).toMatchObject({ id: '', name: 'Club Nowhere' })
+    await wrapper.find('input').setValue('   ')
+    expect(wrapper.emitted('update:modelValue')!.at(-1)).toEqual([null])
   })
 
   it('clear button empties the query and emits null', async () => {
@@ -165,20 +174,20 @@ describe('VenueAutocomplete', () => {
     await input.setValue('ber')
     await vi.advanceTimersByTimeAsync(300)
     await flushPromises()
-    expect(wrapper.text()).toContain('CREATE NEW VENUE')
+    expect(wrapper.text()).toContain('AS TYPED')
 
     await input.trigger('keydown', { key: 'Escape' })
-    expect(wrapper.text()).not.toContain('CREATE NEW VENUE')
+    expect(wrapper.text()).not.toContain('AS TYPED')
 
     // reopen, then click outside (pointerdown arms onClickOutside, click fires it)
     await input.setValue('berg')
     await vi.advanceTimersByTimeAsync(300)
     await flushPromises()
-    expect(wrapper.text()).toContain('CREATE NEW VENUE')
+    expect(wrapper.text()).toContain('AS TYPED')
     document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
     document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
-    expect(wrapper.text()).not.toContain('CREATE NEW VENUE')
+    expect(wrapper.text()).not.toContain('AS TYPED')
   })
 
   it('updates the query when the model value changes', async () => {

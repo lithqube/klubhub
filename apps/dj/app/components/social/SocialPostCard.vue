@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { ScheduledPost } from '~/types/social'
 import { useSocialStore } from '~/stores/social'
 import { apiAssetUrl } from '~/utils/apiAssetUrl'
+import { toZonedInput } from '~/utils/socialTime'
 
 const props = defineProps<{
   post: ScheduledPost
@@ -14,30 +15,42 @@ const expanded = ref(false)
 
 // Edit form state
 const editCaption = ref(props.post.caption)
-const editScheduledAt = ref(props.post.scheduledAtUtc.slice(0, 16)) // datetime-local format
+const editScheduledAt = ref(toZonedInput(props.post.scheduledAtUtc, props.post.timezoneName))
 const editTimezone = ref(props.post.timezoneName)
+const saving = ref(false)
+
+/** The editor always starts from what is saved now, not from mount time. */
+function seed() {
+  editCaption.value = props.post.caption
+  editScheduledAt.value = toZonedInput(props.post.scheduledAtUtc, props.post.timezoneName)
+  editTimezone.value = props.post.timezoneName
+}
 
 const isScheduled = computed(() => props.post.status === 'scheduled')
 
 function toggleExpand() {
   if (!isScheduled.value) return
-  expanded.value = !expanded.value
+  // A tap on the open card must not close it and drop what was typed.
+  if (expanded.value) return
+  seed()
+  expanded.value = true
 }
 
 function cancelEdit() {
-  editCaption.value = props.post.caption
-  editScheduledAt.value = props.post.scheduledAtUtc.slice(0, 16)
-  editTimezone.value = props.post.timezoneName
   expanded.value = false
 }
 
 async function saveEdit() {
-  await store.editPost(props.post.id, {
+  if (saving.value) return
+  saving.value = true
+  const saved = await store.editPost(props.post.id, {
     caption: editCaption.value,
     scheduledAt: editScheduledAt.value,
     timezoneName: editTimezone.value,
   })
-  expanded.value = false
+  saving.value = false
+  // A failed save keeps the editor open with the typed text; the store says why.
+  if (saved) expanded.value = false
 }
 
 const statusLabel = computed(() => {
@@ -134,8 +147,12 @@ const platformTag = computed(() =>
         <input
           v-model="editScheduledAt"
           type="datetime-local"
+          :aria-label="`Publish time (${editTimezone})`"
           class="w-full bg-surface-container-high border-0 border-l-2 border-transparent px-2 py-1.5 font-data text-xs text-on-surface focus:outline-none focus:border-primary transition-colors"
         >
+        <p class="font-terminal tracking-terminal text-[10px] uppercase text-tertiary">
+          TIME IN {{ editTimezone }}
+        </p>
         <div class="flex gap-2 justify-end">
           <button
             class="ghost-border px-3 py-1 font-terminal tracking-terminal text-[10px] uppercase text-on-surface-variant hover:text-primary hover:border-primary/40 transition-colors"
@@ -145,9 +162,10 @@ const platformTag = computed(() =>
           </button>
           <button
             class="gradient-cta px-3 py-1 font-terminal tracking-terminal text-[10px] uppercase text-on-primary"
+            :disabled="saving"
             @click.stop="saveEdit"
           >
-            SAVE
+            {{ saving ? 'SAVING…' : 'SAVE' }}
           </button>
         </div>
       </div>

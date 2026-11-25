@@ -110,7 +110,9 @@ async function flushSettings() {
   try {
     await settings.save(patchToSend)
   } catch {
-    // saveStatus is 'error'; the status chip tells the user
+    // saveStatus is 'error'; the status chip tells the user. Keep the failed
+    // fields for the next save; anything typed since wins.
+    pendingSettings = { ...patchToSend, ...pendingSettings }
   }
 }
 
@@ -257,6 +259,12 @@ async function handleExportPdf() {
   exportUrl.value = ''
   exportError.value = ''
   try {
+    // The PDF is built from the saved copy: send pending edits first.
+    await Promise.all([flush(), flushSettings()])
+    if (saveState.value === 'error') {
+      exportError.value = 'Your latest changes are not saved, so they would be missing from the PDF. Edit a field to retry, then export.'
+      return
+    }
     const result = await store.generateExport()
     exportUrl.value = result.downloadUrl
     await store.loadExports()

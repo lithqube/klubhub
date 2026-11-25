@@ -36,12 +36,16 @@ export const useSettingsStore = defineStore('settings', () => {
     'social_links', 'bio_short', 'bio_long', 'contact_info', 'invoice_prefix',
   ] as const;
 
-  function applyProfile(data: Record<string, any>): void {
-    if (typeof data.dj_name === 'string') djName.value = data.dj_name;
-    if (data.social_links && typeof data.social_links === 'object') {
+  const profileNow = () => [djName.value, socialLinks.value, contactInfo.value] as const;
+
+  /** `since` skips every field edited after that snapshot was taken. */
+  function applyProfile(data: Record<string, any>, since = profileNow()): void {
+    const [name, links, contact] = since;
+    if (typeof data.dj_name === 'string' && djName.value === name) djName.value = data.dj_name;
+    if (data.social_links && typeof data.social_links === 'object' && socialLinks.value === links) {
       socialLinks.value = { ...data.social_links };
     }
-    if (typeof data.contact_info === 'string') contactInfo.value = data.contact_info;
+    if (typeof data.contact_info === 'string' && contactInfo.value === contact) contactInfo.value = data.contact_info;
   }
 
   /**
@@ -50,7 +54,7 @@ export const useSettingsStore = defineStore('settings', () => {
    * is why EPK settings writes never saved), and sending only the changed
    * field would wipe the rest. So fetch the current row, merge, send it all.
    */
-  async function writePatch(patch: SettingsPatch): Promise<void> {
+  async function writePatch(patch: SettingsPatch, since: ReturnType<typeof profileNow>): Promise<void> {
     saveStatus.value = 'saving';
     try {
       const current = await $fetch<Record<string, any>>('/api/v1/settings');
@@ -58,7 +62,7 @@ export const useSettingsStore = defineStore('settings', () => {
       for (const key of WRITABLE_KEYS) body[key] = current[key];
       Object.assign(body, patch);
       const saved = await $fetch<Record<string, any>>('/api/v1/settings', { method: 'PUT', body });
-      applyProfile(saved?.data ?? saved ?? body);
+      applyProfile(saved?.data ?? saved ?? body, since);
       saveStatus.value = 'saved';
     } catch (e) {
       saveStatus.value = 'error';
@@ -71,7 +75,8 @@ export const useSettingsStore = defineStore('settings', () => {
   // token and the second would answer 409.
   let queue: Promise<unknown> = Promise.resolve();
   function save(patch: SettingsPatch): Promise<void> {
-    const run = queue.then(() => writePatch(patch));
+    const since = profileNow(); // what the caller's patch was built from
+    const run = queue.then(() => writePatch(patch, since));
     queue = run.catch(() => undefined);
     return run;
   }

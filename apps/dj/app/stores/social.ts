@@ -145,7 +145,7 @@ export const useSocialStore = defineStore('social', () => {
     return result.data.path;
   }
 
-  async function editPost(id: string, req: EditPostRequest): Promise<void> {
+  async function editPost(id: string, req: EditPostRequest): Promise<boolean> {
     try {
       const result = await $fetch<{ data: ScheduledPost }>(`/api/v1/social/posts/${id}`, {
         method: 'PUT',
@@ -155,8 +155,10 @@ export const useSocialStore = defineStore('social', () => {
       if (idx !== -1) {
         posts.value[idx] = mapScheduledPost(result.data);
       }
+      return true;
     } catch (e) {
       useUiStore().showError(String(e));
+      return false;
     }
   }
 

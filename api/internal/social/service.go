@@ -372,6 +372,11 @@ func (s *Service) EditPost(ctx context.Context, id uuid.UUID, req EditPostReques
 		return nil, fmt.Errorf("parse scheduled_at: %w", err)
 	}
 
+	// An edit without an image id leaves the image as it is.
+	if req.ImageStorageKey == "" {
+		req.ImageStorageKey = post.ImageStorageKey
+	}
+
 	return s.repo.UpdatePost(ctx, id, req.Caption, req.ImageStorageKey, scheduledAt, req.TimezoneName)
 }
 
