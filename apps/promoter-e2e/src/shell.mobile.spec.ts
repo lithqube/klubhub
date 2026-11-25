@@ -15,6 +15,14 @@ test.describe('promoter shell (mobile)', () => {
     await expect(page.getByRole('heading', { name: 'DOOR', level: 1 })).toBeVisible();
   });
 
+  test('the MORE sheet does not slide under reduced motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    await hydrated(page);
+    await page.getByRole('button', { name: 'MORE' }).click();
+    await expect(page.getByRole('dialog')).toHaveCSS('animation-name', 'none');
+  });
+
   test('mobile header shows the product brand', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('banner', { name: 'KlubHub Promoter brand bar' })).toBeVisible();

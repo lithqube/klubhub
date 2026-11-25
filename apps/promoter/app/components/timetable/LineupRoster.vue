@@ -22,8 +22,9 @@ function move(i: number, d: number) {
   next.splice(i + d, 0, x!)
   emit('update', next)
 }
-function remove(i: number) {
-  emit('update', props.lineup.filter((_, j) => j !== i))
+// By id: a row still animating out keeps its old index.
+function remove(id: string) {
+  emit('update', props.lineup.filter(l => l.id !== id))
 }
 /** B2B with the act above: same stage, same times, shared group number. */
 function toggleB2B(i: number) {
@@ -69,7 +70,7 @@ function toggleB2B(i: number) {
           <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`B2B ${l.display_name} with the act above`" :aria-pressed="l.b2b_group != null" :disabled="i === 0 && l.b2b_group == null" @click="toggleB2B(i)"><Users style="width:12px;height:12px;" /></button>
           <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Move ${l.display_name} up`" :disabled="i === 0" @click="move(i, -1)"><ArrowUp style="width:12px;height:12px;" /></button>
           <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Move ${l.display_name} down`" :disabled="i === lineup.length - 1" @click="move(i, 1)"><ArrowDown style="width:12px;height:12px;" /></button>
-          <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Remove ${l.display_name}`" @click="remove(i)"><X style="width:12px;height:12px;" /></button>
+          <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Remove ${l.display_name}`" @click="remove(l.id)"><X style="width:12px;height:12px;" /></button>
         </template>
       </li>
     </TransitionGroup>

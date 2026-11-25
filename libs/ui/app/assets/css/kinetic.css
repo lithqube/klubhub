@@ -955,6 +955,8 @@ a.quiet:hover { opacity: 1; }
   .kh-list-move { transition: transform .22s ease; }
   .kh-list-enter-active,
   .kh-list-leave-active { transition: opacity .18s ease, translate .18s ease; }
+  /* A row on its way out must not take taps: its handlers are stale. */
+  .kh-list-leave-active { pointer-events: none; }
   .kh-list-enter-from,
   .kh-list-leave-to { opacity: 0; translate: 0 6px; }
 
@@ -967,5 +969,6 @@ a.quiet:hover { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-in, .animate-out { animation: none !important; }
+  /* Substring match: dialogs and sheets use data-[state=*]:animate-in variants. */
+  [class*="animate-in"], [class*="animate-out"] { animation: none !important; }
 }
