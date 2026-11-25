@@ -232,6 +232,13 @@
       "skillPath": "packages/core/skills/ui-sdk/SKILL.md",
       "computedHash": "1af8b09475fd1c8784489c4c1099eb167e28297c344e1102fb017ca07ce74d00"
     },
+    "verification-before-completion": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/verification-before-completion/SKILL.md",
+      "computedHash": "09b0e3a4689c1c38a3b8fc6ef57a1d4165aa33c0013d546dbde9dd348941a319"
+    },
     "wait-what": {
       "source": "mattpocock/skills",
       "commit": "d65391149dbb5fe76478e76fa8d5122b2aa5a70e",
