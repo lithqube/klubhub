@@ -64,6 +64,10 @@ export function useTimetableDraft(event: Ref<EventDetail | null>) {
 
   const stale = computed(() => dirtyCount.value > 0 && !!event.value && base.value !== lineupSignature(event.value.lineup))
 
+  // The comparison ends with the conflict: without it there are no controls to
+  // leave the read-only view, and SAVE would send a draft that is not on screen.
+  watch(stale, (conflict) => { if (!conflict) viewSaved.value = false })
+
   function update(next: LineupEntry[]) {
     if (viewSaved.value) return
     if (!draft.value) base.value = lineupSignature(event.value?.lineup ?? [])

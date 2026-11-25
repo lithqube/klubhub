@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defineComponent, h, ref, type Ref } from 'vue'
+import { defineComponent, h, nextTick, ref, type Ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import type { EventDetail, LineupEntry } from '~/types/event'
 import { useTimetableDraft } from '../useTimetableDraft'
@@ -44,6 +44,22 @@ describe('useTimetableDraft', () => {
     draft.keepMine()
     expect(draft.stale.value).toBe(false)
     expect(draft.lineup.value.map(l => l.display_name)).toEqual(['Kaiser', 'Dasha'])
+  })
+
+  it('leaves the saved view when the conflict goes away', async () => {
+    for (const saved of [[act('a', 'Kaiser'), act('b', 'Dasha')], [act('a', 'Kaiser')]]) {
+      const event = ref<EventDetail | null>(night([act('a', 'Kaiser')]))
+      const draft = setup(event)
+      draft.update([act('a', 'Kaiser'), act('b', 'Dasha')])
+      event.value = night([act('c', 'Klock')], 2)
+      draft.viewSaved.value = true
+      await nextTick()
+      event.value = night(saved, 3) // equal to mine, or back to where I started
+      await nextTick()
+      expect(draft.stale.value).toBe(false)
+      expect(draft.viewSaved.value).toBe(false)
+      expect(draft.lineup.value.map(l => l.display_name)).toEqual(['Kaiser', 'Dasha'])
+    }
   })
 
   it('drops back to the saved lineup on discard', () => {
