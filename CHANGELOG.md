@@ -6,8 +6,36 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-25
+
+### Upgrade notes
+
+- Migrations 033–035 (DJ: availability, outreach templates, booking
+  requests) and Promoter 00014–00017 (email messages, talent contacts, open
+  slots, outreach) run automatically on start.
+- Booking outreach sends are off until you set
+  `OUTREACH_PROVIDER_PERMITS_OUTREACH=true`, and only if your email provider's
+  terms allow cold B2B outreach. Until then a send answers
+  `422 outreach_not_permitted`. `OUTREACH_MAX_PER_DAY` (default 50) caps sends
+  per tenant. See `docs/OUTREACH-PROVIDER.md`.
+- `docker-compose.prod.yml` defaults `IMAGE_TAG` to `v1.3.0`. This is the
+  first tag published automatically when it was pushed, for `linux/amd64` and
+  `linux/arm64`; on x86 set `APP_PLATFORM=linux/amd64`. See
+  `docs/container-images.md`.
+- The same tag publishes `ghcr.io/lithqube/klubhub-promoter-api:v1.3.0`.
+  KlubHub Promoter is a preview: no versioned Promoter release exists yet.
+
 ### Added
 
+- **Availability and booking outreach (Phase 4.10).** DJs publish open
+  dates, match them against promoter slots, and send booking requests from
+  templates with the EPK attached, with a sent log. Promoters get a Bookings
+  page: talent book, open slots, matches, composer and sent log, with replies
+  going to the member who sent. Email sending and the document store moved
+  out of finance into a shared platform package.
+- Release tags publish images: pushing `vX.Y.Z` builds the DJ and Promoter
+  images for `linux/amd64` and `linux/arm64`, scans each with Trivy, and
+  signs the merged tag.
 - Safe self-hosted updates: re-running the installer (or `./klubhub update`)
   now backs up the databases, Garage storage and secrets to
   `.local/backups/<timestamp>/` before pulling new images, records the
@@ -16,7 +44,23 @@ project adheres to [Semantic Versioning](https://semver.org/).
   version (one step back). `./klubhub update --release` (installer `--release`)
   pins the update to the newest `v*` release tag. If a service fails its
   health check after an update, the installer prints the rollback
-  instructions. See `docs/SELF-HOSTING.md`.
+  instructions. See `docs/SELF-HOSTING.md`. `--release` skips release
+  candidates (`-rc` tags); `update <ref>` still installs any tag.
+- Tracklists export as plain text as well as the image card.
+- Dialogs, sheets, lists, toasts and presses animate, and every animation
+  respects reduced motion.
+
+### Fixed
+
+- Social post edits, press-kit settings and gig venue changes no longer lose
+  data silently; press-kit saves are serialized and a post locks while it
+  saves.
+- Promoter door check-ins, offer status and lineup drafts are protected from
+  overwrites; the saved-lineup view closes when the conflict ends.
+- The phone bottom bar reaches every section.
+- Outreach API calls time out, so a dead backend shows an error.
+- Go 1.26.11 and `golang.org/x/net` v0.62.0 clear the open govulncheck
+  findings; the DJ image no longer bundles npm or corepack (Trivy).
 
 ## [1.2.0] - 2026-10-03
 

@@ -18,6 +18,7 @@ matches your role.
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Release history and what's changed since the last tagged release |
 || [`release-notes/v1.0.1.md`](./release-notes/v1.0.1.md) | Runtime, CI, and onboarding hardening (PRs #5, #7, #9, #10, #11, #12); operator follow-up steps for GHCR publish and Plunk workflow rename |
 || [`release-notes/v1.1.0-phase5.md`](./release-notes/v1.1.0-phase5.md) | **Phase 5** — Finance Tracker module: invoices, payments, agreements, PDF rendering, self-hostable Plunk email |
+| [`release-notes/v1.3.0.md`](./release-notes/v1.3.0.md) | **v1.3.0** — availability and booking outreach (sends gated), safe installer updates with backup and rollback, amd64 images, Promoter image preview; upgrade steps |
 | [`release-notes/v1.2.0.md`](./release-notes/v1.2.0.md) | **v1.2.0** — e-invoicing (Factur-X / XRechnung), document archive, receipts, Rider Templates, tracklist editor, Host allowlist; upgrade steps |
 | [`../SECURITY.md`](../SECURITY.md) | Threat model, supported versions, vulnerability reporting — including [KlubHub Promoter's security model](../SECURITY.md#klubhub-promoter-security-model) |
 | [`../.env.example`](../.env.example) | Annotated template for the env vars |
