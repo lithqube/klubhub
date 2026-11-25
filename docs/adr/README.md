@@ -11,6 +11,7 @@ consequences, alternatives. Status is one of Proposed, Accepted, Superseded.
 | [0004](0004-promoter-nats-outbox.md) | Promoter: transactional outbox to NATS JetStream | Accepted |
 | [0005](0005-promoter-embedded-opa.md) | Promoter: OPA embedded in the Go binary | Accepted |
 | [0006](0006-promoter-rls-tenant-isolation.md) | Promoter: fail-closed Postgres RLS tenant isolation | Accepted |
+| [0007](0007-one-shared-release-version.md) | One shared release version for both products | Accepted |
 
 Some patterns are adapted from other projects by the same author (OpenSchild,
 Mettal, nuxt-nats). Patterns learned from client work are reimplemented from

@@ -31,7 +31,7 @@ Tags published before this change (`v1.2.0` and earlier) are `linux/arm64` only.
 Three tag paths are supported:
 
 - **Automatic runs from `main`:** the workflow publishes `sha-<short SHA>` when DJ files change. This is the rolling CI path; it does not create stable release tags.
-- **Release tags:** pushing a git tag `vX.Y.Z` (or `vX.Y.Z-rc.N`) publishes `:vX.Y.Z` plus that commit's `sha-<short SHA>`, whatever files changed. `promoter-ci.yml` does the same for `klubhub-promoter-api`, so one release tag publishes both products. `./klubhub update --release` checks out the newest `v*` tag and pulls the image published for it.
+- **Release tags:** pushing a git tag `vX.Y.Z` (or `vX.Y.Z-rc.N`) publishes `:vX.Y.Z` plus that commit's `sha-<short SHA>`, whatever files changed. `promoter-ci.yml` does the same for `klubhub-promoter-api`, so one release tag publishes both products. The Promoter image of a release is a preview until the Promoter MVP; the shared version does not imply a stable Promoter ([ADR 0007](./adr/0007-one-shared-release-version.md)). `./klubhub update --release` checks out the newest `v*` tag and pulls the image published for it.
 - **Manual `workflow_dispatch` runs:** supply `tag_override` (it must look like `v1.2.0`) to publish or backfill a release tag, for example one pushed before release tags built automatically. Inspect the resolved tag in the run before relying on it.
 
 The workflow disables `latest`. Pin a known release or exact published build, not an assumed moving tag.
