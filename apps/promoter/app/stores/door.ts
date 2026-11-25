@@ -213,19 +213,22 @@ export const useDoorStore = defineStore('door', () => {
     } catch (e) {
       throw toApiError(e)
     }
-    const sameEvent = bundle.value?.event.id === d.event.id
-    const carry: QueueSlot = sameEvent
-      ? { ops: queue.value, adds: adds.value, journal: journal.value, rejections: rejections.value }
-      : { ops: [], adds: [], journal: [], rejections: [] }
     phase.value = 'loading'
     try {
+      // Nothing on this device is touched until the new bundle is in hand: on
+      // bad signal a failed download must leave the queue and vault as they were.
+      const fresh = await fetchBundle()
+      const sameEvent = bundle.value?.event.id === d.event.id
+      const carry: QueueSlot = sameEvent
+        ? { ops: queue.value, adds: adds.value, journal: journal.value, rejections: rejections.value }
+        : { ops: [], adds: [], journal: [], rejections: [] }
       await theVault().create()
       reset()
       queue.value = carry.ops
       adds.value = carry.adds
       journal.value = carry.journal
       rejections.value = carry.rejections
-      await downloadBundle()
+      await applyBundle(fresh)
       wipedBecause.value = null
     } catch (e) {
       phase.value = 'locked'
@@ -233,8 +236,13 @@ export const useDoorStore = defineStore('door', () => {
     }
   }
 
+  const fetchBundle = () => apiFetch<DoorBundle>('/api/v1/door/bundle')
+
   async function downloadBundle(): Promise<void> {
-    const b = await apiFetch<DoorBundle>('/api/v1/door/bundle')
+    await applyBundle(await fetchBundle())
+  }
+
+  async function applyBundle(b: DoorBundle): Promise<void> {
     // Guests added at the door and not yet synced must stay findable.
     const pendingGuests = adds.value.filter(a => !b.guests.some(g => g.id === a.id))
       .map(a => ({ id: a.id, list_id: a.list_id, name: a.name, plus_n: a.plus_n, status: 'going' as const, note: '' }))

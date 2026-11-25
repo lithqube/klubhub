@@ -7,7 +7,7 @@ import { hasErrors } from '~/utils/timetable'
 
 const store = useEventStore()
 const { current } = storeToRefs(store)
-const { lineup, issues, dirtyCount, update, discard, toInput } = useTimetableDraft(current)
+const { lineup, issues, dirtyCount, stale, viewSaved, update, discard, keepMine, toInput } = useTimetableDraft(current)
 const online = useOnline()
 
 const snap = ref(15)
@@ -16,11 +16,12 @@ const editing = ref<string | null>(null)
 const busy = ref(false)
 const message = ref<{ kind: 'ok' | 'error', text: string } | null>(null)
 const isPast = computed(() => !!current.value && Date.parse(current.value.ends_at) <= Date.now())
+const readonly = computed(() => isPast.value || viewSaved.value)
 const untimedIds = computed(() => new Set(lineup.value.filter(l => !l.set_start).map(l => l.id)))
 const editingEntry = computed<LineupEntry | null>(() => lineup.value.find(l => l.id === editing.value) ?? null)
 
 async function save() {
-  if (!current.value || !online.value) return
+  if (!current.value || !online.value || stale.value) return
   busy.value = true
   message.value = null
   try {
@@ -31,7 +32,7 @@ async function save() {
       : { kind: 'ok', text: 'TIMETABLE SAVED' }
   } catch (e) {
     const err = e as ApiError
-    message.value = { kind: 'error', text: err.error === 'version_conflict' ? 'SOMEONE ELSE SAVED THIS EVENT. Your changes are still here; reload their version to compare.' : `NOT SAVED · ${err.problem ?? err.error}. Your changes are still here.` }
+    message.value = { kind: 'error', text: err.error === 'version_conflict' ? 'SOMEONE ELSE SAVED THIS EVENT. Your changes are still here; reload the page to compare.' : `NOT SAVED · ${err.problem ?? err.error}. Your changes are still here.` }
   } finally {
     busy.value = false
   }
@@ -71,7 +72,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </div>
 
     <div style="display:grid;gap:12px;" class="lg:grid-cols-[280px_1fr]">
-      <TimetableLineupRoster class="order-2 lg:order-1" style="min-width:0;" :lineup="lineup" :readonly="isPast" :untimed-ids="untimedIds" @update="update" @schedule="id => (editing = id)" />
+      <TimetableLineupRoster class="order-2 lg:order-1" style="min-width:0;" :lineup="lineup" :readonly="readonly" :untimed-ids="untimedIds" @update="update" @schedule="id => (editing = id)" />
       <div class="space-y-2 order-1 lg:order-2" style="min-width:0;">
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
           <div class="theme-seg hidden lg:flex" role="radiogroup" aria-label="Timetable view">
@@ -83,12 +84,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
         <TimetableGrid
           v-if="current.stages.length" class="hidden lg:block" :class="{ 'lg:hidden': view === 'list' }"
-          :event="current" :stages="current.stages" :lineup="lineup" :issues="issues" :readonly="isPast" :snap="snap"
+          :event="current" :stages="current.stages" :lineup="lineup" :issues="issues" :readonly="readonly" :snap="snap"
           @update="update" @edit="id => (editing = id)"
         />
         <TimetableList
           :class="view === 'grid' ? 'lg:hidden' : ''"
-          :event="current" :stages="current.stages" :lineup="lineup" :issues="issues" :readonly="isPast"
+          :event="current" :stages="current.stages" :lineup="lineup" :issues="issues" :readonly="readonly"
           @edit="id => (editing = id)"
         />
       </div>
@@ -100,12 +101,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       v-if="dirtyCount || message" role="region" aria-label="Save timetable"
       class="glass" style="position:sticky;bottom:72px;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;"
     >
-      <span :role="message?.kind === 'error' ? 'alert' : 'status'" style="font-family:var(--font-terminal);font-size:10px;letter-spacing:.06em;" :style="message?.kind === 'error' ? 'color:var(--color-error);' : ''">
+      <span v-if="stale" role="alert" style="font-family:var(--font-terminal);font-size:10px;letter-spacing:.06em;color:var(--color-error);" data-testid="lineup-stale">
+        THE SAVED TIMETABLE CHANGED SINCE YOU STARTED EDITING · SAVING YOURS WOULD REPLACE IT
+        <template v-if="viewSaved"> · SHOWING THE SAVED ONE</template>
+      </span>
+      <span v-else :role="message?.kind === 'error' ? 'alert' : 'status'" style="font-family:var(--font-terminal);font-size:10px;letter-spacing:.06em;" :style="message?.kind === 'error' ? 'color:var(--color-error);' : ''">
         <template v-if="message">{{ message.text }}</template>
         <template v-else-if="!online">OFFLINE · {{ dirtyCount }} {{ dirtyCount === 1 ? 'CHANGE' : 'CHANGES' }} WAITING · SAVED ON THIS DEVICE</template>
         <template v-else>UNSAVED · {{ dirtyCount }} {{ dirtyCount === 1 ? 'CHANGE' : 'CHANGES' }} · SAVED ON THIS DEVICE</template>
       </span>
-      <span v-if="dirtyCount" style="display:flex;gap:8px;">
+      <span v-if="stale" style="display:flex;flex-wrap:wrap;gap:8px;">
+        <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" :aria-pressed="viewSaved" @click="viewSaved = !viewSaved">{{ viewSaved ? 'VIEW MINE' : 'VIEW SAVED' }}</button>
+        <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" @click="discard(); message = null">DISCARD MINE</button>
+        <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" @click="keepMine(); message = null">KEEP MINE</button>
+      </span>
+      <span v-else-if="dirtyCount" style="display:flex;gap:8px;">
         <button type="button" class="btn-hud btn-hud-ghost" style="min-height:44px;" @click="discard(); message = null">DISCARD</button>
         <button type="button" class="btn-hud btn-hud-cta" style="min-height:44px;" :disabled="busy || !online" @click="save">{{ busy ? 'SAVING…' : 'SAVE TIMETABLE' }}</button>
       </span>

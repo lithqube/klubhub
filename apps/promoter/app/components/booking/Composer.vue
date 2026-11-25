@@ -6,7 +6,7 @@ import { useOrgStore } from '~/stores/org'
 import { useSessionStore } from '~/stores/session'
 import type { ApiError, EventSummary } from '~/types/event'
 import type { OpenSlot, TalentContact } from '~/types/bookings'
-import { mentionsVenue, offerErrorText, offerVariables, renderOfferText, venueWithheld, OFFER_VARIABLES } from '~/utils/bookings'
+import { mentionsVenue, offerDelivery, offerErrorText, offerVariables, renderOfferText, venueWithheld, OFFER_VARIABLES } from '~/utils/bookings'
 
 /**
  * The offer composer (04.10-05): template picker, subject/body editor with
@@ -38,6 +38,8 @@ const edited = ref(false)
 const sending = ref(false)
 const error = ref<ApiError | null>(null)
 const notice = ref('')
+/** The offer that already went out: SEND stays off until it differs. */
+const delivered = ref('')
 
 const selectedTemplate = computed(() => templates.value.find(t => t.id === templateId.value) ?? null)
 
@@ -62,7 +64,9 @@ const venueWarning = computed(() => {
   return mentionsVenue(subject.value) || mentionsVenue(body.value)
 })
 
-const canSend = computed(() => !!props.contact?.has_email && !!subject.value.trim() && !!body.value.trim() && !sending.value)
+const offerKey = computed(() => JSON.stringify([props.contact?.id, props.openSlot?.id ?? null, subject.value, body.value]))
+const canSend = computed(() => !!props.contact?.has_email && !!subject.value.trim() && !!body.value.trim()
+  && !sending.value && offerKey.value !== delivered.value)
 
 watch(templateId, (id) => {
   const t = templates.value.find(x => x.id === id)
@@ -90,15 +94,23 @@ async function send() {
   sending.value = true
   error.value = null
   notice.value = ''
+  const key = offerKey.value
+  const to = props.contact.name || props.contact.email
   try {
-    await store.sendOffer({
+    const o = await store.sendOffer({
       talent_contact_id: props.contact.id,
       open_slot_id: props.openSlot?.id ?? null,
       template_id: selectedTemplate.value?.id ?? null,
       subject: subject.value,
       body: body.value,
     })
-    notice.value = `Offer sent to ${props.contact.name || props.contact.email}.`
+    const outcome = offerDelivery(o)
+    if (outcome === 'failed') {
+      error.value = { error: 'delivery_failed', problem: o.email_error } as ApiError
+      return
+    }
+    delivered.value = key
+    notice.value = outcome === 'queued' ? `Offer to ${to} is queued for sending.` : `Offer sent to ${to}.`
     emit('sent', notice.value)
   } catch (e) {
     error.value = e as ApiError

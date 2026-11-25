@@ -109,6 +109,8 @@ export function mentionsVenue(text: string): boolean {
 /** Send-error copy per the API's error codes (SPEC §12). */
 export function offerErrorText(e: ApiError | null): string {
   switch (e?.error) {
+    case 'delivery_failed':
+      return `The offer was NOT delivered${e.problem ? ` (${e.problem})` : ''}. The sent log lists it as failed; you can send it again.`
     case 'email_unavailable':
       return 'Email is not configured (Plunk): offers cannot be sent until transactional email is set up.'
     // Provider-terms gate: offers are cold B2B outreach and most hosted
@@ -135,6 +137,17 @@ export function offerErrorText(e: ApiError | null): string {
     default:
       return e?.error ? `Could not send the offer (${e.error}).` : 'Could not send the offer.'
   }
+}
+
+/**
+ * What really happened to an offer. The API answers success even when the
+ * mail provider refused the message, so the returned status is the truth.
+ */
+export function offerDelivery(o: Pick<OutreachRequest, 'status' | 'email_status'>): 'failed' | 'queued' | 'sent' {
+  const states: string[] = [o.status, o.email_status ?? '']
+  if (states.includes('failed') || states.includes('bounced')) return 'failed'
+  if (states.includes('queued') || states.includes('sending')) return 'queued'
+  return 'sent'
 }
 
 /** Delivery badge tone per status, matching the HUD palette. */
