@@ -60,7 +60,7 @@ async function onConfirm(): Promise<void> {
   <div
     v-if="open"
     data-testid="attach-rider-dialog"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+    class="kh-modal fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
     role="dialog"
     aria-modal="true"
     :aria-labelledby="titleId"

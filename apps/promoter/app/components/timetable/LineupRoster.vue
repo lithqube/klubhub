@@ -53,7 +53,7 @@ function toggleB2B(i: number) {
       <button type="submit" class="btn-hud btn-hud-ghost" style="min-height:44px;margin-top:6px;" :disabled="!paste.trim()">ADD</button>
     </form>
     <p v-if="!lineup.length" style="font-size:13px;color:var(--color-on-surface-variant);">No acts yet. Paste your lineup above.</p>
-    <ol style="list-style:none;margin:0;padding:0;display:grid;gap:4px;">
+    <TransitionGroup tag="ol" name="kh-list" style="list-style:none;margin:0;padding:0;display:grid;gap:4px;">
       <li
         v-for="(l, i) in lineup" :key="l.id"
         style="display:flex;align-items:center;gap:6px;min-height:44px;padding:4px 6px;border-left:2px solid transparent;"
@@ -72,6 +72,6 @@ function toggleB2B(i: number) {
           <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Remove ${l.display_name}`" @click="remove(i)"><X style="width:12px;height:12px;" /></button>
         </template>
       </li>
-    </ol>
+    </TransitionGroup>
   </section>
 </template>

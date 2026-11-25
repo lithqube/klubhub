@@ -30,10 +30,10 @@ const rootProps = computed(() => ({ open: props.open, defaultOpen: props.default
 const forwarded = useForwardProps(rootProps)
 
 const sideClasses = {
-  top: 'inset-x-0 top-0 border-b border-surface-container-high',
-  right: 'inset-y-0 right-0 h-full w-3/4 border-l border-surface-container-high sm:max-w-sm',
-  bottom: 'inset-x-0 bottom-0 border-t border-surface-container-high',
-  left: 'inset-y-0 left-0 h-full w-3/4 border-r border-surface-container-high sm:max-w-sm',
+  top: 'inset-x-0 top-0 border-b border-surface-container-high data-[state=open]:slide-in-from-top data-[state=closed]:slide-out-to-top',
+  right: 'inset-y-0 right-0 h-full w-3/4 border-l border-surface-container-high sm:max-w-sm data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right',
+  bottom: 'inset-x-0 bottom-0 border-t border-surface-container-high data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom',
+  left: 'inset-y-0 left-0 h-full w-3/4 border-r border-surface-container-high sm:max-w-sm data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left',
 }
 </script>
 
@@ -50,7 +50,7 @@ const sideClasses = {
       <DialogContent
         :class="cn(
           'fixed z-50 gap-4 glass-panel-heavy p-6 shadow-glow-primary transition ease-in-out',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
+          'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:duration-250',
           sideClasses[side],
           props.class
         )"

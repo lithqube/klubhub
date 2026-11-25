@@ -47,6 +47,7 @@ Three families, three fixed roles — never interchangeable:
 - Standard transition: `.15s`–`.2s`, default easing.
 - Live-state signals use keyframe motion: `pulse-dot` (2s) for "live" indicators, `scan` (2s linear) sweeping progress fills.
 - JS motion (extension added 2026-11-24, `animejs`, helpers in `libs/ui/app/utils/motion.ts`): new `.page-body` sections rise 8px and fade in over 220ms, 30ms apart; the door card fades in (160ms, never scaled: its 56px targets must keep their size) and shakes (260ms) when a guest cannot be admitted or still needs a second tap. All of it is skipped under reduced motion, and inline styles are removed afterwards. Add motion only to show a change of state or feedback.
+- CSS motion (extension added 2026-11-25, shared in `kinetic.css`, off under reduced motion, translate and opacity only): controls move 1px when pressed; errors, opened `details` and hand-built modals (`kh-modal`) rise in over 200ms; lists that change use `<TransitionGroup name="kh-list">`; toasts slide in from the edge; the shared dialog and sheet use `tw-animate-css` (dialog rises, sheet slides from its side, 200–250ms).
 
 ## Components
 
@@ -79,6 +80,8 @@ Three families, three fixed roles — never interchangeable:
 - **Inline remove confirm**: "REMOVE RECEIPT?" with KEEP (ghost, focused first) and YES, REMOVE (`btn-hud-error`), in the row instead of a second modal.
 - **Paperclip chip**: a dashed 24px chip (44px on touch) with the file count; solid primary when expanded, opening an inline detail row. **NO RECEIPT** is a muted `--color-tertiary` meta label, not a badge, because red is reserved for failure. The NO RECEIPT filter chip means "active expenses still without a file": it never counts or lists income or voided entries, pressing INCOME (or a voided status) while it is on drops it, and pressing it while INCOME is selected leaves income.
 - **Status note**: a polite live region with a 3px `--color-on-surface-variant` left bar, for messages such as "Entry saved. 1 of 3 receipts failed to upload."
+
+- **Landing site** (`apps/site`, 2026-11-25): same tokens and fonts, built from `kinetic.css`. One type ramp (11 / 14 / 16 / 20 / 24 / section / hero) and one spacing ramp (8 to 96) as `--t-*` and `--s*` in its stylesheet. Body copy is 14–16px (a reading page, not an instrument panel). Shell commands use the system monospace so they copy faithfully. The cyan signature marks actions, focus and hover; module numbers stay tertiary until hovered. Motion is translate and opacity only, off under reduced motion: the hero rises once, sections rise as they scroll in where the browser supports scroll timelines.
 
 ## Voice
 

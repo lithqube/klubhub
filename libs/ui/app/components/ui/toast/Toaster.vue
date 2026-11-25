@@ -6,7 +6,9 @@ const { toasts, dismiss } = useToast()
 </script>
 
 <template>
-  <div
+  <TransitionGroup
+    tag="div"
+    name="kh-toast"
     class="fixed bottom-4 right-4 z-[100] flex max-h-screen w-full max-w-sm flex-col gap-2"
     aria-live="polite"
     aria-label="Notifications"
@@ -17,5 +19,5 @@ const { toasts, dismiss } = useToast()
       :toast="toast"
       @dismiss="dismiss"
     />
-  </div>
+  </TransitionGroup>
 </template>
