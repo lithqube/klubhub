@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { generateImage } from '@/composables/useTracklist';
+import { selectCardTracks, tracklistText } from '@/utils/tracklistText';
 
 const tracklistStore = useTracklistStore();
 const uiStore = useUiStore();
@@ -63,6 +64,25 @@ const exportBoth = async () => {
     uiStore.exportLoading = false;
   }
 };
+
+// Plain-text export: the same tracks the card shows, edits included.
+const settingsStore = useSettingsStore();
+const { tracks } = storeToRefs(tracklistStore);
+const { trackRangeStart, trackRangeEnd, maxTracks } = storeToRefs(settingsStore);
+const textCopied = ref<'plain' | 'numbered' | null>(null);
+const textError = ref<string | null>(null);
+
+async function copyText(format: 'plain' | 'numbered') {
+  textCopied.value = null;
+  textError.value = null;
+  const shown = selectCardTracks(tracks.value, trackRangeStart.value, trackRangeEnd.value, maxTracks.value);
+  try {
+    await navigator.clipboard.writeText(tracklistText(shown, format === 'numbered'));
+    textCopied.value = format;
+  } catch {
+    textError.value = 'Could not copy to the clipboard';
+  }
+}
 
 // Navigate to social page with the best available image path
 function scheduleToInstagram() {
@@ -154,6 +174,34 @@ function scheduleToInstagram() {
         SCHEDULE TO INSTAGRAM
       </Button>
     </div>
+
+    <!-- Plain text, for captions and mix descriptions -->
+    <h2 class="font-command tracking-command text-on-surface text-sm uppercase font-bold pt-2">
+      EXPORT_TEXT
+    </h2>
+    <div class="flex flex-col gap-3 sm:flex-row">
+      <Button
+        variant="ghost"
+        :disabled="!tracklist"
+        class="ghost-border font-terminal tracking-terminal text-on-surface text-[9px] uppercase flex-1"
+        data-testid="export-text-plain"
+        @click="copyText('plain')"
+      >
+        {{ textCopied === 'plain' ? 'COPIED' : 'COPY_TEXT (ARTIST - TITLE)' }}
+      </Button>
+      <Button
+        variant="ghost"
+        :disabled="!tracklist"
+        class="ghost-border font-terminal tracking-terminal text-on-surface text-[9px] uppercase flex-1"
+        data-testid="export-text-numbered"
+        @click="copyText('numbered')"
+      >
+        {{ textCopied === 'numbered' ? 'COPIED' : 'COPY_NUMBERED (1. ARTIST - TITLE)' }}
+      </Button>
+    </div>
+    <p v-if="textError" role="alert" class="font-terminal tracking-terminal text-error text-xs uppercase">
+      ERROR: {{ textError }}
+    </p>
 
     <!-- No tracklist message -->
     <div
