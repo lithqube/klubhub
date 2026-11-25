@@ -41,6 +41,10 @@ describe('selectCardTracks', () => {
     expect(titles(selectCardTracks(ten, 2, 6, 3))).toEqual(['T2', 'T3', 'T4'])
   })
 
+  it('includes the range end track when no max is set', () => {
+    expect(titles(selectCardTracks(ten, 2, 4, 0))).toEqual(['T2', 'T3', 'T4'])
+  })
+
   it('ignores a half-set range and a max of 0', () => {
     expect(selectCardTracks(ten, 2, null, 0)).toHaveLength(10)
     expect(titles(selectCardTracks(ten, null, null, 2))).toEqual(['T0', 'T1'])
