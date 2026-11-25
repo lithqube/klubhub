@@ -26,7 +26,7 @@ These modules form the **core identity** of KlubHub DJ and must remain free to:
 | Module | Phase | Why Open-Source |
 |--------|-------|-----------------|
 | **Infrastructure** | 0 | Foundation — breaking this out would kill self-hosted story |
-| **Tracklist Image Generator** | 1 | **Flagship identity** — "upload file, get image in 60 seconds" IS the product. Must be free to create viral adoption. Includes text export (1001Tracklists/Mixcloud/SoundCloud). |
+| **Tracklist Image Generator** | 1 | **Flagship identity** — "upload file, get image in 60 seconds" IS the product. Must be free to create viral adoption. Includes text export (Mixcloud/SoundCloud). |
 | **Design System** | 1.5 | UI foundation — no value as paid |
 | **Social Media Scheduler (Instagram)** | 2 | Instagram scheduling completes the tracklist→post workflow. Paywalling the last step of the flagship workflow frustrates the core user at peak value. Multi-platform (TikTok, Twitter/X) is SaaS PRO. |
 | **Gig Tracker** | 4 | Privacy-sensitive data (fees, contacts, venues). Hub module — restricting it blocks 3 downstream modules. Now includes venue/contact DB, iCal feed, and booking confirmation PDF. |
@@ -65,7 +65,7 @@ These features have characteristics that naturally justify SaaS pricing:
 
 ```
 FREE (Self-Hosted, Open-Source MIT)
-├── Tracklist Image Generator (unlimited) + text export (1001Tracklists, Mixcloud, SoundCloud)
+├── Tracklist Image Generator (unlimited) + text export (Mixcloud, SoundCloud)
 ├── Social Scheduler: Instagram (unlimited posts)
 ├── EPK Builder: unlimited press kits as PDF
 ├── Gig Tracker (unlimited) + Contacts & Venue DB + iCal feed + booking confirmation PDF

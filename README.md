@@ -46,7 +46,7 @@ You get:
 | # | Module | Status | What it does |
 |---|--------|--------|--------------|
 | 0 | **Infrastructure** | ✅ Complete | Docker Compose stack (Postgres 16, Garage S3, Go API, Nuxt), health endpoint, migrations, backup/restore |
-| 1 | **Tracklist Image Generator** | ✅ Complete | Upload 1001Tracklists / Mixcloud / SoundCloud export → parsed tracklist → cover art (Spotify / Discogs) → PNG/JPEG |
+| 1 | **Tracklist Image Generator** | ✅ Complete | Upload a Rekordbox history export → parsed tracklist → cover art (Spotify / Discogs) → PNG/JPEG |
 | 1.5 | **Design System Foundation** | ✅ Complete | Tailwind v4, shadcn-vue, Pinia, responsive shell, 3-way theme switcher |
 | 1.5.5 | **Kinetic HUD** | ✅ Complete | Cyberpunk HUD aesthetic — glass panels, bracket boxes, pulse dots, variable-font typography |
 | 2 | **Social Media Scheduler** | ✅ Complete | Instagram OAuth, timezone-aware scheduling, retry with exponential backoff, calendar view |

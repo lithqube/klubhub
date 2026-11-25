@@ -136,7 +136,7 @@ function rowLabel(inv: Invoice): string {
       <button type="button" class="btn-hud btn-hud-ghost btn-hud-sm il-tap" @click="select('all')">SHOW ALL</button>
     </div>
 
-    <ul v-else class="glass il-rows" aria-label="Invoices">
+    <TransitionGroup v-else tag="ul" name="kh-list" class="glass il-rows" aria-label="Invoices">
       <li v-for="inv in filteredInvoices" :key="inv.id">
         <button
           type="button"
@@ -159,7 +159,7 @@ function rowLabel(inv: Invoice): string {
           <span class="badge-hud il-badge" :class="DISPLAY_STATUS_BADGE[invoiceDisplayStatus(inv, today)]">{{ statusLabel(inv, today) }}</span>
         </button>
       </li>
-    </ul>
+    </TransitionGroup>
     <p v-if="listError && listLoaded" class="il-inline-error" role="alert">
       Could not refresh: {{ listError.message }}
       <button type="button" class="il-retry" @click="store.fetchInvoices()">RETRY</button>

@@ -160,6 +160,7 @@ onMounted(() => {
     <Teleport to="body">
       <div
         v-if="showDeleteDialog"
+        class="kh-modal"
         style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);"
         @click.self="cancelDelete"
       >

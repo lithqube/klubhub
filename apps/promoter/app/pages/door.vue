@@ -461,7 +461,7 @@ const rejectionHelp = computed(() => (rejections.value.length && rejections.valu
 
         <section v-if="!view && !q.trim() && recent.length" aria-labelledby="recent-h">
           <h2 id="recent-h" class="section-lbl" style="margin:4px 0 6px;">RECENT</h2>
-          <ul class="recent" aria-labelledby="recent-h">
+          <TransitionGroup tag="ul" name="kh-list" class="recent" aria-labelledby="recent-h">
             <li v-for="r in recent" :key="r.nonce">
               <span class="r-main">
                 <span class="r-name">{{ r.name }}</span>
@@ -471,7 +471,7 @@ const rejectionHelp = computed(() => (rejections.value.length && rejections.valu
                 <Undo2 style="width:18px;height:18px;" aria-hidden="true" /> UNDO
               </button>
             </li>
-          </ul>
+          </TransitionGroup>
         </section>
       </main>
 

@@ -26,7 +26,7 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 ### Tracklist Image Generator (TRKL)
 
 - [x] **TRKL-01**: User can upload a DJ history file via drag-and-drop or file picker
-- [x] **TRKL-02**: System auto-detects and parses Rekordbox (.txt, .csv, .xml), Serato (history format), and Traktor (.nml) without user input
+- [ ] **TRKL-02**: System auto-detects and parses Rekordbox (.txt, .csv, .xml), Serato (history format), and Traktor (.nml) without user input. _Only the Rekordbox history export (tab-separated .txt) is implemented; checked against the parser 2026-11-25._
 - [x] **TRKL-03**: System extracts artist, title, BPM, key, label, duration, and time played from all supported formats
 - [x] **TRKL-04**: System validates uploaded files and returns clear error messages for unsupported or malformed files
 - [x] **TRKL-05**: System rejects files exceeding configurable max upload size (default 50 MB) with a clear error message
@@ -53,7 +53,7 @@ Requirements for full platform delivery across all 9 areas (infra + 7 modules + 
 - [x] **TRKL-26**: Image templates support full Unicode rendering including CJK, Cyrillic, and Arabic via bundled Noto Sans fonts; unrenderable glyphs show `?` substitution
 - [x] **TRKL-27**: User can delete a tracklist; cascade soft-deletes child tracks and generated images; linked gig references are set to NULL; confirmation dialog warns user
 - [x] **TRKL-28**: System persists user's last-used template, background mode, and metadata field settings
-- [ ] **TRKL-29**: User can export a parsed tracklist as plain text in three formats: (a) 1001Tracklists format `HH:MM - Artist - Title`, (b) Mixcloud/SoundCloud description format `Artist - Title` (one per line), (c) numbered list `1. Artist - Title (Label)` with label omitted if missing
+- [ ] **TRKL-29**: User can export a parsed tracklist as plain text in two formats: (a) Mixcloud/SoundCloud description format `Artist - Title` (one per line), (b) numbered list `1. Artist - Title (Label)` with label omitted if missing
 - [ ] **TRKL-30**: Text export respects the active track range selector (same range as image export); empty metadata fields are omitted gracefully from output
 
 ### Design System Foundation (DSYS) — INSERTED
@@ -201,7 +201,7 @@ Deferred to v1.x and v2.0. Tracked but not in current roadmap.
 - **SOCL-v2-03**: Social media content calendar view
 
 ### Tracklist Enhancements
-- **TRKL-v2-01**: Text-only tracklist export (1001tracklists, Mixcloud, SoundCloud formats)
+- **TRKL-v2-01**: Text-only tracklist export (Mixcloud and SoundCloud formats)
 - **TRKL-v2-02**: Additional image output formats (Twitter/X banner, A4 poster, custom dimensions)
 - **TRKL-v2-03**: AI-generated and procedural/gradient backgrounds
 

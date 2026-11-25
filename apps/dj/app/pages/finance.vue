@@ -232,7 +232,7 @@ watch(entriesLoaded, (loaded) => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="finance-void-title"
-        class="finance-confirm-overlay"
+        class="finance-confirm-overlay kh-modal"
         @keydown="onFinanceDialogEscape"
         @click.self="voidingEntry = null"
       >
@@ -255,7 +255,7 @@ watch(entriesLoaded, (loaded) => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="finance-delete-title"
-        class="finance-confirm-overlay"
+        class="finance-confirm-overlay kh-modal"
         @keydown="onFinanceDialogEscape"
         @click.self="deletingEntry = null"
       >

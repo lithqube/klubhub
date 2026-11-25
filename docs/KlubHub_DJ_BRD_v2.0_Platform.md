@@ -583,7 +583,7 @@ The `.env` file configures: Spotify/Discogs/MusicBrainz API keys, Instagram/Face
 
 | Phase | Module | Key Deliverables |
 |---|---|---|
-| **1a** | Tracklist Image Generator | File parsing (3 formats), image gen (2 sizes, 3 bg modes), cover art, templates, live preview, text export (1001Tracklists / Mixcloud / SoundCloud) |
+| **1a** | Tracklist Image Generator | File parsing (3 formats), image gen (2 sizes, 3 bg modes), cover art, templates, live preview, text export (Mixcloud / SoundCloud) |
 | **1b** | Social Media Scheduler | Instagram feed + stories, scheduling, queue view, auto-attach from tracklist gen (Instagram is OSS; multi-platform is KlubHub Cloud PRO) |
 | **1c** | EPK / Press Kit Builder | Bio editor, photo management, tech rider, stage plot, PDF export (PDF is OSS; hosted EPK URL is KlubHub Cloud PRO) |
 | **1d** | Gig Tracker | Gig CRUD, status workflow, venue & contact database, iCal feed, booking confirmation PDF, calendar/list views, tracklist linking |

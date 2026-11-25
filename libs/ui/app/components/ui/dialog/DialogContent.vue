@@ -25,9 +25,9 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
         'rounded-none glass-panel-heavy text-on-surface luminous-threshold p-6',
         'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-        'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-        'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-48%',
-        'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-48%',
+        // A short rise, no zoom (it would shrink touch targets) and no slide from
+        // the centre offset (Tailwind v4 centres with the translate property, so it would jump).
+        'data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:slide-in-from-bottom-2',
         props.class,
       )"
     >

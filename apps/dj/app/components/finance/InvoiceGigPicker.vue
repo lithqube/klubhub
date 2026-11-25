@@ -26,7 +26,9 @@ function display(c: GigChoice | null): string {
   return c ? `${c.label} · ${c.dateLabel}` : ''
 }
 
-watch(selected, (c) => { if (!open.value) query.value = display(c) }, { immediate: true })
+// A different gig always replaces the text, even with the list open (the composer
+// focuses this field itself); a reload of the same gig leaves typing alone.
+watch(selected, (c, was) => { if (!open.value || c?.id !== was?.id) query.value = display(c) }, { immediate: true })
 
 const filtered = computed(() => {
   const q = query.value === display(selected.value) ? '' : query.value

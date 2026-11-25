@@ -78,7 +78,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="sheet" role="dialog" aria-modal="true" :aria-labelledby="`${uid}-h`" @keydown="onKey">
+  <div class="sheet kh-modal" role="dialog" aria-modal="true" :aria-labelledby="`${uid}-h`" @keydown="onKey">
     <form ref="form" class="glass body" novalidate @submit.prevent="submit">
       <div class="head">
         <h2 :id="`${uid}-h`" class="section-lbl" style="margin:0;font-size:11px;">ADD AT THE DOOR</h2>

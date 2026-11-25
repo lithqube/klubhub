@@ -204,7 +204,7 @@ Features that seem reasonable or will be requested by users but should be delibe
 The tracklist image generator is the single must-ship feature that establishes the product's identity and attracts early adopters. Everything else builds on this.
 
 - [x] File upload (drag-and-drop + file picker) — without this the product literally cannot start
-- [x] Auto-detect and parse Rekordbox, Serato, Traktor — without 3 formats, 2/3 of users are excluded
+- [ ] Auto-detect and parse Rekordbox, Serato, Traktor — without 3 formats, 2/3 of users are excluded. _Only the Rekordbox history export (.txt) is implemented (see TRKL-02)._
 - [x] Parsed tracklist review with inline editing — trust layer; DJs must see and correct what was parsed
 - [x] Cover art fetch with fallback chain + placeholder — visual quality is the product's core promise
 - [x] Per-track cover art override — essential for tracks with wrong or missing art
@@ -221,7 +221,7 @@ The tracklist image generator is the single must-ship feature that establishes t
 ### Add After Validation (v1.x)
 
 - [ ] TikTok posting — after Instagram integration is stable and proven
-- [ ] Text-only tracklist export (1001tracklists format) — requested frequently; low complexity
+- [ ] Text-only tracklist export — requested frequently; low complexity
 - [ ] Additional output formats (Twitter/X banner, A4 poster) — after Story/Square patterns are established
 - [ ] CSV/JSON data export for all modules — power-user feature; add when users ask for data portability
 - [ ] Calendar sync (iCal export, Google Calendar) — gig tracker enhancement; low complexity

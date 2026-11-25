@@ -446,6 +446,7 @@ function close() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="gig-form-title"
+        class="kh-modal"
         style="position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);"
         @keydown="onDialogEscape"
         @click.self="close"
@@ -759,6 +760,7 @@ function close() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="gig-cancel-title"
+          class="kh-modal"
           style="position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);"
           @keydown="onDialogEscape"
         >

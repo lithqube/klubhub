@@ -223,14 +223,14 @@ function clearFilters() {
 
         <!-- List view -->
         <template v-else-if="viewMode === 'list'">
-          <div class="glass" style="overflow:hidden;">
+          <TransitionGroup tag="div" name="kh-list" class="glass" style="overflow:hidden;">
             <GigListRow
               v-for="gig in gigs"
               :key="gig.id"
               :gig="gig"
               @edit="openEditGig"
             />
-          </div>
+          </TransitionGroup>
         </template>
 
         <!-- Calendar view -->

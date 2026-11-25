@@ -22,8 +22,9 @@ function move(i: number, d: number) {
   next.splice(i + d, 0, x!)
   emit('update', next)
 }
-function remove(i: number) {
-  emit('update', props.lineup.filter((_, j) => j !== i))
+// By id: a row still animating out keeps its old index.
+function remove(id: string) {
+  emit('update', props.lineup.filter(l => l.id !== id))
 }
 /** B2B with the act above: same stage, same times, shared group number. */
 function toggleB2B(i: number) {
@@ -53,7 +54,7 @@ function toggleB2B(i: number) {
       <button type="submit" class="btn-hud btn-hud-ghost" style="min-height:44px;margin-top:6px;" :disabled="!paste.trim()">ADD</button>
     </form>
     <p v-if="!lineup.length" style="font-size:13px;color:var(--color-on-surface-variant);">No acts yet. Paste your lineup above.</p>
-    <ol style="list-style:none;margin:0;padding:0;display:grid;gap:4px;">
+    <TransitionGroup tag="ol" name="kh-list" style="list-style:none;margin:0;padding:0;display:grid;gap:4px;">
       <li
         v-for="(l, i) in lineup" :key="l.id"
         style="display:flex;align-items:center;gap:6px;min-height:44px;padding:4px 6px;border-left:2px solid transparent;"
@@ -69,9 +70,9 @@ function toggleB2B(i: number) {
           <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`B2B ${l.display_name} with the act above`" :aria-pressed="l.b2b_group != null" :disabled="i === 0 && l.b2b_group == null" @click="toggleB2B(i)"><Users style="width:12px;height:12px;" /></button>
           <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Move ${l.display_name} up`" :disabled="i === 0" @click="move(i, -1)"><ArrowUp style="width:12px;height:12px;" /></button>
           <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Move ${l.display_name} down`" :disabled="i === lineup.length - 1" @click="move(i, 1)"><ArrowDown style="width:12px;height:12px;" /></button>
-          <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Remove ${l.display_name}`" @click="remove(i)"><X style="width:12px;height:12px;" /></button>
+          <button type="button" class="btn-hud btn-hud-ghost btn-hud-xs hit-44" :aria-label="`Remove ${l.display_name}`" @click="remove(l.id)"><X style="width:12px;height:12px;" /></button>
         </template>
       </li>
-    </ol>
+    </TransitionGroup>
   </section>
 </template>

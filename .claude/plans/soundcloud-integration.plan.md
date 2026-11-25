@@ -68,7 +68,7 @@ No webhook or push-notification support is documented anywhere — a publish wor
 
 ### 1.5 An unresolved ambiguity: "tracklist source"
 
-SoundCloud has no concept of "the tracklist inside this DJ mix" — a track is one audio file with flat metadata, not a sequence of sub-tracks with timestamps the way a 1001Tracklists plain-text export is. The nearest structural match is `GET /playlists/{playlist_urn}`, which returns an **ordered list of separate tracks**. So "tracklist source for the image generator" as scoped here means **importing a SoundCloud playlist as a tracklist** (each playlist item → one row in the existing tracklist model), not extracting cue points from one uploaded mix — SoundCloud's API cannot do the latter. **This needs the user to confirm before §5.3 is built**; if the actual want is "read the tracklist a DJ pasted into their own mix's description," that requires parsing free-text (SoundCloud's `description` field on a track), which is a different and much less reliable feature.
+SoundCloud has no concept of "the tracklist inside this DJ mix" — a track is one audio file with flat metadata, not a sequence of sub-tracks with timestamps the way a DJ software history export is. The nearest structural match is `GET /playlists/{playlist_urn}`, which returns an **ordered list of separate tracks**. So "tracklist source for the image generator" as scoped here means **importing a SoundCloud playlist as a tracklist** (each playlist item → one row in the existing tracklist model), not extracting cue points from one uploaded mix — SoundCloud's API cannot do the latter. **This needs the user to confirm before §5.3 is built**; if the actual want is "read the tracklist a DJ pasted into their own mix's description," that requires parsing free-text (SoundCloud's `description` field on a track), which is a different and much less reliable feature.
 
 ---
 
@@ -155,7 +155,7 @@ api/cmd/api (DJ binary)
 
 ### 5.3 Playlist-as-tracklist import — Size M
 - **Blocked on resolving §1.5** with the user first.
-- If confirmed as playlist import: `GET /me/playlists` → picker UI → `GET /playlists/{urn}` → map each track to the existing tracklist row shape (title, artist from SoundCloud's flat `title` string — SoundCloud tracks don't reliably separate "artist" and "title" the way a 1001Tracklists export does, so this needs a parsing heuristic or a manual review step before saving, matching the existing tracklist review-table UX).
+- If confirmed as playlist import: `GET /me/playlists` → picker UI → `GET /playlists/{urn}` → map each track to the existing tracklist row shape (title, artist from SoundCloud's flat `title` string — SoundCloud tracks don't reliably separate "artist" and "title" the way a DJ software history export does, so this needs a parsing heuristic or a manual review step before saving, matching the existing tracklist review-table UX).
 
 ### 5.4 Scheduled publishing — Size L
 - **Do not start until the SoundCloud API Terms of Use and attribution/branding requirements have been read by a human** (rule #10 of the original brief) — this is the slice most exposed to ToS terms neither this document nor the fetched pages covered.
