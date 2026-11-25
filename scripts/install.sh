@@ -446,9 +446,9 @@ fetch_repo() {
   mkdir -p "$DIR/.local"; chmod 700 "$DIR/.local"
 }
 
-latest_release() { # newest v* tag on the remote (annotated tags list a ^{} deref line)
+latest_release() { # newest final v* tag on the remote; skips annotated ^{} deref lines and -rc/-suffix candidates
   git ls-remote --tags "$REPO_URL" 'refs/tags/v*' 2>/dev/null \
-    | sed -e 's|.*refs/tags/||' -e '/\^{}$/d' | sort -V | tail -n1
+    | sed -e 's|.*refs/tags/||' -e '/\^{}$/d' -e '/-/d' | sort -V | tail -n1
 }
 resolve_ref() { # sets REF: --release > --ref/env > saved ref > main
   if [[ "${RELEASE:-0}" == 1 && -z "${REF:-}" ]]; then
