@@ -170,12 +170,14 @@ func serve() error {
 		OutreachGate: email.NewOutreachGate(
 			strings.EqualFold(strings.TrimSpace(rt.cfg.OutreachProviderPermitsOutreach), "true")),
 	}, nil)
+	campaigns := marketing.NewCampaignService(rt.db, rt.keys, marketing.NewGate(
+		strings.EqualFold(strings.TrimSpace(rt.cfg.MarketingProviderPermitsMarketing), "true")), nil)
 	deps := server.Deps{
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),
 		Events:        event.NewHandler(events),
 		Guests:        guest.NewHandler(guests),
 		Audience:      audience.NewHandler(aud),
-		Marketing:     marketing.NewHandler(marketing.Checker{Resolver: net.DefaultResolver, Timeout: 5 * time.Second}),
+		Marketing:     marketing.NewHandler(marketing.Checker{Resolver: net.DefaultResolver, Timeout: 5 * time.Second}).WithCampaigns(campaigns),
 		Reports:       report.NewHandler(report.NewService(rt.db, rt.keys, nil)),
 		Retention:     retention.NewHandler(retention.NewService(rt.db, nil)),
 		Sealed:        sealed.NewHandler(sealed.NewService(rt.db, rt.keys, nil)),
