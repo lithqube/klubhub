@@ -9,6 +9,7 @@ import (
 	"flag"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -31,6 +32,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/audience"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
+	"github.com/klubhub/dj/api/internal/promoter/marketing"
 	"github.com/klubhub/dj/api/internal/promoter/report"
 	"github.com/klubhub/dj/api/internal/promoter/retention"
 	"github.com/klubhub/dj/api/internal/promoter/sealed"
@@ -113,6 +115,7 @@ func stack(t *testing.T) (http.Handler, *identity.Service, func() []error) {
 		Identity: identity.NewHandler(svc), Origins: []string{origin},
 		Events: event.NewHandler(events), Guests: guest.NewHandler(guests),
 		Audience:  audience.NewHandler(audience.NewService(db, keys, nil)),
+		Marketing: marketing.NewHandler(marketing.Checker{Resolver: net.DefaultResolver, Timeout: time.Second}),
 		Door:      door.NewHandler(door.NewService(db, keys, svc, nil)),
 		Reports:   report.NewHandler(report.NewService(db, keys, nil)),
 		Retention: retention.NewHandler(retention.NewService(db, nil)),
@@ -166,6 +169,8 @@ func TestEveryRouteHasAPolicyDecision(t *testing.T) {
 		{Method: http.MethodPost, Pattern: "/api/v1/audience/segments", Action: "audience.write"},
 		{Method: http.MethodPut, Pattern: "/api/v1/audience/segments/{segmentID}", Action: "audience.write"},
 		{Method: http.MethodDelete, Pattern: "/api/v1/audience/segments/{segmentID}", Action: "audience.write"},
+		// P3.2 sending-domain DNS checker.
+		{Method: http.MethodGet, Pattern: "/api/v1/marketing/dns-status", Action: "campaign.read"},
 		// P4 bookings outreach (04.10): talent.* guards talent PII, booking.* the booking work.
 		{Method: http.MethodGet, Pattern: "/api/v1/bookings/talent", Action: "talent.read"},
 		{Method: http.MethodPost, Pattern: "/api/v1/bookings/talent", Action: "talent.write"},

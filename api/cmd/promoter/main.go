@@ -41,6 +41,7 @@ import (
 	"github.com/klubhub/dj/api/internal/promoter/audience"
 	"github.com/klubhub/dj/api/internal/promoter/guest"
 	"github.com/klubhub/dj/api/internal/promoter/identity"
+	"github.com/klubhub/dj/api/internal/promoter/marketing"
 	"github.com/klubhub/dj/api/internal/promoter/migrations"
 	"github.com/klubhub/dj/api/internal/promoter/report"
 	"github.com/klubhub/dj/api/internal/promoter/retention"
@@ -174,6 +175,7 @@ func serve() error {
 		Events:        event.NewHandler(events),
 		Guests:        guest.NewHandler(guests),
 		Audience:      audience.NewHandler(aud),
+		Marketing:     marketing.NewHandler(marketing.Checker{Resolver: net.DefaultResolver, Timeout: 5 * time.Second}),
 		Reports:       report.NewHandler(report.NewService(rt.db, rt.keys, nil)),
 		Retention:     retention.NewHandler(retention.NewService(rt.db, nil)),
 		Sealed:        sealed.NewHandler(sealed.NewService(rt.db, rt.keys, nil)),
