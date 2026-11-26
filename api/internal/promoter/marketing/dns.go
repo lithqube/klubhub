@@ -161,7 +161,10 @@ func lookupError(ctx context.Context, err error) string {
 }
 
 // Handler exposes the checker under /api/v1/marketing.
-type Handler struct{ checker Checker }
+type Handler struct {
+	checker  Checker
+	webhooks *WebhookService
+}
 
 // NewHandler builds the HTTP adapter.
 func NewHandler(c Checker) *Handler { return &Handler{checker: c} }
@@ -170,6 +173,7 @@ func NewHandler(c Checker) *Handler { return &Handler{checker: c} }
 // already declared in the Rego policy (owner, admin, marketing).
 func (h *Handler) Mount(r chi.Router, e *authz.Engine, reg *authz.Registry, onDeny authz.Denied) {
 	e.Handle(r, reg, authz.Route{Method: http.MethodGet, Pattern: "/api/v1/marketing/dns-status", Action: "campaign.read", ResourceType: "sending_domain"}, h.dnsStatus, onDeny)
+	h.mountWebhooks(r, e, reg, onDeny)
 }
 
 var hostLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
