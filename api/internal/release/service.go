@@ -23,6 +23,9 @@ type Store interface {
 	GetDeadline(ctx context.Context, id uuid.UUID) (*Deadline, error)
 	ListDeadlines(ctx context.Context, releaseID uuid.UUID) ([]*Deadline, error)
 	DeleteDeadlinesForRelease(ctx context.Context, releaseID uuid.UUID) error
+	UpsertPlatformLink(ctx context.Context, link *PlatformLink) error
+	DeletePlatformLink(ctx context.Context, releaseID uuid.UUID, platform Platform) error
+	ListPlatformLinks(ctx context.Context, releaseID uuid.UUID) ([]*PlatformLink, error)
 }
 
 // Input is what a caller supplies to create or edit a release (REL-01).
