@@ -39,6 +39,8 @@ type CampaignService struct {
 	keys *envelope.Keyring
 	gate *Gate
 	now  func() time.Time
+	// clickBase is the public origin for tracking links; empty sends links unwrapped.
+	clickBase string
 }
 
 // NewCampaignService builds the service; now defaults to time.Now.
@@ -127,14 +129,28 @@ func (s *CampaignService) Send(ctx context.Context, id uuid.UUID) (queued int, e
 		if err != nil {
 			return err
 		}
+		var links []string
+		if s.clickBase != "" {
+			links = campaignLinks(body)
+		}
+		for i, l := range links {
+			if _, err := tx.Exec(ctx, `INSERT INTO marketing_campaign_links (tenant_id, campaign_id, position, url) VALUES ($1, $2, $3, $4)`,
+				tenant, id, i, l); err != nil {
+				return err
+			}
+		}
 		for _, r := range rs {
 			email, err := s.keys.OpenString(ctx, tx, tenant, envelope.Field{Table: "audience_contacts", Column: "email_enc", RowID: r.ID}, r.Enc)
 			if err != nil {
 				return err
 			}
 			sid := uuid.Must(uuid.NewV7())
+			rendered := body
+			if len(links) > 0 {
+				rendered = s.wrapLinks(dek, tenant, id, sid, body, links)
+			}
 			var enc [3][]byte
-			for i, v := range []struct{ col, val string }{{"to_email_enc", email}, {"subject_enc", subject}, {"body_enc", body}} {
+			for i, v := range []struct{ col, val string }{{"to_email_enc", email}, {"subject_enc", subject}, {"body_enc", rendered}} {
 				if enc[i], err = envelope.SealString(dek, tenant, envelope.Field{Table: "marketing_sends", Column: v.col, RowID: sid}, v.val); err != nil {
 					return err
 				}
@@ -173,6 +189,7 @@ func (h *Handler) mountCampaigns(r chi.Router, e *authz.Engine, reg *authz.Regis
 	}
 	route("/api/v1/marketing/campaigns", "campaign.write", h.createCampaign)
 	route("/api/v1/marketing/campaigns/{campaignID}/send", "campaign.send", h.sendCampaign)
+	h.mountClicks(r, e, reg, onDeny)
 }
 
 func (h *Handler) createCampaign(w http.ResponseWriter, r *http.Request) {
