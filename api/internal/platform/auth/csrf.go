@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // CSRFHeader must be present on every state-changing request. Browsers
@@ -22,6 +23,12 @@ func CSRF(allowedOrigins []string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.Method {
 			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Provider webhooks carry no cookie or browser origin; the
+			// handler authenticates them by signature.
+			if strings.HasPrefix(r.URL.Path, "/api/v1/marketing/webhooks/") {
 				next.ServeHTTP(w, r)
 				return
 			}
