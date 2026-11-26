@@ -11,8 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// memQueue is an in-memory marketing_sends. The worker drives it from one
-// goroutine, so it needs no lock.
+// memQueue is an in-memory marketing_sends, driven from one goroutine (no lock).
 type memQueue struct {
 	rows    []*memRow
 	tenants []uuid.UUID
@@ -70,9 +69,9 @@ func (q *memQueue) failed(s Send, status, lastError string, due time.Time) error
 	return nil
 }
 
-func (q *memQueue) Sent(_ context.Context, s Send, _ string, _ time.Time) error {
+func (q *memQueue) Sent(_ context.Context, s Send, providerID string, _ time.Time) error {
 	for _, r := range q.rows {
-		if r.send.Message.SendID == s.Message.SendID {
+		if r.send.Message.SendID == s.Message.SendID && providerID == r.send.TenantID.String() {
 			r.status = "sent"
 		}
 	}
@@ -87,29 +86,30 @@ func (q *memQueue) Fail(_ context.Context, s Send, lastError string) error {
 	return q.failed(s, "failed", lastError, time.Time{})
 }
 
-type fakeProvider struct{ send func(*Message) error }
+// fakeProvider returns its tenant as the message id; Sent rejects any other.
+type fakeProvider struct {
+	tenant uuid.UUID
+	send   func(*Message) error
+}
 
 func (p fakeProvider) SendMarketing(_ context.Context, m *Message) (string, error) {
 	if p.send != nil {
-		return "", p.send(m)
+		return p.tenant.String(), p.send(m)
 	}
-	return "pm-1", nil
+	return p.tenant.String(), nil
 }
 
 func (fakeProvider) HandleWebhook(*http.Request) ([]WebhookEvent, error) { return nil, nil }
 
 type fakeClock struct{ t time.Time }
 
-func (c *fakeClock) now() time.Time          { return c.t }
-func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
-
-func setup(p MarketingProvider, perMinute int) (*Worker, *memQueue, *fakeClock) {
+func setup(send func(*Message) error, perMinute int) (*Worker, *memQueue, *fakeClock) {
 	clock := &fakeClock{t: time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)}
 	q := &memQueue{}
 	w := &Worker{
 		Queue:     q,
-		Provider:  func(context.Context, uuid.UUID) (MarketingProvider, error) { return p, nil },
-		Now:       clock.now,
+		Provider:  func(_ context.Context, t uuid.UUID) (MarketingProvider, error) { return fakeProvider{t, send}, nil },
+		Now:       func() time.Time { return clock.t },
 		Interval:  time.Second,
 		PerMinute: perMinute,
 	}
@@ -124,7 +124,7 @@ func tick(t *testing.T, w *Worker) {
 }
 
 func TestWorkerDrainsAtPerTenantRate(t *testing.T) {
-	w, q, clock := setup(fakeProvider{}, 120) // one send per 500 ms; a 1 s tick holds 2
+	w, q, clock := setup(nil, 120) // one send per 500 ms; a 1 s tick holds 2
 	a, b := uuid.New(), uuid.New()
 	q.add(a, 10, clock.t)
 	q.add(b, 10, clock.t)
@@ -136,13 +136,13 @@ func TestWorkerDrainsAtPerTenantRate(t *testing.T) {
 	if got := q.count(a, "sent"); got != 2 {
 		t.Fatalf("tenant a sent %d with no time passed, want 2", got)
 	}
-	clock.advance(1500 * time.Millisecond) // 3 accrued, capped to one tick's worth
+	clock.t = clock.t.Add(1500 * time.Millisecond) // 3 accrued, capped to one tick's worth
 	tick(t, w)
 	if got, gotB := q.count(a, "sent"), q.count(b, "sent"); got != 4 || gotB != 4 {
 		t.Fatalf("after 1.5 s: a sent %d, b sent %d, want 4 each", got, gotB)
 	}
 	for range 3 {
-		clock.advance(time.Second)
+		clock.t = clock.t.Add(time.Second)
 		tick(t, w)
 	}
 	if got := q.count(a, "sent"); got != 10 {
@@ -152,21 +152,21 @@ func TestWorkerDrainsAtPerTenantRate(t *testing.T) {
 
 func TestWorkerRetriesWithBackoffThenDeadLetters(t *testing.T) {
 	var keys []uuid.UUID
-	w, q, clock := setup(fakeProvider{send: func(m *Message) error {
+	w, q, clock := setup(func(m *Message) error {
 		keys = append(keys, m.SendID)
 		return errors.New("smtp 451 try later")
-	}}, 60)
+	}, 60)
 	w.MaxAttempts, w.Backoff = 3, time.Minute
 	tenant := uuid.New()
 	q.add(tenant, 1, clock.t.Add(time.Second))
 	// Due at t0+1s; fails → +1m; fails → +2m; third failure dead-letters.
 	for i, wait := range []time.Duration{time.Second, time.Minute, 2 * time.Minute} {
-		clock.advance(wait - time.Millisecond)
+		clock.t = clock.t.Add(wait - time.Millisecond)
 		tick(t, w)
 		if len(keys) != i {
 			t.Fatalf("attempt %d ran before it was due", i+1)
 		}
-		clock.advance(time.Millisecond)
+		clock.t = clock.t.Add(time.Millisecond)
 		tick(t, w)
 		if len(keys) != i+1 {
 			t.Fatalf("attempt %d did not run when due", i+1)
@@ -179,7 +179,7 @@ func TestWorkerRetriesWithBackoffThenDeadLetters(t *testing.T) {
 	if keys[0] != keys[1] || keys[1] != keys[2] {
 		t.Fatalf("retries used different idempotency keys: %v", keys)
 	}
-	clock.advance(time.Hour)
+	clock.t = clock.t.Add(time.Hour)
 	tick(t, w)
 	if len(keys) != 3 {
 		t.Fatalf("dead-lettered send was attempted again: %d attempts", len(keys))
@@ -188,12 +188,12 @@ func TestWorkerRetriesWithBackoffThenDeadLetters(t *testing.T) {
 
 func TestWorkerRecoversFromProviderPanic(t *testing.T) {
 	calls := 0
-	w, q, clock := setup(fakeProvider{send: func(*Message) error {
+	w, q, clock := setup(func(*Message) error {
 		if calls++; calls == 1 {
 			panic("adapter bug")
 		}
 		return nil
-	}}, 120)
+	}, 120)
 	tenant := uuid.New()
 	q.add(tenant, 2, clock.t)
 	tick(t, w)
