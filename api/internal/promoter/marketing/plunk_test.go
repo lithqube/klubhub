@@ -107,9 +107,7 @@ func TestNewPlunkNeedsKeyAndSecret(t *testing.T) {
 
 func webhookReq(auth, body string) *http.Request {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/marketing/webhooks/x", strings.NewReader(body))
-	if auth != "" {
-		r.Header.Set("Authorization", auth)
-	}
+	r.Header.Set("Authorization", auth)
 	return r
 }
 

@@ -186,10 +186,8 @@ func (p *Plunk) HandleWebhook(r *http.Request) ([]WebhookEvent, error) {
 		ev.Type, ev.At = EventBounce, in.Event.BouncedAt
 	case in.Event.EmailID == "" && in.Event.BouncedAt.IsZero() && in.Contact.Subscribed != nil && !*in.Contact.Subscribed:
 		ev.Type = EventUnsubscribe
-	default:
-		return []WebhookEvent{}, nil
 	}
-	if ev.Email == "" {
+	if ev.Type == "" || ev.Email == "" {
 		return []WebhookEvent{}, nil
 	}
 	return []WebhookEvent{ev}, nil
