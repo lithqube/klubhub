@@ -123,6 +123,19 @@ func TestSMTPProvider_RejectsHeaderInjection(t *testing.T) {
 	}
 }
 
+// CR/LF in campaign-author Subject or From name must not open a header line.
+func TestSMTPProvider_EncodesHeaderInjection(t *testing.T) {
+	sink := newSMTPSink(t)
+	msg := testMessage()
+	msg.Subject, msg.FromName = "Hi\r\nBcc: a@example.com", "Club\r\nBcc: b@example.com"
+	if _, err := marketing.NewSMTPProvider(sink.config()).SendMarketing(context.Background(), msg); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if data := <-sink.got; strings.Contains(strings.ToLower(data), "\r\nbcc:") {
+		t.Fatalf("injected header:\n%s", data)
+	}
+}
+
 func TestSMTPProvider_GateWithoutAttestation(t *testing.T) {
 	sink := newSMTPSink(t)
 	p := marketing.Gated(marketing.NewGate(false), marketing.NewSMTPProvider(sink.config()))
