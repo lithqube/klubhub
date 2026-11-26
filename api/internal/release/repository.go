@@ -174,6 +174,58 @@ func (r *Repository) DeleteDeadlinesForRelease(ctx context.Context, releaseID uu
 	return err
 }
 
+// UpsertPlatformLink stores the link of one platform, replacing the previous
+// link of that platform.
+func (r *Repository) UpsertPlatformLink(ctx context.Context, link *PlatformLink) error {
+	return r.pool.QueryRow(ctx, `
+		INSERT INTO release_platform_links (release_id, platform, url)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (release_id, platform)
+		DO UPDATE SET url = EXCLUDED.url, updated_at = now()
+		RETURNING id, created_at, updated_at`,
+		link.ReleaseID, link.Platform, link.URL,
+	).Scan(&link.ID, &link.CreatedAt, &link.UpdatedAt)
+}
+
+// DeletePlatformLink removes the link of one platform of a release.
+func (r *Repository) DeletePlatformLink(ctx context.Context, releaseID uuid.UUID, platform Platform) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM release_platform_links WHERE release_id = $1 AND platform = $2`, releaseID, platform)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListPlatformLinks returns the links of a release.
+func (r *Repository) ListPlatformLinks(ctx context.Context, releaseID uuid.UUID) ([]*PlatformLink, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, release_id, platform, url, created_at, updated_at
+		FROM release_platform_links
+		WHERE release_id = $1
+		ORDER BY platform`, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*PlatformLink, 0, 4)
+	for rows.Next() {
+		var l PlatformLink
+		if err := rows.Scan(&l.ID, &l.ReleaseID, &l.Platform, &l.URL, &l.CreatedAt, &l.UpdatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out = append(out, &l)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	return out, nil
+}
+
 // List returns every live release ordered by release date, then title.
 func (r *Repository) List(ctx context.Context) ([]*Release, error) {
 	rows, err := r.pool.Query(ctx, `

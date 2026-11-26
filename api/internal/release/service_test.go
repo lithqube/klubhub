@@ -13,11 +13,16 @@ import (
 type fakeStore struct {
 	releases  map[uuid.UUID]*Release
 	deadlines map[uuid.UUID]*Deadline
+	links     map[uuid.UUID]*PlatformLink
 	updates   int
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{releases: map[uuid.UUID]*Release{}, deadlines: map[uuid.UUID]*Deadline{}}
+	return &fakeStore{
+		releases:  map[uuid.UUID]*Release{},
+		deadlines: map[uuid.UUID]*Deadline{},
+		links:     map[uuid.UUID]*PlatformLink{},
+	}
 }
 
 func (f *fakeStore) Create(_ context.Context, rel *Release) error {
@@ -108,6 +113,39 @@ func (f *fakeStore) DeleteDeadlinesForRelease(_ context.Context, releaseID uuid.
 		}
 	}
 	return nil
+}
+
+func (f *fakeStore) UpsertPlatformLink(_ context.Context, link *PlatformLink) error {
+	if link.ID == uuid.Nil {
+		link.ID = uuid.Must(uuid.NewV7())
+	}
+	for id, existing := range f.links {
+		if existing.ReleaseID == link.ReleaseID && existing.Platform == link.Platform {
+			delete(f.links, id)
+		}
+	}
+	f.links[link.ID] = link
+	return nil
+}
+
+func (f *fakeStore) DeletePlatformLink(_ context.Context, releaseID uuid.UUID, platform Platform) error {
+	for id, existing := range f.links {
+		if existing.ReleaseID == releaseID && existing.Platform == platform {
+			delete(f.links, id)
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (f *fakeStore) ListPlatformLinks(_ context.Context, releaseID uuid.UUID) ([]*PlatformLink, error) {
+	out := make([]*PlatformLink, 0, len(f.links))
+	for _, l := range f.links {
+		if l.ReleaseID == releaseID {
+			out = append(out, l)
+		}
+	}
+	return out, nil
 }
 
 func TestCanTransitionOnlyNeighbouringSteps(t *testing.T) {

@@ -224,3 +224,50 @@ func TestIntegration_DeadlinesCascadeWithTheRelease(t *testing.T) {
 		t.Fatalf("want ErrNotFound for the cascaded deadline, got %v", err)
 	}
 }
+
+func TestIntegration_PlatformLinksUpsertAndCascade(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	if testPool == nil {
+		t.Skip("postgres unavailable")
+	}
+
+	ctx := context.Background()
+	svc := release.NewService(release.NewRepository(testPool))
+
+	rel, err := svc.Create(ctx, release.Input{Title: "Links", ReleaseDate: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetPlatformLink(ctx, rel.ID, release.PlatformBeatport, "https://beatport.com/release/1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetPlatformLink(ctx, rel.ID, release.PlatformBeatport, "https://beatport.com/release/2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetPlatformLink(ctx, rel.ID, release.PlatformBandcamp, "https://bandcamp.com/x"); err != nil {
+		t.Fatal(err)
+	}
+	links, err := svc.ListPlatformLinks(ctx, rel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 2 {
+		t.Fatalf("release has %d links, want 2 (one per platform)", len(links))
+	}
+	for _, l := range links {
+		if l.Platform == release.PlatformBeatport && l.URL != "https://beatport.com/release/2" {
+			t.Errorf("beatport url = %q, want the replacement", l.URL)
+		}
+	}
+
+	// Deleting the release takes its links with it.
+	if err := svc.Delete(ctx, rel.ID); err != nil {
+		t.Fatal(err)
+	}
+	links, err = svc.ListPlatformLinks(ctx, rel.ID)
+	if err != release.ErrNotFound {
+		t.Fatalf("want ErrNotFound for a deleted release, got %v", err)
+	}
+}
