@@ -1,6 +1,7 @@
 package marketing_test
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -93,6 +94,57 @@ func TestClick_RecordsAndRedirects(t *testing.T) {
 	}
 	if got := count(t, f.org, "marketing_clicks"); got != 1 {
 		t.Fatalf("%d clicks after bad tokens, want 1", got)
+	}
+}
+
+// QA gaps: an unknown key version is 404 (not 500); an erased recipient's
+// click still redirects but stores nothing.
+func TestClick_UnknownKeyAndErasedRecipient(t *testing.T) {
+	f := newCampFixture(t, true)
+	f.svc.WithClickTracking("https://promoter.test")
+	f.contact(t, "yes@example.com", "consent", "")
+	id, err := f.svc.Create(f.ctx, marketing.CampaignInput{SegmentID: f.segment, Subject: "Fri", Body: "https://tix.example/fri"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Send(f.ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	m := trackRe.FindStringSubmatch(f.sentBody(t))
+	if m == nil {
+		t.Fatal("link not wrapped")
+	}
+	path := m[1]
+	cut := strings.LastIndex(path, "/") + 1
+	raw, err := base64.RawURLEncoding.DecodeString(path[cut:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[3] ^= 0x40 // key version 1 → 65
+	foreign := path[:cut] + base64.RawURLEncoding.EncodeToString(raw)
+
+	r := chi.NewRouter()
+	marketing.NewHandler(marketing.Checker{}).WithCampaigns(f.svc).Mount(r, (*authz.Engine)(nil), authz.NewRegistry(), nil)
+	get := func(p string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, p, nil))
+		return w
+	}
+
+	if w := get(foreign); w.Code != http.StatusNotFound {
+		t.Fatalf("unknown key version: %d, want 404", w.Code)
+	}
+	if err := tenantdb.WithTenant(f.ctx, testDB.App, f.org, func(tx pgx.Tx) error {
+		_, err := tx.Exec(f.ctx, `DELETE FROM marketing_sends`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if w := get(path); w.Code != http.StatusFound || w.Header().Get("Location") != "https://tix.example/fri" {
+		t.Fatalf("erased recipient: %d → %q, want 302 to the link", w.Code, w.Header().Get("Location"))
+	}
+	if got := count(t, f.org, "marketing_clicks"); got != 0 {
+		t.Fatalf("%d clicks for an erased recipient, want 0", got)
 	}
 }
 

@@ -1,0 +1,90 @@
+PASS
+ok  	github.com/klubhub/dj/api/cmd/api	1.549s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/artwork	1.291s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/contact	3.882s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/einvoice	1.327s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/epk	1.492s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/finance	10.004s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/finance/tax	1.227s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/gig	5.045s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/outreach	3.546s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/audit	3.889s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/auth	1.398s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/authz	1.494s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/config	1.230s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/crypto	1.201s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/docstore	3.625s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/email	3.393s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/envelope	3.672s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/events	3.503s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/http	1.416s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/migrations	1.219s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/pdffont	1.262s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/storage	1.294s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/platform/tenantdb	3.501s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter	1.248s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/audience	3.643s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/bookings	3.717s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/config	1.266s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/door	3.920s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/event	3.696s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/guest	3.719s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/identity	3.771s [no tests to run]
+=== RUN   TestClick_RecordsAndRedirects
+--- PASS: TestClick_RecordsAndRedirects (0.04s)
+=== RUN   TestSend_WithoutClickBaseLeavesLinks
+--- PASS: TestSend_WithoutClickBaseLeavesLinks (0.01s)
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/marketing	3.844s
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/migrations	1.223s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/report	3.923s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/retention	3.948s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/sealed	4.006s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/promoter/server	3.850s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/ra	1.273s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/rider	3.498s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/settings	3.738s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/social	3.420s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/tracklist	3.443s [no tests to run]
+PASS
+ok  	github.com/klubhub/dj/api/internal/venue	3.453s [no tests to run]

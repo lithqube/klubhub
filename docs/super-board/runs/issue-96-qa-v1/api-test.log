@@ -1,0 +1,61 @@
+
+> nx run api:test
+
+> go test ./... -race -count=1 -p 1
+
+ok  	github.com/klubhub/dj/api/cmd/api	5.718s
+?   	github.com/klubhub/dj/api/cmd/promoter	[no test files]
+ok  	github.com/klubhub/dj/api/internal/artwork	1.367s
+ok  	github.com/klubhub/dj/api/internal/contact	3.701s
+ok  	github.com/klubhub/dj/api/internal/einvoice	1.717s
+ok  	github.com/klubhub/dj/api/internal/epk	6.063s
+ok  	github.com/klubhub/dj/api/internal/finance	14.821s
+ok  	github.com/klubhub/dj/api/internal/finance/tax	1.230s
+ok  	github.com/klubhub/dj/api/internal/gig	3.809s
+ok  	github.com/klubhub/dj/api/internal/outreach	3.698s
+ok  	github.com/klubhub/dj/api/internal/platform/audit	4.109s
+ok  	github.com/klubhub/dj/api/internal/platform/auth	1.997s
+ok  	github.com/klubhub/dj/api/internal/platform/authz	1.567s
+ok  	github.com/klubhub/dj/api/internal/platform/config	1.301s
+ok  	github.com/klubhub/dj/api/internal/platform/crypto	1.215s
+?   	github.com/klubhub/dj/api/internal/platform/db	[no test files]
+ok  	github.com/klubhub/dj/api/internal/platform/docstore	3.797s
+ok  	github.com/klubhub/dj/api/internal/platform/email	3.628s
+ok  	github.com/klubhub/dj/api/internal/platform/envelope	3.506s
+ok  	github.com/klubhub/dj/api/internal/platform/events	4.232s
+ok  	github.com/klubhub/dj/api/internal/platform/http	1.449s
+?   	github.com/klubhub/dj/api/internal/platform/log	[no test files]
+ok  	github.com/klubhub/dj/api/internal/platform/migrations	1.216s
+ok  	github.com/klubhub/dj/api/internal/platform/pdffont	1.386s
+?   	github.com/klubhub/dj/api/internal/platform/pgtest	[no test files]
+ok  	github.com/klubhub/dj/api/internal/platform/storage	1.307s
+ok  	github.com/klubhub/dj/api/internal/platform/tenantdb	3.953s
+ok  	github.com/klubhub/dj/api/internal/promoter	1.277s
+ok  	github.com/klubhub/dj/api/internal/promoter/audience	4.098s
+ok  	github.com/klubhub/dj/api/internal/promoter/bookings	4.214s
+ok  	github.com/klubhub/dj/api/internal/promoter/config	1.232s
+ok  	github.com/klubhub/dj/api/internal/promoter/door	8.468s
+ok  	github.com/klubhub/dj/api/internal/promoter/event	3.965s
+ok  	github.com/klubhub/dj/api/internal/promoter/guest	4.233s
+ok  	github.com/klubhub/dj/api/internal/promoter/identity	12.024s
+ok  	github.com/klubhub/dj/api/internal/promoter/marketing	4.271s
+ok  	github.com/klubhub/dj/api/internal/promoter/migrations	3.966s
+ok  	github.com/klubhub/dj/api/internal/promoter/report	5.165s
+ok  	github.com/klubhub/dj/api/internal/promoter/retention	6.696s
+ok  	github.com/klubhub/dj/api/internal/promoter/sealed	5.786s
+ok  	github.com/klubhub/dj/api/internal/promoter/server	6.163s
+ok  	github.com/klubhub/dj/api/internal/ra	1.340s
+ok  	github.com/klubhub/dj/api/internal/rider	5.538s
+ok  	github.com/klubhub/dj/api/internal/settings	3.585s
+ok  	github.com/klubhub/dj/api/internal/social	8.827s
+ok  	github.com/klubhub/dj/api/internal/tracklist	3.692s
+ok  	github.com/klubhub/dj/api/internal/venue	3.737s
+
+
+
+ NX   Successfully ran target test for project api
+
+
+Your AI agent configuration is outdated. Run "nx configure-ai-agents" to update.
+
+EXIT=0
