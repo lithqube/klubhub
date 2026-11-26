@@ -252,6 +252,26 @@ func TestSegments_DuplicateNameRejected(t *testing.T) {
 	}
 }
 
+func TestSegments_DeleteWithCampaignRejected(t *testing.T) {
+	f := setup(t)
+	seg, err := f.svc.CreateSegment(f.ctx, audience.SegmentInput{Name: "Early birds", Filter: audience.SegmentFilter{Status: audience.StatusActive}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A campaign referencing the segment makes the FK RESTRICT bite (migration 00019).
+	if err := tenantdb.WithTenant(context.Background(), testDB.App, f.org, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(),
+			`INSERT INTO marketing_campaigns (id, tenant_id, segment_id, subject, body) VALUES ($1, $2, $3, 'Lineup', 'Hi')`,
+			uuid.Must(uuid.NewV7()), f.org, seg.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.DeleteSegment(f.ctx, seg.ID); !errors.Is(err, audience.ErrSegmentInUse) {
+		t.Fatalf("want ErrSegmentInUse, got %v", err)
+	}
+}
+
 func TestSegments_SinceDaysFilter(t *testing.T) {
 	f := setup(t)
 	if _, err := f.svc.CreateContact(f.ctx, audience.ContactInput{

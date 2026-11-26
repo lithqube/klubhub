@@ -6,6 +6,7 @@ var (
 	ErrNotFound      = errors.New("audience: not found")
 	ErrDuplicate     = errors.New("audience: a contact with this email already exists")
 	ErrSegmentExists = errors.New("audience: a segment with this name already exists")
+	ErrSegmentInUse  = errors.New("audience: the segment is used by a campaign")
 )
 
 // InvalidError reports a field that failed validation.
