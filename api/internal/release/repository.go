@@ -2,6 +2,7 @@ package release
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/google/uuid"
@@ -224,6 +225,121 @@ func (r *Repository) ListPlatformLinks(ctx context.Context, releaseID uuid.UUID)
 	}
 	rows.Close()
 	return out, nil
+}
+
+// InsertChecklistItem stores a promo step.
+func (r *Repository) InsertChecklistItem(ctx context.Context, item *ChecklistItem) error {
+	return r.pool.QueryRow(ctx, `
+		INSERT INTO release_checklist_items (release_id, position, label, done)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at, updated_at`,
+		item.ReleaseID, item.Position, item.Label, item.Done,
+	).Scan(&item.ID, &item.CreatedAt, &item.UpdatedAt)
+}
+
+// UpdateChecklistItem writes a promo step.
+func (r *Repository) UpdateChecklistItem(ctx context.Context, item *ChecklistItem) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE release_checklist_items
+		SET position = $2, label = $3, done = $4, updated_at = now()
+		WHERE id = $1`,
+		item.ID, item.Position, item.Label, item.Done,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return r.pool.QueryRow(ctx, `SELECT created_at, updated_at FROM release_checklist_items WHERE id = $1`, item.ID).
+		Scan(&item.CreatedAt, &item.UpdatedAt)
+}
+
+// DeleteChecklistItem removes a promo step.
+func (r *Repository) DeleteChecklistItem(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM release_checklist_items WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// GetChecklistItem returns a promo step by ID, or ErrNotFound.
+func (r *Repository) GetChecklistItem(ctx context.Context, id uuid.UUID) (*ChecklistItem, error) {
+	var item ChecklistItem
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, release_id, position, label, done, created_at, updated_at
+		FROM release_checklist_items
+		WHERE id = $1`, id,
+	).Scan(&item.ID, &item.ReleaseID, &item.Position, &item.Label, &item.Done, &item.CreatedAt, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+// ListChecklistItems returns the promo steps of a release, in order.
+func (r *Repository) ListChecklistItems(ctx context.Context, releaseID uuid.UUID) ([]*ChecklistItem, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, release_id, position, label, done, created_at, updated_at
+		FROM release_checklist_items
+		WHERE release_id = $1
+		ORDER BY position, label`, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*ChecklistItem, 0, 8)
+	for rows.Next() {
+		var item ChecklistItem
+		if err := rows.Scan(&item.ID, &item.ReleaseID, &item.Position, &item.Label, &item.Done, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out = append(out, &item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	return out, nil
+}
+
+// GetChecklistTemplate returns the saved default template, or nil when none
+// has been saved yet.
+func (r *Repository) GetChecklistTemplate(ctx context.Context) ([]string, error) {
+	var raw []byte
+	err := r.pool.QueryRow(ctx, `SELECT items FROM release_checklist_templates LIMIT 1`).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var labels []string
+	if err := json.Unmarshal(raw, &labels); err != nil {
+		return nil, err
+	}
+	return labels, nil
+}
+
+// SaveChecklistTemplate stores the default template for future releases.
+func (r *Repository) SaveChecklistTemplate(ctx context.Context, labels []string) error {
+	raw, err := json.Marshal(labels)
+	if err != nil {
+		return err
+	}
+	_, err = r.pool.Exec(ctx, `
+		INSERT INTO release_checklist_templates (label, items)
+		VALUES ('default', $1)
+		ON CONFLICT ((1)) DO UPDATE SET items = EXCLUDED.items, updated_at = now()`, raw)
+	return err
 }
 
 // List returns every live release ordered by release date, then title.

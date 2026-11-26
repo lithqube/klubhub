@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -14,6 +15,8 @@ type fakeStore struct {
 	releases  map[uuid.UUID]*Release
 	deadlines map[uuid.UUID]*Deadline
 	links     map[uuid.UUID]*PlatformLink
+	checklist map[uuid.UUID]*ChecklistItem
+	template  []string
 	updates   int
 }
 
@@ -22,6 +25,7 @@ func newFakeStore() *fakeStore {
 		releases:  map[uuid.UUID]*Release{},
 		deadlines: map[uuid.UUID]*Deadline{},
 		links:     map[uuid.UUID]*PlatformLink{},
+		checklist: map[uuid.UUID]*ChecklistItem{},
 	}
 }
 
@@ -146,6 +150,55 @@ func (f *fakeStore) ListPlatformLinks(_ context.Context, releaseID uuid.UUID) ([
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeStore) InsertChecklistItem(_ context.Context, item *ChecklistItem) error {
+	if item.ID == uuid.Nil {
+		item.ID = uuid.Must(uuid.NewV7())
+	}
+	f.checklist[item.ID] = item
+	return nil
+}
+
+func (f *fakeStore) UpdateChecklistItem(_ context.Context, item *ChecklistItem) error {
+	if _, ok := f.checklist[item.ID]; !ok {
+		return ErrNotFound
+	}
+	f.checklist[item.ID] = item
+	return nil
+}
+
+func (f *fakeStore) DeleteChecklistItem(_ context.Context, id uuid.UUID) error {
+	delete(f.checklist, id)
+	return nil
+}
+
+func (f *fakeStore) GetChecklistItem(_ context.Context, id uuid.UUID) (*ChecklistItem, error) {
+	item, ok := f.checklist[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return item, nil
+}
+
+func (f *fakeStore) ListChecklistItems(_ context.Context, releaseID uuid.UUID) ([]*ChecklistItem, error) {
+	out := make([]*ChecklistItem, 0, len(f.checklist))
+	for _, item := range f.checklist {
+		if item.ReleaseID == releaseID {
+			out = append(out, item)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Position < out[j].Position })
+	return out, nil
+}
+
+func (f *fakeStore) GetChecklistTemplate(_ context.Context) ([]string, error) {
+	return f.template, nil
+}
+
+func (f *fakeStore) SaveChecklistTemplate(_ context.Context, labels []string) error {
+	f.template = append([]string(nil), labels...)
+	return nil
 }
 
 func TestCanTransitionOnlyNeighbouringSteps(t *testing.T) {
