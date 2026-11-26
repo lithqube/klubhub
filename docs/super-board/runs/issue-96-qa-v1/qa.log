@@ -1,0 +1,11 @@
+# pnpm nx run api:test -- -run 'TestClick|TestSend_WithoutClickBase' -v
+=== RUN   TestClick_RecordsAndRedirects
+--- PASS: TestClick_RecordsAndRedirects (0.04s)
+=== RUN   TestSend_WithoutClickBaseLeavesLinks
+--- PASS: TestSend_WithoutClickBaseLeavesLinks (0.01s)
+ok  	github.com/klubhub/dj/api/internal/promoter/marketing	3.844s
+# pnpm nx run api:test (full, -race)
+ok  	github.com/klubhub/dj/api/internal/promoter/marketing	4.271s
+ok  	github.com/klubhub/dj/api/internal/promoter/migrations	3.966s
+packages ok: 43
+EXIT=0

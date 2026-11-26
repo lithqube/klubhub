@@ -171,7 +171,7 @@ func serve() error {
 			strings.EqualFold(strings.TrimSpace(rt.cfg.OutreachProviderPermitsOutreach), "true")),
 	}, nil)
 	campaigns := marketing.NewCampaignService(rt.db, rt.keys, marketing.NewGate(
-		strings.EqualFold(strings.TrimSpace(rt.cfg.MarketingProviderPermitsMarketing), "true")), nil)
+		strings.EqualFold(strings.TrimSpace(rt.cfg.MarketingProviderPermitsMarketing), "true")), nil).WithClickTracking(rt.cfg.Origins()[0])
 	deps := server.Deps{
 		Log: rt.log, DB: rt.db, Authz: rt.engine, Origins: rt.cfg.Origins(),
 		Events:        event.NewHandler(events),
