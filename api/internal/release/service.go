@@ -26,6 +26,13 @@ type Store interface {
 	UpsertPlatformLink(ctx context.Context, link *PlatformLink) error
 	DeletePlatformLink(ctx context.Context, releaseID uuid.UUID, platform Platform) error
 	ListPlatformLinks(ctx context.Context, releaseID uuid.UUID) ([]*PlatformLink, error)
+	InsertChecklistItem(ctx context.Context, item *ChecklistItem) error
+	UpdateChecklistItem(ctx context.Context, item *ChecklistItem) error
+	DeleteChecklistItem(ctx context.Context, id uuid.UUID) error
+	GetChecklistItem(ctx context.Context, id uuid.UUID) (*ChecklistItem, error)
+	ListChecklistItems(ctx context.Context, releaseID uuid.UUID) ([]*ChecklistItem, error)
+	GetChecklistTemplate(ctx context.Context) ([]string, error)
+	SaveChecklistTemplate(ctx context.Context, labels []string) error
 }
 
 // Input is what a caller supplies to create or edit a release (REL-01).
@@ -50,7 +57,8 @@ func NewService(repo Store) *Service {
 	return &Service{repo: repo, now: time.Now}
 }
 
-// Create stores a new release in its first workflow state.
+// Create stores a new release in its first workflow state and seeds its
+// promo checklist from the default template.
 func (s *Service) Create(ctx context.Context, in Input) (*Release, error) {
 	rel, err := s.build(in)
 	if err != nil {
@@ -58,6 +66,9 @@ func (s *Service) Create(ctx context.Context, in Input) (*Release, error) {
 	}
 	rel.Status = StatusDemoSent
 	if err := s.repo.Create(ctx, rel); err != nil {
+		return nil, err
+	}
+	if err := s.seedChecklist(ctx, rel.ID); err != nil {
 		return nil, err
 	}
 	return rel, nil
