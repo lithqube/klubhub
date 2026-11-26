@@ -184,3 +184,43 @@ func TestIntegration_ReleaseCRUDRoundTrip(t *testing.T) {
 		t.Fatalf("list has %d releases after delete, want 1", len(list))
 	}
 }
+
+func TestIntegration_DeadlinesCascadeWithTheRelease(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	if testPool == nil {
+		t.Skip("postgres unavailable")
+	}
+
+	ctx := context.Background()
+	svc := release.NewService(release.NewRepository(testPool))
+
+	rel, err := svc.Create(ctx, release.Input{Title: "Cascade", ReleaseDate: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := svc.AddDeadline(ctx, rel.ID, "Artwork", time.Date(2026, 12, 20, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadlines, err := svc.ListDeadlines(ctx, rel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deadlines) != 1 || deadlines[0].ID != d.ID {
+		t.Fatalf("deadlines = %+v, want the one we added", deadlines)
+	}
+
+	// Deleting the release takes its deadlines with it.
+	if err := svc.Delete(ctx, rel.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ListDeadlines(ctx, rel.ID); err != release.ErrNotFound {
+		t.Fatalf("want ErrNotFound for a deleted release, got %v", err)
+	}
+	_, err = svc.GetDeadline(ctx, d.ID)
+	if err != release.ErrNotFound {
+		t.Fatalf("want ErrNotFound for the cascaded deadline, got %v", err)
+	}
+}
