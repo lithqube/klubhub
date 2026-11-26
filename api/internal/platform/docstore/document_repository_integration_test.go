@@ -137,6 +137,15 @@ func TestIntegration_DocumentRepository_UniqueViolationMapsToConflict(t *testing
 	`, DocumentOwnerInvoice, ownerID); err != nil {
 		t.Fatal(err)
 	}
+	// The competitor's backend keeps its last query in pg_stat_activity while
+	// it sits idle in the open transaction, so it would satisfy the "an INSERT
+	// is in flight" check below and let the test commit before the repository
+	// is really blocked — the repository would then compute the next version
+	// and insert cleanly. Remember its pid to exclude it.
+	var competitorPID int32
+	if err := tx.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&competitorPID); err != nil {
+		t.Fatal(err)
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -160,7 +169,8 @@ func TestIntegration_DocumentRepository_UniqueViolationMapsToConflict(t *testing
 			WHERE state = 'active'
 			  AND query LIKE '%INSERT INTO documents%'
 			  AND pid <> pg_backend_pid()
-		`).Scan(&blocked); err != nil {
+			  AND pid <> $1
+		`, competitorPID).Scan(&blocked); err != nil {
 			t.Fatal(err)
 		}
 		if blocked > 0 {
