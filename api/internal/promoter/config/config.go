@@ -77,6 +77,10 @@ type Config struct {
 	// including via /v1/send. Fail-closed: unset answers 422
 	// outreach_not_permitted on POST /offers. See docs/OUTREACH-PROVIDER.md.
 	OutreachProviderPermitsOutreach string `envconfig:"OUTREACH_PROVIDER_PERMITS_OUTREACH" default:"false"`
+	// MarketingProviderPermitsMarketing is the operator attestation that the
+	// configured provider's terms allow marketing email. Fail-closed: anything
+	// but "true" answers 422 marketing_not_permitted on campaign send.
+	MarketingProviderPermitsMarketing string `envconfig:"MARKETING_PROVIDER_PERMITS_MARKETING" default:"false"`
 }
 
 // PlunkConfigured reports whether transactional email is fully configured.
