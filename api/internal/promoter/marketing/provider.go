@@ -25,8 +25,17 @@ type MarketingProvider interface {
 	HandleWebhook(r *http.Request) ([]WebhookEvent, error)
 }
 
+// Kind names the mail stream a message belongs to.
+type Kind string
+
+// KindMarketing is the only kind a marketing adapter delivers; anything else
+// (including the zero value) is refused with ErrNotMarketing, so
+// transactional mail cannot leave through the campaign path.
+const KindMarketing Kind = "marketing"
+
 // Message is one unsealed marketing email, ready for delivery.
 type Message struct {
+	Kind Kind
 	// SendID is the marketing_sends row id; providers that support it use it
 	// as the idempotency key so a retried send is not delivered twice.
 	SendID    uuid.UUID
