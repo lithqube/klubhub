@@ -72,6 +72,8 @@ func fail(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "duplicate"})
 	case errors.Is(err, ErrSegmentExists):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "segment_exists"})
+	case errors.Is(err, ErrSegmentInUse):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "segment_in_use"})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 	}

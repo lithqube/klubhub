@@ -3,6 +3,7 @@ package audience
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/klubhub/dj/api/internal/platform/audit"
 	"github.com/klubhub/dj/api/internal/platform/envelope"
@@ -664,11 +666,16 @@ func (s *Service) UpdateSegment(ctx context.Context, id uuid.UUID, in SegmentInp
 	return &out, nil
 }
 
-// DeleteSegment removes a saved filter. It never deletes contacts.
+// DeleteSegment removes a saved filter. It never deletes contacts. A segment
+// referenced by a marketing campaign (FK RESTRICT) maps to ErrSegmentInUse.
 func (s *Service) DeleteSegment(ctx context.Context, id uuid.UUID) error {
 	return s.db.WithTenant(ctx, tenantOf(ctx), func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `DELETE FROM audience_segments WHERE id = $1 AND tenant_id = $2`, id, tenantOf(ctx))
 		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+				return ErrSegmentInUse
+			}
 			return err
 		}
 		if tag.RowsAffected() == 0 {
