@@ -271,3 +271,57 @@ func TestIntegration_PlatformLinksUpsertAndCascade(t *testing.T) {
 		t.Fatalf("want ErrNotFound for a deleted release, got %v", err)
 	}
 }
+
+func TestIntegration_ChecklistTemplateRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	if testPool == nil {
+		t.Skip("postgres unavailable")
+	}
+
+	ctx := context.Background()
+	svc := release.NewService(release.NewRepository(testPool))
+
+	rel, err := svc.Create(ctx, release.Input{Title: "Checklist", ReleaseDate: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := svc.ListChecklistItems(ctx, rel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 6 {
+		t.Fatalf("new release has %d checklist items, want the shipped default of 6", len(items))
+	}
+
+	// Trim and keep the checklist as the template for future releases.
+	if err := svc.RemoveChecklistItem(ctx, rel.ID, items[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SaveChecklistAsTemplate(ctx, rel.ID); err != nil {
+		t.Fatal(err)
+	}
+	next, err := svc.Create(ctx, release.Input{Title: "Seeded", ReleaseDate: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := svc.ListChecklistItems(ctx, next.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seeded) != 5 {
+		t.Fatalf("seeded checklist has %d items, want the saved template's 5", len(seeded))
+	}
+	if seeded[0].Label == "Single sent to promoters" {
+		t.Error("the seeded checklist still carries the removed first step")
+	}
+
+	// The steps cascade away with their release.
+	if err := svc.Delete(ctx, next.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ListChecklistItems(ctx, next.ID); err != release.ErrNotFound {
+		t.Fatalf("want ErrNotFound for a deleted release, got %v", err)
+	}
+}
