@@ -60,6 +60,11 @@ export function useDialogFocus(open: WatchSource<boolean>, title: ElRef, refocus
       // Fallback when the close auto-focus event does not fire: once the
       // dialog is gone and focus fell back to <body>, return it to the opener.
       setTimeout(() => {
+        // Same teardown guard as elementOf: Vitest does not wait out real
+        // timers between files, so this callback can fire after jsdom is
+        // gone — `document` is undefined then and touching it throws an
+        // unhandled ReferenceError that fails the whole run.
+        if (typeof document === 'undefined') return
         const active = document.activeElement
         if (opener && (!active || active === document.body)) restore()
       }, 60)
