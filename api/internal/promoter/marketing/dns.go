@@ -71,8 +71,23 @@ func (c Checker) lookup(ctx context.Context, typ, name, prefix string) Record {
 	}
 	var found []string
 	for _, t := range txt {
-		if (prefix == "" && dkimKey(t) != "") || (prefix != "" && strings.HasPrefix(strings.ToLower(t), prefix)) {
-			found = append(found, t)
+		lt := strings.ToLower(t)
+		switch typ {
+		case "spf":
+			// RFC 7208: the version section "v=spf1" ends at a space (or EOL).
+			if hasRecordPrefix(lt, prefix, " \t") {
+				found = append(found, t)
+			}
+		case "dmarc":
+			// RFC 7489 §6.3: tag-list is semicolon-separated; v=DMARC1 and a
+			// valid p= policy are both required.
+			if hasRecordPrefix(lt, prefix, ";") && dmarcPolicy(t) {
+				found = append(found, t)
+			}
+		default: // dkim
+			if dkimKey(t) != "" {
+				found = append(found, t)
+			}
 		}
 	}
 	switch {
@@ -88,15 +103,49 @@ func (c Checker) lookup(ctx context.Context, typ, name, prefix string) Record {
 	return rec
 }
 
-// dkimKey returns the p= tag of a DKIM key record; empty means revoked or absent.
+// hasRecordPrefix reports whether the lowercased TXT record starts with the
+// version prefix followed by one of terminators or the end of the record, so
+// "v=spf10" is not an SPF record (RFC 7208 §4.5) and "v=dmarc10" is not DMARC.
+func hasRecordPrefix(lowered, prefix, terminators string) bool {
+	if !strings.HasPrefix(lowered, prefix) {
+		return false
+	}
+	rest := lowered[len(prefix):]
+	return rest == "" || strings.IndexByte(terminators, rest[0]) >= 0
+}
+
+var dkimKeyRe = regexp.MustCompile(`^[A-Za-z0-9+/]+={0,2}$`)
+
+// dkimKey returns the p= tag of a DKIM key record; empty means revoked,
+// absent, or not a base64 key (RFC 6376 §3.6.1 — any other value is invalid).
 func dkimKey(t string) string {
 	for _, tag := range strings.Split(t, ";") {
 		k, v, ok := strings.Cut(strings.TrimSpace(tag), "=")
 		if ok && strings.TrimSpace(k) == "p" {
-			return strings.TrimSpace(v)
+			v = strings.TrimSpace(v)
+			if v == "" || !dkimKeyRe.MatchString(v) {
+				return ""
+			}
+			return v
 		}
 	}
 	return ""
+}
+
+// dmarcPolicy reports whether the record carries a valid required p= policy.
+func dmarcPolicy(t string) bool {
+	for _, tag := range strings.Split(t, ";") {
+		k, v, ok := strings.Cut(strings.TrimSpace(tag), "=")
+		if ok && strings.EqualFold(strings.TrimSpace(k), "p") {
+			switch strings.ToLower(strings.TrimSpace(v)) {
+			case "none", "quarantine", "reject":
+				return true
+			default:
+				return false
+			}
+		}
+	}
+	return false
 }
 
 func lookupError(ctx context.Context, err error) string {
@@ -139,6 +188,19 @@ func validDomain(d string) bool {
 	return true
 }
 
+// validSelector accepts a DKIM selector, which may be multi-label.
+func validSelector(s string) bool {
+	if s == "" || len(s) > 253 {
+		return false
+	}
+	for _, l := range strings.Split(s, ".") {
+		if !hostLabel.MatchString(l) {
+			return false
+		}
+	}
+	return true
+}
+
 // GET /api/v1/marketing/dns-status?domain=<sending domain>&selector=<DKIM selector>
 func (h *Handler) dnsStatus(w http.ResponseWriter, r *http.Request) {
 	domain := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))), ".")
@@ -148,7 +210,7 @@ func (h *Handler) dnsStatus(w http.ResponseWriter, r *http.Request) {
 	case !validDomain(domain):
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid", "field": "domain"})
-	case !hostLabel.MatchString(selector):
+	case !validSelector(selector):
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid", "field": "selector"})
 	default:

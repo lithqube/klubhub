@@ -100,13 +100,38 @@ func TestHandlerUnresolvableDomainAnswersWithTimeout(t *testing.T) {
 	}
 }
 
+func TestCheckRecordVersionBoundaries(t *testing.T) {
+	c := Checker{Resolver: stub{
+		"example.org":               {"v=spf10 -all"},                // not SPF — RFC 7208 §4.5 excludes v=spf10
+		"s1._domainkey.example.org": {"v=DKIM1; p=!!!not-base64!!!"}, // p= must be base64 — RFC 6376 §3.6.1
+		"_dmarc.example.org":        {"v=DMARC1"},                     // missing required p= — RFC 7489 §6.3
+	}, Timeout: time.Second}
+
+	got := c.Check(context.Background(), "example.org", "s1")
+	want := map[string]string{"spf": "invalid_record", "dkim": "invalid_record", "dmarc": "invalid_record"}
+	for _, r := range []Record{got.SPF, got.DKIM, got.DMARC} {
+		if r.Pass || r.Error != want[r.Type] {
+			t.Errorf("%s: want error %q, got %+v", r.Type, want[r.Type], r)
+		}
+	}
+}
+
 func TestHandlerRejectsBadInput(t *testing.T) {
 	h := NewHandler(Checker{Resolver: stub{}, Timeout: time.Second})
-	for _, q := range []string{"", "?domain=localhost&selector=s1", "?domain=a..b&selector=s1", "?domain=example.org", "?domain=example.org&selector=a.b", "?domain=ex_ample.org&selector=s1"} {
+	for _, q := range []string{"", "?domain=localhost&selector=s1", "?domain=a..b&selector=s1", "?domain=example.org", "?domain=example.org&selector=a..b", "?domain=ex_ample.org&selector=s1"} {
 		rec := httptest.NewRecorder()
 		h.dnsStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/marketing/dns-status"+q, nil))
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Errorf("%q: status = %d, want 422", q, rec.Code)
 		}
+	}
+}
+
+func TestHandlerAcceptsMultiLabelSelector(t *testing.T) {
+	h := NewHandler(Checker{Resolver: stub{}, Timeout: time.Second})
+	rec := httptest.NewRecorder()
+	h.dnsStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/marketing/dns-status?domain=example.org&selector=mail.s1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s, want 200 (multi-label selectors are valid)", rec.Code, rec.Body)
 	}
 }
