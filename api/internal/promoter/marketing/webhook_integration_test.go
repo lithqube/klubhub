@@ -154,3 +154,41 @@ func TestWebhook_UnknownTenantIs404(t *testing.T) {
 		t.Fatalf("status %d, want 404", code)
 	}
 }
+
+func TestWebhook_EventTypesMapToContactStatus(t *testing.T) {
+	for _, tc := range []struct{ event, want string }{
+		{"complaint", "complained"}, {"unsubscribe", "unsubscribed"},
+	} {
+		t.Run(tc.event, func(t *testing.T) {
+			f := newWebhookFixture(t)
+			f.addContact(t, "nadia@example.com")
+			if code := f.post(f.org, "ok", tc.event+" nadia@example.com m-1"); code != http.StatusNoContent {
+				t.Fatalf("status %d", code)
+			}
+			if !f.suppressed(t, "nadia@example.com") {
+				t.Fatal("not suppressed")
+			}
+			page, _ := f.aud.ListContacts(f.ctx, audience.ContactFilter{})
+			if page.Contacts[0].Status != tc.want {
+				t.Fatalf("status %s, want %s", page.Contacts[0].Status, tc.want)
+			}
+		})
+	}
+}
+
+// An earlier unsubscribe must not be rewritten by a later bounce, and an
+// address with no contact row is still suppressed (fail closed).
+func TestWebhook_LaterEventKeepsFirstStatusAndUnknownAddressSuppressed(t *testing.T) {
+	f := newWebhookFixture(t)
+	f.addContact(t, "nadia@example.com")
+	f.post(f.org, "ok", "unsubscribe nadia@example.com m-1")
+	f.post(f.org, "ok", "bounce nadia@example.com m-2")
+	page, _ := f.aud.ListContacts(f.ctx, audience.ContactFilter{})
+	if page.Contacts[0].Status != "unsubscribed" {
+		t.Fatalf("status %s, want unsubscribed", page.Contacts[0].Status)
+	}
+	f.post(f.org, "ok", "bounce stranger@example.com m-3")
+	if !f.suppressed(t, "stranger@example.com") {
+		t.Fatal("address without a contact must still be suppressed")
+	}
+}
