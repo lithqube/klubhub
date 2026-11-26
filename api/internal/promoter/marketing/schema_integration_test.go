@@ -140,3 +140,49 @@ func TestMarketingTables_CannotWriteForOtherTenant(t *testing.T) {
 		t.Fatal("insert for another tenant succeeded; want an RLS violation")
 	}
 }
+
+// WITH CHECK on every table: re-stamping a row to another tenant is refused.
+func TestMarketingTables_CannotMoveRowToOtherTenant(t *testing.T) {
+	if testDB == nil {
+		t.Skip("integration: -short")
+	}
+	orgA, orgB := newOrg(t), newOrg(t)
+	seed(t, orgA)
+	bg := context.Background()
+	for _, table := range tables {
+		err := tenantdb.WithTenant(bg, testDB.App, orgA, func(tx pgx.Tx) error {
+			_, err := tx.Exec(bg, `UPDATE `+table+` SET tenant_id = $1`, orgB)
+			return err
+		})
+		if err == nil {
+			t.Errorf("%s: moving tenant A's row to tenant B succeeded; want an RLS violation", table)
+		}
+	}
+}
+
+// Erasing a contact deletes its marketing mail, sealed address included.
+func TestMarketingSends_DeletedWithContact(t *testing.T) {
+	if testDB == nil {
+		t.Skip("integration: -short")
+	}
+	org := newOrg(t)
+	contact := uuid.New()
+	bg := context.Background()
+	if err := tenantdb.WithTenant(bg, testDB.App, org, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(bg, `INSERT INTO audience_contacts (id, tenant_id, email_enc, email_bidx, source, consent_basis, consent_recorded_at)
+			VALUES ($1, $2, '\x01', '\x02', 'csv', 'consent', now())`, contact, org); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(bg, `INSERT INTO marketing_sends (id, tenant_id, contact_id, to_email_enc, to_email_bidx, subject_enc, body_enc)
+			VALUES ($1, $2, $3, '\x01', '\x02', '\x03', '\x04')`, uuid.New(), org, contact); err != nil {
+			return err
+		}
+		_, err := tx.Exec(bg, `DELETE FROM audience_contacts WHERE id = $1`, contact)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(t, org, "marketing_sends"); got != 0 {
+		t.Errorf("marketing_sends keeps %d rows after the contact was deleted, want 0", got)
+	}
+}
