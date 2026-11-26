@@ -17,6 +17,12 @@ type Store interface {
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Release, error)
 	List(ctx context.Context) ([]*Release, error)
+	InsertDeadline(ctx context.Context, d *Deadline) error
+	UpdateDeadline(ctx context.Context, d *Deadline) error
+	DeleteDeadline(ctx context.Context, id uuid.UUID) error
+	GetDeadline(ctx context.Context, id uuid.UUID) (*Deadline, error)
+	ListDeadlines(ctx context.Context, releaseID uuid.UUID) ([]*Deadline, error)
+	DeleteDeadlinesForRelease(ctx context.Context, releaseID uuid.UUID) error
 }
 
 // Input is what a caller supplies to create or edit a release (REL-01).
@@ -73,9 +79,12 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in Input) (*Release,
 	return rel, nil
 }
 
-// Delete soft-deletes a release.
+// Delete soft-deletes a release and removes its deadlines with it.
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
-	return s.repo.SoftDelete(ctx, id)
+	if err := s.repo.SoftDelete(ctx, id); err != nil {
+		return err
+	}
+	return s.repo.DeleteDeadlinesForRelease(ctx, id)
 }
 
 // Transition moves a release to the next workflow state (REL-02). Moving to

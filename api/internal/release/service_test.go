@@ -9,17 +9,18 @@ import (
 	"github.com/google/uuid"
 )
 
-// fakeRepo is an in-memory Repository for the service tests.
-type fakeRepo struct {
-	releases map[uuid.UUID]*Release
-	updates  int
+// fakeStore is an in-memory Store for the service tests.
+type fakeStore struct {
+	releases  map[uuid.UUID]*Release
+	deadlines map[uuid.UUID]*Deadline
+	updates   int
 }
 
-func newFakeRepo() *fakeRepo {
-	return &fakeRepo{releases: map[uuid.UUID]*Release{}}
+func newFakeStore() *fakeStore {
+	return &fakeStore{releases: map[uuid.UUID]*Release{}, deadlines: map[uuid.UUID]*Deadline{}}
 }
 
-func (f *fakeRepo) Create(_ context.Context, rel *Release) error {
+func (f *fakeStore) Create(_ context.Context, rel *Release) error {
 	if rel.ID == uuid.Nil {
 		rel.ID = uuid.Must(uuid.NewV7())
 	}
@@ -29,7 +30,7 @@ func (f *fakeRepo) Create(_ context.Context, rel *Release) error {
 	return nil
 }
 
-func (f *fakeRepo) Update(_ context.Context, rel *Release) error {
+func (f *fakeStore) Update(_ context.Context, rel *Release) error {
 	if _, ok := f.releases[rel.ID]; !ok {
 		return ErrNotFound
 	}
@@ -38,12 +39,12 @@ func (f *fakeRepo) Update(_ context.Context, rel *Release) error {
 	return nil
 }
 
-func (f *fakeRepo) SoftDelete(_ context.Context, id uuid.UUID) error {
+func (f *fakeStore) SoftDelete(_ context.Context, id uuid.UUID) error {
 	delete(f.releases, id)
 	return nil
 }
 
-func (f *fakeRepo) GetByID(_ context.Context, id uuid.UUID) (*Release, error) {
+func (f *fakeStore) GetByID(_ context.Context, id uuid.UUID) (*Release, error) {
 	rel, ok := f.releases[id]
 	if !ok {
 		return nil, ErrNotFound
@@ -51,12 +52,62 @@ func (f *fakeRepo) GetByID(_ context.Context, id uuid.UUID) (*Release, error) {
 	return rel, nil
 }
 
-func (f *fakeRepo) List(_ context.Context) ([]*Release, error) {
+func (f *fakeStore) List(_ context.Context) ([]*Release, error) {
 	out := make([]*Release, 0, len(f.releases))
 	for _, rel := range f.releases {
 		out = append(out, rel)
 	}
 	return out, nil
+}
+
+func (f *fakeStore) InsertDeadline(_ context.Context, d *Deadline) error {
+	if d.ID == uuid.Nil {
+		d.ID = uuid.Must(uuid.NewV7())
+	}
+	d.CreatedAt = time.Now()
+	d.UpdatedAt = d.CreatedAt
+	f.deadlines[d.ID] = d
+	return nil
+}
+
+func (f *fakeStore) UpdateDeadline(_ context.Context, d *Deadline) error {
+	if _, ok := f.deadlines[d.ID]; !ok {
+		return ErrNotFound
+	}
+	f.deadlines[d.ID] = d
+	return nil
+}
+
+func (f *fakeStore) DeleteDeadline(_ context.Context, id uuid.UUID) error {
+	delete(f.deadlines, id)
+	return nil
+}
+
+func (f *fakeStore) GetDeadline(_ context.Context, id uuid.UUID) (*Deadline, error) {
+	d, ok := f.deadlines[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return d, nil
+}
+
+func (f *fakeStore) ListDeadlines(_ context.Context, releaseID uuid.UUID) ([]*Deadline, error) {
+	out := make([]*Deadline, 0, len(f.deadlines))
+	for _, d := range f.deadlines {
+		if d.ReleaseID == releaseID {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeStore) DeleteDeadlinesForRelease(_ context.Context, releaseID uuid.UUID) error {
+	for id, d := range f.deadlines {
+		if d.ReleaseID == releaseID {
+			delete(f.deadlines, id)
+		}
+	}
+	return nil
 }
 
 func TestCanTransitionOnlyNeighbouringSteps(t *testing.T) {
@@ -82,8 +133,8 @@ func TestCanTransitionOnlyNeighbouringSteps(t *testing.T) {
 }
 
 func TestTransitionRejectsIllegalJump(t *testing.T) {
-	repo := newFakeRepo()
-	svc := NewService(repo)
+	store := newFakeStore()
+	svc := NewService(store)
 	rel, err := svc.Create(context.Background(), Input{Title: "Night Signal", ReleaseDate: time.Now()})
 	if err != nil {
 		t.Fatal(err)
@@ -94,14 +145,14 @@ func TestTransitionRejectsIllegalJump(t *testing.T) {
 	if _, err := svc.Transition(context.Background(), rel.ID, StatusReleased); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("want ErrInvalidTransition, got %v", err)
 	}
-	if repo.updates != 0 {
-		t.Fatalf("illegal transitions wrote %d updates, want 0", repo.updates)
+	if store.updates != 0 {
+		t.Fatalf("illegal transitions wrote %d updates, want 0", store.updates)
 	}
 }
 
 func TestTransitionWalksTheWholeWorkflow(t *testing.T) {
-	repo := newFakeRepo()
-	svc := NewService(repo)
+	store := newFakeStore()
+	svc := NewService(store)
 	rel, err := svc.Create(context.Background(), Input{Title: "Night Signal", ReleaseDate: time.Now()})
 	if err != nil {
 		t.Fatal(err)
@@ -115,18 +166,16 @@ func TestTransitionWalksTheWholeWorkflow(t *testing.T) {
 			t.Fatalf("status = %s, want %s", rel.Status, to)
 		}
 	}
-	// released is terminal
 	if _, err := svc.Transition(context.Background(), rel.ID, StatusPromo); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("want ErrInvalidTransition out of released, got %v", err)
 	}
-	// the same status again is a no-op, not an error
 	if _, err := svc.Transition(context.Background(), rel.ID, StatusReleased); err != nil {
 		t.Fatalf("same-status transition: %v", err)
 	}
 }
 
 func TestCreateValidatesInput(t *testing.T) {
-	svc := NewService(newFakeRepo())
+	svc := NewService(newFakeStore())
 	day := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
 	for name, in := range map[string]Input{
 		"no title":       {ReleaseDate: day},
@@ -153,8 +202,7 @@ func TestCreateValidatesInput(t *testing.T) {
 	}
 }
 
-func TestIsOverdueIsComputed(t *testing.T) {
-	today := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+func TestIsOverdueIsComputed(t *testing.T) {	today := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
 	past := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	future := time.Date(2026, 12, 24, 0, 0, 0, 0, time.UTC)
 
@@ -176,6 +224,7 @@ func TestIsOverdueIsComputed(t *testing.T) {
 	}
 }
 
+// indexOf returns the position of a status in the workflow order.
 func indexOf(t *testing.T, s ReleaseStatus) int {
 	t.Helper()
 	for i, v := range statusOrder {

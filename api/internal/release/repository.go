@@ -82,6 +82,98 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*Release, error
 	return &rel, nil
 }
 
+// InsertDeadline stores a deadline and fills in its ID and timestamps.
+func (r *Repository) InsertDeadline(ctx context.Context, d *Deadline) error {
+	return r.pool.QueryRow(ctx, `
+		INSERT INTO release_deadlines (release_id, name, due_date, completed)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at, updated_at`,
+		d.ReleaseID, d.Name, d.DueDate, d.Completed,
+	).Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt)
+}
+
+// UpdateDeadline writes a deadline and bumps updated_at.
+func (r *Repository) UpdateDeadline(ctx context.Context, d *Deadline) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE release_deadlines
+		SET name = $2, due_date = $3, completed = $4, updated_at = now()
+		WHERE id = $1`,
+		d.ID, d.Name, d.DueDate, d.Completed,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return r.pool.QueryRow(ctx, `SELECT created_at, updated_at FROM release_deadlines WHERE id = $1`, d.ID).
+		Scan(&d.CreatedAt, &d.UpdatedAt)
+}
+
+// DeleteDeadline removes a deadline.
+func (r *Repository) DeleteDeadline(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM release_deadlines WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// GetDeadline returns a deadline by ID, or ErrNotFound.
+func (r *Repository) GetDeadline(ctx context.Context, id uuid.UUID) (*Deadline, error) {
+	var d Deadline
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, release_id, name, due_date, completed, created_at, updated_at
+		FROM release_deadlines
+		WHERE id = $1`, id,
+	).Scan(&d.ID, &d.ReleaseID, &d.Name, &d.DueDate, &d.Completed, &d.CreatedAt, &d.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+// ListDeadlines returns the deadlines of a release, soonest first.
+func (r *Repository) ListDeadlines(ctx context.Context, releaseID uuid.UUID) ([]*Deadline, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, release_id, name, due_date, completed, created_at, updated_at
+		FROM release_deadlines
+		WHERE release_id = $1
+		ORDER BY due_date, name`, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Deadline, 0, 4)
+	for rows.Next() {
+		var d Deadline
+		if err := rows.Scan(&d.ID, &d.ReleaseID, &d.Name, &d.DueDate, &d.Completed, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out = append(out, &d)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	return out, nil
+}
+
+// DeleteDeadlinesForRelease removes every deadline of a release. A release is
+// soft-deleted, so its deadlines are removed explicitly; the FK CASCADE
+// covers hard deletes of the release itself.
+func (r *Repository) DeleteDeadlinesForRelease(ctx context.Context, releaseID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM release_deadlines WHERE release_id = $1`, releaseID)
+	return err
+}
+
 // List returns every live release ordered by release date, then title.
 func (r *Repository) List(ctx context.Context) ([]*Release, error) {
 	rows, err := r.pool.Query(ctx, `
