@@ -1,4 +1,4 @@
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async () => {
   try {
     return await $fetch('/api/v1/releases', {
       baseURL: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8080',
