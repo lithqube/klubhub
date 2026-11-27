@@ -32,6 +32,7 @@ import (
 	"github.com/klubhub/dj/api/internal/platform/migrations"
 	"github.com/klubhub/dj/api/internal/platform/storage"
 	"github.com/klubhub/dj/api/internal/ra"
+	"github.com/klubhub/dj/api/internal/release"
 	"github.com/klubhub/dj/api/internal/rider"
 	"github.com/klubhub/dj/api/internal/settings"
 	"github.com/klubhub/dj/api/internal/social"
@@ -294,6 +295,11 @@ func run() error {
 	contactSvc := contact.NewService(contactRepo)
 	contactHandler := contact.NewHandler(contactSvc)
 
+	// 9b. Release planner (Phase 6): releases, their deadlines, platform
+	// links and the promo checklist. Mounted on the router below.
+	releaseSvc := release.NewService(release.NewRepository(pool))
+	releaseHandler := release.NewHandler(releaseSvc)
+
 	// 9a. Resident Advisor import (on by default). Only while
 	// FEATURE_RA_IMPORT is not false is an RA client constructed and the RA routes
 	// mounted (/epk/import-ra, /gigs/import-ra, /gigs/info/{slug}). This
@@ -346,6 +352,10 @@ func run() error {
 		riderHandler.Routes(),
 		outreachHandler,
 	)
+
+	// Release planner routes (Phase 6). Mounted after the router is built so
+	// the shared router signature stays untouched.
+	router.Mount("/api/v1/releases", releaseHandler.Routes())
 
 	// 11. Start HTTP server. Run ListenAndServe in a goroutine so main can
 	// orchestrate graceful shutdown on SIGTERM/SIGINT without blocking
