@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -117,7 +118,8 @@ type reorderRequest struct {
 func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	releases, err := h.svc.List(r.Context())
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("release list failed: %v", err)
+		h.writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{"data": releases})
@@ -248,7 +250,8 @@ func (h *Handler) writeStatusError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrInvalidTransition):
 		h.writeError(w, http.StatusConflict, err.Error())
 	default:
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("release request failed: %v", err)
+		h.writeError(w, http.StatusInternalServerError, "internal server error")
 	}
 }
 

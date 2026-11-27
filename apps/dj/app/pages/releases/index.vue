@@ -7,7 +7,7 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { Plus } from 'lucide-vue-next'
 import { useReleaseStore } from '~/stores/releases'
-import { isReleaseOverdue, type ReleaseInput } from '~/types/release'
+import { isReleaseOverdue, type Deadline, type ReleaseInput } from '~/types/release'
 import ReleaseListRow from '~/components/release/ReleaseListRow.vue'
 
 useHead({ title: 'Releases: KlubHub DJ' })
@@ -20,17 +20,30 @@ const title = ref('')
 const artists = ref('')
 const releaseDate = ref('')
 const saving = ref(false)
+const timelineDeadlines = ref<Array<{ releaseId: string; releaseTitle: string; deadline: Deadline }>>([])
 
 const overdueCount = computed(() => releases.value.filter((r) => isReleaseOverdue(r)).length)
 
 // The timeline strip: the release dates and every deadline, soonest first.
-const timelineDates = computed(() => {
-  const dates = releases.value.map((r) => r.release_date).filter(Boolean)
-  return [...new Set(dates)].sort()
+const timelineItems = computed(() => {
+  const releaseItems = releases.value.map((release) => ({
+    key: `release-${release.id}`,
+    date: release.release_date,
+    label: release.title,
+    to: `/releases/${release.id}`,
+  }))
+  const deadlineItems = timelineDeadlines.value.map(({ releaseId, releaseTitle, deadline }) => ({
+    key: `deadline-${deadline.id}`,
+    date: deadline.due_date,
+    label: `${releaseTitle}: ${deadline.name}`,
+    to: `/releases/${releaseId}`,
+  }))
+  return [...releaseItems, ...deadlineItems].sort((a, b) => a.date.localeCompare(b.date))
 })
 
 async function load(): Promise<void> {
   await store.fetchReleases()
+  timelineDeadlines.value = await store.fetchDeadlineTimeline()
 }
 
 onMounted(load)
@@ -82,18 +95,19 @@ async function create(): Promise<void> {
       {{ error }}
     </p>
 
-    <section v-if="timelineDates.length" class="px-4 py-3 border-b border-outline/40">
+    <section v-if="timelineItems.length" class="px-4 py-3 border-b border-outline/40">
       <p class="font-terminal text-[8px] uppercase tracking-terminal text-tertiary mb-2">
         timeline_view
       </p>
       <div class="flex gap-2 overflow-x-auto pb-1">
-        <div
-          v-for="date in timelineDates"
-          :key="date"
-          class="shrink-0 px-2 py-1 border border-outline/60 font-terminal text-[9px] uppercase tracking-terminal text-tertiary"
+        <NuxtLink
+          v-for="item in timelineItems"
+          :key="item.key"
+          :to="item.to"
+          class="shrink-0 px-2 py-1 border border-outline/60 font-terminal text-[9px] uppercase tracking-terminal text-tertiary hover:text-primary hover:border-primary"
         >
-          {{ date }}
-        </div>
+          {{ item.date }} · {{ item.label }}
+        </NuxtLink>
       </div>
     </section>
 

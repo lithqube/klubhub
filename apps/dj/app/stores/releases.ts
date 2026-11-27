@@ -24,6 +24,12 @@ function unwrapList<T>(result: T[] | { data: T[] | null } | null | undefined): T
   return Array.isArray(inner) ? inner : []
 }
 
+export interface ReleaseDeadlineTimelineEntry {
+  releaseId: string
+  releaseTitle: string
+  deadline: Deadline
+}
+
 export const useReleaseStore = defineStore('releases', () => {
   const releases = ref<Release[]>([])
   const current = ref<Release | null>(null)
@@ -128,6 +134,27 @@ export const useReleaseStore = defineStore('releases', () => {
       console.error('transitionRelease failed:', e)
       return null
     }
+  }
+
+  async function fetchDeadlineTimeline(): Promise<ReleaseDeadlineTimelineEntry[]> {
+    let failed = false
+    const entries = await Promise.all(releases.value.map(async (release) => {
+      try {
+        const result = await $fetch(`/api/v1/releases/${release.id}/deadlines`)
+        return unwrapList<Deadline>(result).map((deadline) => ({
+          releaseId: release.id,
+          releaseTitle: release.title,
+          deadline,
+        }))
+      } catch (e) {
+        failed = true
+        console.error(`fetchDeadlineTimeline failed for ${release.id}:`, e)
+        return []
+      }
+    }))
+
+    if (failed) error.value = 'Some release deadlines could not be loaded'
+    return entries.flat()
   }
 
   async function fetchDeadlines(id: string): Promise<Deadline[]> {
@@ -331,6 +358,7 @@ export const useReleaseStore = defineStore('releases', () => {
     updateRelease,
     deleteRelease,
     transitionRelease,
+    fetchDeadlineTimeline,
     fetchDeadlines,
     addDeadline,
     completeDeadline,
