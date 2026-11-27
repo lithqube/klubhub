@@ -6,6 +6,7 @@ import type {
   PlatformLink,
   Release,
   ReleaseInput,
+  ReleasePlatform,
   ReleaseStatus,
 } from '../types/release'
 
@@ -21,6 +22,12 @@ function unwrap<T>(result: T | { data: T } | null | undefined): T | null {
 function unwrapList<T>(result: T[] | { data: T[] | null } | null | undefined): T[] {
   const inner = unwrap(result)
   return Array.isArray(inner) ? inner : []
+}
+
+export interface ReleaseDeadlineTimelineEntry {
+  releaseId: string
+  releaseTitle: string
+  deadline: Deadline
 }
 
 export const useReleaseStore = defineStore('releases', () => {
@@ -129,6 +136,214 @@ export const useReleaseStore = defineStore('releases', () => {
     }
   }
 
+  async function fetchDeadlineTimeline(): Promise<ReleaseDeadlineTimelineEntry[]> {
+    let failed = false
+    const entries = await Promise.all(releases.value.map(async (release) => {
+      try {
+        const result = await $fetch(`/api/v1/releases/${release.id}/deadlines`)
+        return unwrapList<Deadline>(result).map((deadline) => ({
+          releaseId: release.id,
+          releaseTitle: release.title,
+          deadline,
+        }))
+      } catch (e) {
+        failed = true
+        console.error(`fetchDeadlineTimeline failed for ${release.id}:`, e)
+        return []
+      }
+    }))
+
+    if (failed) error.value = 'Some release deadlines could not be loaded'
+    return entries.flat()
+  }
+
+  async function fetchDeadlines(id: string): Promise<Deadline[]> {
+    try {
+      const data = await $fetch(`/api/v1/releases/${id}/deadlines`)
+      deadlines.value = unwrapList<Deadline>(data)
+      return deadlines.value
+    } catch (e) {
+      console.error('fetchDeadlines failed:', e)
+      deadlines.value = []
+      return []
+    }
+  }
+
+  async function addDeadline(id: string, name: string, dueDate: string): Promise<Deadline | null> {
+    error.value = null
+    try {
+      const data = await $fetch(`/api/v1/releases/${id}/deadlines`, {
+        method: 'POST',
+        body: { name, due_date: dueDate },
+      })
+      const created = unwrap<Deadline>(data)
+      if (created) await fetchDeadlines(id)
+      return created
+    } catch (e) {
+      error.value = 'Failed to add the deadline'
+      console.error('addDeadline failed:', e)
+      return null
+    }
+  }
+
+  async function completeDeadline(id: string, deadlineId: string): Promise<Deadline | null> {
+    error.value = null
+    try {
+      const data = await $fetch(`/api/v1/releases/${id}/deadlines/${deadlineId}/complete`, {
+        method: 'POST',
+      })
+      const updated = unwrap<Deadline>(data)
+      if (updated) await fetchDeadlines(id)
+      return updated
+    } catch (e) {
+      error.value = 'Failed to complete the deadline'
+      console.error('completeDeadline failed:', e)
+      return null
+    }
+  }
+
+  async function removeDeadline(id: string, deadlineId: string): Promise<boolean> {
+    error.value = null
+    try {
+      await $fetch(`/api/v1/releases/${id}/deadlines/${deadlineId}`, { method: 'DELETE' })
+      await fetchDeadlines(id)
+      return true
+    } catch (e) {
+      error.value = 'Failed to remove the deadline'
+      console.error('removeDeadline failed:', e)
+      return false
+    }
+  }
+
+  async function fetchLinks(id: string): Promise<PlatformLink[]> {
+    try {
+      const data = await $fetch(`/api/v1/releases/${id}/links`)
+      links.value = unwrapList<PlatformLink>(data)
+      return links.value
+    } catch (e) {
+      console.error('fetchLinks failed:', e)
+      links.value = []
+      return []
+    }
+  }
+
+  async function setLink(id: string, platform: ReleasePlatform, url: string): Promise<PlatformLink | null> {
+    error.value = null
+    try {
+      const data = await $fetch(`/api/v1/releases/${id}/links`, {
+        method: 'POST',
+        body: { platform, url },
+      })
+      const saved = unwrap<PlatformLink>(data)
+      if (saved) await fetchLinks(id)
+      return saved
+    } catch (e) {
+      error.value = 'Failed to save the link'
+      console.error('setLink failed:', e)
+      return null
+    }
+  }
+
+  async function removeLink(id: string, platform: ReleasePlatform): Promise<boolean> {
+    error.value = null
+    try {
+      await $fetch(`/api/v1/releases/${id}/links/${platform}`, { method: 'DELETE' })
+      await fetchLinks(id)
+      return true
+    } catch (e) {
+      error.value = 'Failed to remove the link'
+      console.error('removeLink failed:', e)
+      return false
+    }
+  }
+
+  async function fetchChecklist(id: string): Promise<ChecklistItem[]> {
+    try {
+      const data = await $fetch(`/api/v1/releases/${id}/checklist`)
+      checklist.value = unwrapList<ChecklistItem>(data)
+      return checklist.value
+    } catch (e) {
+      console.error('fetchChecklist failed:', e)
+      checklist.value = []
+      return []
+    }
+  }
+
+  async function addChecklistItem(id: string, label: string): Promise<ChecklistItem | null> {
+    error.value = null
+    try {
+      const data = await $fetch(`/api/v1/releases/${id}/checklist`, {
+        method: 'POST',
+        body: { label },
+      })
+      const created = unwrap<ChecklistItem>(data)
+      if (created) await fetchChecklist(id)
+      return created
+    } catch (e) {
+      error.value = 'Failed to add the step'
+      console.error('addChecklistItem failed:', e)
+      return null
+    }
+  }
+
+  async function toggleChecklistItem(id: string, itemId: string, done: boolean): Promise<ChecklistItem | null> {
+    error.value = null
+    try {
+      const data = await $fetch(`/api/v1/releases/${id}/checklist/${itemId}/toggle`, {
+        method: 'POST',
+        body: { done },
+      })
+      const updated = unwrap<ChecklistItem>(data)
+      if (updated) await fetchChecklist(id)
+      return updated
+    } catch (e) {
+      error.value = 'Failed to update the step'
+      console.error('toggleChecklistItem failed:', e)
+      return null
+    }
+  }
+
+  async function removeChecklistItem(id: string, itemId: string): Promise<boolean> {
+    error.value = null
+    try {
+      await $fetch(`/api/v1/releases/${id}/checklist/${itemId}`, { method: 'DELETE' })
+      await fetchChecklist(id)
+      return true
+    } catch (e) {
+      error.value = 'Failed to remove the step'
+      console.error('removeChecklistItem failed:', e)
+      return false
+    }
+  }
+
+  async function reorderChecklist(id: string, order: string[]): Promise<boolean> {
+    error.value = null
+    try {
+      await $fetch(`/api/v1/releases/${id}/checklist/reorder`, {
+        method: 'POST',
+        body: { order },
+      })
+      await fetchChecklist(id)
+      return true
+    } catch (e) {
+      error.value = 'Failed to reorder the steps'
+      console.error('reorderChecklist failed:', e)
+      return false
+    }
+  }
+
+  async function saveChecklistAsTemplate(id: string): Promise<boolean> {
+    error.value = null
+    try {
+      await $fetch(`/api/v1/releases/${id}/checklist/save-as-default`, { method: 'POST' })
+      return true
+    } catch (e) {
+      error.value = 'Failed to save the template'
+      console.error('saveChecklistAsTemplate failed:', e)
+      return false
+    }
+  }
+
   return {
     releases,
     current,
@@ -143,5 +358,19 @@ export const useReleaseStore = defineStore('releases', () => {
     updateRelease,
     deleteRelease,
     transitionRelease,
+    fetchDeadlineTimeline,
+    fetchDeadlines,
+    addDeadline,
+    completeDeadline,
+    removeDeadline,
+    fetchLinks,
+    setLink,
+    removeLink,
+    fetchChecklist,
+    addChecklistItem,
+    toggleChecklistItem,
+    removeChecklistItem,
+    reorderChecklist,
+    saveChecklistAsTemplate,
   }
 })
