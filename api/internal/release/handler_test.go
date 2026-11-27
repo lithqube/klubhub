@@ -136,8 +136,8 @@ func TestHandlerMapsServiceErrors(t *testing.T) {
 		if rec.Code != c.want {
 			t.Errorf("%s: status = %d, want %d", name, rec.Code, c.want)
 		}
-		if name == "unexpected" && bytes.Contains(rec.Body.Bytes(), []byte(c.err.Error())) {
-			t.Errorf("unexpected error leaked to response: %s", rec.Body)
+		if name == "unexpected" {
+			assertGenericInternalError(t, rec)
 		}
 	}
 }
@@ -148,11 +148,17 @@ func TestHandlerListDoesNotExposeUnexpectedErrors(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
-	if bytes.Contains(rec.Body.Bytes(), []byte(secret.Error())) {
-		t.Fatalf("unexpected error leaked to response: %s", rec.Body)
+	assertGenericInternalError(t, rec)
+}
+
+func assertGenericInternalError(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not a JSON error envelope: %v; body=%s", err, rec.Body)
 	}
-	if !bytes.Contains(rec.Body.Bytes(), []byte("internal server error")) {
-		t.Errorf("generic error missing from response: %s", rec.Body)
+	if len(body) != 1 || body["error"] != "internal server error" {
+		t.Fatalf("response = %#v, want only the generic error envelope", body)
 	}
 }
 
