@@ -63,6 +63,18 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/{id}/deadlines/{deadlineId}/complete", h.handleCompleteDeadline)
 	r.Delete("/{id}/deadlines/{deadlineId}", h.handleRemoveDeadline)
 
+	r.Get("/{id}/links", h.handleListLinks)
+	r.Post("/{id}/links", h.handleSetLink)
+	r.Delete("/{id}/links/{platform}", h.handleRemoveLink)
+
+	r.Get("/{id}/checklist", h.handleListChecklist)
+	r.Post("/{id}/checklist", h.handleAddChecklistItem)
+	r.Put("/{id}/checklist/{itemId}", h.handleRenameChecklistItem)
+	r.Post("/{id}/checklist/{itemId}/toggle", h.handleToggleChecklistItem)
+	r.Delete("/{id}/checklist/{itemId}", h.handleRemoveChecklistItem)
+	r.Post("/{id}/checklist/reorder", h.handleReorderChecklist)
+	r.Post("/{id}/checklist/save-as-default", h.handleSaveChecklistAsTemplate)
+
 	return r
 }
 
