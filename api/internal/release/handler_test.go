@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -138,6 +139,20 @@ func TestHandlerMapsServiceErrors(t *testing.T) {
 		if name == "unexpected" && bytes.Contains(rec.Body.Bytes(), []byte(c.err.Error())) {
 			t.Errorf("unexpected error leaked to response: %s", rec.Body)
 		}
+	}
+}
+
+func TestHandlerListDoesNotExposeUnexpectedErrors(t *testing.T) {
+	secret := errors.New("database connection details")
+	rec := do(t, NewHandler(&stubService{fail: secret}).Routes(), http.MethodGet, "/", nil)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte(secret.Error())) {
+		t.Fatalf("unexpected error leaked to response: %s", rec.Body)
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("internal server error")) {
+		t.Errorf("generic error missing from response: %s", rec.Body)
 	}
 }
 
