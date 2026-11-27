@@ -46,6 +46,26 @@ describe('useReleaseStore', () => {
     expect(store.releases[0].title).toBe('Night Signal');
   });
 
+  it('loads deadlines for the release timeline through the store', async () => {
+    const deadline: Deadline = {
+      id: 'd-1',
+      release_id: 'r-1',
+      name: 'Artwork',
+      due_date: '2026-12-01',
+      completed: false,
+    };
+    mockFetch.mockImplementation((url: string) => {
+      if (url === '/api/v1/releases') return Promise.resolve({ data: [mockRelease] });
+      return Promise.resolve({ data: [deadline] });
+    });
+    const store = setup();
+    await store.fetchReleases();
+
+    const timeline = await store.fetchDeadlineTimeline();
+    expect(timeline).toEqual([{ releaseId: 'r-1', releaseTitle: 'Night Signal', deadline }]);
+    expect(mockFetch).toHaveBeenLastCalledWith('/api/v1/releases/r-1/deadlines');
+  });
+
   it('keeps the list empty and records an error when the request fails', async () => {
     mockFetch.mockRejectedValue(new Error('boom'));
     const store = setup();
