@@ -135,6 +135,9 @@ func TestHandlerMapsServiceErrors(t *testing.T) {
 		if rec.Code != c.want {
 			t.Errorf("%s: status = %d, want %d", name, rec.Code, c.want)
 		}
+		if name == "unexpected" && bytes.Contains(rec.Body.Bytes(), []byte(c.err.Error())) {
+			t.Errorf("unexpected error leaked to response: %s", rec.Body)
+		}
 	}
 }
 
